@@ -1,0 +1,31 @@
+/* Custom Color Scheme */
+:root {
+  /* Add your custom color variables here */
+  --primary-color: #000000;
+  --secondary-color: #000000;
+  --accent-color: #000000;
+  --text-color: #000000;
+  --background-color: #000000;
+}
+
+
+[data-menu-styles=dark] .app-sidebar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url(./imgs/bg.jpg);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    z-index: -1;
+    transition: background-position 0.6s ease;
+}
+
+[data-menu-styles=dark] .app-sidebar:hover::before {
+    background-position: 0 0;
+}
+
+/* Add your custom color styles here */ 
