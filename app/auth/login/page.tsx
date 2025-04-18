@@ -18,7 +18,8 @@ const Signinbasic = () => {
 
     useEffect(() => {
         if (isAuthenticated) {
-            router.push('/dashboards/main');
+            const baseUrl = window.location.origin;
+            router.push(`${baseUrl}/dashboards/main`);
         }
     }, [isAuthenticated, router]);
 
