@@ -24,7 +24,7 @@ export const authActions = {
         try {
             dispatch(authActions.loginRequest());
 
-            const response = await fetch('http://localhost:3001/v1/auth/login', {
+            const response = await fetch('https://addon-backend.onrender.com/v1/auth/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
