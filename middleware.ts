@@ -14,6 +14,13 @@ export function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/catalog/items', baseUrl));
     }
 
+    if (request.nextUrl.pathname === '/auth/logout') {
+        const response = NextResponse.redirect(new URL('/auth/login', baseUrl));
+        response.cookies.delete('accessToken');
+        response.cookies.delete('refreshToken');
+        return response;
+    }
+
     return NextResponse.next();
 }
 

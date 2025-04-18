@@ -15,7 +15,8 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
 
   const handleLogout = () => {
     dispatch(authActions.logout());
-    router.push('/auth/login');
+    const baseUrl = window.location.origin;
+    window.location.href = `${baseUrl}/auth/login`;
   };
 
   const [passwordshow1, setpasswordshow1] = useState(false);
@@ -518,9 +519,12 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
                       className="ti ti-adjustments-horizontal text-[1.125rem] me-2 opacity-[0.7] !inline-flex"></i>Settings</Link></li>
                  
                     <li><Link 
-                      onClick={handleLogout}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleLogout();
+                      }}
                       className="w-full ti-dropdown-item !text-[0.8125rem] !p-[0.65rem] !gap-x-0 !inline-flex cursor-pointer" 
-                      href="#!"
+                      href="#"
                     ><i
                       className="ti ti-logout text-[1.125rem] me-2 opacity-[0.7] !inline-flex"></i>Log Out</Link></li>
                   </ul>
