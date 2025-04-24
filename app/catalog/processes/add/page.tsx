@@ -99,7 +99,7 @@ const AddProcessPage = () => {
         steps: formData.steps
       };
 
-      const response = await fetch('http://localhost:3001/v1/processes', {
+      const response = await fetch('https://addon-backend.onrender.com/v1/processes', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -120,7 +120,7 @@ const AddProcessPage = () => {
         const imageFormData = new FormData();
         imageFormData.append('image', formData.image);
 
-        const imageResponse = await fetch(`http://localhost:3001/v1/processes/${result.id}/image`, {
+        const imageResponse = await fetch(`https://addon-backend.onrender.com/v1/processes/${result.id}/image`, {
           method: 'PATCH',
           body: imageFormData,
         });

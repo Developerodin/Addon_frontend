@@ -43,7 +43,7 @@ export default function AddRawMaterial() {
         image: 'null' // Making image optional with default null value
       };
 
-      const response = await fetch('http://localhost:3001/v1/raw-materials', {
+      const response = await fetch('https://addon-backend.onrender.com/v1/raw-materials', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

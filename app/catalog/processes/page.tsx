@@ -50,7 +50,7 @@ const ProcessesPage = () => {
       setIsLoading(true);
       setError(null);
       
-      const response = await fetch('http://localhost:3001/v1/processes', {
+      const response = await fetch('https://addon-backend.onrender.com/v1/processes', {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -102,7 +102,7 @@ const ProcessesPage = () => {
     if (window.confirm('Are you sure you want to delete this process?')) {
       const loadingToast = toast.loading('Deleting process...');
       try {
-        const response = await fetch(`http://localhost:3001/v1/processes/${id}`, {
+        const response = await fetch(`https://addon-backend.onrender.com/v1/processes/${id}`, {
           method: 'DELETE',
           headers: {
             'Accept': 'application/json',
@@ -137,7 +137,7 @@ const ProcessesPage = () => {
         let hasError = false;
         const deletePromises = selectedProcesses.map(async (id) => {
           try {
-            const response = await fetch(`http://localhost:3001/v1/processes/${id}`, {
+            const response = await fetch(`https://addon-backend.onrender.com/v1/processes/${id}`, {
               method: 'DELETE',
               headers: {
                 'Accept': 'application/json',
@@ -324,7 +324,7 @@ const ProcessesPage = () => {
                 steps: steps.length > 0 ? steps : [] // Use parsed steps or empty array
               };
 
-              const response = await fetch('http://localhost:3001/v1/processes', {
+              const response = await fetch('https://addon-backend.onrender.com/v1/processes', {
                 method: 'POST',
                 headers: {
                   'Accept': 'application/json',

@@ -33,7 +33,7 @@ interface ProductsResponse {
 }
 
 const API_ENDPOINTS = {
-  products: 'http://localhost:3001/v1/products'
+  products: 'https://addon-backend.onrender.com/v1/products'
 };
 
 const ProductListPage = () => {

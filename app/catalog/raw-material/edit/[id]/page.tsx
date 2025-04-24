@@ -35,7 +35,7 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
     const fetchMaterial = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`http://localhost:3001/v1/raw-materials/${params.id}`, {
+        const response = await fetch(`https://addon-backend.onrender.com/v1/raw-materials/${params.id}`, {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -83,7 +83,7 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
       setIsLoading(true);
 
       // Send the update request with JSON data
-      const response = await fetch(`http://localhost:3001/v1/raw-materials/${params.id}`, {
+      const response = await fetch(`https://addon-backend.onrender.com/v1/raw-materials/${params.id}`, {
         method: 'PATCH',
         headers: {
           'Accept': 'application/json',
@@ -108,7 +108,7 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
         const formData = new FormData();
         formData.append('image', selectedImage);
 
-        const imageResponse = await fetch(`http://localhost:3001/v1/raw-materials/${params.id}/image`, {
+        const imageResponse = await fetch(`https://addon-backend.onrender.com/v1/raw-materials/${params.id}/image`, {
           method: 'PATCH',
           body: formData,
         });

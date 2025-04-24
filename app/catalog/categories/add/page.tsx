@@ -34,7 +34,7 @@ const AddCategoryPage = () => {
   useEffect(() => {
     const fetchParentCategories = async () => {
       try {
-        const response = await fetch('http://localhost:3001/v1/categories', {
+        const response = await fetch('https://addon-backend.onrender.com/v1/categories', {
           headers: {
             'Accept': 'application/json',
           },
@@ -87,7 +87,7 @@ const AddCategoryPage = () => {
         const formData = new FormData();
         formData.append('image', selectedImage);
 
-        const imageResponse = await fetch('http://localhost:3001/v1/upload', {
+        const imageResponse = await fetch('https://addon-backend.onrender.com/v1/upload', {
           method: 'POST',
           body: formData,
         });
@@ -111,7 +111,7 @@ const AddCategoryPage = () => {
       };
 
       // Create category
-      const response = await fetch('http://localhost:3001/v1/categories', {
+      const response = await fetch('https://addon-backend.onrender.com/v1/categories', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',

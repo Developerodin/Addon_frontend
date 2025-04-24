@@ -97,11 +97,11 @@ interface Category {
 
 // API endpoints
 const API_ENDPOINTS = {
-  attributes: 'http://localhost:3001/v1/product-attributes',
-  rawMaterials: 'http://localhost:3001/v1/raw-materials',
-  processes: 'http://localhost:3001/v1/processes',
-  createProduct: 'http://localhost:3001/v1/products',
-  categories: 'http://localhost:3001/v1/categories'
+  attributes: 'https://addon-backend.onrender.com/v1/product-attributes',
+  rawMaterials: 'https://addon-backend.onrender.com/v1/raw-materials',
+  processes: 'https://addon-backend.onrender.com/v1/processes',
+  createProduct: 'https://addon-backend.onrender.com/v1/products',
+  categories: 'https://addon-backend.onrender.com/v1/categories'
 };
 
 const generateSoftwareCode = () => {

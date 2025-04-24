@@ -32,7 +32,7 @@ async function createAttribute(payload: AttributePayload) {
   console.log('Sending payload:', payload);
   
   try {
-    const response = await fetch('http://localhost:3001/v1/product-attributes', {
+    const response = await fetch('https://addon-backend.onrender.com/v1/product-attributes', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

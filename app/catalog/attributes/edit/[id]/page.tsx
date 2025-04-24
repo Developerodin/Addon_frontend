@@ -40,7 +40,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
         setIsLoading(true);
         setError(null);
         
-        const response = await fetch(`http://localhost:3001/v1/product-attributes/${params.id}`, {
+        const response = await fetch(`https://addon-backend.onrender.com/v1/product-attributes/${params.id}`, {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -135,7 +135,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
         }))
       };
 
-      const response = await fetch(`http://localhost:3001/v1/product-attributes/${params.id}`, {
+      const response = await fetch(`https://addon-backend.onrender.com/v1/product-attributes/${params.id}`, {
         method: 'PATCH',
         headers: {
           'Accept': 'application/json',

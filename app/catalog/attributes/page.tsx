@@ -55,7 +55,7 @@ const AttributesPage = () => {
       setIsLoading(true);
       setError(null);
       
-      const response = await fetch('http://localhost:3001/v1/product-attributes', {
+      const response = await fetch('https://addon-backend.onrender.com/v1/product-attributes', {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -157,7 +157,7 @@ const AttributesPage = () => {
       setIsDeleting(true);
       setDeleteId(attributeId);
 
-      const response = await fetch(`http://localhost:3001/v1/product-attributes/${attributeId}`, {
+      const response = await fetch(`https://addon-backend.onrender.com/v1/product-attributes/${attributeId}`, {
         method: 'DELETE',
         headers: {
           'Accept': 'application/json',
@@ -247,7 +247,7 @@ const AttributesPage = () => {
 
             console.log('Sending attribute data to API:', attributeData);
 
-            const response = await fetch('http://localhost:3001/v1/product-attributes', {
+            const response = await fetch('https://addon-backend.onrender.com/v1/product-attributes', {
               method: 'POST',
               headers: {
                 'Accept': 'application/json',

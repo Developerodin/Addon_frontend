@@ -56,11 +56,11 @@ interface AttributeCategory {
 }
 
 const API_ENDPOINTS = {
-  products: 'http://localhost:3001/v1/products',
-  categories: 'http://localhost:3001/v1/categories',
-  rawMaterials: 'http://localhost:3001/v1/raw-materials',
-  attributes: 'http://localhost:3001/v1/attributes',
-  processes: 'http://localhost:3001/v1/processes'
+  products: 'https://addon-backend.onrender.com/v1/products',
+  categories: 'https://addon-backend.onrender.com/v1/categories',
+  rawMaterials: 'https://addon-backend.onrender.com/v1/raw-materials',
+  attributes: 'https://addon-backend.onrender.com/v1/attributes',
+  processes: 'https://addon-backend.onrender.com/v1/processes'
 };
 
 const EditProductPage = () => {

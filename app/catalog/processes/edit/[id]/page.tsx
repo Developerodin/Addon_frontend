@@ -42,7 +42,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
   useEffect(() => {
     const fetchProcess = async () => {
       try {
-        const response = await fetch(`http://localhost:3001/v1/processes/${params.id}`, {
+        const response = await fetch(`https://addon-backend.onrender.com/v1/processes/${params.id}`, {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -148,7 +148,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
         steps: cleanSteps
       };
 
-      const response = await fetch(`http://localhost:3001/v1/processes/${params.id}`, {
+      const response = await fetch(`https://addon-backend.onrender.com/v1/processes/${params.id}`, {
         method: 'PATCH',
         headers: {
           'Accept': 'application/json',
@@ -167,7 +167,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
         const imageFormData = new FormData();
         imageFormData.append('image', formData.image);
 
-        const imageResponse = await fetch(`http://localhost:3001/v1/processes/${params.id}/image`, {
+        const imageResponse = await fetch(`https://addon-backend.onrender.com/v1/processes/${params.id}/image`, {
           method: 'PATCH',
           body: imageFormData,
         });

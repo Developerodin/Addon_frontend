@@ -40,7 +40,7 @@ const CategoriesPage = () => {
       setIsLoading(true);
       setError(null);
       
-      const response = await fetch('http://localhost:3001/v1/categories', {
+      const response = await fetch('https://addon-backend.onrender.com/v1/categories', {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -91,7 +91,7 @@ const CategoriesPage = () => {
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this category?')) {
       try {
-        const response = await fetch(`http://localhost:3001/v1/categories/${id}`, {
+        const response = await fetch(`https://addon-backend.onrender.com/v1/categories/${id}`, {
           method: 'DELETE',
           headers: {
             'Accept': 'application/json',
@@ -125,7 +125,7 @@ const CategoriesPage = () => {
         let hasError = false;
         const deletePromises = selectedCategories.map(async (id) => {
           try {
-            const response = await fetch(`http://localhost:3001/v1/categories/${id}`, {
+            const response = await fetch(`https://addon-backend.onrender.com/v1/categories/${id}`, {
               method: 'DELETE',
               headers: {
                 'Accept': 'application/json',
@@ -245,7 +245,7 @@ const CategoriesPage = () => {
                 }
               }
 
-              const response = await fetch('http://localhost:3001/v1/categories', {
+              const response = await fetch('https://addon-backend.onrender.com/v1/categories', {
                 method: 'POST',
                 headers: {
                   'Accept': 'application/json',

@@ -44,7 +44,7 @@ const RawMaterialPage = () => {
       setIsLoading(true);
       setError(null);
       
-      const response = await fetch('http://localhost:3001/v1/raw-materials', {
+      const response = await fetch('https://addon-backend.onrender.com/v1/raw-materials', {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -113,7 +113,7 @@ const RawMaterialPage = () => {
     if (window.confirm(`Are you sure you want to delete ${selectedMaterials.length} selected material(s)?`)) {
       try {
         for (const id of selectedMaterials) {
-          const response = await fetch(`http://localhost:3001/v1/raw-materials/${id}`, {
+          const response = await fetch(`https://addon-backend.onrender.com/v1/raw-materials/${id}`, {
             method: 'DELETE',
             headers: {
               'Accept': 'application/json',
@@ -140,7 +140,7 @@ const RawMaterialPage = () => {
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this material?')) {
       try {
-        const response = await fetch(`http://localhost:3001/v1/raw-materials/${id}`, {
+        const response = await fetch(`https://addon-backend.onrender.com/v1/raw-materials/${id}`, {
           method: 'DELETE',
           headers: {
             'Accept': 'application/json',
@@ -197,7 +197,7 @@ const RawMaterialPage = () => {
             }
 
             // Send to API
-            const response = await fetch('http://localhost:3001/v1/raw-materials', {
+            const response = await fetch('https://addon-backend.onrender.com/v1/raw-materials', {
               method: 'POST',
               headers: {
                 'Accept': 'application/json',
