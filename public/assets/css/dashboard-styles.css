@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .nav.tab-style-1 {
+    @apply border-b-0 p-[0.65rem] bg-light rounded-md mb-4;
+  }
+
+  .nav.tab-style-1 .nav-item {
+    @apply me-2;
+  }
+
+  .nav.tab-style-1 .nav-item:last-child {
+    @apply me-0;
+  }
+
+  .nav.tab-style-1 .nav-link {
+    @apply rounded-md py-[0.35rem] px-4;
+  }
+
+  .nav.tab-style-1 .nav-link.active {
+    @apply bg-primary text-white shadow-md transition-all ease-in;
+  }
+} 

@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import "./custom-colors.css";
+@import "../public/assets/css/style.css";
+
+//Packages css
+@import "@simonwep/pickr/dist/themes/classic.min.css";
+@import "@simonwep/pickr/dist/themes/monolith.min.css";
+@import "@simonwep/pickr/dist/themes/nano.min.css";
+@import "simplebar-react/dist/simplebar.min.css";
+
+@layer components {
+  @media (max-width: 991.98px) {
+    [data-toggled="open"] {
+      #responsive-overlay {
+        @apply visible #{!important};
+        --tw-bg-opacity: 0.5;
+      }
+    } 
+  }
+
+  @media screen and (min-width: 992px) {
+    [data-vertical-style=doublemenu] .app-sidebar .slide.has-sub.active > .slide-menu {
+      display: block !important;
+    }
+  }
+
+  .m-auto {
+    margin: auto;
+  }
+}
