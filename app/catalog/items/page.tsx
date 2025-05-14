@@ -22,6 +22,9 @@ interface Product {
   };
   createdAt: string;
   updatedAt: string;
+  attributes?: ProductAttribute;
+  bom?: ProductBOM[];
+  processes?: ProductProcess[];
 }
 
 interface ProductsResponse {
@@ -30,6 +33,73 @@ interface ProductsResponse {
   limit: number;
   totalPages: number;
   totalResults: number;
+}
+
+interface ProductAttribute {
+  type: string;
+  brand: string;
+  mrp: string;
+  material: string;
+  color: string;
+  pattern: string;
+  season: string;
+  occasion: string;
+  gender: string;
+  ageGroup: string;
+}
+
+interface ProductBOM {
+  material: string;
+  quantity: number;
+}
+
+interface ProductProcess {
+  process: string;
+  sequence: number;
+}
+
+interface CompleteProduct extends Product {
+  attributes: ProductAttribute;
+  bom: ProductBOM[];
+  processes: ProductProcess[];
+}
+
+// Update the Excel interfaces to use Style Code
+interface ExcelGeneralRow {
+  'Product Name': string;
+  'Style Code': string;
+  'Internal Code': string;
+  'Vendor Code': string;
+  'Factory Code': string;
+  'EAN Code': string;
+  'Description': string;
+  'Category': string;
+}
+
+interface ExcelAttributeRow {
+  'Style Code': string;
+  'Type': string;
+  'Brand': string;
+  'MRP': string;
+  'Material': string;
+  'Color': string;
+  'Pattern': string;
+  'Season': string;
+  'Occasion': string;
+  'Gender': string;
+  'Age Group': string;
+}
+
+interface ExcelBOMRow {
+  'Style Code': string;
+  'Material': string;
+  'Quantity': string;
+}
+
+interface ExcelProcessRow {
+  'Style Code': string;
+  'Process': string;
+  'Sequence': string;
 }
 
 const API_ENDPOINTS = {
@@ -81,41 +151,136 @@ const ProductListPage = () => {
   const handleExport = async () => {
     try {
       setIsLoading(true);
-      // Fetch all products for export
       const response = await axios.get(`${API_ENDPOINTS.products}?limit=1000`);
       const data = response.data as ProductsResponse;
       
-      // Prepare data for export
-      const exportData = data.results.map(product => ({
-        Name: product.name,
-        'Software Code': product.softwareCode,
+      const wb = XLSX.utils.book_new();
+
+      // General Sheet
+      const generalData = data.results.map(product => ({
+        'Product Name': product.name,
+        'Style Code': product.styleCode,
         'Internal Code': product.internalCode,
         'Vendor Code': product.vendorCode,
         'Factory Code': product.factoryCode,
-        'Style Code': product.styleCode,
         'EAN Code': product.eanCode,
-        Description: product.description,
-        Category: product.category.name,
-        'Created At': new Date(product.createdAt).toLocaleDateString(),
-        'Updated At': new Date(product.updatedAt).toLocaleDateString()
+        'Description': product.description,
+        'Category': product.category.name
       }));
+      const wsGeneral = XLSX.utils.json_to_sheet(generalData);
+      XLSX.utils.book_append_sheet(wb, wsGeneral, 'General');
 
-      // Create workbook and worksheet
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Products');
+      // Attributes Sheet
+      const attributesData = data.results.map(product => ({
+        'Style Code': product.styleCode,
+        'Type': product.attributes?.type || '',
+        'Brand': product.attributes?.brand || '',
+        'MRP': product.attributes?.mrp || '',
+        'Material': product.attributes?.material || '',
+        'Color': product.attributes?.color || '',
+        'Pattern': product.attributes?.pattern || '',
+        'Season': product.attributes?.season || '',
+        'Occasion': product.attributes?.occasion || '',
+        'Gender': product.attributes?.gender || '',
+        'Age Group': product.attributes?.ageGroup || ''
+      }));
+      const wsAttributes = XLSX.utils.json_to_sheet(attributesData);
+      XLSX.utils.book_append_sheet(wb, wsAttributes, 'Attributes');
 
-      // Generate Excel file
+      // BOM Sheet
+      const bomData = data.results.flatMap(product => 
+        (product.bom || []).map(bom => ({
+          'Style Code': product.styleCode,
+          'Material': bom.material,
+          'Quantity': bom.quantity
+        }))
+      );
+      const wsBOM = XLSX.utils.json_to_sheet(bomData);
+      XLSX.utils.book_append_sheet(wb, wsBOM, 'BOM');
+
+      // Processes Sheet
+      const processesData = data.results.flatMap(product => 
+        (product.processes || []).map(process => ({
+          'Style Code': product.styleCode,
+          'Process': process.process,
+          'Sequence': process.sequence
+        }))
+      );
+      const wsProcesses = XLSX.utils.json_to_sheet(processesData);
+      XLSX.utils.book_append_sheet(wb, wsProcesses, 'Processes');
+
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
-      // Save file
       saveAs(data2, `products_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (error) {
       console.error('Error exporting products:', error);
       alert('Error exporting products. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // General Sheet Template
+      const generalTemplate = [{
+        'Product Name': 'Example Product',
+        'Style Code': 'STY-XXXXX',
+        'Internal Code': 'INT-XXXXX',
+        'Vendor Code': 'VEN-XXXXX',
+        'Factory Code': 'FAC-XXXXX',
+        'EAN Code': '1234567890123',
+        'Description': 'Product description here',
+        'Category': 'Category Name'
+      }];
+      const wsGeneral = XLSX.utils.json_to_sheet(generalTemplate);
+      XLSX.utils.book_append_sheet(wb, wsGeneral, 'General');
+
+      // Attributes Sheet Template
+      const attributesTemplate = [{
+        'Style Code': 'STY-XXXXX',
+        'Type': 'Type 1',
+        'Brand': 'Brand Name',
+        'MRP': '999.99',
+        'Material': 'Cotton',
+        'Color': 'Blue',
+        'Pattern': 'Solid',
+        'Season': 'Summer',
+        'Occasion': 'Casual',
+        'Gender': 'Unisex',
+        'Age Group': 'Adult'
+      }];
+      const wsAttributes = XLSX.utils.json_to_sheet(attributesTemplate);
+      XLSX.utils.book_append_sheet(wb, wsAttributes, 'Attributes');
+
+      // BOM Sheet Template
+      const bomTemplate = [{
+        'Style Code': 'STY-XXXXX',
+        'Material': 'Cotton Fabric',
+        'Quantity': '2'
+      }];
+      const wsBOM = XLSX.utils.json_to_sheet(bomTemplate);
+      XLSX.utils.book_append_sheet(wb, wsBOM, 'BOM');
+
+      // Processes Sheet Template
+      const processesTemplate = [{
+        'Style Code': 'STY-XXXXX',
+        'Process': 'Cutting',
+        'Sequence': '1'
+      }];
+      const wsProcesses = XLSX.utils.json_to_sheet(processesTemplate);
+      XLSX.utils.book_append_sheet(wb, wsProcesses, 'Processes');
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      saveAs(data, 'product_template.xlsx');
+    } catch (error) {
+      console.error('Error generating template:', error);
+      alert('Error generating template. Please try again.');
     }
   };
 
@@ -132,22 +297,81 @@ const ProductListPage = () => {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
           
-          // Get first worksheet
-          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          // Process General sheet
+          const generalSheet = workbook.Sheets['General'];
+          const generalData = XLSX.utils.sheet_to_json(generalSheet) as ExcelGeneralRow[];
 
-          // Process and validate each row
-          const products = jsonData.map((row: any) => ({
-            name: row['Name'],
-            softwareCode: row['Software Code'],
-            internalCode: row['Internal Code'],
-            vendorCode: row['Vendor Code'],
-            factoryCode: row['Factory Code'],
-            styleCode: row['Style Code'],
-            eanCode: row['EAN Code'],
-            description: row['Description'],
-            category: row['Category']
-          }));
+          // Process Attributes sheet
+          const attributesSheet = workbook.Sheets['Attributes'];
+          const attributesData = attributesSheet ? XLSX.utils.sheet_to_json(attributesSheet) as ExcelAttributeRow[] : [];
+
+          // Process BOM sheet
+          const bomSheet = workbook.Sheets['BOM'];
+          const bomData = bomSheet ? XLSX.utils.sheet_to_json(bomSheet) as ExcelBOMRow[] : [];
+
+          // Process Processes sheet
+          const processesSheet = workbook.Sheets['Processes'];
+          const processesData = processesSheet ? XLSX.utils.sheet_to_json(processesSheet) as ExcelProcessRow[] : [];
+
+          // Combine data by Style Code
+          const products = generalData.map((row) => {
+            const styleCode = row['Style Code'];
+            
+            // Find matching attributes
+            const attributes = attributesData.find(attr => attr['Style Code'] === styleCode) || {
+              'Type': '',
+              'Brand': '',
+              'MRP': '',
+              'Material': '',
+              'Color': '',
+              'Pattern': '',
+              'Season': '',
+              'Occasion': '',
+              'Gender': '',
+              'Age Group': ''
+            };
+            
+            // Find matching BOM items
+            const bom = bomData
+              .filter(bom => bom['Style Code'] === styleCode)
+              .map(bom => ({
+                material: bom['Material'],
+                quantity: Number(bom['Quantity'])
+              }));
+
+            // Find matching processes
+            const processes = processesData
+              .filter(proc => proc['Style Code'] === styleCode)
+              .map(proc => ({
+                process: proc['Process'],
+                sequence: Number(proc['Sequence'])
+              }));
+
+            return {
+              name: row['Product Name'],
+              styleCode: styleCode,
+              internalCode: row['Internal Code'],
+              vendorCode: row['Vendor Code'],
+              factoryCode: row['Factory Code'],
+              eanCode: row['EAN Code'],
+              description: row['Description'],
+              category: row['Category'],
+              attributes: {
+                type: attributes['Type'],
+                brand: attributes['Brand'],
+                mrp: attributes['MRP'],
+                material: attributes['Material'],
+                color: attributes['Color'],
+                pattern: attributes['Pattern'],
+                season: attributes['Season'],
+                occasion: attributes['Occasion'],
+                gender: attributes['Gender'],
+                ageGroup: attributes['Age Group']
+              },
+              bom,
+              processes
+            };
+          });
 
           // Send to API
           await axios.post(`${API_ENDPOINTS.products}/import`, { products });
@@ -184,6 +408,15 @@ const ProductListPage = () => {
             <div className="box-header flex justify-between items-center">
               <h1 className="box-title text-2xl font-semibold">Products</h1>
               <div className="box-tools flex space-x-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  className="ti-btn ti-btn-secondary"
+                  disabled={isLoading}
+                >
+                  <i className="ri-file-download-line me-2"></i>
+                  Download Template
+                </button>
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -233,7 +466,7 @@ const ProductListPage = () => {
                       <thead>
                         <tr className="border-b border-gray-200">
                           <th className="text-start">Name</th>
-                          <th className="text-start">Software Code</th>
+                          <th className="text-start">Style Code</th>
                           <th className="text-start">Internal Code</th>
                           <th className="text-start">Category</th>
                           <th className="text-start">Created At</th>
@@ -244,7 +477,7 @@ const ProductListPage = () => {
                         {products.map((product) => (
                           <tr key={product.id} className="border-b border-gray-200">
                             <td>{product.name}</td>
-                            <td>{product.softwareCode}</td>
+                            <td>{product.styleCode}</td>
                             <td>{product.internalCode}</td>
                             <td>{product.category?.name}</td>
                             <td>{new Date(product.createdAt).toLocaleDateString()}</td>
