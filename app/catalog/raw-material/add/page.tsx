@@ -5,13 +5,22 @@ import { useRouter } from 'next/navigation';
 import Seo from '@/shared/layout-components/seo/seo';
 import Image from 'next/image';
 import { toast, Toaster } from 'react-hot-toast';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface RawMaterialForm {
-  itemName: string;
-  printName: string;
-  color: string;
-  unit: string;
+  name: string;
+  groupName: string;
+  type: string;
   description: string;
+  brand: string;
+  countSize: string;
+  material: string;
+  color: string;
+  shade: string;
+  unit: string;
+  mrp: string;
+  hsnCode: string;
+  gst: string;
   image?: File;
   imagePreview?: string;
 }
@@ -20,11 +29,19 @@ export default function AddRawMaterial() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<RawMaterialForm>({
-    itemName: '',
-    printName: '',
-    color: '',
-    unit: '',
+    name: '',
+    groupName: '',
+    type: '',
     description: '',
+    brand: '',
+    countSize: '',
+    material: '',
+    color: '',
+    shade: '',
+    unit: '',
+    mrp: '',
+    hsnCode: '',
+    gst: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -33,17 +50,24 @@ export default function AddRawMaterial() {
     setIsSubmitting(true);
 
     try {
-      // Prepare the request data
       const requestData = {
-        itemName: formData.itemName,
-        printName: formData.printName,
-        color: formData.color,
-        unit: formData.unit,
+        name: formData.name,
+        groupName: formData.groupName,
+        type: formData.type,
         description: formData.description,
-        image: 'null' // Making image optional with default null value
+        brand: formData.brand,
+        countSize: formData.countSize,
+        material: formData.material,
+        color: formData.color,
+        shade: formData.shade,
+        unit: formData.unit,
+        mrp: formData.mrp,
+        hsnCode: formData.hsnCode,
+        gst: formData.gst,
+        image: 'null',
       };
 
-      const response = await fetch('https://addon-backend.onrender.com/v1/raw-materials', {
+      const response = await fetch(`${API_BASE_URL}/raw-materials`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -143,26 +167,108 @@ export default function AddRawMaterial() {
                     </div>
                   </div>
 
-                  {/* Item Name */}
+                  {/* Group Name Dropdown */}
                   <div className="form-group">
-                    <label className="form-label">Item Name</label>
+                    <label className="form-label">Group Name</label>
+                    <select
+                      name="groupName"
+                      value={formData.groupName}
+                      onChange={handleChange}
+                      className="form-control"
+                      required
+                    >
+                      <option value="">Select Group</option>
+                      <option value="Embroidery">Embroidery</option>
+                      <option value="Packing Material">Packing Material</option>
+                      <option value="Yarn">Yarn</option>
+                      <option value="Finished Goods">Finished Goods</option>
+                      <option value="Stationary">Stationary</option>
+                      <option value="Household">Household</option>
+                      <option value="Machine Tools">Machine Tools</option>
+                      <option value="Maintenance">Maintenance</option>
+                    </select>
+                  </div>
+
+                  {/* Type Dropdown */}
+                  <div className="form-group">
+                    <label className="form-label">Type</label>
+                    <select
+                      name="type"
+                      value={formData.type}
+                      onChange={handleChange}
+                      className="form-control"
+                      required
+                    >
+                      <option value="">Select Type</option>
+                      <option value="Threads">Threads</option>
+                      <option value="Tag">Tag</option>
+                      <option value="Polybags">Polybags</option>
+                      <option value="Box">Box</option>
+                      <option value="Stands">Stands</option>
+                      <option value="Socks">Socks</option>
+                      <option value="Stickers">Stickers</option>
+                    </select>
+                  </div>
+
+                  {/* Name */}
+                  <div className="form-group">
+                    <label className="form-label">Name</label>
                     <input
                       type="text"
-                      name="itemName"
-                      value={formData.itemName}
+                      name="name"
+                      value={formData.name}
                       onChange={handleChange}
                       className="form-control"
                       required
                     />
                   </div>
 
-                  {/* Print Name */}
+                  {/* Description */}
                   <div className="form-group">
-                    <label className="form-label">Print Name</label>
+                    <label className="form-label">Description</label>
+                    <textarea
+                      name="description"
+                      value={formData.description}
+                      onChange={handleChange}
+                      className="form-control"
+                      rows={2}
+                      required
+                    ></textarea>
+                  </div>
+
+                  {/* Brand */}
+                  <div className="form-group">
+                    <label className="form-label">Brand</label>
                     <input
                       type="text"
-                      name="printName"
-                      value={formData.printName}
+                      name="brand"
+                      value={formData.brand}
+                      onChange={handleChange}
+                      className="form-control"
+                      required
+                    />
+                  </div>
+
+                  {/* Count/Size */}
+                  <div className="form-group">
+                    <label className="form-label">Count/Size</label>
+                    <input
+                      type="text"
+                      name="countSize"
+                      value={formData.countSize}
+                      onChange={handleChange}
+                      className="form-control"
+                      required
+                    />
+                  </div>
+
+                  {/* Material */}
+                  <div className="form-group">
+                    <label className="form-label">Material</label>
+                    <input
+                      type="text"
+                      name="material"
+                      value={formData.material}
                       onChange={handleChange}
                       className="form-control"
                       required
@@ -182,7 +288,20 @@ export default function AddRawMaterial() {
                     />
                   </div>
 
-                  {/* Unit */}
+                  {/* Shade */}
+                  <div className="form-group">
+                    <label className="form-label">Shade</label>
+                    <input
+                      type="text"
+                      name="shade"
+                      value={formData.shade}
+                      onChange={handleChange}
+                      className="form-control"
+                      required
+                    />
+                  </div>
+
+                  {/* Unit Dropdown */}
                   <div className="form-group">
                     <label className="form-label">Unit</label>
                     <select
@@ -193,26 +312,55 @@ export default function AddRawMaterial() {
                       required
                     >
                       <option value="">Select Unit</option>
-                      <option value="Meters">Meters</option>
-                      <option value="Yards">Yards</option>
-                      <option value="Pieces">Pieces</option>
+                      <option value="Meter">Meter</option>
+                      <option value="Pcs">Pcs</option>
                       <option value="Kilograms">Kilograms</option>
-                      <option value="Liters">Liters</option>
+                      <option value="Grams">Grams</option>
+                      <option value="Liter">Liter</option>
+                      <option value="Pairs">Pairs</option>
+                      <option value="Packet">Packet</option>
+                      <option value="Packs">Packs</option>
                     </select>
                   </div>
-                </div>
 
-                {/* Description */}
-                <div className="form-group col-span-2">
-                  <label className="form-label">Description</label>
-                  <textarea
-                    name="description"
-                    value={formData.description}
-                    onChange={handleChange}
-                    className="form-control"
-                    rows={4}
-                    required
-                  ></textarea>
+                  {/* MRP */}
+                  <div className="form-group">
+                    <label className="form-label">MRP</label>
+                    <input
+                      type="text"
+                      name="mrp"
+                      value={formData.mrp}
+                      onChange={handleChange}
+                      className="form-control"
+                      required
+                    />
+                  </div>
+
+                  {/* HSN Code */}
+                  <div className="form-group">
+                    <label className="form-label">HSN Code</label>
+                    <input
+                      type="text"
+                      name="hsnCode"
+                      value={formData.hsnCode}
+                      onChange={handleChange}
+                      className="form-control"
+                      required
+                    />
+                  </div>
+
+                  {/* GST % */}
+                  <div className="form-group">
+                    <label className="form-label">GST %</label>
+                    <input
+                      type="text"
+                      name="gst"
+                      value={formData.gst}
+                      onChange={handleChange}
+                      className="form-control"
+                      required
+                    />
+                  </div>
                 </div>
 
                 {/* Form Actions */}

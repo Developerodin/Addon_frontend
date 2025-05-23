@@ -4,6 +4,7 @@ import Seo from '@/shared/layout-components/seo/seo';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface Category {
   id: string;
@@ -34,7 +35,7 @@ const AddCategoryPage = () => {
   useEffect(() => {
     const fetchParentCategories = async () => {
       try {
-        const response = await fetch('https://addon-backend.onrender.com/v1/categories', {
+        const response = await fetch(`${API_BASE_URL}/categories`, {
           headers: {
             'Accept': 'application/json',
           },
@@ -87,7 +88,7 @@ const AddCategoryPage = () => {
         const formData = new FormData();
         formData.append('image', selectedImage);
 
-        const imageResponse = await fetch('https://addon-backend.onrender.com/v1/upload', {
+        const imageResponse = await fetch(`${API_BASE_URL}/upload`, {
           method: 'POST',
           body: formData,
         });
@@ -111,7 +112,7 @@ const AddCategoryPage = () => {
       };
 
       // Create category
-      const response = await fetch('https://addon-backend.onrender.com/v1/categories', {
+      const response = await fetch(`${API_BASE_URL}/categories`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',

@@ -6,6 +6,7 @@ import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import Seo from '@/shared/layout-components/seo/seo';
 import Image from 'next/image';
 import { toast, Toaster } from 'react-hot-toast';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface ProcessStep {
   stepTitle: string;
@@ -42,7 +43,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
   useEffect(() => {
     const fetchProcess = async () => {
       try {
-        const response = await fetch(`https://addon-backend.onrender.com/v1/processes/${params.id}`, {
+        const response = await fetch(`${API_BASE_URL}/processes/${params.id}`, {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -148,7 +149,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
         steps: cleanSteps
       };
 
-      const response = await fetch(`https://addon-backend.onrender.com/v1/processes/${params.id}`, {
+      const response = await fetch(`${API_BASE_URL}/processes/${params.id}`, {
         method: 'PATCH',
         headers: {
           'Accept': 'application/json',
@@ -167,7 +168,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
         const imageFormData = new FormData();
         imageFormData.append('image', formData.image);
 
-        const imageResponse = await fetch(`https://addon-backend.onrender.com/v1/processes/${params.id}/image`, {
+        const imageResponse = await fetch(`${API_BASE_URL}/processes/${params.id}/image`, {
           method: 'PATCH',
           body: imageFormData,
         });
@@ -224,6 +225,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                           value={formData.name}
                           onChange={handleInputChange}
                           required
+                          disabled={isSubmitting}
                         />
                       </div>
                     </div>
@@ -238,6 +240,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                           value={formData.type}
                           onChange={handleInputChange}
                           required
+                          disabled={isSubmitting}
                         >
                           <option value="">Select Type</option>
                           <option value="Manufacturing">Manufacturing</option>
@@ -259,6 +262,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                           value={formData.description}
                           onChange={handleInputChange}
                           rows={4}
+                          disabled={isSubmitting}
                         />
                       </div>
                     </div>
@@ -274,6 +278,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                           placeholder="Enter sort order"
                           value={formData.sortOrder}
                           onChange={handleInputChange}
+                          disabled={isSubmitting}
                         />
                       </div>
                     </div>
@@ -287,6 +292,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                           className="form-select"
                           value={formData.status}
                           onChange={handleInputChange}
+                          disabled={isSubmitting}
                         >
                           <option value="active">Active</option>
                           <option value="inactive">Inactive</option>
@@ -314,6 +320,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                                     setFormData(prev => ({ ...prev, image: null }));
                                     setImagePreview('');
                                   }}
+                                  disabled={isSubmitting}
                                 >
                                   <i className="ri-close-line"></i>
                                 </button>
@@ -329,6 +336,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                               className="absolute inset-0 opacity-0 cursor-pointer"
                               onChange={handleImageChange}
                               accept="image/*"
+                              disabled={isSubmitting}
                             />
                           </div>
                         </div>
@@ -344,6 +352,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                         type="button"
                         className="ti-btn ti-btn-primary"
                         onClick={addStep}
+                        disabled={isSubmitting}
                       >
                         <i className="ri-add-line me-2"></i>Add Step
                       </button>
@@ -360,6 +369,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                               value={step.stepTitle}
                               onChange={(e) => handleStepChange(index, 'stepTitle', e.target.value)}
                               required
+                              disabled={isSubmitting}
                             />
                           </div>
                         </div>
@@ -373,6 +383,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                               value={step.stepDescription}
                               onChange={(e) => handleStepChange(index, 'stepDescription', e.target.value)}
                               required
+                              disabled={isSubmitting}
                             />
                           </div>
                         </div>
@@ -386,6 +397,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                               value={step.duration}
                               onChange={(e) => handleStepChange(index, 'duration', e.target.value)}
                               required
+                              disabled={isSubmitting}
                             />
                           </div>
                         </div>
@@ -395,6 +407,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                             type="button"
                             className="absolute top-2 right-2 text-red-500 hover:text-red-700"
                             onClick={() => removeStep(index)}
+                            disabled={isSubmitting}
                           >
                             <i className="ri-delete-bin-line text-lg"></i>
                           </button>
@@ -408,6 +421,7 @@ const EditProcessPage = ({ params }: { params: { id: string } }) => {
                       type="button"
                       className="ti-btn ti-btn-secondary"
                       onClick={() => router.push('/catalog/processes')}
+                      disabled={isSubmitting}
                     >
                       Cancel
                     </button>

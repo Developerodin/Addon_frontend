@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Seo from '@/shared/layout-components/seo/seo';
 import { toast, Toaster } from 'react-hot-toast';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface Category {
   id: string;
@@ -33,7 +34,7 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
   useEffect(() => {
     const fetchCategory = async () => {
       try {
-        const response = await fetch(`https://addon-backend.onrender.com/v1/categories/${params.id}`);
+        const response = await fetch(`${API_BASE_URL}/categories/${params.id}`);
         if (!response.ok) throw new Error('Failed to fetch category');
         const data = await response.json();
         
@@ -60,7 +61,7 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
 
     const fetchParentCategories = async () => {
       try {
-        const response = await fetch('https://addon-backend.onrender.com/v1/categories');
+        const response = await fetch(`${API_BASE_URL}/categories`);
         if (!response.ok) throw new Error('Failed to fetch categories');
         const data = await response.json();
         // Filter out the current category and its children to prevent circular references
@@ -110,7 +111,7 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
         parent: formData.parent || null
       };
 
-      const response = await fetch(`https://addon-backend.onrender.com/v1/categories/${params.id}`, {
+      const response = await fetch(`${API_BASE_URL}/categories/${params.id}`, {
         method: 'PATCH',
         headers: {
           'Accept': 'application/json',
@@ -129,7 +130,7 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
         const imageFormData = new FormData();
         imageFormData.append('image', imageFile);
 
-        const imageResponse = await fetch(`https://addon-backend.onrender.com/v1/categories/${params.id}/image`, {
+        const imageResponse = await fetch(`${API_BASE_URL}/categories/${params.id}/image`, {
           method: 'PATCH',
           body: imageFormData,
         });

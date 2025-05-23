@@ -13,8 +13,14 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
   const dispatch = useDispatch();
   const router = useRouter();
 
-  const handleLogout = () => {
-    dispatch(authActions.logout());
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async (e?: React.MouseEvent) => {
+    if (loggingOut) return;
+    if (e) e.preventDefault();
+    setLoggingOut(true);
+    await dispatch<any>(authActions.logout());
+    setLoggingOut(false);
     router.push('/auth/login');
   };
 
@@ -517,12 +523,10 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
                     <li><Link className="w-full ti-dropdown-item !text-[0.8125rem] !gap-x-0 !p-[0.65rem]" href="#!"><i
                       className="ti ti-adjustments-horizontal text-[1.125rem] me-2 opacity-[0.7] !inline-flex"></i>Settings</Link></li>
                  
-                    <li><Link 
-                      onClick={handleLogout}
-                      className="w-full ti-dropdown-item !text-[0.8125rem] !p-[0.65rem] !gap-x-0 !inline-flex cursor-pointer" 
+                    <li><Link onClick={handleLogout} className="w-full ti-dropdown-item !text-[0.8125rem] !p-[0.65rem] !gap-x-0 !inline-flex cursor-pointer" 
                       href="#!"
                     ><i
-                      className="ti ti-logout text-[1.125rem] me-2 opacity-[0.7] !inline-flex"></i>Log Out</Link></li>
+                      className="ti ti-logout text-[1.125rem] me-2 opacity-[0.7] !inline-flex"></i>{loggingOut ? 'Logging out...' : 'Logout'}</Link></li>
                   </ul>
                 </div>
               </div>

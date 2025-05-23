@@ -4,6 +4,7 @@ import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface Category {
   id: string;
@@ -16,6 +17,7 @@ interface Category {
 }
 
 interface ExcelRow {
+  'ID'?: string;
   'Category Name': string;
   'Description'?: string;
   'Parent Category'?: string;
@@ -31,36 +33,32 @@ const CategoriesPage = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalResults, setTotalResults] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch categories from API
-  const fetchCategories = async () => {
+  // Fetch categories from API (with pagination and search)
+  const fetchCategories = async (page = 1, limit = itemsPerPage, search = '') => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      const response = await fetch('https://addon-backend.onrender.com/v1/categories', {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      });
-
+      const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
+      const response = await fetch(`${API_BASE_URL}/categories?page=${page}&limit=${limit}${searchParam}`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to fetch categories');
       }
-
       const data = await response.json();
-      console.log('Categories data:', data);
-      
-      // Check if data is in the expected format (array of categories)
       const categoriesArray = Array.isArray(data.results) ? data.results : [];
       setCategories(categoriesArray);
+      setTotalResults(data.totalResults || 0);
+      setTotalPages(data.totalPages || 1);
     } catch (err) {
-      console.error('Error fetching categories:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch categories');
+      setCategories([]);
+      setTotalPages(1);
       toast.error('Failed to load categories');
     } finally {
       setIsLoading(false);
@@ -68,8 +66,12 @@ const CategoriesPage = () => {
   };
 
   useEffect(() => {
-    fetchCategories();
-  }, []);
+    fetchCategories(currentPage, itemsPerPage, searchQuery);
+  }, [currentPage, itemsPerPage, searchQuery]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -91,7 +93,7 @@ const CategoriesPage = () => {
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this category?')) {
       try {
-        const response = await fetch(`https://addon-backend.onrender.com/v1/categories/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/categories/${id}`, {
           method: 'DELETE',
           headers: {
             'Accept': 'application/json',
@@ -125,7 +127,7 @@ const CategoriesPage = () => {
         let hasError = false;
         const deletePromises = selectedCategories.map(async (id) => {
           try {
-            const response = await fetch(`https://addon-backend.onrender.com/v1/categories/${id}`, {
+            const response = await fetch(`${API_BASE_URL}/categories/${id}`, {
               method: 'DELETE',
               headers: {
                 'Accept': 'application/json',
@@ -174,32 +176,33 @@ const CategoriesPage = () => {
     category.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Calculate pagination
-  const totalPages = Math.ceil(filteredCategories.length / itemsPerPage);
+  // Calculate current categories for the current page
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentCategories = filteredCategories.slice(startIndex, endIndex);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     try {
-      // Prepare data for export
-      const exportData = categories.map(category => ({
+      // Always fetch all categories for export
+      const response = await fetch(`${API_BASE_URL}/categories?page=1&limit=100000`);
+      if (!response.ok) throw new Error('Failed to fetch all categories for export');
+      const data = await response.json();
+      const exportSource = Array.isArray(data.results) ? data.results : [];
+      const exportData = exportSource.map((category: Category) => ({
+        'ID': category.id,
         'Category Name': category.name,
         'Description': category.description || '',
-        'Parent Category': categories.find(p => p.id === category.parent)?.name || 'None',
+        'Parent Category': exportSource.find((p: Category) => p.id === category.parent)?.name || 'None',
         'Sort Order': category.sortOrder,
         'Status': category.status
       }));
-
-      // Create worksheet
       const ws = XLSX.utils.json_to_sheet(exportData);
+      ws['!cols'] = [
+        { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 20 }, { wch: 10 }, { wch: 10 }
+      ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Categories');
-
-      // Generate file name with timestamp
       const fileName = `categories_${new Date().toISOString().split('T')[0]}.xlsx`;
-
-      // Save file
       XLSX.writeFile(wb, fileName);
       toast.success('Categories exported successfully');
     } catch (error) {
@@ -211,7 +214,7 @@ const CategoriesPage = () => {
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    setImportProgress(0);
     const loadingToast = toast.loading('Importing categories...');
     try {
       const reader = new FileReader();
@@ -222,11 +225,14 @@ const CategoriesPage = () => {
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
           const jsonData = XLSX.utils.sheet_to_json(worksheet) as ExcelRow[];
-
           let successCount = 0;
           let errorCount = 0;
-
-          for (const row of jsonData) {
+          // Fetch all categories for upsert by name
+          const allResponse = await fetch(`${API_BASE_URL}/categories?page=1&limit=100000`);
+          const allData = allResponse.ok ? await allResponse.json() : { results: [] };
+          const allCategories: Category[] = allData.results || [];
+          for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
             try {
               const categoryData = {
                 name: row['Category Name'],
@@ -235,64 +241,84 @@ const CategoriesPage = () => {
                 status: (row['Status']?.toString()?.toLowerCase() === 'active') ? 'active' : 'inactive',
                 parent: null as string | null
               };
-
               // Find parent category ID by name if provided
               const parentName = row['Parent Category'];
               if (parentName && parentName !== 'None') {
-                const parentCategory = categories.find(c => c.name === parentName);
+                const parentCategory = allCategories.find(c => c.name === parentName);
                 if (parentCategory) {
                   categoryData.parent = parentCategory.id;
                 }
               }
-
-              const response = await fetch('https://addon-backend.onrender.com/v1/categories', {
-                method: 'POST',
-                headers: {
-                  'Accept': 'application/json',
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(categoryData),
-              });
-
-              if (!response.ok) {
-                throw new Error(`Failed to import category: ${row['Category Name']}`);
+              let categoryId = row['ID'];
+              if (!categoryId) {
+                // Try to find by name (case-insensitive)
+                const found = allCategories.find(c => c.name.trim().toLowerCase() === categoryData.name.trim().toLowerCase());
+                if (found) categoryId = found.id;
               }
-
-              successCount++;
+              if (categoryId) {
+                // Update existing
+                const patchResponse = await fetch(`${API_BASE_URL}/categories/${categoryId}`, {
+                  method: 'PATCH',
+                  headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(categoryData),
+                });
+                if (!patchResponse.ok) throw new Error();
+                successCount++;
+              } else {
+                // Create new
+                const postResponse = await fetch(`${API_BASE_URL}/categories`, {
+                  method: 'POST',
+                  headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(categoryData),
+                });
+                if (!postResponse.ok) throw new Error();
+                successCount++;
+              }
             } catch (error) {
-              console.error('Error importing category:', error);
               errorCount++;
             }
+            setImportProgress(Math.round(((i + 1) / jsonData.length) * 100));
           }
-
-          // Clear the file input
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-
-          // Show results
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          setImportProgress(null);
           toast.dismiss(loadingToast);
-          if (successCount > 0) {
-            toast.success(`Successfully imported ${successCount} categories`);
-          }
-          if (errorCount > 0) {
-            toast.error(`Failed to import ${errorCount} categories`);
-          }
-
-          // Refresh the categories list
+          if (successCount > 0) toast.success(`Successfully imported/updated ${successCount} categories`);
+          if (errorCount > 0) toast.error(`Failed to import/update ${errorCount} categories`);
           fetchCategories();
         } catch (error) {
-          console.error('Error processing file:', error);
+          setImportProgress(null);
           toast.error('Failed to process import file', { id: loadingToast });
         }
       };
-
       reader.readAsArrayBuffer(file);
     } catch (error) {
-      console.error('Error importing categories:', error);
+      setImportProgress(null);
       toast.error('Failed to import categories', { id: loadingToast });
     }
   };
+
+  // Condensed pagination helper
+  function getPagination(currentPage: number, totalPages: number) {
+    const pages = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 4) pages.push('...');
+      for (let i = Math.max(2, currentPage - 2); i <= Math.min(totalPages - 1, currentPage + 2); i++) {
+        pages.push(i);
+      }
+      if (currentPage < totalPages - 3) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  }
 
   return (
     <div className="main-content">
@@ -316,30 +342,39 @@ const CategoriesPage = () => {
                     Delete Selected ({selectedCategories.length})
                   </button>
                 )}
-
                 {/* Import/Export Buttons */}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  accept=".xlsx,.xls"
-                  onChange={handleImport}
-                />
+                <div className="relative group">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept=".xlsx,.xls"
+                    onChange={handleImport}
+                  />
+                  <button
+                    type="button"
+                    className="ti-btn ti-btn-success"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <i className="ri-upload-2-line me-2"></i> Import
+                  </button>
+                </div>
+                {importProgress !== null && (
+                  <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
+                    <div
+                      className="bg-primary h-full transition-all duration-200"
+                      style={{ width: `${importProgress}%` }}
+                    ></div>
+                    <span className="ml-2 text-xs text-gray-700">{importProgress}%</span>
+                  </div>
+                )}
                 <button
                   type="button"
-                  className="ti-btn ti-btn-success"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <i className="ri-upload-2-line me-2"></i> Import
-                </button>
-                <button
-                  type="button"
-                  className="ti-btn ti-btn-success"
+                  className="ti-btn ti-btn-primary"
                   onClick={handleExport}
                 >
                   <i className="ri-download-2-line me-2"></i> Export
                 </button>
-
                 <Link href="/catalog/categories/add" className="ti-btn ti-btn-primary">
                   <i className="ri-add-line me-2"></i> Add New Category
                 </Link>
@@ -351,11 +386,28 @@ const CategoriesPage = () => {
           <div className="box">
             <div className="box-body">
               {/* Search Bar */}
-              <div className="mb-4">
-                <div className="relative">
+              <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
+                <div className="flex items-center">
+                  <label className="mr-2 text-sm text-gray-600">Rows per page:</label>
+                  <select
+                    className="form-select w-auto text-sm"
+                    value={itemsPerPage}
+                    onChange={e => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={500}>500</option>
+                    <option value={1000}>1000</option>
+                  </select>
+                </div>
+                <div className="relative w-full max-w-xs">
                   <input
                     type="text"
-                    className="form-control py-3"
+                    className="form-control py-3 pr-10"
                     placeholder="Search by category name..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -397,7 +449,7 @@ const CategoriesPage = () => {
                     </thead>
                     <tbody>
                       {currentCategories.length > 0 ? (
-                        currentCategories.map((category, index) => (
+                        currentCategories.map((category: Category, index: number) => (
                           <tr 
                             key={category.id} 
                             className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}
@@ -468,10 +520,10 @@ const CategoriesPage = () => {
               )}
 
               {/* Pagination */}
-              {!isLoading && !error && filteredCategories.length > itemsPerPage && (
+              {!isLoading && !error && (
                 <div className="flex justify-between items-center mt-4">
                   <div className="text-sm text-gray-500">
-                    Showing {startIndex + 1} to {Math.min(endIndex, filteredCategories.length)} of {filteredCategories.length} entries
+                    Showing {totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {totalResults === 0 ? 0 : Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
                   </div>
                   <nav aria-label="Page navigation" className="">
                     <ul className="flex flex-wrap items-center">
@@ -484,20 +536,22 @@ const CategoriesPage = () => {
                           Previous
                         </button>
                       </li>
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                        <li key={page} className="page-item">
-                          <button
-                            className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
-                              currentPage === page 
-                              ? 'bg-primary text-white hover:bg-primary-dark' 
-                              : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                            }`}
-                            onClick={() => setCurrentPage(page)}
-                          >
-                            {page}
-                          </button>
-                        </li>
-                      ))}
+                      {getPagination(currentPage, totalPages).map((page, idx) =>
+                        page === '...'
+                          ? <li key={"ellipsis-" + idx} className="page-item"><span className="px-3">...</span></li>
+                          : <li key={page} className="page-item">
+                              <button
+                                className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
+                                  currentPage === page 
+                                  ? 'bg-primary text-white hover:bg-primary-dark' 
+                                  : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                                }`}
+                                onClick={() => setCurrentPage(Number(page))}
+                              >
+                                {page}
+                              </button>
+                            </li>
+                      )}
                       <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
                         <button
                           className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"

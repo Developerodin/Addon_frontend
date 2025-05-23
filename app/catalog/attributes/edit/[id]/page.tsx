@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Seo from '@/shared/layout-components/seo/seo';
 import { toast, Toaster } from 'react-hot-toast';
 import Image from 'next/image';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface AttributeValue {
   id: number;
@@ -40,7 +41,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
         setIsLoading(true);
         setError(null);
         
-        const response = await fetch(`https://addon-backend.onrender.com/v1/product-attributes/${params.id}`, {
+        const response = await fetch(`${API_BASE_URL}/product-attributes/${params.id}`, {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -135,7 +136,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
         }))
       };
 
-      const response = await fetch(`https://addon-backend.onrender.com/v1/product-attributes/${params.id}`, {
+      const response = await fetch(`${API_BASE_URL}/product-attributes/${params.id}`, {
         method: 'PATCH',
         headers: {
           'Accept': 'application/json',
@@ -215,6 +216,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
+                    disabled={isSaving}
                   />
                 </div>
 
@@ -225,6 +227,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
                     className="form-control"
                     value={formData.type}
                     onChange={handleInputChange}
+                    disabled={isSaving}
                   >
                     <option value="select">Select</option>
                     <option value="radio">Radio</option>
@@ -240,6 +243,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
                     className="form-control"
                     value={formData.sortOrder}
                     onChange={handleInputChange}
+                    disabled={isSaving}
                   />
                 </div>
               </div>
@@ -252,6 +256,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
                     type="button"
                     className="ti-btn ti-btn-primary ti-btn-sm"
                     onClick={handleAddOption}
+                    disabled={isSaving}
                   >
                     <i className="ri-add-line me-2"></i> Add Option
                   </button>
@@ -269,6 +274,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
                             value={option.name}
                             onChange={(e) => handleOptionChange(index, 'name', e.target.value)}
                             required
+                            disabled={isSaving}
                           />
                         </div>
                         <div>
@@ -278,6 +284,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
                             className="form-control"
                             value={option.sortOrder}
                             onChange={(e) => handleOptionChange(index, 'sortOrder', parseInt(e.target.value))}
+                            disabled={isSaving}
                           />
                         </div>
                       </div>
@@ -285,6 +292,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
                         type="button"
                         className="ti-btn ti-btn-danger ti-btn-sm mt-6"
                         onClick={() => handleRemoveOption(index)}
+                        disabled={isSaving}
                       >
                         <i className="ri-delete-bin-line"></i>
                       </button>
@@ -299,6 +307,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
                   type="button"
                   className="ti-btn ti-btn-secondary"
                   onClick={() => router.push('/catalog/attributes')}
+                  disabled={isSaving}
                 >
                   Cancel
                 </button>

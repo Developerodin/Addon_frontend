@@ -6,6 +6,7 @@ import Seo from '@/shared/layout-components/seo/seo';
 import { toast, Toaster } from 'react-hot-toast';
 import Image from 'next/image';
 import * as XLSX from 'xlsx';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface ProcessStep {
   stepTitle: string;
@@ -41,51 +42,51 @@ const ProcessesPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalResults, setTotalResults] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
 
   // Fetch processes from API
-  const fetchProcesses = async () => {
+  const fetchProcesses = async (page = 1, limit = itemsPerPage, search = '') => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      const response = await fetch('https://addon-backend.onrender.com/v1/processes', {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      });
-
+      const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
+      const response = await fetch(`${API_BASE_URL}/processes?page=${page}&limit=${limit}${searchParam}`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to fetch processes');
       }
-
       const data = await response.json();
-      console.log('Processes data:', data);
-      
-      // Check if data is in the expected format (array of processes)
-      const processesArray = Array.isArray(data.results) ? data.results : [];
-      setProcesses(processesArray);
+      setProcesses(data.results || []);
+      setTotalResults(data.totalResults || 0);
+      setTotalPages(data.totalPages || 1);
     } catch (err) {
-      console.error('Error fetching processes:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch processes');
-      toast.error('Failed to load processes');
+      setProcesses([]);
+      setTotalPages(1);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchProcesses();
-  }, []);
+    fetchProcesses(currentPage, itemsPerPage, searchQuery);
+  }, [currentPage, itemsPerPage, searchQuery]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   const handleSelectAll = () => {
     if (selectAll) {
       setSelectedProcesses([]);
     } else {
-      setSelectedProcesses(filteredProcesses.map(proc => proc.id));
+      setSelectedProcesses(processes.map(proc => proc.id));
     }
     setSelectAll(!selectAll);
   };
@@ -100,9 +101,10 @@ const ProcessesPage = () => {
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this process?')) {
+      setIsDeleting(true);
       const loadingToast = toast.loading('Deleting process...');
       try {
-        const response = await fetch(`https://addon-backend.onrender.com/v1/processes/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/processes/${id}`, {
           method: 'DELETE',
           headers: {
             'Accept': 'application/json',
@@ -115,36 +117,36 @@ const ProcessesPage = () => {
           throw new Error(errorData.message || 'Failed to delete process');
         }
 
-        // Remove the deleted process from the local state
-        setProcesses(prevProcesses => prevProcesses.filter(proc => proc.id !== id));
+        // Always refetch from backend after delete
+        await fetchProcesses();
         // Remove from selected processes if it was selected
         setSelectedProcesses(prev => prev.filter(selectedId => selectedId !== id));
-        
         toast.success('Process deleted successfully', { id: loadingToast });
       } catch (err) {
         console.error('Error deleting process:', err);
         toast.error(err instanceof Error ? err.message : 'Failed to delete process', { id: loadingToast });
+      } finally {
+        setIsDeleting(false);
       }
     }
   };
 
   const handleDeleteSelected = async () => {
     if (selectedProcesses.length === 0) return;
-    
     if (window.confirm(`Are you sure you want to delete ${selectedProcesses.length} selected process(es)?`)) {
+      setIsBulkDeleting(true);
       const loadingToast = toast.loading(`Deleting ${selectedProcesses.length} processes...`);
       try {
         let hasError = false;
         const deletePromises = selectedProcesses.map(async (id) => {
           try {
-            const response = await fetch(`https://addon-backend.onrender.com/v1/processes/${id}`, {
+            const response = await fetch(`${API_BASE_URL}/processes/${id}`, {
               method: 'DELETE',
               headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
               },
             });
-
             if (!response.ok) {
               const errorData = await response.json();
               throw new Error(errorData.message || `Failed to delete process: ${id}`);
@@ -156,19 +158,13 @@ const ProcessesPage = () => {
             return null;
           }
         });
-
         const results = await Promise.all(deletePromises);
         const successfulDeletes = results.filter((id): id is string => id !== null);
-
-        // Remove successfully deleted processes from the local state
-        setProcesses(prevProcesses => 
-          prevProcesses.filter(proc => !successfulDeletes.includes(proc.id))
-        );
-        
+        // Always refetch from backend after bulk delete
+        await fetchProcesses();
         // Clear selected processes
         setSelectedProcesses([]);
         setSelectAll(false);
-
         if (hasError) {
           toast.error('Some processes could not be deleted', { id: loadingToast });
         } else {
@@ -177,26 +173,26 @@ const ProcessesPage = () => {
       } catch (err) {
         console.error('Error in bulk delete:', err);
         toast.error('Failed to delete processes', { id: loadingToast });
+      } finally {
+        setIsBulkDeleting(false);
       }
     }
   };
 
-  // Filter processes based on search query
-  const filteredProcesses = processes.filter(process =>
-    process.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    process.type.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Calculate pagination
-  const totalPages = Math.ceil(filteredProcesses.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentProcesses = filteredProcesses.slice(startIndex, endIndex);
-
-  const handleExport = () => {
+  const handleExport = async () => {
     try {
-      // Prepare data for export
-      const exportData = processes.map(process => ({
+      let exportSource: Process[] = [];
+      if (selectedProcesses.length > 0) {
+        exportSource = processes.filter(proc => selectedProcesses.includes(proc.id));
+      } else {
+        // Fetch all processes from backend
+        const response = await fetch(`${API_BASE_URL}/processes?page=1&limit=100000`);
+        if (!response.ok) throw new Error('Failed to fetch all processes for export');
+        const data = await response.json();
+        exportSource = data.results || [];
+      }
+      const exportData = exportSource.map(process => ({
+        'ID': process.id,
         'Process Name': process.name,
         'Description': process.description || '',
         'Type': process.type,
@@ -206,28 +202,13 @@ const ProcessesPage = () => {
           .map(step => `${step.stepTitle}|${step.stepDescription}|${step.duration}`)
           .join(', ')
       }));
-
-      // Create worksheet
       const ws = XLSX.utils.json_to_sheet(exportData);
-
-      // Add column widths
-      const colWidths = [
-        { wch: 20 }, // Process Name
-        { wch: 30 }, // Description
-        { wch: 15 }, // Type
-        { wch: 10 }, // Sort Order
-        { wch: 10 }, // Status
-        { wch: 50 }, // Steps
+      ws['!cols'] = [
+        { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 50 }
       ];
-      ws['!cols'] = colWidths;
-
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Processes');
-
-      // Generate file name with timestamp
       const fileName = `processes_${new Date().toISOString().split('T')[0]}.xlsx`;
-
-      // Save file
       XLSX.writeFile(wb, fileName);
       toast.success('Processes exported successfully');
     } catch (error) {
@@ -287,7 +268,7 @@ const ProcessesPage = () => {
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    setImportProgress(0);
     const loadingToast = toast.loading('Importing processes...');
     try {
       const reader = new FileReader();
@@ -297,81 +278,110 @@ const ProcessesPage = () => {
           const workbook = XLSX.read(data, { type: 'array' });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet) as ExcelRow[];
-
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
           let successCount = 0;
           let errorCount = 0;
-
-          for (const row of jsonData) {
+          // Fetch all processes for upsert by name
+          const allResponse = await fetch(`${API_BASE_URL}/processes?page=1&limit=100000`);
+          const allData = allResponse.ok ? await allResponse.json() : { results: [] };
+          const allProcesses: Process[] = allData.results || [];
+          for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i] as any;
             try {
-              // Parse steps from the Excel format
               const stepsString = row['Steps (Title | Description | Duration)'] || '';
-              const steps = stepsString.split(',').map(stepStr => {
+              const steps = (stepsString as string).split(',').map((stepStr: string) => {
                 const [stepTitle = '', stepDescription = '', duration = '0'] = stepStr.trim().split('|');
                 return {
                   stepTitle: stepTitle.trim(),
                   stepDescription: stepDescription.trim(),
                   duration: parseInt(duration.trim()) || 0
                 };
-              }).filter(step => step.stepTitle); // Only include steps with a title
-
+              }).filter((step: any) => step.stepTitle);
               const processData = {
                 name: row['Process Name'],
                 description: row['Description'] || '',
                 type: row['Type'],
                 sortOrder: parseInt(row['Sort Order']?.toString() || '0'),
                 status: (row['Status']?.toString()?.toLowerCase() === 'active') ? 'active' : 'inactive',
-                steps: steps.length > 0 ? steps : [] // Use parsed steps or empty array
+                steps: steps.length > 0 ? steps : []
               };
-
-              const response = await fetch('https://addon-backend.onrender.com/v1/processes', {
-                method: 'POST',
-                headers: {
-                  'Accept': 'application/json',
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(processData),
-              });
-
-              if (!response.ok) {
-                throw new Error(`Failed to import process: ${row['Process Name']}`);
+              if (!processData.name || !processData.type) {
+                errorCount++;
+                continue;
               }
-
-              successCount++;
+              let processId = row['ID'];
+              if (!processId) {
+                // Try to find by name (case-insensitive)
+                const found = allProcesses.find(p => p.name.trim().toLowerCase() === processData.name.trim().toLowerCase());
+                if (found) processId = found.id;
+              }
+              if (processId) {
+                // Update existing
+                const patchResponse = await fetch(`${API_BASE_URL}/processes/${processId}`, {
+                  method: 'PATCH',
+                  headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(processData),
+                });
+                if (!patchResponse.ok) throw new Error();
+                successCount++;
+              } else {
+                // Create new
+                const postResponse = await fetch(`${API_BASE_URL}/processes`, {
+                  method: 'POST',
+                  headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(processData),
+                });
+                if (!postResponse.ok) throw new Error();
+                successCount++;
+              }
             } catch (error) {
-              console.error('Error importing process:', error);
               errorCount++;
             }
+            setImportProgress(Math.round(((i + 1) / jsonData.length) * 100));
           }
-
-          // Clear the file input
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-
-          // Show results
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          setImportProgress(null);
           toast.dismiss(loadingToast);
-          if (successCount > 0) {
-            toast.success(`Successfully imported ${successCount} processes`);
-          }
-          if (errorCount > 0) {
-            toast.error(`Failed to import ${errorCount} processes`);
-          }
-
-          // Refresh the processes list
+          if (successCount > 0) toast.success(`Successfully imported/updated ${successCount} processes`);
+          if (errorCount > 0) toast.error(`Failed to import/update ${errorCount} processes`);
           fetchProcesses();
         } catch (error) {
-          console.error('Error processing file:', error);
+          setImportProgress(null);
           toast.error('Failed to process import file', { id: loadingToast });
         }
       };
-
       reader.readAsArrayBuffer(file);
     } catch (error) {
-      console.error('Error importing processes:', error);
+      setImportProgress(null);
       toast.error('Failed to import processes', { id: loadingToast });
     }
   };
+
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+
+  // Add a helper function to generate condensed pagination
+  function getPagination(currentPage: number, totalPages: number) {
+    const pages = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 4) pages.push('...');
+      for (let i = Math.max(2, currentPage - 2); i <= Math.min(totalPages - 1, currentPage + 2); i++) {
+        pages.push(i);
+      }
+      if (currentPage < totalPages - 3) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  }
 
   return (
     <div className="main-content">
@@ -390,6 +400,7 @@ const ProcessesPage = () => {
                     type="button" 
                     className="ti-btn ti-btn-danger"
                     onClick={handleDeleteSelected}
+                    disabled={isBulkDeleting}
                   >
                     <i className="ri-delete-bin-line me-2"></i> 
                     Delete Selected ({selectedProcesses.length})
@@ -433,9 +444,20 @@ const ProcessesPage = () => {
                   </div>
                 </div>
 
+                {/* Progress bar for import */}
+                {importProgress !== null && (
+                  <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
+                    <div
+                      className="bg-primary h-full transition-all duration-200"
+                      style={{ width: `${importProgress}%` }}
+                    ></div>
+                    <span className="ml-2 text-xs text-gray-700">{importProgress}%</span>
+                  </div>
+                )}
+
                 <button
                   type="button"
-                  className="ti-btn ti-btn-success"
+                  className="ti-btn ti-btn-primary"
                   onClick={handleExport}
                 >
                   <i className="ri-download-2-line me-2"></i> Export
@@ -452,11 +474,28 @@ const ProcessesPage = () => {
           <div className="box">
             <div className="box-body">
               {/* Search Bar */}
-              <div className="mb-4">
-                <div className="relative">
+              <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
+                <div className="flex items-center">
+                  <label className="mr-2 text-sm text-gray-600">Rows per page:</label>
+                  <select
+                    className="form-select w-auto text-sm"
+                    value={itemsPerPage}
+                    onChange={e => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={500}>500</option>
+                    <option value={1000}>1000</option>
+                  </select>
+                </div>
+                <div className="relative w-full max-w-xs">
                   <input
                     type="text"
-                    className="form-control py-3"
+                    className="form-control py-3 pr-10"
                     placeholder="Search by process name or type..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -491,15 +530,15 @@ const ProcessesPage = () => {
                         </th>
                         <th scope="col" className="text-start">Process Name</th>
                         <th scope="col" className="text-start">Type</th>
-                        <th scope="col" className="text-start">Steps</th>
+                        <th scope="col" className="text-start w-80 text-base">Steps</th>
                         <th scope="col" className="text-start">Sort Order</th>
                         <th scope="col" className="text-start">Status</th>
                         <th scope="col" className="text-start">Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {currentProcesses.length > 0 ? (
-                        currentProcesses.map((process, index) => (
+                      {processes.length > 0 ? (
+                        processes.map((process, index) => (
                           <tr 
                             key={process.id} 
                             className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}
@@ -532,7 +571,7 @@ const ProcessesPage = () => {
                                 {process.type}
                               </span>
                             </td>
-                            <td>{process.steps.length} steps</td>
+                            <td className="w-80 truncate align-top text-base">{process.steps.length} steps</td>
                             <td>{process.sortOrder}</td>
                             <td>
                               <span className={`badge ${process.status === 'active' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
@@ -552,6 +591,7 @@ const ProcessesPage = () => {
                                   className="ti-btn ti-btn-danger ti-btn-sm"
                                   onClick={() => handleDelete(process.id)}
                                   title="Delete Process"
+                                  disabled={isDeleting}
                                 >
                                   <i className="ri-delete-bin-line"></i>
                                 </button>
@@ -581,10 +621,10 @@ const ProcessesPage = () => {
               )}
 
               {/* Pagination */}
-              {!isLoading && !error && filteredProcesses.length > itemsPerPage && (
+              {!isLoading && !error && (
                 <div className="flex justify-between items-center mt-4">
                   <div className="text-sm text-gray-500">
-                    Showing {startIndex + 1} to {Math.min(endIndex, filteredProcesses.length)} of {filteredProcesses.length} entries
+                    Showing {totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {totalResults === 0 ? 0 : Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
                   </div>
                   <nav aria-label="Page navigation" className="">
                     <ul className="flex flex-wrap items-center">
@@ -597,20 +637,22 @@ const ProcessesPage = () => {
                           Previous
                         </button>
                       </li>
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                        <li key={page} className="page-item">
-                          <button
-                            className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
-                              currentPage === page 
-                              ? 'bg-primary text-white hover:bg-primary-dark' 
-                              : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                            }`}
-                            onClick={() => setCurrentPage(page)}
-                          >
-                            {page}
-                          </button>
-                        </li>
-                      ))}
+                      {getPagination(currentPage, totalPages).map((page, idx) =>
+                        page === '...'
+                          ? <li key={"ellipsis-" + idx} className="page-item"><span className="px-3">...</span></li>
+                          : <li key={page} className="page-item">
+                              <button
+                                className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
+                                  currentPage === page 
+                                  ? 'bg-primary text-white hover:bg-primary-dark' 
+                                  : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                                }`}
+                                onClick={() => setCurrentPage(Number(page))}
+                              >
+                                {page}
+                              </button>
+                            </li>
+                      )}
                       <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
                         <button
                           className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"

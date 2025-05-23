@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import axios from 'axios';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface AttributeOptionValue {
   _id: string;
@@ -97,11 +98,11 @@ interface Category {
 
 // API endpoints
 const API_ENDPOINTS = {
-  attributes: 'https://addon-backend.onrender.com/v1/product-attributes',
-  rawMaterials: 'https://addon-backend.onrender.com/v1/raw-materials',
-  processes: 'https://addon-backend.onrender.com/v1/processes',
-  createProduct: 'https://addon-backend.onrender.com/v1/products',
-  categories: 'https://addon-backend.onrender.com/v1/categories'
+  attributes: `${API_BASE_URL}/product-attributes`,
+  rawMaterials: `${API_BASE_URL}/raw-materials`,
+  processes: `${API_BASE_URL}/processes`,
+  createProduct: `${API_BASE_URL}/products`,
+  categories: `${API_BASE_URL}/categories`
 };
 
 const generateSoftwareCode = () => {
@@ -587,6 +588,7 @@ const AddProductPage = () => {
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-medium">Bill of Materials</h3>
                       <button
+                        type="button"
                         onClick={handleAddBomItem}
                         className="ti-btn ti-btn-primary"
                         disabled={isLoading}

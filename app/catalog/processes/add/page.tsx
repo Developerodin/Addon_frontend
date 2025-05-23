@@ -6,6 +6,7 @@ import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import Seo from '@/shared/layout-components/seo/seo';
 import Image from 'next/image';
 import { toast, Toaster } from 'react-hot-toast';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface ProcessStep {
   stepTitle: string;
@@ -99,7 +100,7 @@ const AddProcessPage = () => {
         steps: formData.steps
       };
 
-      const response = await fetch('https://addon-backend.onrender.com/v1/processes', {
+      const response = await fetch(`${API_BASE_URL}/processes`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -120,7 +121,7 @@ const AddProcessPage = () => {
         const imageFormData = new FormData();
         imageFormData.append('image', formData.image);
 
-        const imageResponse = await fetch(`https://addon-backend.onrender.com/v1/processes/${result.id}/image`, {
+        const imageResponse = await fetch(`${API_BASE_URL}/processes/${result.id}/image`, {
           method: 'PATCH',
           body: imageFormData,
         });
@@ -131,7 +132,7 @@ const AddProcessPage = () => {
       }
 
       toast.success('Process created successfully', { id: loadingToast });
-      router.push('/catalog/processes');
+      setTimeout(() => router.push('/catalog/processes'), 800);
     } catch (error) {
       console.error('Error creating process:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to create process', { id: loadingToast });
@@ -169,6 +170,7 @@ const AddProcessPage = () => {
                           value={formData.name}
                           onChange={handleInputChange}
                           required
+                          disabled={isSubmitting}
                         />
                       </div>
                     </div>
@@ -183,6 +185,7 @@ const AddProcessPage = () => {
                           value={formData.type}
                           onChange={handleInputChange}
                           required
+                          disabled={isSubmitting}
                         >
                           <option value="">Select Type</option>
                           <option value="Manufacturing">Manufacturing</option>
@@ -204,6 +207,7 @@ const AddProcessPage = () => {
                           value={formData.description}
                           onChange={handleInputChange}
                           rows={4}
+                          disabled={isSubmitting}
                         />
                       </div>
                     </div>
@@ -219,6 +223,7 @@ const AddProcessPage = () => {
                           placeholder="Enter sort order"
                           value={formData.sortOrder}
                           onChange={handleInputChange}
+                          disabled={isSubmitting}
                         />
                       </div>
                     </div>
@@ -232,6 +237,7 @@ const AddProcessPage = () => {
                           className="form-select"
                           value={formData.status}
                           onChange={handleInputChange}
+                          disabled={isSubmitting}
                         >
                           <option value="active">Active</option>
                           <option value="inactive">Inactive</option>
@@ -259,6 +265,7 @@ const AddProcessPage = () => {
                                     setFormData(prev => ({ ...prev, image: null }));
                                     setImagePreview('');
                                   }}
+                                  disabled={isSubmitting}
                                 >
                                   <i className="ri-close-line"></i>
                                 </button>
@@ -274,6 +281,7 @@ const AddProcessPage = () => {
                               className="absolute inset-0 opacity-0 cursor-pointer"
                               onChange={handleImageChange}
                               accept="image/*"
+                              disabled={isSubmitting}
                             />
                           </div>
                         </div>
@@ -289,6 +297,7 @@ const AddProcessPage = () => {
                         type="button"
                         className="ti-btn ti-btn-primary"
                         onClick={addStep}
+                        disabled={isSubmitting}
                       >
                         <i className="ri-add-line me-2"></i>Add Step
                       </button>
@@ -305,6 +314,7 @@ const AddProcessPage = () => {
                               value={step.stepTitle}
                               onChange={(e) => handleStepChange(index, 'stepTitle', e.target.value)}
                               required
+                              disabled={isSubmitting}
                             />
                           </div>
                         </div>
@@ -318,6 +328,7 @@ const AddProcessPage = () => {
                               value={step.stepDescription}
                               onChange={(e) => handleStepChange(index, 'stepDescription', e.target.value)}
                               required
+                              disabled={isSubmitting}
                             />
                           </div>
                         </div>
@@ -331,6 +342,7 @@ const AddProcessPage = () => {
                               value={step.duration}
                               onChange={(e) => handleStepChange(index, 'duration', e.target.value)}
                               required
+                              disabled={isSubmitting}
                             />
                           </div>
                         </div>
@@ -340,6 +352,7 @@ const AddProcessPage = () => {
                             type="button"
                             className="absolute top-2 right-2 text-red-500 hover:text-red-700"
                             onClick={() => removeStep(index)}
+                            disabled={isSubmitting}
                           >
                             <i className="ri-delete-bin-line text-lg"></i>
                           </button>
@@ -353,6 +366,7 @@ const AddProcessPage = () => {
                       type="button"
                       className="ti-btn ti-btn-secondary"
                       onClick={() => router.push('/catalog/processes')}
+                      disabled={isSubmitting}
                     >
                       Cancel
                     </button>

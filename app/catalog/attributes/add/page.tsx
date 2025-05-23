@@ -6,6 +6,7 @@ import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import Seo from '@/shared/layout-components/seo/seo';
 import Image from 'next/image';
 import { toast, Toaster } from 'react-hot-toast';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 // Types
 interface OptionValue {
@@ -32,7 +33,7 @@ async function createAttribute(payload: AttributePayload) {
   console.log('Sending payload:', payload);
   
   try {
-    const response = await fetch('https://addon-backend.onrender.com/v1/product-attributes', {
+    const response = await fetch(`${API_BASE_URL}/product-attributes`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -142,6 +143,7 @@ const AddAttributePage = () => {
           console.log('Validation error:', error);
           toast.error(error);
         });
+        setIsSubmitting(false);
         return;
       }
 
@@ -185,6 +187,10 @@ const AddAttributePage = () => {
       // Show success message
       toast.success('Attribute created successfully');
       
+      // Redirect to attributes list after short delay
+      setTimeout(() => {
+        router.push('/catalog/attributes');
+      }, 1000);
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       if (error instanceof Error) {
@@ -232,6 +238,7 @@ const AddAttributePage = () => {
                             value={formData.name}
                             onChange={handleInputChange}
                             required
+                            disabled={isSubmitting}
                           />
                         </div>
                       </div>
@@ -246,6 +253,7 @@ const AddAttributePage = () => {
                           className="form-select"
                           value={formData.type}
                           onChange={handleInputChange}
+                          disabled={isSubmitting}
                         >
                           <option value="select">Select</option>
                           <option value="radio">Radio</option>
@@ -266,6 +274,7 @@ const AddAttributePage = () => {
                           value={formData.sortOrder}
                           onChange={handleInputChange}
                           required
+                          disabled={isSubmitting}
                         />
                       </div>
                     </div>
@@ -307,6 +316,7 @@ const AddAttributePage = () => {
                                     value={value.name}
                                     onChange={(e) => handleValueChange(index, 'name', e.target.value)}
                                     required
+                                    disabled={isSubmitting}
                                   />
                                 </div>
                               </td>
@@ -324,6 +334,7 @@ const AddAttributePage = () => {
                                         type="button"
                                         className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow-sm hover:bg-red-600 transition-colors"
                                         onClick={() => handleValueChange(index, 'image', null)}
+                                        disabled={isSubmitting}
                                       >
                                         <i className="ri-close-line"></i>
                                       </button>
@@ -340,6 +351,7 @@ const AddAttributePage = () => {
                                             handleValueChange(index, 'image', file);
                                           }
                                         }}
+                                        disabled={isSubmitting}
                                       />
                                       <i className="ri-upload-cloud-2-line text-2xl text-gray-400"></i>
                                       <div className="mt-1 text-xs text-gray-500">Upload</div>
@@ -355,6 +367,7 @@ const AddAttributePage = () => {
                                   value={value.sortOrder}
                                   onChange={(e) => handleValueChange(index, 'sortOrder', e.target.value)}
                                   required
+                                  disabled={isSubmitting}
                                 />
                               </td>
                               <td className="px-6 py-4">
@@ -362,7 +375,7 @@ const AddAttributePage = () => {
                                   type="button"
                                   className="text-red-500 hover:text-red-700"
                                   onClick={() => removeValueField(index)}
-                                  disabled={formData.values.length === 1}
+                                  disabled={formData.values.length === 1 || isSubmitting}
                                 >
                                   <i className="ri-delete-bin-line text-lg"></i>
                                 </button>
@@ -378,6 +391,7 @@ const AddAttributePage = () => {
                         type="button"
                         className="btn btn-primary"
                         onClick={addValueField}
+                        disabled={isSubmitting}
                       >
                         Add Option Value
                       </button>
@@ -389,6 +403,7 @@ const AddAttributePage = () => {
                       type="button"
                       className="btn btn-outline-secondary"
                       onClick={() => router.back()}
+                      disabled={isSubmitting}
                     >
                       Cancel
                     </button>

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import axios from 'axios';
 import Seo from '@/shared/layout-components/seo/seo';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface Product {
   id: string;
@@ -56,11 +57,11 @@ interface AttributeCategory {
 }
 
 const API_ENDPOINTS = {
-  products: 'https://addon-backend.onrender.com/v1/products',
-  categories: 'https://addon-backend.onrender.com/v1/categories',
-  rawMaterials: 'https://addon-backend.onrender.com/v1/raw-materials',
-  attributes: 'https://addon-backend.onrender.com/v1/attributes',
-  processes: 'https://addon-backend.onrender.com/v1/processes'
+  products: `${API_BASE_URL}/products`,
+  categories: `${API_BASE_URL}/categories`,
+  rawMaterials: `${API_BASE_URL}/raw-materials`,
+  attributes: `${API_BASE_URL}/attributes`,
+  processes: `${API_BASE_URL}/processes`
 };
 
 const EditProductPage = () => {
@@ -110,14 +111,42 @@ const EditProductPage = () => {
           axios.get(API_ENDPOINTS.processes)
         ]);
 
-        setFormData(productResponse.data);
-        if (productResponse.data.image) {
-          setImagePreview(productResponse.data.image);
+        // Normalize raw materials: map itemName to name if needed
+        const rawMaterials = (materialsResponse.data.results || []).map((mat: any) => ({
+          ...mat,
+          name: mat.name || mat.itemName || '',
+        }));
+        setRawMaterials(rawMaterials);
+
+        // Normalize categories
+        const categories = categoriesResponse.data.results || [];
+        setCategories(categories);
+
+        // Normalize product data
+        let product = productResponse.data;
+        // If category is a string, convert to { id, name }
+        if (typeof product.category === 'string') {
+          const catObj = categories.find((c: any) => c.id === product.category) || { id: product.category, name: '' };
+          product.category = catObj;
+        }
+        // Defensive: ensure attributes, bom, processes are arrays/objects
+        product.attributes = product.attributes || {};
+        product.bom = Array.isArray(product.bom) ? product.bom : [];
+        product.processes = Array.isArray(product.processes) ? product.processes : [];
+        setFormData(product);
+        if (product.image) {
+          setImagePreview(product.image);
         }
 
-        setCategories(categoriesResponse.data.results || []);
-        setRawMaterials(materialsResponse.data.results || []);
-        setAttributeCategories(attributesResponse.data.results || []);
+        // Normalize attribute categories if needed
+        let attrCats = attributesResponse.data.results || [];
+        // If attribute options are not present, default to empty array
+        attrCats = attrCats.map((cat: any) => ({
+          ...cat,
+          options: Array.isArray(cat.options) ? cat.options : []
+        }));
+        setAttributeCategories(attrCats);
+
         setProcesses(processesResponse.data.results || []);
       } catch (error) {
         console.error('Error fetching data:', error);

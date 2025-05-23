@@ -4,14 +4,23 @@ import { useRouter } from 'next/navigation';
 import Seo from '@/shared/layout-components/seo/seo';
 import { toast, Toaster } from 'react-hot-toast';
 import Image from 'next/image';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
 
 interface RawMaterial {
   id: string;
-  itemName: string;
-  printName: string;
-  color: string;
-  unit: string;
+  name: string;
+  groupName: string;
+  type: string;
   description: string;
+  brand: string;
+  countSize: string;
+  material: string;
+  color: string;
+  shade: string;
+  unit: string;
+  mrp: string;
+  hsnCode: string;
+  gst: string;
   image: string | null;
 }
 
@@ -20,11 +29,19 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
   const [isLoading, setIsLoading] = useState(false);
   const [material, setMaterial] = useState<RawMaterial>({
     id: '',
-    itemName: '',
-    printName: '',
-    color: '',
-    unit: '',
+    name: '',
+    groupName: '',
+    type: '',
     description: '',
+    brand: '',
+    countSize: '',
+    material: '',
+    color: '',
+    shade: '',
+    unit: '',
+    mrp: '',
+    hsnCode: '',
+    gst: '',
     image: null
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -35,7 +52,7 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
     const fetchMaterial = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`https://addon-backend.onrender.com/v1/raw-materials/${params.id}`, {
+        const response = await fetch(`${API_BASE_URL}/raw-materials/${params.id}`, {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -48,7 +65,23 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
         }
 
         const data = await response.json();
-        setMaterial(data);
+        setMaterial({
+          id: data.id,
+          name: data.name || '',
+          groupName: data.groupName || '',
+          type: data.type || '',
+          description: data.description || '',
+          brand: data.brand || '',
+          countSize: data.countSize || '',
+          material: data.material || '',
+          color: data.color || '',
+          shade: data.shade || '',
+          unit: data.unit || '',
+          mrp: data.mrp || '',
+          hsnCode: data.hsnCode || '',
+          gst: data.gst || '',
+          image: data.image || null
+        });
         if (data.image) {
           setImagePreview(data.image);
         }
@@ -83,18 +116,26 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
       setIsLoading(true);
 
       // Send the update request with JSON data
-      const response = await fetch(`https://addon-backend.onrender.com/v1/raw-materials/${params.id}`, {
+      const response = await fetch(`${API_BASE_URL}/raw-materials/${params.id}`, {
         method: 'PATCH',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          itemName: material.itemName,
-          printName: material.printName,
+          name: material.name,
+          groupName: material.groupName,
+          type: material.type,
+          description: material.description,
+          brand: material.brand,
+          countSize: material.countSize,
+          material: material.material,
           color: material.color,
+          shade: material.shade,
           unit: material.unit,
-          description: material.description
+          mrp: material.mrp,
+          hsnCode: material.hsnCode,
+          gst: material.gst
         })
       });
 
@@ -108,7 +149,7 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
         const formData = new FormData();
         formData.append('image', selectedImage);
 
-        const imageResponse = await fetch(`https://addon-backend.onrender.com/v1/raw-materials/${params.id}/image`, {
+        const imageResponse = await fetch(`${API_BASE_URL}/raw-materials/${params.id}/image`, {
           method: 'PATCH',
           body: formData,
         });
@@ -149,83 +190,9 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
         <div className="box-body">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Material Name */}
-              <div>
-                <label htmlFor="itemName" className="block text-sm font-medium text-gray-700">
-                  Material Name *
-                </label>
-                <input
-                  type="text"
-                  id="itemName"
-                  required
-                  className="mt-1 form-control"
-                  value={material.itemName}
-                  onChange={(e) => setMaterial({ ...material, itemName: e.target.value })}
-                />
-              </div>
-
-              {/* Print Name */}
-              <div>
-                <label htmlFor="printName" className="block text-sm font-medium text-gray-700">
-                  Print Name
-                </label>
-                <input
-                  type="text"
-                  id="printName"
-                  className="mt-1 form-control"
-                  value={material.printName}
-                  onChange={(e) => setMaterial({ ...material, printName: e.target.value })}
-                />
-              </div>
-
-              {/* Color */}
-              <div>
-                <label htmlFor="color" className="block text-sm font-medium text-gray-700">
-                  Color
-                </label>
-                <input
-                  type="text"
-                  id="color"
-                  className="mt-1 form-control"
-                  value={material.color}
-                  onChange={(e) => setMaterial({ ...material, color: e.target.value })}
-                />
-              </div>
-
-              {/* Unit */}
-              <div>
-                <label htmlFor="unit" className="block text-sm font-medium text-gray-700">
-                  Unit *
-                </label>
-                <input
-                  type="text"
-                  id="unit"
-                  required
-                  className="mt-1 form-control"
-                  value={material.unit}
-                  onChange={(e) => setMaterial({ ...material, unit: e.target.value })}
-                />
-              </div>
-
-              {/* Description */}
-              <div className="md:col-span-2">
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-                  Description
-                </label>
-                <textarea
-                  id="description"
-                  rows={4}
-                  className="mt-1 form-control"
-                  value={material.description}
-                  onChange={(e) => setMaterial({ ...material, description: e.target.value })}
-                />
-              </div>
-
               {/* Image Upload */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Image
-                </label>
+                <label className="block text-sm font-medium text-gray-700">Image</label>
                 <div className="mt-1 flex items-center space-x-4">
                   {imagePreview && (
                     <div className="relative w-32 h-32">
@@ -247,6 +214,188 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
                     />
                   </label>
                 </div>
+              </div>
+              {/* Group Name Dropdown */}
+              <div className="form-group">
+                <label className="form-label">Group Name</label>
+                <select
+                  name="groupName"
+                  value={material.groupName}
+                  onChange={e => setMaterial({ ...material, groupName: e.target.value })}
+                  className="form-control"
+                  required
+                >
+                  <option value="">Select Group</option>
+                  <option value="Embroidery">Embroidery</option>
+                  <option value="Packing Material">Packing Material</option>
+                  <option value="Yarn">Yarn</option>
+                  <option value="Finished Goods">Finished Goods</option>
+                  <option value="Stationary">Stationary</option>
+                  <option value="Household">Household</option>
+                  <option value="Machine Tools">Machine Tools</option>
+                  <option value="Maintenance">Maintenance</option>
+                </select>
+              </div>
+              {/* Type Dropdown */}
+              <div className="form-group">
+                <label className="form-label">Type</label>
+                <select
+                  name="type"
+                  value={material.type}
+                  onChange={e => setMaterial({ ...material, type: e.target.value })}
+                  className="form-control"
+                  required
+                >
+                  <option value="">Select Type</option>
+                  <option value="Threads">Threads</option>
+                  <option value="Tag">Tag</option>
+                  <option value="Polybags">Polybags</option>
+                  <option value="Box">Box</option>
+                  <option value="Stands">Stands</option>
+                  <option value="Socks">Socks</option>
+                  <option value="Stickers">Stickers</option>
+                </select>
+              </div>
+              {/* Name */}
+              <div className="form-group">
+                <label className="form-label">Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={material.name}
+                  onChange={e => setMaterial({ ...material, name: e.target.value })}
+                  className="form-control"
+                  required
+                />
+              </div>
+              {/* Description */}
+              <div className="form-group">
+                <label className="form-label">Description</label>
+                <textarea
+                  name="description"
+                  value={material.description}
+                  onChange={e => setMaterial({ ...material, description: e.target.value })}
+                  className="form-control"
+                  rows={2}
+                  required
+                ></textarea>
+              </div>
+              {/* Brand */}
+              <div className="form-group">
+                <label className="form-label">Brand</label>
+                <input
+                  type="text"
+                  name="brand"
+                  value={material.brand}
+                  onChange={e => setMaterial({ ...material, brand: e.target.value })}
+                  className="form-control"
+                  required
+                />
+              </div>
+              {/* Count/Size */}
+              <div className="form-group">
+                <label className="form-label">Count/Size</label>
+                <input
+                  type="text"
+                  name="countSize"
+                  value={material.countSize}
+                  onChange={e => setMaterial({ ...material, countSize: e.target.value })}
+                  className="form-control"
+                  required
+                />
+              </div>
+              {/* Material */}
+              <div className="form-group">
+                <label className="form-label">Material</label>
+                <input
+                  type="text"
+                  name="material"
+                  value={material.material}
+                  onChange={e => setMaterial({ ...material, material: e.target.value })}
+                  className="form-control"
+                  required
+                />
+              </div>
+              {/* Color */}
+              <div className="form-group">
+                <label className="form-label">Color</label>
+                <input
+                  type="text"
+                  name="color"
+                  value={material.color}
+                  onChange={e => setMaterial({ ...material, color: e.target.value })}
+                  className="form-control"
+                  required
+                />
+              </div>
+              {/* Shade */}
+              <div className="form-group">
+                <label className="form-label">Shade</label>
+                <input
+                  type="text"
+                  name="shade"
+                  value={material.shade}
+                  onChange={e => setMaterial({ ...material, shade: e.target.value })}
+                  className="form-control"
+                  required
+                />
+              </div>
+              {/* Unit Dropdown */}
+              <div className="form-group">
+                <label className="form-label">Unit</label>
+                <select
+                  name="unit"
+                  value={material.unit}
+                  onChange={e => setMaterial({ ...material, unit: e.target.value })}
+                  className="form-control"
+                  required
+                >
+                  <option value="">Select Unit</option>
+                  <option value="Meter">Meter</option>
+                  <option value="Pcs">Pcs</option>
+                  <option value="Kilograms">Kilograms</option>
+                  <option value="Grams">Grams</option>
+                  <option value="Liter">Liter</option>
+                  <option value="Pairs">Pairs</option>
+                  <option value="Packet">Packet</option>
+                  <option value="Packs">Packs</option>
+                </select>
+              </div>
+              {/* MRP */}
+              <div className="form-group">
+                <label className="form-label">MRP</label>
+                <input
+                  type="text"
+                  name="mrp"
+                  value={material.mrp}
+                  onChange={e => setMaterial({ ...material, mrp: e.target.value })}
+                  className="form-control"
+                  required
+                />
+              </div>
+              {/* HSN Code */}
+              <div className="form-group">
+                <label className="form-label">HSN Code</label>
+                <input
+                  type="text"
+                  name="hsnCode"
+                  value={material.hsnCode}
+                  onChange={e => setMaterial({ ...material, hsnCode: e.target.value })}
+                  className="form-control"
+                  required
+                />
+              </div>
+              {/* GST % */}
+              <div className="form-group">
+                <label className="form-label">GST %</label>
+                <input
+                  type="text"
+                  name="gst"
+                  value={material.gst}
+                  onChange={e => setMaterial({ ...material, gst: e.target.value })}
+                  className="form-control"
+                  required
+                />
               </div>
             </div>
 

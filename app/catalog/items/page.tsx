@@ -5,6 +5,8 @@ import Link from 'next/link';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { API_BASE_URL } from '@/shared/data/utilities/api';
+import { toast, Toaster } from 'react-hot-toast';
 
 interface Product {
   id: string;
@@ -103,7 +105,7 @@ interface ExcelProcessRow {
 }
 
 const API_ENDPOINTS = {
-  products: 'https://addon-backend.onrender.com/v1/products'
+  products: `${API_BASE_URL}/products`
 };
 
 const ProductListPage = () => {
@@ -111,22 +113,29 @@ const ProductListPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalResults, setTotalResults] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchProducts();
-  }, [currentPage]);
+  }, [currentPage, itemsPerPage, searchQuery]);
 
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_ENDPOINTS.products}?page=${currentPage}`);
+      const response = await axios.get(`${API_ENDPOINTS.products}?page=${currentPage}&limit=${itemsPerPage}&search=${encodeURIComponent(searchQuery)}`);
       const data = response.data as ProductsResponse;
       setProducts(data.results);
       setTotalPages(data.totalPages);
+      setTotalResults(data.totalResults);
     } catch (error) {
       console.error('Error fetching products:', error);
-      alert('Error fetching products. Please try again.');
+      toast.error('Error fetching products. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -136,22 +145,58 @@ const ProductListPage = () => {
     setCurrentPage(page);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedProducts([]);
+    } else {
+      setSelectedProducts(products.map(p => p.id));
+    }
+    setSelectAll(!selectAll);
+  };
 
+  const handleProductSelect = (productId: string) => {
+    if (selectedProducts.includes(productId)) {
+      setSelectedProducts(selectedProducts.filter(id => id !== productId));
+    } else {
+      setSelectedProducts([...selectedProducts, productId]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedProducts.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedProducts.length} selected product(s)?`)) return;
+    toast.loading('Deleting selected products...');
     try {
-      await axios.delete(`${API_ENDPOINTS.products}/${id}`);
+      await Promise.all(selectedProducts.map(id => axios.delete(`${API_ENDPOINTS.products}/${id}`)));
+      toast.dismiss();
+      toast.success('Selected products deleted successfully');
+      setSelectedProducts([]);
+      setSelectAll(false);
       fetchProducts();
     } catch (error) {
-      console.error('Error deleting product:', error);
-      alert('Error deleting product. Please try again.');
+      toast.dismiss();
+      toast.error('Failed to delete selected products');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this product?')) return;
+    toast.loading('Deleting product...');
+    try {
+      await axios.delete(`${API_ENDPOINTS.products}/${id}`);
+      toast.dismiss();
+      toast.success('Product deleted successfully');
+      fetchProducts();
+    } catch (error) {
+      toast.dismiss();
+      toast.error('Error deleting product. Please try again.');
     }
   };
 
   const handleExport = async () => {
     try {
       setIsLoading(true);
-      const response = await axios.get(`${API_ENDPOINTS.products}?limit=1000`);
+      const response = await axios.get(`${API_ENDPOINTS.products}?limit=100000`);
       const data = response.data as ProductsResponse;
       
       const wb = XLSX.utils.book_new();
@@ -213,9 +258,10 @@ const ProductListPage = () => {
       const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
       saveAs(data2, `products_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Products exported successfully');
     } catch (error) {
       console.error('Error exporting products:', error);
-      alert('Error exporting products. Please try again.');
+      toast.error('Error exporting products. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -287,9 +333,9 @@ const ProductListPage = () => {
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    setImportProgress(0);
+    const loadingToast = toast.loading('Importing products...');
     try {
-      setIsLoading(true);
       const reader = new FileReader();
       
       reader.onload = async (e) => {
@@ -376,26 +422,45 @@ const ProductListPage = () => {
           // Send to API
           await axios.post(`${API_ENDPOINTS.products}/import`, { products });
           
-          alert('Products imported successfully!');
+          setImportProgress(null);
+          toast.dismiss(loadingToast);
+          toast.success('Products imported successfully!');
           fetchProducts(); // Refresh the list
-        } catch (error) {
-          console.error('Error processing import:', error);
-          alert('Error processing import. Please check your file format and try again.');
-        } finally {
-          setIsLoading(false);
-          if (fileInputRef.current) {
-            fileInputRef.current.value = ''; // Reset file input
+        } catch (error: any) {
+          setImportProgress(null);
+          toast.dismiss(loadingToast);
+          if (error.response && error.response.data && error.response.data.errors) {
+            // If backend returns row-level errors
+            toast.error('Import failed: ' + error.response.data.errors.join('; '));
+          } else {
+            toast.error('Error processing import. Please check your file format and try again.');
           }
         }
       };
 
       reader.readAsArrayBuffer(file);
     } catch (error) {
-      console.error('Error importing products:', error);
-      alert('Error importing products. Please try again.');
-      setIsLoading(false);
+      setImportProgress(null);
+      toast.dismiss(loadingToast);
+      toast.error('Error importing products. Please try again.');
     }
   };
+
+  function getPagination(currentPage: number, totalPages: number) {
+    const pages = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 4) pages.push('...');
+      for (let i = Math.max(2, currentPage - 2); i <= Math.min(totalPages - 1, currentPage + 2); i++) {
+        pages.push(i);
+      }
+      if (currentPage < totalPages - 3) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  }
 
   return (
     <div className="main-content">
@@ -407,7 +472,7 @@ const ProductListPage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <h1 className="box-title text-2xl font-semibold">Products</h1>
-              <div className="box-tools flex space-x-2">
+              <div className="box-tools flex items-center space-x-2">
                 <button
                   type="button"
                   onClick={handleDownloadTemplate}
@@ -427,12 +492,21 @@ const ProductListPage = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="ti-btn ti-btn-primary"
+                  className="ti-btn ti-btn-success"
                   disabled={isLoading}
                 >
                   <i className="ri-file-excel-2-line me-2"></i>
                   Import
                 </button>
+                {importProgress !== null && (
+                  <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
+                    <div
+                      className="bg-primary h-full transition-all duration-200"
+                      style={{ width: `${importProgress}%` }}
+                    ></div>
+                    <span className="ml-2 text-xs text-gray-700">{importProgress}%</span>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={handleExport}
@@ -442,6 +516,17 @@ const ProductListPage = () => {
                   <i className="ri-download-2-line me-2"></i>
                   Export
                 </button>
+                {selectedProducts.length > 0 && (
+                  <button
+                    type="button"
+                    className="ti-btn ti-btn-danger"
+                    onClick={handleBulkDelete}
+                    disabled={isLoading}
+                  >
+                    <i className="ri-delete-bin-line me-2"></i>
+                    Delete Selected ({selectedProducts.length})
+                  </button>
+                )}
                 <Link href="/catalog/items/add" className="ti-btn ti-btn-primary">
                   <i className="ri-add-line me-2"></i>
                   Add Product
@@ -453,6 +538,38 @@ const ProductListPage = () => {
           {/* Content Box */}
           <div className="box">
             <div className="box-body">
+              <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
+                <div className="flex items-center">
+                  <label className="mr-2 text-sm text-gray-600">Rows per page:</label>
+                  <select
+                    className="form-select w-auto text-sm"
+                    value={itemsPerPage}
+                    onChange={e => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={500}>500</option>
+                    <option value={1000}>1000</option>
+                  </select>
+                </div>
+                <div className="relative w-full max-w-xs">
+                  <input
+                    type="text"
+                    className="form-control py-3 pr-10"
+                    placeholder="Search by product name, style code, or category..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                  />
+                  <button className="absolute end-0 top-0 px-4 h-full">
+                    <i className="ri-search-line text-lg"></i>
+                  </button>
+                </div>
+              </div>
+
               {isLoading ? (
                 <div className="text-center py-10">
                   <div className="spinner-border text-primary" role="status">
@@ -465,6 +582,14 @@ const ProductListPage = () => {
                     <table className="table whitespace-nowrap table-bordered">
                       <thead>
                         <tr className="border-b border-gray-200">
+                          <th>
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              checked={selectAll}
+                              onChange={handleSelectAll}
+                            />
+                          </th>
                           <th className="text-start">Name</th>
                           <th className="text-start">Style Code</th>
                           <th className="text-start">Internal Code</th>
@@ -476,23 +601,27 @@ const ProductListPage = () => {
                       <tbody>
                         {products.map((product) => (
                           <tr key={product.id} className="border-b border-gray-200">
+                            <td>
+                              <input
+                                type="checkbox"
+                                className="form-check-input"
+                                checked={selectedProducts.includes(product.id)}
+                                onChange={() => handleProductSelect(product.id)}
+                              />
+                            </td>
                             <td>{product.name}</td>
                             <td>{product.styleCode}</td>
                             <td>{product.internalCode}</td>
                             <td>{product.category?.name}</td>
-                            <td>{new Date(product.createdAt).toLocaleDateString()}</td>
+                            <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>
                             <td>
                               <div className="flex space-x-2">
-                                <Link 
-                                  href={`/catalog/items/${product.id}/edit`}
-                                  className="ti-btn ti-btn-sm ti-btn-primary"
-                                >
-                                  <i className="ri-pencil-line"></i>
+                                <Link href={`/catalog/items/${product.id}/edit`} className="ti-btn ti-btn-primary ti-btn-sm">
+                                  <i className="ri-edit-line"></i>
                                 </Link>
                                 <button
-                                  type="button"
+                                  className="ti-btn ti-btn-danger ti-btn-sm"
                                   onClick={() => handleDelete(product.id)}
-                                  className="ti-btn ti-btn-sm ti-btn-danger"
                                 >
                                   <i className="ri-delete-bin-line"></i>
                                 </button>
@@ -505,39 +634,48 @@ const ProductListPage = () => {
                   </div>
 
                   {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div className="flex justify-center mt-6">
-                      <nav className="flex space-x-2" aria-label="Pagination">
-                        <button
-                          type="button"
-                          onClick={() => handlePageChange(currentPage - 1)}
-                          disabled={currentPage === 1}
-                          className="ti-btn ti-btn-outline-primary"
-                        >
-                          Previous
-                        </button>
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                          <button
-                            key={page}
-                            type="button"
-                            onClick={() => handlePageChange(page)}
-                            className={`ti-btn ${
-                              currentPage === page
-                                ? 'ti-btn-primary'
-                                : 'ti-btn-outline-primary'
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => handlePageChange(currentPage + 1)}
-                          disabled={currentPage === totalPages}
-                          className="ti-btn ti-btn-outline-primary"
-                        >
-                          Next
-                        </button>
+                  {!isLoading && (
+                    <div className="flex justify-between items-center mt-4">
+                      <div className="text-sm text-gray-500">
+                        Showing {totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {totalResults === 0 ? 0 : Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
+                      </div>
+                      <nav aria-label="Page navigation" className="">
+                        <ul className="flex flex-wrap items-center">
+                          <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                            <button
+                              className="page-link py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                              disabled={currentPage === 1}
+                            >
+                              Previous
+                            </button>
+                          </li>
+                          {getPagination(currentPage, totalPages).map((page, idx) =>
+                            page === '...'
+                              ? <li key={"ellipsis-" + idx} className="page-item"><span className="px-3">...</span></li>
+                              : <li key={page} className="page-item">
+                                  <button
+                                    className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
+                                      currentPage === page 
+                                      ? 'bg-primary text-white hover:bg-primary-dark' 
+                                      : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                                    }`}
+                                    onClick={() => setCurrentPage(Number(page))}
+                                  >
+                                    {page}
+                                  </button>
+                                </li>
+                          )}
+                          <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                            <button
+                              className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                              disabled={currentPage === totalPages}
+                            >
+                              Next
+                            </button>
+                          </li>
+                        </ul>
                       </nav>
                     </div>
                   )}
@@ -547,6 +685,7 @@ const ProductListPage = () => {
           </div>
         </div>
       </div>
+      <Toaster position="top-right" />
     </div>
   );
 };
