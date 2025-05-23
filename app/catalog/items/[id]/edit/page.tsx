@@ -60,7 +60,7 @@ const API_ENDPOINTS = {
   products: `${API_BASE_URL}/products`,
   categories: `${API_BASE_URL}/categories`,
   rawMaterials: `${API_BASE_URL}/raw-materials`,
-  attributes: `${API_BASE_URL}/attributes`,
+  attributes: `${API_BASE_URL}/product-attributes`,
   processes: `${API_BASE_URL}/processes`
 };
 
@@ -292,11 +292,11 @@ const EditProductPage = () => {
           }
         });
 
-        await axios.put(`${API_ENDPOINTS.products}/${productId}`, formDataObj, {
+        await axios.patch(`${API_ENDPOINTS.products}/${productId}`, formDataObj, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
       } else {
-        await axios.put(`${API_ENDPOINTS.products}/${productId}`, productData, {
+        await axios.patch(`${API_ENDPOINTS.products}/${productId}`, productData, {
           headers: { 'Content-Type': 'application/json' }
         });
       }

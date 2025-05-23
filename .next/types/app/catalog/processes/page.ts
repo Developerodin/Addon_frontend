@@ -1,4 +1,4 @@
-// File: /Applications/XAMPP/xamppfiles/htdocs/Addons/Addon_frontend/app/catalog/processes/page.tsx
+// File: D:\Projects\AddOn Project\Frontend\Addon_frontend\app\catalog\processes\page.tsx
 import * as entry from '../../../../../app/catalog/processes/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

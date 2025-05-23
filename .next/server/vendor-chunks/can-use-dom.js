@@ -16,7 +16,7 @@ exports.modules = {
   \*******************************************/
 /***/ ((module) => {
 
-eval("var canUseDOM = !!(\n  typeof window !== 'undefined' &&\n  window.document &&\n  window.document.createElement\n);\n\nmodule.exports = canUseDOM;//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiKHNzcikvLi9ub2RlX21vZHVsZXMvY2FuLXVzZS1kb20vaW5kZXguanMiLCJtYXBwaW5ncyI6IkFBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTs7QUFFQSIsInNvdXJjZXMiOlsid2VicGFjazovL3N0YXJ0ZXJraXQvLi9ub2RlX21vZHVsZXMvY2FuLXVzZS1kb20vaW5kZXguanM/NDM3MiJdLCJzb3VyY2VzQ29udGVudCI6WyJ2YXIgY2FuVXNlRE9NID0gISEoXG4gIHR5cGVvZiB3aW5kb3cgIT09ICd1bmRlZmluZWQnICYmXG4gIHdpbmRvdy5kb2N1bWVudCAmJlxuICB3aW5kb3cuZG9jdW1lbnQuY3JlYXRlRWxlbWVudFxuKTtcblxubW9kdWxlLmV4cG9ydHMgPSBjYW5Vc2VET007Il0sIm5hbWVzIjpbXSwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///(ssr)/./node_modules/can-use-dom/index.js\n");
+eval("var canUseDOM = !!(\n  typeof window !== 'undefined' &&\n  window.document &&\n  window.document.createElement\n);\n\nmodule.exports = canUseDOM;//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiKHNzcikvLi9ub2RlX21vZHVsZXMvY2FuLXVzZS1kb20vaW5kZXguanMiLCJtYXBwaW5ncyI6IkFBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTs7QUFFQSIsInNvdXJjZXMiOlsid2VicGFjazovL3N0YXJ0ZXJraXQvLi9ub2RlX21vZHVsZXMvY2FuLXVzZS1kb20vaW5kZXguanM/YTAzZiJdLCJzb3VyY2VzQ29udGVudCI6WyJ2YXIgY2FuVXNlRE9NID0gISEoXG4gIHR5cGVvZiB3aW5kb3cgIT09ICd1bmRlZmluZWQnICYmXG4gIHdpbmRvdy5kb2N1bWVudCAmJlxuICB3aW5kb3cuZG9jdW1lbnQuY3JlYXRlRWxlbWVudFxuKTtcblxubW9kdWxlLmV4cG9ydHMgPSBjYW5Vc2VET007Il0sIm5hbWVzIjpbXSwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///(ssr)/./node_modules/can-use-dom/index.js\n");
 
 /***/ })
 

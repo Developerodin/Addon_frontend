@@ -1,4 +1,4 @@
-// File: /Applications/XAMPP/xamppfiles/htdocs/Addons/Addon_frontend/app/(components)/(contentlayout)/layout.tsx
+// File: D:\Projects\AddOn Project\Frontend\Addon_frontend\app\(components)\(contentlayout)\layout.tsx
 import * as entry from '../../../../../app/(components)/(contentlayout)/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
