@@ -1,9 +1,10 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
   "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/catalog/processes/page": "app/catalog/processes/page.js",
+  "/catalog/categories/page": "app/catalog/categories/page.js",
   "/catalog/items/page": "app/catalog/items/page.js",
   "/catalog/items/add/page": "app/catalog/items/add/page.js",
-  "/catalog/categories/page": "app/catalog/categories/page.js",
-  "/catalog/processes/page": "app/catalog/processes/page.js",
-  "/catalog/items/[id]/edit/page": "app/catalog/items/[id]/edit/page.js"
+  "/catalog/items/[id]/edit/page": "app/catalog/items/[id]/edit/page.js",
+  "/(components)/(contentlayout)/dashboards/main/page": "app/(components)/(contentlayout)/dashboards/main/page.js"
 }
