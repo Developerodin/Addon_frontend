@@ -50,10 +50,20 @@ interface AttributeOption {
   name: string;
 }
 
+interface AttributeOptionValue {
+  _id: string;
+  name: string;
+  image?: string;
+  sortOrder?: number;
+}
+
 interface AttributeCategory {
   id: string;
   name: string;
-  options: AttributeOption[];
+  type?: string;
+  sortOrder?: number;
+  options?: AttributeOption[];
+  optionValues: AttributeOptionValue[];
 }
 
 const API_ENDPOINTS = {
@@ -129,22 +139,66 @@ const EditProductPage = () => {
           const catObj = categories.find((c: any) => c.id === product.category) || { id: product.category, name: '' };
           product.category = catObj;
         }
+        
         // Defensive: ensure attributes, bom, processes are arrays/objects
         product.attributes = product.attributes || {};
+        
+        // Normalize attribute data
+        const normalizedAttributes = { ...product.attributes };
+        
+        // Log the original attributes
+        console.log('Original product attributes:', product.attributes);
+        
+        // Process the bom and processes arrays
         product.bom = Array.isArray(product.bom) ? product.bom : [];
         product.processes = Array.isArray(product.processes) ? product.processes : [];
-        setFormData(product);
+        
+        // Set the product data with normalized attributes
+        setFormData({
+          ...product,
+          attributes: normalizedAttributes
+        });
+        console.log('Product data loaded:', product);
+        console.log('Product attributes:', product.attributes);
         if (product.image) {
           setImagePreview(product.image);
         }
 
-        // Normalize attribute categories if needed
+        // Process attribute categories
         let attrCats = attributesResponse.data.results || [];
-        // If attribute options are not present, default to empty array
-        attrCats = attrCats.map((cat: any) => ({
-          ...cat,
-          options: Array.isArray(cat.options) ? cat.options : []
-        }));
+        
+        // Map attribute categories with their option values - handle both data structures
+        attrCats = attrCats.map((cat: any) => {
+          // Check which format is available in the API response
+          const hasOptionValues = Array.isArray(cat.optionValues) && cat.optionValues.length > 0;
+          const hasOptions = Array.isArray(cat.options) && cat.options.length > 0;
+          
+          // Transform options to optionValues format if needed
+          let optionValues = hasOptionValues ? cat.optionValues : [];
+          
+          // If only options is available, convert to optionValues format
+          if (!hasOptionValues && hasOptions) {
+            optionValues = cat.options.map((opt: any) => ({
+              _id: opt.id || opt._id,
+              name: opt.name,
+              sortOrder: opt.sortOrder || 0
+            }));
+          }
+          
+          console.log(`Category ${cat.name} options:`, { 
+            hasOptionValues, 
+            hasOptions, 
+            optionValues 
+          });
+          
+          return {
+            ...cat,
+            optionValues: optionValues,
+            options: cat.options || [] // Keep for backward compatibility
+          };
+        });
+        
+        console.log('Processed attribute categories:', attrCats);
         setAttributeCategories(attrCats);
 
         setProcesses(processesResponse.data.results || []);
@@ -158,6 +212,38 @@ const EditProductPage = () => {
 
     fetchData();
   }, [productId]);
+
+  // Debug effect to monitor attributeCategories
+  useEffect(() => {
+    if (attributeCategories.length > 0) {
+      console.log('attributeCategories updated:', attributeCategories);
+      console.log('First category optionValues:', attributeCategories[0].optionValues);
+      
+      // Map category names to IDs to help debug
+      const categoryNameToId: Record<string, string> = {};
+      attributeCategories.forEach(cat => {
+        categoryNameToId[cat.name] = cat.id;
+      });
+      console.log('Category name to ID mapping:', categoryNameToId);
+      
+      // Check if product attributes match by name or by ID
+      if (Object.keys(formData.attributes).length > 0) {
+        console.log('Current product attributes:', formData.attributes);
+        
+        // Check which attributes match by name vs. by ID
+        const matchesByName = attributeCategories.filter(cat => 
+          formData.attributes[cat.name] !== undefined
+        );
+        
+        const matchesById = attributeCategories.filter(cat => 
+          formData.attributes[cat.id] !== undefined
+        );
+        
+        console.log('Attributes matching by name:', matchesByName.map(c => c.name));
+        console.log('Attributes matching by ID:', matchesById.map(c => c.name));
+      }
+    }
+  }, [attributeCategories, formData.attributes]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -179,14 +265,27 @@ const EditProductPage = () => {
     }
   };
 
-  const handleAttributeChange = (categoryId: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      attributes: {
+  const handleAttributeChange = (categoryName: string, value: string) => {
+    console.log('Changing attribute:', categoryName, 'to value:', value);
+    
+    // Find the category ID that corresponds to this name if available
+    const category = attributeCategories.find(cat => cat.name === categoryName);
+    const categoryId = category?.id || '';
+    
+    console.log('Category found:', category ? 'yes' : 'no', 'ID:', categoryId);
+    
+    setFormData(prev => {
+      const updatedAttributes = {
         ...prev.attributes,
-        [categoryId]: value
-      }
-    }));
+        [categoryName]: value // Use the category name as the key
+      };
+      
+      console.log('Updated attributes:', updatedAttributes);
+      return {
+        ...prev,
+        attributes: updatedAttributes
+      };
+    });
   };
 
   const handleBomItemChange = (index: number, field: 'material' | 'quantity', value: string) => {
@@ -254,6 +353,8 @@ const EditProductPage = () => {
     setIsLoading(true);
 
     try {
+      console.log('Submitting with attributes:', formData.attributes);
+      
       // Prepare the base product data
       const productData = {
         name: formData.name,
@@ -489,23 +590,44 @@ const EditProductPage = () => {
                 {/* Attributes Tab */}
                 {activeTab === 'attributes' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {attributeCategories.map((category) => (
-                      <div key={category.id}>
-                        <label className="form-label">{category.name}</label>
-                        <select
-                          className="form-control"
-                          value={formData.attributes[category.id] || ''}
-                          onChange={(e) => handleAttributeChange(category.id, e.target.value)}
-                        >
-                          <option value="">Select {category.name}</option>
-                          {category.options.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.name}
-                            </option>
-                          ))}
-                        </select>
+                    {/* Debug information */}
+                    {attributeCategories.length === 0 ? (
+                      <div className="col-span-2 text-center py-4">
+                        <p>No attribute categories found.</p>
                       </div>
-                    ))}
+                    ) : (
+                      attributeCategories.map((category) => {
+                        // Get the current attribute value - try both by ID and by name
+                        const valueById = formData.attributes[category.id] || '';
+                        const valueByName = formData.attributes[category.name] || '';
+                        const currentValue = valueById || valueByName;
+                        
+                        return (
+                          <div key={category.id} className="space-y-2">
+                            <label className="form-label">{category.name}</label>
+                            <select
+                              className="form-control"
+                              value={currentValue}
+                              onChange={(e) => handleAttributeChange(category.name, e.target.value)}
+                            >
+                              <option value="">Select {category.name}</option>
+                              {category.optionValues && category.optionValues.length > 0 ? (
+                                category.optionValues.map((option) => (
+                                  <option 
+                                    key={option._id} 
+                                    value={option._id}
+                                  >
+                                    {option.name}
+                                  </option>
+                                ))
+                              ) : (
+                                <option value="" disabled>No options available</option>
+                              )}
+                            </select>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 )}
 
