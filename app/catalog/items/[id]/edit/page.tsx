@@ -68,10 +68,10 @@ interface AttributeCategory {
 
 const API_ENDPOINTS = {
   products: `${API_BASE_URL}/products`,
-  categories: `${API_BASE_URL}/categories`,
-  rawMaterials: `${API_BASE_URL}/raw-materials`,
-  attributes: `${API_BASE_URL}/product-attributes`,
-  processes: `${API_BASE_URL}/processes`
+  categories: `${API_BASE_URL}/categories?page=1&limit=200`,
+  rawMaterials: `${API_BASE_URL}/raw-materials?page=1&limit=200`,
+  attributes: `${API_BASE_URL}/product-attributes?page=1&limit=200`,
+  processes: `${API_BASE_URL}/processes?page=1&limit200`
 };
 
 const EditProductPage = () => {

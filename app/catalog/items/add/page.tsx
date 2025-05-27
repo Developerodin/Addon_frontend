@@ -98,11 +98,11 @@ interface Category {
 
 // API endpoints
 const API_ENDPOINTS = {
-  attributes: `${API_BASE_URL}/product-attributes`,
-  rawMaterials: `${API_BASE_URL}/raw-materials`,
-  processes: `${API_BASE_URL}/processes`,
+  attributes: `${API_BASE_URL}/product-attributes?page=1&limit=200`,
+  rawMaterials: `${API_BASE_URL}/raw-materials?page=1&limit=200`,
+  processes: `${API_BASE_URL}/processes?page=1&limit=200`,
   createProduct: `${API_BASE_URL}/products`,
-  categories: `${API_BASE_URL}/categories`
+  categories: `${API_BASE_URL}/categories?page=1&limit=200`
 };
 
 const generateSoftwareCode = () => {
