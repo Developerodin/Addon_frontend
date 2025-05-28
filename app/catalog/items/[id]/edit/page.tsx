@@ -71,7 +71,7 @@ const API_ENDPOINTS = {
   categories: `${API_BASE_URL}/categories?page=1&limit=200`,
   rawMaterials: `${API_BASE_URL}/raw-materials?page=1&limit=200`,
   attributes: `${API_BASE_URL}/product-attributes?page=1&limit=200`,
-  processes: `${API_BASE_URL}/processes?page=1&limit200`
+  processes: `${API_BASE_URL}/processes`
 };
 
 const EditProductPage = () => {
