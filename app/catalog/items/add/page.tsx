@@ -84,7 +84,7 @@ interface BomItem {
 }
 
 interface ProcessItem {
-  process: string;
+  processId: string;
 }
 
 interface FormData {
@@ -114,7 +114,7 @@ const generateSoftwareCode = () => {
 const AddProductPage = () => {
   const [activeTab, setActiveTab] = useState('general');
   const [bomItems, setBomItems] = useState<BomItem[]>([{ material: '', quantity: 0 }]);
-  const [processItems, setProcessItems] = useState<ProcessItem[]>([{ process: '' }]);
+  const [processItems, setProcessItems] = useState<ProcessItem[]>([{ processId: '' }]);
   const [softwareCode, setSoftwareCode] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   
@@ -228,13 +228,12 @@ const AddProductPage = () => {
   };
 
   const handleAddProcess = () => {
-    setProcessItems([...processItems, { process: '' }]);
+    setProcessItems([...processItems, { processId: '' }]);
   };
 
-  const handleProcessChange = (index: number, field: string, value: string) => {
-    console.log('Process change:', { index, field, value });
+  const handleProcessChange = (index: number, value: string) => {
     const newProcessItems = [...processItems];
-    newProcessItems[index] = { ...newProcessItems[index], [field]: value };
+    newProcessItems[index] = { ...newProcessItems[index], processId: value };
     setProcessItems(newProcessItems);
   };
 
@@ -313,9 +312,9 @@ const AddProductPage = () => {
 
         // Processes
         processes: processItems
-          .filter(item => item.process)
+          .filter(item => item.processId)
           .map(item => ({
-            processId: item.process
+            processId: item.processId
           }))
       };
 
@@ -683,8 +682,8 @@ const AddProductPage = () => {
                               <td>
                                 <select
                                   className="form-select"
-                                  value={item.process}
-                                  onChange={(e) => handleProcessChange(index, 'process', e.target.value)}
+                                  value={item.processId}
+                                  onChange={(e) => handleProcessChange(index, e.target.value)}
                                   disabled={isLoading}
                                 >
                                   <option value="">Select Process</option>
@@ -696,10 +695,10 @@ const AddProductPage = () => {
                                 </select>
                               </td>
                               <td>
-                                {availableProcesses.find(p => p.id === item.process)?.type || ''}
+                                {availableProcesses.find(p => p.id === item.processId)?.type || ''}
                               </td>
                               <td>
-                                {availableProcesses.find(p => p.id === item.process)?.description || ''}
+                                {availableProcesses.find(p => p.id === item.processId)?.description || ''}
                               </td>
                               <td>
                                 <button

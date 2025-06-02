@@ -11,7 +11,7 @@ const SalesIcon = <i className="bx bx-cart side-menu__icon"></i>;
 const StoresIcon = <i className="bx bx-store side-menu__icon"></i>;
 const AnalyticsIcon = <i className="bx bx-bar-chart side-menu__icon"></i>;
 const ReplenishmentIcon = <i className="bx bx-refresh side-menu__icon"></i>;
-
+const FilemanagerIcon = <i className="ri ri-file-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 // Badges if needed
 const badge = (
   <span className="badge !bg-warning/10 !text-warning !py-[0.25rem] !px-[0.45rem] !text-[0.75em] ms-1">
@@ -111,5 +111,13 @@ export const MenuItems: any = [
     active: false,
     selected: false,
     path: "/replenishment",
+  },
+  {
+    icon: FilemanagerIcon,
+    title: "File Manager",
+    type: "link",
+    active: false,
+    selected: false,
+    path: "/filemanager",
   },
 ];

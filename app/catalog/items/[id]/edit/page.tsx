@@ -27,9 +27,7 @@ interface Product {
     materialUnit?: string;
   }>;
   processes: Array<{
-    process: string;
-    type?: string;
-    description?: string;
+    processId: string;
   }>;
   image?: string;
 }
@@ -83,7 +81,12 @@ const EditProductPage = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [attributeCategories, setAttributeCategories] = useState<AttributeCategory[]>([]);
-  const [processes, setProcesses] = useState<any[]>([]);
+  const [processes, setProcesses] = useState<Array<{
+    id: string;
+    name: string;
+    type?: string;
+    description?: string;
+  }>>([]);
   const [activeTab, setActiveTab] = useState('general');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
@@ -149,14 +152,35 @@ const EditProductPage = () => {
         // Log the original attributes
         console.log('Original product attributes:', product.attributes);
         
+        // Helper function to get process ID
+        const getProcessId = (proc: any): string => {
+          if (typeof proc === 'object') {
+            if (proc.id) return proc.id;
+            if (proc.process?.id) return proc.process.id;
+            if (proc.processId?.id) return proc.processId.id;
+            if (typeof proc.process === 'string') return proc.process;
+            if (typeof proc.processId === 'string') return proc.processId;
+          }
+          return proc || '';
+        };
+
         // Process the bom and processes arrays
         product.bom = Array.isArray(product.bom) ? product.bom : [];
-        product.processes = Array.isArray(product.processes) ? product.processes : [];
+        
+        // Normalize processes to always have processId as string
+        product.processes = Array.isArray(product.processes)
+          ? product.processes.map((proc: any) => ({
+              processId: getProcessId(proc)
+            }))
+          : [];
+
+        console.log('Normalized processes:', product.processes);
         
         // Set the product data with normalized attributes
         setFormData({
           ...product,
-          attributes: normalizedAttributes
+          attributes: normalizedAttributes,
+          processes: product.processes
         });
         console.log('Product data loaded:', product);
         console.log('Product attributes:', product.attributes);
@@ -309,15 +333,28 @@ const EditProductPage = () => {
     });
   };
 
-  const handleProcessChange = (index: number, field: 'process' | 'type' | 'description', value: string) => {
+  const handleProcessChange = (index: number, value: string) => {
+    console.log('Changing process at index', index, 'to value:', value);
     setFormData(prev => {
       const newProcesses = [...prev.processes];
-      newProcesses[index] = {
-        ...newProcesses[index],
-        [field]: value
-      };
+      newProcesses[index] = { processId: value };
+      console.log('New processes array:', newProcesses);
       return { ...prev, processes: newProcesses };
     });
+  };
+
+  const addProcess = () => {
+    setFormData(prev => ({
+      ...prev,
+      processes: [...prev.processes, { processId: '' }]
+    }));
+  };
+
+  const removeProcess = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      processes: prev.processes.filter((_, i) => i !== index)
+    }));
   };
 
   const addBomItem = () => {
@@ -331,20 +368,6 @@ const EditProductPage = () => {
     setFormData(prev => ({
       ...prev,
       bom: prev.bom.filter((_, i) => i !== index)
-    }));
-  };
-
-  const addProcess = () => {
-    setFormData(prev => ({
-      ...prev,
-      processes: [...prev.processes, { process: '', type: '', description: '' }]
-    }));
-  };
-
-  const removeProcess = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      processes: prev.processes.filter((_, i) => i !== index)
     }));
   };
 
@@ -371,10 +394,8 @@ const EditProductPage = () => {
           material: item.material,
           quantity: Number(item.quantity)
         })),
-        processes: formData.processes.filter(proc => proc.process).map(proc => ({
-          process: proc.process,
-          type: proc.type || undefined,
-          description: proc.description || undefined
+        processes: formData.processes.filter(proc => proc.processId).map(proc => ({
+          processId: proc.processId
         }))
       };
 
@@ -685,51 +706,56 @@ const EditProductPage = () => {
                 {/* Processes Tab */}
                 {activeTab === 'processes' && (
                   <div>
-                    {formData.processes.map((proc, index) => (
-                      <div key={index} className="grid grid-cols-12 gap-4 mb-4">
-                        <div className="col-span-4">
-                          <select
-                            className="form-control"
-                            value={proc.process}
-                            onChange={(e) => handleProcessChange(index, 'process', e.target.value)}
-                          >
-                            <option value="">Select Process</option>
-                            {processes.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </select>
+                    {formData.processes.map((proc, index) => {
+                      const currentProcessId = typeof proc.processId === 'object' ? proc.processId.id : proc.processId;
+                      console.log('Current process:', { proc, currentProcessId });
+                      
+                      return (
+                        <div key={index} className="grid grid-cols-12 gap-4 mb-4">
+                          <div className="col-span-4">
+                            <select
+                              className="form-control"
+                              value={currentProcessId}
+                              onChange={(e) => handleProcessChange(index, e.target.value)}
+                            >
+                              <option value="">Select Process</option>
+                              {processes.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-span-3">
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={processes.find(p => p.id === currentProcessId)?.type || ''}
+                              readOnly
+                              placeholder="Type"
+                            />
+                          </div>
+                          <div className="col-span-3">
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={processes.find(p => p.id === currentProcessId)?.description || ''}
+                              readOnly
+                              placeholder="Description"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <button
+                              type="button"
+                              onClick={() => removeProcess(index)}
+                              className="ti-btn ti-btn-danger"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          </div>
                         </div>
-                        <div className="col-span-3">
-                          <input
-                            type="text"
-                            className="form-control"
-                            value={proc.type || ''}
-                            onChange={(e) => handleProcessChange(index, 'type', e.target.value)}
-                            placeholder="Type"
-                          />
-                        </div>
-                        <div className="col-span-3">
-                          <input
-                            type="text"
-                            className="form-control"
-                            value={proc.description || ''}
-                            onChange={(e) => handleProcessChange(index, 'description', e.target.value)}
-                            placeholder="Description"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <button
-                            type="button"
-                            onClick={() => removeProcess(index)}
-                            className="ti-btn ti-btn-danger"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <button
                       type="button"
                       onClick={addProcess}
