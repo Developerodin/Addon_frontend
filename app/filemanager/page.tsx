@@ -2,140 +2,32 @@
 import { Filemanagerlist, Folderdata, Myfilesdata, Recentdata } from '@/shared/data/pages/filemanager/filemanagerdata'
 import Seo from '@/shared/layout-components/seo/seo'
 import Link from 'next/link'
-import React, { Fragment, useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useMemo,Fragment } from 'react'
 import PerfectScrollbar from 'react-perfect-scrollbar';
 import 'react-perfect-scrollbar/dist/css/styles.css';
-import { useDropzone } from 'react-dropzone'
-import S3Service from '@/shared/services/s3Service'
-// Additional imports will be added when implementing S3 functionality
-
-// Define file and folder types
-interface FileItem {
-  id: number;
-  name: string;
-  size: number;
-  type: string;
-  lastModified: string;
-  path: string;
-  url: string;
-}
-
-interface FolderItem {
-  id: number;
-  name: string;
-  type: 'folder';
-  path: string;
-  items: number;
-  size: string;
-  lastModified: string;
-}
-
-type StorageItem = FileItem | FolderItem;
-
-// Type guard functions
-const isFileItem = (item: StorageItem): item is FileItem => {
-  return item.type !== 'folder';
-};
-
-const isFolderItem = (item: StorageItem): item is FolderItem => {
-  return item.type === 'folder';
-};
+import ContentLayout from "@/app/(components)/(contentlayout)/layout";
 
 const Filemanager = () => {
 
     const [isFoldersOpen, setFoldersOpen] = useState(false);
-    const [isDetailsOpen, setDetailsOpen] = useState(false);
-    const [currentFolder, setCurrentFolder] = useState('root');
-    const [folderPath, setFolderPath] = useState(['Home']);
-    const [isUploading, setIsUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [filesList, setFilesList] = useState<StorageItem[]>([]);
+    const [selectedFolders, setSelectedFolders] = useState<number[]>([]);
+    const [selectedFiles, setSelectedFiles] = useState<number[]>([]);
     const [showUploadModal, setShowUploadModal] = useState(false);
-    const [newFolderName, setNewFolderName] = useState('');
-    const [selectedFile, setSelectedFile] = useState<StorageItem | null>(null);
-    
-    // Initialize S3 service
-    const [s3Service, setS3Service] = useState<S3Service | null>(null);
-    
-    // Initialize S3 on component mount
-    useEffect(() => {
-      const s3Config = {
-        bucketName: process.env.NEXT_PUBLIC_S3_BUCKET || '',
-        region: process.env.NEXT_PUBLIC_S3_REGION || '',
-        accessKeyId: process.env.NEXT_PUBLIC_S3_ACCESS_KEY || '',
-        secretAccessKey: process.env.NEXT_PUBLIC_S3_SECRET_KEY || '',
-      };
-      
-      console.log("S3 Config:", s3Config);
-      
-      if (s3Config.bucketName && s3Config.region && s3Config.accessKeyId && s3Config.secretAccessKey) {
-        const service = new S3Service(s3Config);
-        setS3Service(service);
-        
-        // Load initial files and folders
-        loadFilesAndFolders();
-      }
-    }, []);
-    
-    // Load files and folders from S3
-    const loadFilesAndFolders = async () => {
-      try {
-        if (!s3Service) return;
-        
-        const prefix = currentFolder === 'root' ? '' : currentFolder;
-        const result = await s3Service.listObjects(prefix);
-        
-        // Process directories
-        const folders = result.directories.map(dir => ({
-          id: Date.now() + Math.random(), // Generate unique ID
-          name: dir.name,
-          type: 'folder' as const,
-          path: dir.path,
-          items: 0, // This could be updated with a count of items in the folder
-          size: '0 KB',
-          lastModified: new Date().toISOString()
-        }));
-        
-        // Process files
-        const files = await Promise.all(result.files.map(async file => {
-          // Get signed URL for each file
-          const url = await s3Service.getSignedUrl(file.path);
-          
-          return {
-            id: Date.now() + Math.random(), // Generate unique ID
-            name: file.name,
-            size: file.size,
-            type: file.name.split('.').pop() || 'file', // Use extension as type
-            lastModified: file.lastModified,
-            path: file.path,
-            url: url
-          };
-        }));
-        
-        setFilesList([...folders, ...files]);
-      } catch (error) {
-        console.error('Error loading files and folders:', error);
-      }
-    };
-    
-    // Update file loading when folder changes
-    useEffect(() => {
-      if (s3Service) {
-        loadFilesAndFolders();
-      }
-    }, [currentFolder, s3Service]);
-    
+    const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+    const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [renameModalOpen, setRenameModalOpen] = useState(false);
+    const [renameFileId, setRenameFileId] = useState<number | null>(null);
+    const [renameFileName, setRenameFileName] = useState('');
+    const [fileData, setFileData] = useState(() => Recentdata.map((f, i) => ({ ...f, id: i + 1 })));
+ 
     const handleResize = () => {
      const windowWidth = window.innerWidth;
      // Handle folders and details visibility
      if (windowWidth <= 575) {
        setFoldersOpen(true);
-       setDetailsOpen(false);
-     } else if (windowWidth <= 1200) {
-       setDetailsOpen(true);
      } else {
        setFoldersOpen(false);
-       setDetailsOpen(false);
      }
    };
  
@@ -150,7 +42,6 @@ const Filemanager = () => {
     const handleToggleFolders = () => {
       if (window.innerWidth <= 575) {
         setFoldersOpen(true);
-        setDetailsOpen(false);
       }
     };
     
@@ -158,531 +49,430 @@ const Filemanager = () => {
       setFoldersOpen(false);
     };
     
-    const handleToggleDetails = () => {
-      if (window.innerWidth <= 1200) {
-        setDetailsOpen(true);
-      }
+    // Folder checkbox handler
+    const handleFolderCheckbox = (id: number) => {
+        setSelectedFolders(prev =>
+            prev.includes(id) ? prev.filter(fid => fid !== id) : [...prev, id]
+        );
     };
-    
-    const handleToggleDetailsClose = () => {
-      setDetailsOpen(false);
+    // File checkbox handler
+    const handleFileCheckbox = (id: number) => {
+        setSelectedFiles(prev =>
+            prev.includes(id) ? prev.filter(fid => fid !== id) : [...prev, id]
+        );
     };
 
-    // Handle file uploads
-    const onDrop = useCallback((acceptedFiles: File[]) => {
-      // In a real implementation, this would upload to S3
-      setSelectedFile(null);
-      handleFileUpload(acceptedFiles[0]);
-    }, []);
-
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
-      onDrop,
-      accept: {
-        'image/*': ['.jpeg', '.jpg', '.png', '.gif'],
-        'application/pdf': ['.pdf'],
-        'application/msword': ['.doc'],
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-        'application/vnd.ms-excel': ['.xls'],
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-        'text/plain': ['.txt']
-      }
-    });
-
-    const handleFileUpload = async (file: File) => {
-      if (!file || !s3Service) return;
-      
-      setIsUploading(true);
-      setUploadProgress(0);
-      
-      try {
-        // Start progress animation
-        const interval = setInterval(() => {
-          setUploadProgress(prev => {
-            if (prev >= 90) { // Only go to 90% until actual upload completes
-              clearInterval(interval);
-              return 90;
-            }
-            return prev + 10;
-          });
-        }, 300);
-        
-        // Actual S3 upload
-        const path = currentFolder === 'root' ? '' : currentFolder;
-        const result = await s3Service.uploadFile(file, path);
-        
-        clearInterval(interval);
-        setUploadProgress(100);
-        
-        // Add the file to the list with the S3 URL
-        const newFile: FileItem = {
-          id: Date.now(),
-          name: file.name,
-          size: file.size,
-          type: file.type || file.name.split('.').pop() || 'file',
-          lastModified: new Date().toISOString(),
-          path: result.key,
-          url: result.location
-        };
-        
-        setFilesList(prev => [...prev, newFile]);
-        setShowUploadModal(false);
-        setIsUploading(false);
-        
-        // Refresh the file list
-        loadFilesAndFolders();
-        
-      } catch (error) {
-        console.error('Upload failed:', error);
-        setIsUploading(false);
-        setUploadProgress(0);
-      }
+    // Handle file selection
+    const handleFilesSelected = (files: FileList | null) => {
+        if (!files) return;
+        const validTypes = ['image/jpeg', 'image/png', 'application/pdf', 'video/mp4'];
+        const filtered = Array.from(files).filter(f => validTypes.includes(f.type));
+        setUploadFiles(prev => [...prev, ...filtered]);
     };
-    
-    const createNewFolder = async () => {
-      if (!newFolderName.trim() || !s3Service) return;
-      
-      try {
-        // Create the folder path
-        const path = currentFolder === 'root' 
-          ? newFolderName 
-          : `${currentFolder}/${newFolderName}`;
-        
-        // Create folder in S3
-        await s3Service.createFolder(path);
-        
-        // Create a new folder object for UI
-        const newFolder: FolderItem = {
-          id: Date.now(),
-          name: newFolderName,
-          type: 'folder',
-          path: path,
-          items: 0,
-          size: '0 KB',
-          lastModified: new Date().toISOString()
-        };
-        
-        // Add to folders list
-        setFilesList(prev => [...prev, newFolder]);
-        setNewFolderName('');
-        
-        // Close the modal
-        const modalElement = document.getElementById('todo-compose');
-        if (modalElement) {
-          modalElement.classList.remove('open');
+
+    // Handle drag and drop
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        handleFilesSelected(e.dataTransfer.files);
+    };
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+    };
+
+    // Simulate upload progress
+    useEffect(() => {
+        if (uploadFiles.length === 0) return;
+        let interval: NodeJS.Timeout;
+        const unfinished = uploadFiles.filter(f => !uploadProgress[f.name]);
+        if (unfinished.length > 0) {
+            interval = setInterval(() => {
+                setUploadProgress(prev => {
+                    const updated = { ...prev };
+                    unfinished.forEach(f => {
+                        const current = updated[f.name] || 0;
+                        if (current < 100) {
+                            updated[f.name] = Math.min(100, current + Math.random() * 20 + 10);
+                        }
+                    });
+                    return updated;
+                });
+            }, 400);
         }
-        
-        // Refresh the file list
-        loadFilesAndFolders();
-      } catch (error) {
-        console.error('Error creating folder:', error);
-      }
-    };
-    
-    const navigateToFolder = (folderId: number) => {
-      const folder = filesList.find(f => f.id === folderId && f.type === 'folder') as FolderItem | undefined;
-      if (folder) {
-        // Ensure the path ends with a slash for S3 folder convention
-        const folderPath = folder.path.endsWith('/') ? folder.path : `${folder.path}/`;
-        setCurrentFolder(folderPath);
-        
-        // Update breadcrumb navigation
-        const folderName = folder.name || folder.path.split('/').filter(Boolean).pop() || '';
-        setFolderPath(prev => [...prev, folderName]);
-      }
-    };
-    
-    const navigateUp = () => {
-      if (folderPath.length > 1) {
-        // Update breadcrumb navigation
-        const newPath = [...folderPath];
-        newPath.pop();
-        setFolderPath(newPath);
-        
-        // Update current folder path
-        if (folderPath.length === 2) {
-          // Going back to root
-          setCurrentFolder('root');
-        } else {
-          // Going back up one level
-          const pathParts = currentFolder.split('/').filter(Boolean);
-          pathParts.pop();
-          const parentPath = pathParts.length ? `${pathParts.join('/')}/` : 'root';
-          setCurrentFolder(parentPath);
-        }
-        
-        // Refresh files
-        loadFilesAndFolders();
-      }
-    };
-    
-    const getFileIcon = (fileType: string) => {
-      if (fileType === 'folder') return <i className="ri-folder-2-line text-warning text-[2rem]"></i>;
-      
-      if (fileType.includes('image')) return <i className="ri-image-line text-info text-[2rem]"></i>;
-      if (fileType.includes('pdf')) return <i className="ri-file-pdf-line text-danger text-[2rem]"></i>;
-      if (fileType.includes('word') || fileType.includes('doc')) return <i className="ri-file-word-line text-primary text-[2rem]"></i>;
-      if (fileType.includes('excel') || fileType.includes('sheet')) return <i className="ri-file-excel-line text-success text-[2rem]"></i>;
-      if (fileType.includes('text')) return <i className="ri-file-text-line text-secondary text-[2rem]"></i>;
-      
-      return <i className="ri-file-line text-[2rem]"></i>;
-    };
-    
-    const formatFileSize = (bytes: number) => {
-      if (bytes === 0) return '0 Bytes';
-      
-      const k = 1024;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
-    
-    const copyFileLink = (fileUrl: string) => {
-      navigator.clipboard.writeText(fileUrl)
-        .then(() => {
-          alert('Link copied to clipboard!');
-        })
-        .catch(err => {
-          console.error('Could not copy link: ', err);
+        return () => clearInterval(interval);
+    }, [uploadFiles]);
+
+    // Remove file from upload list
+    const handleRemoveUploadFile = (name: string) => {
+        setUploadFiles(prev => prev.filter(f => f.name !== name));
+        setUploadProgress(prev => {
+            const updated = { ...prev };
+            delete updated[name];
+            return updated;
         });
     };
 
-    // Delete file functionality
-    const deleteFile = async (file: FileItem) => {
-      if (!s3Service) return;
-      
-      try {
-        await s3Service.deleteObject(file.path);
-        setFilesList(prev => prev.filter(item => item.id !== file.id));
-        
-        if (selectedFile && selectedFile.id === file.id) {
-          setSelectedFile(null);
+    // Add a sample nested folder structure for demonstration
+    const nestedFolders = [
+        {
+            id: 1,
+            name: 'Images',
+            children: [
+                { id: 5, name: 'Vacation', children: [] },
+                { id: 6, name: 'Work', children: [] },
+            ],
+        },
+        {
+            id: 2,
+            name: 'Docs',
+            children: [
+                { id: 7, name: 'Invoices', children: [] },
+            ],
+        },
+        {
+            id: 3,
+            name: 'Downloads',
+            children: [],
+        },
+        {
+            id: 4,
+            name: 'Apps',
+            children: [],
+        },
+    ];
+
+    const [activeFolderId, setActiveFolderId] = useState<number | null>(null);
+    const [expandedFolders, setExpandedFolders] = useState<number[]>([]);
+    const toggleExpand = (id: number) => {
+        setExpandedFolders(prev => prev.includes(id) ? prev.filter(fid => fid !== id) : [...prev, id]);
+    };
+
+    // Recursive folder tree component
+    const FolderTree = ({ folders, level = 0 }: { folders: any[]; level?: number }) => (
+        <ul
+            className={`relative transition-all duration-200
+                ${level > 0 ? 'pl-5 ml-2 border-l-2 border-primary/40 dark:border-primary/60' : ''}
+            `}
+            style={{
+                borderColor: level > 0 ? 'rgba(59,130,246,0.4)' : undefined, // Tailwind primary/40
+            }}
+        >
+            {folders.map(folder => {
+                const isActive = activeFolderId === folder.id;
+                const isExpanded = expandedFolders.includes(folder.id);
+                const hasChildren = folder.children && folder.children.length > 0;
+                return (
+                    <li key={folder.id} className="relative group transition-all duration-200">
+                        <div
+                            className={`flex items-center gap-2 px-2 py-1 rounded-lg cursor-pointer transition-all duration-200
+                                ${isActive ? 'bg-primary/10 text-primary font-semibold shadow-sm' : 'hover:bg-primary/5 hover:text-primary'}
+                                ${level > 0 ? 'ml-2 bg-primary/5' : ''}`}
+                            style={{ minHeight: '2.25rem' }}
+                            onClick={() => setActiveFolderId(folder.id)}
+                        >
+                            {hasChildren && (
+                                <span
+                                    className="flex items-center justify-center w-5 h-5 text-gray-400 hover:text-primary transition mr-1"
+                                    onClick={e => { e.stopPropagation(); toggleExpand(folder.id); }}
+                                >
+                                    <i className={`ri-arrow-${isExpanded ? 'down' : 'right'}-s-line`}></i>
+                                </span>
+                            )}
+                            <span className={`flex items-center justify-center w-7 h-7 rounded-lg ${isActive ? 'bg-primary/20' : 'bg-gray-100 dark:bg-defaultbg'} mr-1`}>
+                                <i className={`ri-folder-2-line text-lg ${isActive ? 'text-primary' : 'text-gray-500'}`}></i>
+                            </span>
+                            <span className="truncate text-base">{folder.name}</span>
+                        </div>
+                        {hasChildren && isExpanded && (
+                            <FolderTree folders={folder.children} level={level + 1} />
+                        )}
+                    </li>
+                );
+            })}
+        </ul>
+    );
+
+    // Find the active folder name for display
+    const getActiveFolderName = (id: number | null, folders: any[]): string => {
+        if (!id) return '';
+        for (const folder of folders) {
+            if (folder.id === id) return folder.name;
+            if (folder.children) {
+                const name = getActiveFolderName(id, folder.children);
+                if (name) return name;
+            }
         }
-      } catch (error) {
-        console.error('Error deleting file:', error);
-      }
+        return '';
+    };
+
+    // File table state
+    const [fileSearch, setFileSearch] = useState('');
+    const [filePage, setFilePage] = useState(1);
+    const [fileRowsPerPage, setFileRowsPerPage] = useState(10);
+    type FileSortCol = 'text1' | 'text3' | 'text4';
+    const [fileSort, setFileSort] = useState<{ col: FileSortCol, dir: 'asc' | 'desc' }>({ col: 'text1', dir: 'asc' });
+    const [selectedFileRows, setSelectedFileRows] = useState<number[]>([]);
+    const [selectAllFiles, setSelectAllFiles] = useState(false);
+
+    // Prepare file data (filter, sort, paginate)
+    const filteredFiles = useMemo(() => {
+        let files = fileData;
+        if (fileSearch) {
+            files = files.filter(f => f.text1.toLowerCase().includes(fileSearch.toLowerCase()));
+        }
+        if (fileSort.col) {
+            files = files.sort((a, b) => {
+                let aVal: any;
+                let bVal: any;
+                if (fileSort.col === 'text1') {
+                    aVal = a.text1;
+                    bVal = b.text1;
+                } else if (fileSort.col === 'text3') {
+                    aVal = parseFloat(a.text3);
+                    bVal = parseFloat(b.text3);
+                } else if (fileSort.col === 'text4') {
+                    aVal = new Date(a.text4);
+                    bVal = new Date(b.text4);
+                }
+                if (aVal < bVal) return fileSort.dir === 'asc' ? -1 : 1;
+                if (aVal > bVal) return fileSort.dir === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return files;
+    }, [fileSearch, fileSort, fileData]);
+
+    const totalFileResults = filteredFiles.length;
+    const totalFilePages = Math.ceil(totalFileResults / fileRowsPerPage);
+    const pagedFiles = filteredFiles.slice((filePage - 1) * fileRowsPerPage, filePage * fileRowsPerPage);
+
+    const handleFileSelectAll = () => {
+        if (selectAllFiles) {
+            setSelectedFileRows([]);
+        } else {
+            setSelectedFileRows(pagedFiles.map(f => f.id));
+        }
+        setSelectAllFiles(!selectAllFiles);
+    };
+    const handleFileRowSelect = (id: number) => {
+        setSelectedFileRows(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+    const handleFileSort = (col: FileSortCol) => {
+        setFileSort(prev => ({ col, dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc' }));
+    };
+
+    // Rename handlers
+    const openRenameModal = (file: any) => {
+        setRenameFileId(file.id);
+        setRenameFileName(file.text1);
+        setRenameModalOpen(true);
+    };
+    const closeRenameModal = () => {
+        setRenameModalOpen(false);
+        setRenameFileId(null);
+        setRenameFileName('');
+    };
+    const handleRenameSave = () => {
+        setFileData(prev => prev.map(f => f.id === renameFileId ? { ...f, text1: renameFileName } : f));
+        closeRenameModal();
     };
 
     return (
         <Fragment>
             <Seo title={"File Manager"} />
-            <div className="file-manager-container p-2 gap-2 sm:!flex !block text-defaulttextcolor text-defaultsize">
-
-                <div className={`file-manager-folders ${isFoldersOpen ? 'open' : ''}`}>
-                    <div className="flex p-4 flex-wrap gap-2 items-center justify-between border-b dark:border-defaultborder/10">
-                        <div>
-                            <h6 className="font-semibold mb-0 text-[1rem]">Folders</h6>
-                        </div>
+            <div className="file-manager-container p-2 gap-1 sm:!flex !block text-defaulttextcolor text-defaultsize">
+                {/* Sidebar: Folders vertical card */}
+                <div className="bg-white dark:bg-bodybg shadow-md p-2 w-full max-w-xs mr-4 h-[calc(100vh-5.5rem)] overflow-y-auto rounded-lg">
+                    {/* Folder tree header */}
+                    <div className="flex items-center justify-between border-b border-defaultborder dark:border-defaultborder/10 px-5 py-2 bg-light/60 rounded-t-lg mb-2">
+                        <h6 className="font-semibold text-[1rem] m-0">Folders</h6>
                         <div className="flex gap-2">
-                            <button aria-label="button" onClick={handleToggleFoldersClose} type="button" id="folders-close-btn" className="sm:hidden block btn btn-icon btn-sm btn-danger">
-                                <i className="ri-close-fill"></i>
+                            <button
+                                className="ti-btn ti-btn-primary ti-btn-xs flex items-center gap-1 px-2 py-1 text-xs font-medium shadow-sm hover:bg-primary-dark transition"
+                                data-hs-overlay="#todo-compose"
+                            >
+                                <i className="ri-add-circle-line text-base"></i> New
                             </button>
-                            <div>
-                                <Link href="#!" scroll={false} className="hs-dropdown-toggle ti-btn !gap-0 !py-1 !px-2 !text-[0.75rem] !font-medium bg-primary text-white flex items-center justify-center" data-hs-overlay="#todo-compose">
-                                    <i className="ri-add-circle-line align-middle !me-1"></i>Create Folder
-                                </Link>
-                            </div>
-                            <div>
-                                <button onClick={() => setShowUploadModal(true)} className="ti-btn !gap-0 !py-1 !px-2 !text-[0.75rem] !font-medium bg-secondary text-white flex items-center justify-center">
-                                    <i className="ri-upload-cloud-line align-middle !me-1"></i>Upload Files
-                                </button>
-                            </div>
+                            <button
+                                className="ti-btn ti-btn-danger ti-btn-xs flex items-center gap-1 px-2 py-1 text-xs font-medium shadow-sm transition disabled:opacity-50"
+                                disabled={!activeFolderId}
+                            >
+                                <i className="ri-delete-bin-line text-base"></i> Delete
+                            </button>
                         </div>
                     </div>
-                    
-                    {/* Breadcrumb Navigation */}
-                    <div className="p-4 border-b dark:border-defaultborder/10">
-                        <nav aria-label="breadcrumb">
-                            <ol className="flex flex-wrap items-center gap-2">
-                                {folderPath.map((folder, index) => (
-                                    <li key={index} className="flex items-center">
-                                        {index > 0 && <i className="ri-arrow-right-s-line mx-1"></i>}
-                                        <button 
-                                            onClick={() => {
-                                                if (index < folderPath.length - 1) {
-                                                    setFolderPath(folderPath.slice(0, index + 1));
-                                                    // Calculate the path based on selected breadcrumb
-                                                    const newPath = folderPath.slice(0, index + 1).join('/');
-                                                    setCurrentFolder(newPath === 'Home' ? 'root' : newPath);
-                                                }
-                                            }}
-                                            className={`text-sm ${index === folderPath.length - 1 ? 'text-primary font-semibold' : 'text-gray-600'}`}
-                                        >
-                                            {folder}
-                                        </button>
-                                    </li>
-                                ))}
-                            </ol>
-                        </nav>
-                    </div>
-                    
-                    <div className="p-4 file-folders-container overflow-scroll" id="file-folders-container">
-                        {/* Upload Dropzone - Visible when upload modal is open */}
-                        {showUploadModal && (
-                            <div className="mb-6 border-2 border-dashed rounded-lg p-6 dark:border-defaultborder/10">
-                                <div {...getRootProps()} className="cursor-pointer text-center">
-                                    <input {...getInputProps()} />
-                                    <div className="mb-4">
-                                        <i className="ri-upload-cloud-2-line text-primary text-[3rem]"></i>
-                                    </div>
-                                    {isDragActive ? (
-                                        <p className="text-lg">Drop the files here...</p>
-                                    ) : (
-                                        <div>
-                                            <p className="text-lg mb-2">Drag & drop files here, or click to select files</p>
-                                            <p className="text-sm text-gray-500">Supports images, documents, PDFs, and more</p>
-                                        </div>
-                                    )}
-                                    
-                                    {isUploading && (
-                                        <div className="mt-4">
-                                            <div className="flex justify-between mb-1">
-                                                <span>Uploading {selectedFile?.name}</span>
-                                                <span>{uploadProgress}%</span>
-                                            </div>
-                                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                                <div className="bg-primary h-2.5 rounded-full" style={{ width: `${uploadProgress}%` }}></div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                <div className="flex justify-end mt-4">
-                                    <button 
-                                        onClick={() => setShowUploadModal(false)}
-                                        className="ti-btn ti-btn-danger !py-1 !px-3 !text-[0.75rem] !font-medium"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Folders Section */}
-                        <div className="flex mb-4 items-center justify-between">
-                            <p className="mb-0 font-semibold text-[.875rem]">Folders</p>
-                        </div>
-                        <div className="grid grid-cols-12 gap-x-6 mb-4">
-                            {filesList.filter(isFolderItem).map((folder) => (
-                                <div className="xxl:col-span-3 xl:col-span-6 lg:col-span-6 md:col-span-6 col-span-12" key={folder.id}>
-                                    <div className="box border dark:border-defaultborder/10 !shadow-none">
-                                        <div className="box-body bg-light" onClick={() => navigateToFolder(folder.id)}>
-                                            <div className="mb-4 folder-svg-container flex flex-wrap justify-between items-start">
-                                                <div>
-                                                    <i className="ri-folder-2-line text-warning text-[2rem]"></i>
-                                                </div>
-                                                <div>
-                                                    <div className="hs-dropdown ti-dropdown ltr:[--placement:left-top] rtl:[--placement:right-top]">
-                                                        <button className="ti-btn ti-btn-sm ti-btn-primary" aria-label="button" type="button" aria-expanded="false">
-                                                            <i className="ri-more-2-fill"></i>
-                                                        </button>
-                                                        <ul className="hs-dropdown-menu ti-dropdown-menu hidden">
-                                                            <li><Link className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium" href="#!" scroll={false}>Delete</Link></li>
-                                                            <li><Link className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium" href="#!" scroll={false}>Rename</Link></li>
-                                                        </ul>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <p className="text-[.875rem] font-semibold mb-1 leading-none">
-                                                <Link href="#!" scroll={false}>{folder.name}</Link>
-                                            </p>
-                                            <div className="flex items-center justify-between flex-wrap">
-                                                <div>
-                                                    <span className="text-[#8c9097] dark:text-white/50 text-[.75rem]">
-                                                        {folder.items} items
-                                                    </span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-default font-semibold">
-                                                        {folder.lastModified.split('T')[0]}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                            
-                            {filesList.filter(isFolderItem).length === 0 && (
-                                <div className="col-span-12 text-center py-8">
-                                    <i className="ri-folder-2-line text-[2rem] text-gray-400 mb-2"></i>
-                                    <p className="text-gray-500">No folders found in this location</p>
-                                </div>
-                            )}
-                        </div>
-                        
-                        {/* Files Section */}
-                        <div className="flex mb-4 items-center justify-between">
-                            <p className="mb-0 font-semibold text-[.875rem]">Files</p>
-                        </div>
-                        <div className="grid grid-cols-12 gap-6">
-                            <div className="xl:col-span-12 col-span-12">
-                                <div className="table-responsive border border-bottom-0 dark:border-defaultborder/10">
-                                    <table className="table whitespace-nowrap table-hover min-w-full">
-                                        <thead>
-                                            <tr>
-                                                <th scope="col" className="text-start">File Name</th>
-                                                <th scope="col" className="text-start">Type</th>
-                                                <th scope="col" className="text-start">Size</th>
-                                                <th scope="col" className="text-start">Date Modified</th>
-                                                <th scope="col" className="text-start">Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="files-list">
-                                            {filesList.filter(isFileItem).map((file) => (
-                                                <tr key={file.id} onClick={() => setSelectedFile(file)}>
-                                                    <th scope="row">
-                                                        <div className="flex items-center">
-                                                            <div className="me-2">
-                                                                <span className="avatar avatar-xs">
-                                                                    {getFileIcon(file.type)}
-                                                                </span>
-                                                            </div>
-                                                            <div>
-                                                                {file.name}
-                                                            </div>
-                                                        </div>
-                                                    </th>
-                                                    <td>{file.type.split('/')[1] || file.type}</td>
-                                                    <td>{formatFileSize(file.size)}</td>
-                                                    <td>{new Date(file.lastModified).toLocaleString()}</td>
-                                                    <td>
-                                                        <div className="flex flex-row items-center !gap-2 text-[0.9375rem]">
-                                                            <Link 
-                                                                aria-label="view" 
-                                                                href={file.url} 
-                                                                target="_blank"
-                                                                className="ti-btn ti-btn-icon ti-btn-wave !rounded-full !border-info/10 !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info"
-                                                            >
-                                                                <i className="ri-eye-line"></i>
-                                                            </Link>
-                                                            <button
-                                                                aria-label="copy link"
-                                                                onClick={(e) => { e.stopPropagation(); copyFileLink(file.url); }}
-                                                                className="ti-btn ti-btn-icon ti-btn-wave !rounded-full !border-success/10 !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-success/10 text-success hover:bg-success hover:text-white hover:border-success"
-                                                            >
-                                                                <i className="ri-link"></i>
-                                                            </button>
-                                                            <button
-                                                                aria-label="delete"
-                                                                onClick={(e) => { 
-                                                                  e.stopPropagation(); 
-                                                                  if (isFileItem(file)) {
-                                                                    deleteFile(file);
-                                                                  }
-                                                                }}
-                                                                className="ti-btn ti-btn-icon ti-btn-wave !rounded-full !border-danger/10 !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger"
-                                                            >
-                                                                <i className="ri-delete-bin-line"></i>
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            
-                                            {filesList.filter(isFileItem).length === 0 && (
-                                                <tr>
-                                                    <td colSpan={5} className="text-center py-8">
-                                                        <i className="ri-file-line text-[2rem] text-gray-400 mb-2"></i>
-                                                        <p className="text-gray-500">No files found in this location</p>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
+                    {/* Beautified FolderTree */}
+                    <div className="pt-1 pb-2 pr-1">
+                        <FolderTree folders={nestedFolders} />
                     </div>
                 </div>
-                
-                {/* File Details Panel - Will be shown when a file is selected */}
-                {selectedFile && isFileItem(selectedFile) && (
-                    <div className={`selected-file-details ${isDetailsOpen ? 'open' : ''}`}>
-                        <div className="flex p-4 items-center justify-between border-b dark:border-defaultborder/10">
-                            <div>
-                                <h6 className="font-semibold mb-0 text-[1rem]">File Details</h6>
-                            </div>
-                            <div className="flex items-center">
-                                <div className="hs-dropdown ti-dropdown me-1">
-                                    <button className="ti-btn ti-btn-sm ti-btn-primary" aria-label="button" type="button" aria-expanded="false">
-                                        <i className="ri-more-2-fill"></i>
+                {/* Main area: Show contents of selected folder */}
+                <div className="flex-1 bg-white dark:bg-bodybg shadow-md p-0 min-h-[10rem] rounded-lg flex flex-col">
+                    {activeFolderId ? (
+                        <>
+                            {/* Folder name header and upload button */}
+                            <div className="flex items-center justify-between border-b border-defaultborder dark:border-defaultborder/10 px-5 py-2 bg-light/60 rounded-t-lg">
+                                <h2 className="text-lg font-semibold text-defaulttextcolor m-0">{getActiveFolderName(activeFolderId, nestedFolders)}</h2>
+                                <div className="flex gap-2">
+                                    <button
+                                        className="ti-btn ti-btn-danger flex items-center gap-2 px-4 py-2 text-sm font-medium shadow-sm transition disabled:opacity-50"
+                                        disabled={selectedFileRows.length === 0}
+                                    >
+                                        <i className="ri-delete-bin-line text-lg"></i> Delete{selectedFileRows.length > 0 && ` (${selectedFileRows.length})`}
                                     </button>
-                                    <ul className="hs-dropdown-menu ti-dropdown-menu hidden">
-                                        <li><button className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium" onClick={() => copyFileLink(selectedFile.url)}>Copy Link</button></li>
-                                        <li><Link className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium" href={selectedFile.url} target="_blank">View</Link></li>
-                                        <li><button className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium" onClick={() => deleteFile(selectedFile)}>Delete</button></li>
+                                    <button
+                                        className="ti-btn ti-btn-warning flex items-center gap-2 px-4 py-2 text-sm font-medium shadow-sm transition disabled:opacity-50"
+                                        disabled={selectedFileRows.length === 0}
+                                    >
+                                        <i className="ri-share-forward-line text-lg"></i> Export Path{selectedFileRows.length > 0 && ` (${selectedFileRows.length})`}
+                                    </button>
+                                    <button
+                                        className="ti-btn ti-btn-info flex items-center gap-2 px-4 py-2 text-sm font-medium shadow-sm transition disabled:opacity-50"
+                                        disabled={selectedFileRows.length === 0}
+                                    >
+                                        <i className="ri-download-2-line text-lg"></i> Download{selectedFileRows.length > 0 && ` (${selectedFileRows.length})`}
+                                    </button>
+                                    <button
+                                        className="ti-btn ti-btn-primary flex items-center gap-2 px-4 py-2 text-sm font-medium shadow-sm hover:bg-primary-dark transition"
+                                        onClick={() => setShowUploadModal(true)}
+                                    >
+                                        <i className="ri-upload-2-line text-lg"></i> Upload
+                                    </button>
+                                </div>
+                            </div>
+                            {/* Search, rows per page, and table */}
+                            <div className="flex flex-wrap justify-between items-center mb-4 gap-2 px-6 pt-4">
+                                <div className="flex items-center">
+                                    <label className="mr-2 text-sm text-gray-600">Rows per page:</label>
+                                    <select
+                                        className="form-select w-auto text-sm"
+                                        value={fileRowsPerPage}
+                                        onChange={e => { setFileRowsPerPage(Number(e.target.value)); setFilePage(1); }}
+                                    >
+                                        <option value={10}>10</option>
+                                        <option value={50}>50</option>
+                                        <option value={100}>100</option>
+                                    </select>
+                                </div>
+                                <div className="relative w-full max-w-xs">
+                                    <input
+                                        type="text"
+                                        className="form-control py-3 pr-10"
+                                        placeholder="Search by file name..."
+                                        value={fileSearch}
+                                        onChange={e => { setFileSearch(e.target.value); setFilePage(1); }}
+                                    />
+                                    <button className="absolute end-0 top-0 px-4 h-full">
+                                        <i className="ri-search-line text-lg"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="table-responsive px-6">
+                                <table className="table whitespace-nowrap table-bordered min-w-full">
+                                    <thead>
+                                        <tr className="border-b border-gray-200">
+                                            <th>
+                                                <input
+                                                    type="checkbox"
+                                                    className="form-check-input"
+                                                    checked={selectAllFiles}
+                                                    onChange={handleFileSelectAll}
+                                                />
+                                            </th>
+                                            <th className="text-start cursor-pointer" onClick={() => handleFileSort('text1')}>
+                                                File Name
+                                                {fileSort.col === 'text1' && (fileSort.dir === 'asc' ? ' ▲' : ' ▼')}
+                                            </th>
+                                            <th className="text-start">Thumbnail</th>
+                                            <th className="text-start cursor-pointer" onClick={() => handleFileSort('text3')}>
+                                                Size
+                                                {fileSort.col === 'text3' && (fileSort.dir === 'asc' ? ' ▲' : ' ▼')}
+                                            </th>
+                                            <th className="text-start cursor-pointer" onClick={() => handleFileSort('text4')}>
+                                                Date Modified
+                                                {fileSort.col === 'text4' && (fileSort.dir === 'asc' ? ' ▲' : ' ▼')}
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {pagedFiles.map((file, idx) => (
+                                            <tr key={file.id} className={`border-b border-gray-200 ${idx % 2 === 0 ? 'bg-gray-50' : ''}`}>
+                                                <td>
+                                                    <input
+                                                        type="checkbox"
+                                                        className="form-check-input"
+                                                        checked={selectedFileRows.includes(file.id)}
+                                                        onChange={() => handleFileRowSelect(file.id)}
+                                                    />
+                                                </td>
+                                                <td className="align-middle">
+                                                    <div className="flex items-center gap-2 h-16">
+                                                        {file.text1}
+                                                        <button
+                                                            className="ml-1 p-1"
+                                                            style={{ fontSize: '0.85em', height: '1.5em', width: '1.5em' }}
+                                                            title="Rename"
+                                                            onClick={() => openRenameModal(file)}
+                                                        >
+                                                            <i className="ri-edit-2-line"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span className="inline-block w-16 h-16 bg-gray-200 rounded overflow-hidden">
+                                                        <img src="../../assets/images/media/file-manager/1.png" alt="" className="object-cover w-full h-full" />
+                                                    </span>
+                                                </td>
+                                                <td>{file.text3}</td>
+                                                <td>{file.text4}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {/* Pagination */}
+                            <div className="flex justify-between items-center mt-4 px-6 pb-4">
+                                <div className="text-sm text-gray-500">
+                                    Showing {totalFileResults === 0 ? 0 : (filePage - 1) * fileRowsPerPage + 1} to {totalFileResults === 0 ? 0 : Math.min(filePage * fileRowsPerPage, totalFileResults)} of {totalFileResults} entries
+                                </div>
+                                <nav aria-label="Page navigation" className="">
+                                    <ul className="flex flex-wrap items-center">
+                                        <li className={`page-item ${filePage === 1 ? 'disabled' : ''}`}>
+                                            <button
+                                                className="page-link py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                                                onClick={() => setFilePage(prev => Math.max(prev - 1, 1))}
+                                                disabled={filePage === 1}
+                                            >
+                                                Previous
+                                            </button>
+                                        </li>
+                                        {Array.from({ length: totalFilePages }, (_, i) => i + 1).map(page => (
+                                            <li key={page} className="page-item">
+                                                <button
+                                                    className={`page-link py-2 px-3 leading-tight border border-gray-300 ${filePage === page ? 'bg-primary text-white hover:bg-primary-dark' : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}
+                                                    onClick={() => setFilePage(page)}
+                                                >
+                                                    {page}
+                                                </button>
+                                            </li>
+                                        ))}
+                                        <li className={`page-item ${filePage === totalFilePages ? 'disabled' : ''}`}>
+                                            <button
+                                                className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                                                onClick={() => setFilePage(prev => Math.min(prev + 1, totalFilePages))}
+                                                disabled={filePage === totalFilePages}
+                                            >
+                                                Next
+                                            </button>
+                                        </li>
                                     </ul>
-                                </div>
-                                <button onClick={() => setSelectedFile(null)} aria-label="button" type="button" className="ti-btn ti-btn-icon ti-btn-sm ti-btn-danger xl:hidden block">
-                                    <i className="ri-close-fill"></i>
-                                </button>
+                                </nav>
                             </div>
-                        </div>
-                        <div className="filemanager-file-details overflow-scroll" id="filemanager-file-details">
-                            <div className="p-4 text-center border-b border-dashed dark:border-defaultborder/10">
-                                <div className="file-details mb-4 !inline-flex">
-                                    {selectedFile.type.includes('image') ? (
-                                        <img src={selectedFile.url} alt={selectedFile.name} className="max-w-full h-auto max-h-48" />
-                                    ) : (
-                                        <div className="p-4">{getFileIcon(selectedFile.type)}</div>
-                                    )}
-                                </div>
-                                <div>
-                                    <p className="mb-0 font-semibold text-[1rem]">{selectedFile.name}</p>
-                                    <p className="mb-0 text-[#8c9097] dark:text-white/50 text-[.625rem]">
-                                        {formatFileSize(selectedFile.size)} | {new Date(selectedFile.lastModified).toLocaleString()}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="p-4 border-b border-dashed dark:border-defaultborder/10">
-                                <ul className="list-group">
-                                    <li className="list-group-item">
-                                        <div>
-                                            <span className="font-semibold">File Format : </span>
-                                            <span className="text-[.75rem] text-[#8c9097] dark:text-white/50">
-                                                {selectedFile.type.split('/')[1] || selectedFile.type}
-                                            </span>
-                                        </div>
-                                    </li>
-                                    <li className="list-group-item">
-                                        <div>
-                                            <p className="font-semibold mb-0">File Location : </p>
-                                            <span className="text-[.75rem] text-[#8c9097] dark:text-white/50">
-                                                {selectedFile.path}
-                                            </span>
-                                        </div>
-                                    </li>
-                                    <li className="list-group-item">
-                                        <div>
-                                            <p className="font-semibold mb-0">File URL : </p>
-                                            <span className="text-[.75rem] text-[#8c9097] dark:text-white/50 break-all">
-                                                {selectedFile.url}
-                                            </span>
-                                        </div>
-                                    </li>
-                                </ul>
-                            </div>
-                            <div className="p-4 flex gap-2">
-                                <button 
-                                    onClick={() => copyFileLink(selectedFile.url)}
-                                    className="ti-btn ti-btn-primary flex-1"
-                                >
-                                    <i className="ri-link me-1"></i> Copy Link
-                                </button>
-                                <button 
-                                    onClick={() => deleteFile(selectedFile)}
-                                    className="ti-btn ti-btn-danger flex-1"
-                                >
-                                    <i className="ri-delete-bin-line me-1"></i> Delete
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                        </>
+                    ) : (
+                        <div className="text-gray-400 text-center mt-10">Select a folder to view its contents.</div>
+                    )}
+                </div>
             </div>
-            
-            {/* Create Folder Modal */}
             <div id="todo-compose" className="hs-overlay hidden ti-modal">
                 <div className="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out min-h-[calc(100%-3.5rem)] flex items-center">
                     <div className="ti-modal-content w-full">
@@ -694,37 +484,143 @@ const Filemanager = () => {
                         </div>
                         <div className="ti-modal-body px-4">
                             <label htmlFor="create-folder1" className="form-label">Folder Name</label>
-                            <input 
-                                type="text" 
-                                className="form-control" 
-                                id="create-folder1" 
-                                placeholder="Folder Name" 
-                                value={newFolderName}
-                                onChange={(e) => setNewFolderName(e.target.value)}
-                            />
+                            <input type="text" className="form-control" id="create-folder1" placeholder="Folder Name" />
                         </div>
                         <div className="ti-modal-footer">
-                            <button 
-                                aria-label="button" 
-                                type="button"
-                                className="hs-dropdown-toggle ti-btn ti-btn-light align-middle"
-                                data-hs-overlay="#todo-compose"
-                            >
+                            <button aria-label="button" type="button"
+                                className="hs-dropdown-toggle ti-btn  ti-btn-light align-middle"
+                                data-hs-overlay="#todo-compose">
                                 <i className="ri-close-fill"></i>
                             </button>
-                            <button 
-                                type="button" 
-                                className="ti-btn ti-btn-success-full text-white !font-medium"
-                                onClick={createNewFolder}
-                            >
-                                Create
-                            </button>
+                            <button type="button" className="ti-btn ti-btn-success-full text-white !font-medium">Create</button>
                         </div>
                     </div>
                 </div>
             </div>
+            <div id="todo-compose2" className="hs-overlay hidden ti-modal">
+                <div className="hs-overlay-open:mt-7 ti-modal-box mt-0 ease-out min-h-[calc(100%-3.5rem)] flex items-center">
+                    <div className="ti-modal-content w-full">
+                        <div className="ti-modal-header">
+                            <h6 className="modal-title text-[1rem] font-semibold">Create File</h6>
+                            <button type="button" className="hs-dropdown-toggle !text-[1rem] !font-semibold !text-defaulttextcolor" data-hs-overlay="#todo-compose2">
+                                <span className="sr-only">Close</span>
+                                <i className="ri-close-line"></i>
+                            </button>
+                        </div>
+                        <div className="ti-modal-body px-4">
+                            <label htmlFor="create-folder1" className="form-label">Folder Name</label>
+                            <input type="text" className="form-control" placeholder="Folder Name" />
+                        </div>
+                        <div className="ti-modal-footer">
+                            <button aria-label="button" type="button"
+                                className="hs-dropdown-toggle ti-btn  ti-btn-light align-middle"
+                                data-hs-overlay="#todo-compose2">
+                                <i className="ri-close-fill"></i>
+                            </button>
+                            <button type="button" className="ti-btn ti-btn-success-full text-white !font-medium">Create</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {/* Upload Modal Overlay */}
+            {showUploadModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="bg-white dark:bg-bodybg rounded-lg shadow-lg p-8 w-full max-w-lg relative animate-fade-in">
+                        <button
+                            className="absolute top-3 right-3 ti-btn ti-btn-icon ti-btn-sm ti-btn-danger"
+                            onClick={() => { setShowUploadModal(false); setUploadFiles([]); setUploadProgress({}); }}
+                            aria-label="Close upload modal"
+                        >
+                            <i className="ri-close-line"></i>
+                        </button>
+                        <h2 className="text-xl font-semibold mb-4 text-defaulttextcolor flex items-center">
+                            <i className="ri-upload-2-line text-2xl mr-2 text-primary"></i> Upload Files
+                        </h2>
+                        <div
+                            className="border-2 border-dashed border-primary/40 rounded-lg p-6 mb-4 flex flex-col items-center justify-center cursor-pointer bg-light/40 hover:bg-primary/10 transition"
+                            onDrop={handleDrop}
+                            onDragOver={handleDragOver}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                multiple
+                                accept=".jpg,.jpeg,.png,.pdf,.mp4"
+                                className="hidden"
+                                onChange={e => handleFilesSelected(e.target.files)}
+                            />
+                            <i className="ri-upload-cloud-2-line text-4xl text-primary mb-2"></i>
+                            <p className="text-defaulttextcolor font-medium">Drag & Drop files here or <span className="text-primary underline">browse</span></p>
+                            <p className="text-xs text-gray-500 mt-1">Supported: JPG, PNG, PDF, MP4</p>
+                        </div>
+                        {uploadFiles.length > 0 && (
+                            <div className="space-y-3 max-h-56 overflow-y-auto mb-2 w-full">
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-sm text-defaulttextcolor font-medium">{uploadFiles.length} file(s) selected</span>
+                                </div>
+                                {uploadFiles.map(file => (
+                                    <div key={file.name} className="flex items-center gap-3 bg-light rounded p-2">
+                                        <div className="flex-1">
+                                            <div className="font-medium text-defaulttextcolor text-sm truncate">{file.name}</div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                                                <div
+                                                    className="bg-primary h-2 rounded-full transition-all duration-300"
+                                                    style={{ width: `${uploadProgress[file.name] || 0}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                        <span className="text-xs text-gray-500 ml-2">{Math.round((uploadProgress[file.name] || 0))}%</span>
+                                        <button
+                                            className="ti-btn ti-btn-icon ti-btn-sm ti-btn-danger ml-2"
+                                            onClick={() => handleRemoveUploadFile(file.name)}
+                                            aria-label="Remove file"
+                                        >
+                                            <i className="ri-close-line"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <div className="flex justify-end mt-4">
+                            <button
+                                className="ti-btn ti-btn-primary"
+                                disabled={uploadFiles.length === 0 || Object.values(uploadProgress).some(p => p < 100)}
+                                onClick={() => { setShowUploadModal(false); setUploadFiles([]); setUploadProgress({}); }}
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {renameModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="bg-white dark:bg-bodybg rounded-lg shadow-lg p-6 w-full max-w-sm relative animate-fade-in">
+                        <button
+                            className="absolute top-3 right-3 ti-btn ti-btn-icon ti-btn-sm ti-btn-danger"
+                            onClick={closeRenameModal}
+                            aria-label="Close rename modal"
+                        >
+                            <i className="ri-close-line"></i>
+                        </button>
+                        <h2 className="text-lg font-semibold mb-4 text-defaulttextcolor">Rename File</h2>
+                        <input
+                            type="text"
+                            className="form-control mb-4"
+                            value={renameFileName}
+                            onChange={e => setRenameFileName(e.target.value)}
+                            autoFocus
+                        />
+                        <div className="flex justify-end gap-2">
+                            <button className="ti-btn ti-btn-light" onClick={closeRenameModal}>Cancel</button>
+                            <button className="ti-btn ti-btn-primary" onClick={handleRenameSave} disabled={!renameFileName.trim()}>Save</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </Fragment>
-    )
+    );
 }
 
 export default Filemanager
