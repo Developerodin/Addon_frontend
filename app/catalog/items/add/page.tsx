@@ -77,7 +77,7 @@ interface Attributes {
 }
 
 interface BomItem {
-  material: string;
+  materialId: string;
   quantity: number;
   materialName?: string;
   materialUnit?: string;
@@ -113,7 +113,7 @@ const generateSoftwareCode = () => {
 
 const AddProductPage = () => {
   const [activeTab, setActiveTab] = useState('general');
-  const [bomItems, setBomItems] = useState<BomItem[]>([{ material: '', quantity: 0 }]);
+  const [bomItems, setBomItems] = useState<BomItem[]>([{ materialId: '', quantity: 0 }]);
   const [processItems, setProcessItems] = useState<ProcessItem[]>([{ processId: '' }]);
   const [softwareCode, setSoftwareCode] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -179,6 +179,7 @@ const AddProductPage = () => {
         // Set raw materials from results array
         const materialsResponse = materialsRes.data as RawMaterialApiResponse;
         setRawMaterials(materialsResponse.results || []);
+        console.log('Raw Materials:', rawMaterials);
         
         // Set processes from results array
         const processResponse = processesRes.data as ProcessApiResponse;
@@ -201,17 +202,17 @@ const AddProductPage = () => {
   }, []);
 
   const handleAddBomItem = () => {
-    setBomItems([...bomItems, { material: '', quantity: 0 }]);
+    setBomItems([...bomItems, { materialId: '', quantity: 0 }]);
   };
 
-  const handleBomItemChange = (index: number, field: 'material' | 'quantity', value: string | number) => {
+  const handleBomItemChange = (index: number, field: 'materialId' | 'quantity', value: string | number) => {
     const newBomItems = [...bomItems];
-    if (field === 'material') {
+    if (field === 'materialId') {
       const selectedMaterial = rawMaterials.find(m => m.id === value);
       newBomItems[index] = {
         ...newBomItems[index],
-        material: value.toString(),
-        materialName: selectedMaterial?.itemName || '',
+        materialId: value.toString(),
+        materialName: selectedMaterial?.name || '',
         materialUnit: selectedMaterial?.unit || ''
       };
     } else if (field === 'quantity') {
@@ -304,9 +305,9 @@ const AddProductPage = () => {
 
         // BOM
         bom: bomItems
-          .filter(item => item.material && item.quantity > 0)
+          .filter(item => item.materialId && item.quantity > 0)
           .map(item => ({
-            materialId: item.material,
+            materialId: item.materialId,
             quantity: item.quantity
           })),
 
@@ -611,14 +612,14 @@ const AddProductPage = () => {
                               <td>
                                 <select
                                   className="form-select"
-                                  value={item.material}
-                                  onChange={(e) => handleBomItemChange(index, 'material', e.target.value)}
+                                  value={item.materialId}
+                                  onChange={(e) => handleBomItemChange(index, 'materialId', e.target.value)}
                                   disabled={isLoading}
                                 >
                                   <option value="">Select Material</option>
                                   {rawMaterials.map((material) => (
                                     <option key={material.id} value={material.id}>
-                                      {material.itemName}
+                                      {material.name}
                                     </option>
                                   ))}
                                 </select>

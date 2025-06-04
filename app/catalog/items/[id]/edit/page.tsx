@@ -21,7 +21,7 @@ interface Product {
   };
   attributes: Record<string, string>;
   bom: Array<{
-    material: string;
+    materialId: string;
     quantity: number;
     materialName?: string;
     materialUnit?: string;
@@ -64,6 +64,13 @@ interface AttributeCategory {
   optionValues: AttributeOptionValue[];
 }
 
+interface ProcessType {
+  id: string;
+  name: string;
+  type?: string;
+  description?: string;
+}
+
 const API_ENDPOINTS = {
   products: `${API_BASE_URL}/products`,
   categories: `${API_BASE_URL}/categories?page=1&limit=200`,
@@ -81,12 +88,7 @@ const EditProductPage = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [attributeCategories, setAttributeCategories] = useState<AttributeCategory[]>([]);
-  const [processes, setProcesses] = useState<Array<{
-    id: string;
-    name: string;
-    type?: string;
-    description?: string;
-  }>>([]);
+  const [processes, setProcesses] = useState<ProcessType[]>([]);
   const [activeTab, setActiveTab] = useState('general');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
@@ -129,6 +131,7 @@ const EditProductPage = () => {
           ...mat,
           name: mat.name || mat.itemName || '',
         }));
+        console.log('Raw Materials:', rawMaterials);
         setRawMaterials(rawMaterials);
 
         // Normalize categories
@@ -137,6 +140,8 @@ const EditProductPage = () => {
 
         // Normalize product data
         let product = productResponse.data;
+        // Debug: log backend BOM
+        console.log('Backend BOM:', productResponse.data);
         // If category is a string, convert to { id, name }
         if (typeof product.category === 'string') {
           const catObj = categories.find((c: any) => c.id === product.category) || { id: product.category, name: '' };
@@ -165,7 +170,18 @@ const EditProductPage = () => {
         };
 
         // Process the bom and processes arrays
-        product.bom = Array.isArray(product.bom) ? product.bom : [];
+        product.bom = Array.isArray(product.bom)
+          ? product.bom.map((item: any) => ({
+              materialId: typeof item.materialId === 'object' && item.materialId !== null
+                ? item.materialId.id
+                : item.materialId || item.material || '',
+              quantity: item.quantity,
+              materialName: item.materialName,
+              materialUnit: item.materialUnit
+            }))
+          : [];
+        // Debug: log normalized BOM
+        console.log('Normalized BOM:', product.bom);
         
         // Normalize processes to always have processId as string
         product.processes = Array.isArray(product.processes)
@@ -225,7 +241,7 @@ const EditProductPage = () => {
         console.log('Processed attribute categories:', attrCats);
         setAttributeCategories(attrCats);
 
-        setProcesses(processesResponse.data.results || []);
+        setProcesses((processesResponse.data.results || []) as ProcessType[]);
       } catch (error) {
         console.error('Error fetching data:', error);
         alert('Error loading product data. Please try again.');
@@ -312,14 +328,14 @@ const EditProductPage = () => {
     });
   };
 
-  const handleBomItemChange = (index: number, field: 'material' | 'quantity', value: string) => {
+  const handleBomItemChange = (index: number, field: 'materialId' | 'quantity', value: string) => {
     setFormData(prev => {
       const newBom = [...prev.bom];
-      if (field === 'material') {
+      if (field === 'materialId') {
         const material = rawMaterials.find(m => m.id === value);
         newBom[index] = {
           ...newBom[index],
-          material: value,
+          materialId: value,
           materialName: material?.name,
           materialUnit: material?.unit
         };
@@ -360,7 +376,7 @@ const EditProductPage = () => {
   const addBomItem = () => {
     setFormData(prev => ({
       ...prev,
-      bom: [...prev.bom, { material: '', quantity: 0 }]
+      bom: [...prev.bom, { materialId: '', quantity: 0 }]
     }));
   };
 
@@ -390,8 +406,8 @@ const EditProductPage = () => {
         description: formData.description,
         category: formData.category.id, // Send only the ID
         attributes: formData.attributes,
-        bom: formData.bom.filter(item => item.material && item.quantity > 0).map(item => ({
-          material: item.material,
+        bom: formData.bom.filter(item => item.materialId && item.quantity > 0).map(item => ({
+          materialId: item.materialId,
           quantity: Number(item.quantity)
         })),
         processes: formData.processes.filter(proc => proc.processId).map(proc => ({
@@ -655,44 +671,50 @@ const EditProductPage = () => {
                 {/* BOM Tab */}
                 {activeTab === 'bom' && (
                   <div>
-                    {formData.bom.map((item, index) => (
-                      <div key={index} className="grid grid-cols-12 gap-4 mb-4">
-                        <div className="col-span-5">
-                          <select
-                            className="form-control"
-                            value={item.material}
-                            onChange={(e) => handleBomItemChange(index, 'material', e.target.value)}
-                          >
-                            <option value="">Select Material</option>
-                            {rawMaterials.map((material) => (
-                              <option key={material.id} value={material.id}>
-                                {material.name} ({material.unit})
-                              </option>
-                            ))}
-                          </select>
+                    {formData.bom.map((item, index) => {
+                      const material = rawMaterials.find(m => m.id === item.materialId);
+                      return (
+                        <div key={index} className="grid grid-cols-12 gap-4 mb-4">
+                          <div className="col-span-5">
+                            <select
+                              className="form-control"
+                              value={item.materialId}
+                              onChange={(e) => handleBomItemChange(index, 'materialId', e.target.value)}
+                            >
+                              <option value="">Select Material</option>
+                              {rawMaterials.map((material) => (
+                                <option key={material.id} value={material.id}>
+                                  {material.name} ({material.unit})
+                                </option>
+                              ))}
+                            </select>
+                            {/* Show warning if materialId is missing or invalid */}
+                            {!item.materialId && <div className="text-xs text-yellow-600 mt-1">No material selected</div>}
+                            {item.materialId && !material && <div className="text-xs text-red-600 mt-1">Material not found in list</div>}
+                          </div>
+                          <div className="col-span-5">
+                            <input
+                              type="number"
+                              className="form-control"
+                              value={item.quantity}
+                              onChange={(e) => handleBomItemChange(index, 'quantity', e.target.value)}
+                              placeholder="Quantity"
+                              min="0"
+                              step="0.01"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <button
+                              type="button"
+                              onClick={() => removeBomItem(index)}
+                              className="ti-btn ti-btn-danger"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          </div>
                         </div>
-                        <div className="col-span-5">
-                          <input
-                            type="number"
-                            className="form-control"
-                            value={item.quantity}
-                            onChange={(e) => handleBomItemChange(index, 'quantity', e.target.value)}
-                            placeholder="Quantity"
-                            min="0"
-                            step="0.01"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <button
-                            type="button"
-                            onClick={() => removeBomItem(index)}
-                            className="ti-btn ti-btn-danger"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <button
                       type="button"
                       onClick={addBomItem}
@@ -719,7 +741,7 @@ const EditProductPage = () => {
                               onChange={(e) => handleProcessChange(index, e.target.value)}
                             >
                               <option value="">Select Process</option>
-                              {processes.map((p) => (
+                              {processes.map((p: ProcessType) => (
                                 <option key={p.id} value={p.id}>
                                   {p.name}
                                 </option>
