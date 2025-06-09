@@ -21,6 +21,7 @@ interface RawMaterial {
   mrp: string;
   hsnCode: string;
   gst: string;
+  articleNo: string;
   image: string | null;
 }
 
@@ -42,6 +43,7 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
     mrp: '',
     hsnCode: '',
     gst: '',
+    articleNo: '',
     image: null
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -80,6 +82,7 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
           mrp: data.mrp || '',
           hsnCode: data.hsnCode || '',
           gst: data.gst || '',
+          articleNo: data.articleNo || '',
           image: data.image || null
         });
         if (data.image) {
@@ -135,7 +138,8 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
           unit: material.unit,
           mrp: material.mrp,
           hsnCode: material.hsnCode,
-          gst: material.gst
+          gst: material.gst,
+          articleNo: material.articleNo
         })
       });
 
@@ -256,6 +260,20 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
                   <option value="Stickers">Stickers</option>
                 </select>
               </div>
+
+               {/* Article No */}
+               <div className="form-group">
+                <label className="form-label">Article No</label>
+                <input
+                  type="text"
+                  name="articleNo"
+                  value={material.articleNo}
+                  onChange={e => setMaterial({ ...material, articleNo: e.target.value })}
+                  className="form-control"
+                  required
+                />
+              </div>
+              
               {/* Name */}
               <div className="form-group">
                 <label className="form-label">Name</label>
@@ -361,6 +379,7 @@ export default function EditRawMaterial({ params }: { params: { id: string } }) 
                   <option value="Packs">Packs</option>
                 </select>
               </div>
+             
               {/* MRP */}
               <div className="form-group">
                 <label className="form-label">MRP</label>

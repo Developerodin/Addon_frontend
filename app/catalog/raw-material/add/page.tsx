@@ -21,6 +21,7 @@ interface RawMaterialForm {
   mrp: string;
   hsnCode: string;
   gst: string;
+  articleNo: string;
   image?: File;
   imagePreview?: string;
 }
@@ -42,6 +43,7 @@ export default function AddRawMaterial() {
     mrp: '',
     hsnCode: '',
     gst: '',
+    articleNo: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -64,6 +66,7 @@ export default function AddRawMaterial() {
         mrp: formData.mrp,
         hsnCode: formData.hsnCode,
         gst: formData.gst,
+        articleNo: formData.articleNo,
         image: 'null',
       };
 
@@ -210,6 +213,19 @@ export default function AddRawMaterial() {
                     </select>
                   </div>
 
+                   {/* Article No */}
+                   <div className="form-group">
+                    <label className="form-label">Article No</label>
+                    <input
+                      type="text"
+                      name="articleNo"
+                      value={formData.articleNo}
+                      onChange={handleChange}
+                      className="form-control"
+                      required
+                    />
+                  </div>
+
                   {/* Name */}
                   <div className="form-group">
                     <label className="form-label">Name</label>
@@ -322,6 +338,8 @@ export default function AddRawMaterial() {
                       <option value="Packs">Packs</option>
                     </select>
                   </div>
+
+                 
 
                   {/* MRP */}
                   <div className="form-group">

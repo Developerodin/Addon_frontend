@@ -41,6 +41,7 @@ interface RawMaterial {
   id: string;
   name: string;
   unit: string;
+  articleNo: string;
 }
 
 interface AttributeOption {
@@ -675,7 +676,7 @@ const EditProductPage = () => {
                       const material = rawMaterials.find(m => m.id === item.materialId);
                       return (
                         <div key={index} className="grid grid-cols-12 gap-4 mb-4">
-                          <div className="col-span-5">
+                          <div className="col-span-4">
                             <select
                               className="form-control"
                               value={item.materialId}
@@ -692,7 +693,7 @@ const EditProductPage = () => {
                             {!item.materialId && <div className="text-xs text-yellow-600 mt-1">No material selected</div>}
                             {item.materialId && !material && <div className="text-xs text-red-600 mt-1">Material not found in list</div>}
                           </div>
-                          <div className="col-span-5">
+                          <div className="col-span-3">
                             <input
                               type="number"
                               className="form-control"
@@ -701,6 +702,15 @@ const EditProductPage = () => {
                               placeholder="Quantity"
                               min="0"
                               step="0.01"
+                            />
+                          </div>
+                          <div className="col-span-3">
+                            <input
+                              type="text"
+                              className="form-control bg-gray-50"
+                              value={material?.articleNo || ''}
+                              readOnly
+                              placeholder="Article No"
                             />
                           </div>
                           <div className="col-span-2">
