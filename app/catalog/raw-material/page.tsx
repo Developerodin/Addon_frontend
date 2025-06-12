@@ -22,6 +22,7 @@ interface RawMaterial {
   mrp: string;
   hsnCode: string;
   gst: string;
+  articleNo: string;
 }
 
 interface ExcelRow {
@@ -39,6 +40,7 @@ interface ExcelRow {
   'MRP'?: string;
   'HSN Code'?: string;
   'GST %'?: string;
+  'Article No.'?: string;
   [key: string]: string | undefined;
 }
 
@@ -65,6 +67,7 @@ const RawMaterialPage = () => {
       setError(null);
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
       const response = await fetch(`${API_BASE_URL}/raw-materials?page=${page}&limit=${limit}${searchParam}`);
+      console.log("response",response);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to fetch raw materials');
@@ -113,6 +116,7 @@ const RawMaterialPage = () => {
     try {
       // Always fetch all raw materials for export
       const response = await fetch(`${API_BASE_URL}/raw-materials?page=1&limit=100000`);
+      console.log("response",response);
       if (!response.ok) throw new Error('Failed to fetch all raw materials for export');
       const data = await response.json();
       const exportSource = Array.isArray(data.results) ? data.results : [];
@@ -130,7 +134,8 @@ const RawMaterialPage = () => {
         'Unit': mat.unit,
         'MRP': mat.mrp,
         'HSN Code': mat.hsnCode,
-        'GST %': mat.gst
+        'GST %': mat.gst,
+        'Article No.': mat.articleNo
       }));
       const ws = XLSX.utils.json_to_sheet(exportData);
       ws['!cols'] = [
@@ -237,6 +242,7 @@ const RawMaterialPage = () => {
               mrp: String(row['MRP'] || '').trim(),
               hsnCode: String(row['HSN Code'] || '').trim(),
               gst: String(row['GST %'] || '').trim(),
+              articleNo: String(row['Article No.'] || '').trim(),
               image: 'null'
             };
             console.log('Importing material:', material);
