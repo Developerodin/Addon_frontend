@@ -18,13 +18,11 @@ interface Product {
   styleCode: string;
   eanCode: string;
   description: string;
-  category: {
-    id: string;
-    name: string;
-  };
-  createdAt: string;
-  updatedAt: string;
-  attributes?: ProductAttribute;
+  category: string;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+  attributes?: Record<string, string>;
   bom?: ProductBOM[];
   processes?: ProductProcess[];
 }
@@ -37,71 +35,17 @@ interface ProductsResponse {
   totalResults: number;
 }
 
-interface ProductAttribute {
-  type: string;
-  brand: string;
-  mrp: string;
-  material: string;
-  color: string;
-  pattern: string;
-  season: string;
-  occasion: string;
-  gender: string;
-  ageGroup: string;
-}
-
 interface ProductBOM {
-  material: string;
+  _id?: string;
+  materialId: string;
   quantity: number;
 }
 
 interface ProductProcess {
-  process: string;
-  sequence: number;
-}
-
-interface CompleteProduct extends Product {
-  attributes: ProductAttribute;
-  bom: ProductBOM[];
-  processes: ProductProcess[];
-}
-
-// Update the Excel interfaces to use Style Code
-interface ExcelGeneralRow {
-  'Product Name': string;
-  'Style Code': string;
-  'Internal Code': string;
-  'Vendor Code': string;
-  'Factory Code': string;
-  'EAN Code': string;
-  'Description': string;
-  'Category': string;
-}
-
-interface ExcelAttributeRow {
-  'Style Code': string;
-  'Type': string;
-  'Brand': string;
-  'MRP': string;
-  'Material': string;
-  'Color': string;
-  'Pattern': string;
-  'Season': string;
-  'Occasion': string;
-  'Gender': string;
-  'Age Group': string;
-}
-
-interface ExcelBOMRow {
-  'Style Code': string;
-  'Material': string;
-  'Quantity': string;
-}
-
-interface ExcelProcessRow {
-  'Style Code': string;
-  'Process': string;
-  'Sequence': string;
+  _id?: string;
+  processId?: string;
+  process?: string;
+  sequence?: number;
 }
 
 const API_ENDPOINTS = {
@@ -202,58 +146,22 @@ const ProductListPage = () => {
       
       const wb = XLSX.utils.book_new();
 
-      // General Sheet
-      const generalData = data.results.map(product => ({
-        'Product Name': product.name,
-        'Style Code': product.styleCode,
+      // Create Products sheet with only basic product data
+      const exportData = data.results.map(product => ({
+        'ID': product.id,
+        'Name': product.name,
+        'Category': product.category, // This is the category ID
+        'Software Code': product.softwareCode,
         'Internal Code': product.internalCode,
         'Vendor Code': product.vendorCode,
         'Factory Code': product.factoryCode,
-        'EAN Code': product.eanCode,
-        'Description': product.description,
-        'Category': product.category.name
-      }));
-      const wsGeneral = XLSX.utils.json_to_sheet(generalData);
-      XLSX.utils.book_append_sheet(wb, wsGeneral, 'General');
-
-      // Attributes Sheet
-      const attributesData = data.results.map(product => ({
         'Style Code': product.styleCode,
-        'Type': product.attributes?.type || '',
-        'Brand': product.attributes?.brand || '',
-        'MRP': product.attributes?.mrp || '',
-        'Material': product.attributes?.material || '',
-        'Color': product.attributes?.color || '',
-        'Pattern': product.attributes?.pattern || '',
-        'Season': product.attributes?.season || '',
-        'Occasion': product.attributes?.occasion || '',
-        'Gender': product.attributes?.gender || '',
-        'Age Group': product.attributes?.ageGroup || ''
+        'EAN Code': product.eanCode,
+        'Description': product.description
       }));
-      const wsAttributes = XLSX.utils.json_to_sheet(attributesData);
-      XLSX.utils.book_append_sheet(wb, wsAttributes, 'Attributes');
-
-      // BOM Sheet
-      const bomData = data.results.flatMap(product => 
-        (product.bom || []).map(bom => ({
-          'Style Code': product.styleCode,
-          'Material': bom.material,
-          'Quantity': bom.quantity
-        }))
-      );
-      const wsBOM = XLSX.utils.json_to_sheet(bomData);
-      XLSX.utils.book_append_sheet(wb, wsBOM, 'BOM');
-
-      // Processes Sheet
-      const processesData = data.results.flatMap(product => 
-        (product.processes || []).map(process => ({
-          'Style Code': product.styleCode,
-          'Process': process.process,
-          'Sequence': process.sequence
-        }))
-      );
-      const wsProcesses = XLSX.utils.json_to_sheet(processesData);
-      XLSX.utils.book_append_sheet(wb, wsProcesses, 'Processes');
+      
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Products');
 
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -272,115 +180,36 @@ const ProductListPage = () => {
     try {
       const wb = XLSX.utils.book_new();
 
-      // General Sheet Template (required fields)
-      const generalTemplate = [
+      // Create a simple template with only basic product fields
+      const templateData = [
         {
-          'Product Name': 'Example T-Shirt',
+          'ID': '680c7a2bc30d1e00643b84e8',
+          'Name': 'Example Product 1',
+          'Category': '680b3411fa35ca00651ff788',
+          'Software Code': 'PRD-M9XTTW8I-85T1C',
+          'Internal Code': '123',
+          'Vendor Code': '456',
+          'Factory Code': '789',
           'Style Code': 'STY-12345',
-          'Internal Code': 'INT-12345',
-          'Vendor Code': 'VEN-12345',
-          'Factory Code': 'FAC-12345',
           'EAN Code': '1234567890123',
-          'Description': 'Basic cotton t-shirt with round neck',
-          'Category': 'T-Shirts'
+          'Description': 'Example product description'
         },
         {
-          'Product Name': 'Example Jeans',
-          'Style Code': 'STY-67890',
+          'ID': '68246cc23d04e20065d3d60a',
+          'Name': 'Example Product 2',
+          'Category': '680b341dfa35ca00651ff792',
+          'Software Code': 'PRD-MANS85IE-BW0YJ',
           'Internal Code': 'INT-67890',
           'Vendor Code': 'VEN-67890',
           'Factory Code': 'FAC-67890',
+          'Style Code': 'STY-67890',
           'EAN Code': '9876543210987',
-          'Description': 'Slim fit denim jeans',
-          'Category': 'Jeans'
+          'Description': 'Another example product'
         }
       ];
-      const wsGeneral = XLSX.utils.json_to_sheet(generalTemplate);
-      XLSX.utils.book_append_sheet(wb, wsGeneral, 'General');
-
-      // Attributes Sheet Template
-      const attributesTemplate = [
-        {
-          'Style Code': 'STY-12345',
-          'Type': 'Casual',
-          'Brand': 'Example Brand',
-          'MRP': '999.99',
-          'Material': 'Cotton',
-          'Color': 'Blue',
-          'Pattern': 'Solid',
-          'Season': 'Summer',
-          'Occasion': 'Casual',
-          'Gender': 'Unisex',
-          'Age Group': 'Adult'
-        },
-        {
-          'Style Code': 'STY-67890',
-          'Type': 'Casual',
-          'Brand': 'Example Brand',
-          'MRP': '1999.99',
-          'Material': 'Denim',
-          'Color': 'Blue',
-          'Pattern': 'Solid',
-          'Season': 'All Season',
-          'Occasion': 'Casual',
-          'Gender': 'Unisex',
-          'Age Group': 'Adult'
-        }
-      ];
-      const wsAttributes = XLSX.utils.json_to_sheet(attributesTemplate);
-      XLSX.utils.book_append_sheet(wb, wsAttributes, 'Attributes');
-
-      // BOM Sheet Template
-      const bomTemplate = [
-        {
-          'Style Code': 'STY-12345',
-          'Material': 'Cotton Fabric',
-          'Quantity': '2'
-        },
-        {
-          'Style Code': 'STY-12345',
-          'Material': 'Thread',
-          'Quantity': '1'
-        },
-        {
-          'Style Code': 'STY-67890',
-          'Material': 'Denim Fabric',
-          'Quantity': '3'
-        },
-        {
-          'Style Code': 'STY-67890',
-          'Material': 'Zipper',
-          'Quantity': '1'
-        }
-      ];
-      const wsBOM = XLSX.utils.json_to_sheet(bomTemplate);
-      XLSX.utils.book_append_sheet(wb, wsBOM, 'BOM');
-
-      // Processes Sheet Template
-      const processesTemplate = [
-        {
-          'Style Code': 'STY-12345',
-          'Process': 'Cutting',
-          'Sequence': '1'
-        },
-        {
-          'Style Code': 'STY-12345',
-          'Process': 'Sewing',
-          'Sequence': '2'
-        },
-        {
-          'Style Code': 'STY-67890',
-          'Process': 'Cutting',
-          'Sequence': '1'
-        },
-        {
-          'Style Code': 'STY-67890',
-          'Process': 'Sewing',
-          'Sequence': '2'
-        }
-      ];
-      const wsProcesses = XLSX.utils.json_to_sheet(processesTemplate);
-      XLSX.utils.book_append_sheet(wb, wsProcesses, 'Processes');
+      
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Products');
 
       // Add instructions sheet
       const instructionsTemplate = [
@@ -389,23 +218,27 @@ const ProductListPage = () => {
           '': ''
         },
         {
-          'Instructions': '1. The General sheet is required and must contain all products you want to import.',
+          'Instructions': '1. The Products sheet contains all the basic product information.',
           '': ''
         },
         {
-          'Instructions': '2. Product Name and Style Code are required fields. All other fields are recommended.',
+          'Instructions': '2. Product Name and Style Code are required fields.',
           '': ''
         },
         {
-          'Instructions': '3. Category must match an existing category name in the system.',
+          'Instructions': '3. Category must be a valid category ID from your system.',
           '': ''
         },
         {
-          'Instructions': '4. The Style Code is used to link data across all sheets.',
+          'Instructions': '4. ID field: Leave empty for new products, include ID for updating existing products.',
           '': ''
         },
         {
-          'Instructions': '5. Do not change the sheet names or column headers.',
+          'Instructions': '5. Software Code: Leave empty for new products (auto-generated), include for updates.',
+          '': ''
+        },
+        {
+          'Instructions': '6. All other fields are optional but recommended.',
           '': ''
         }
       ];
@@ -424,274 +257,104 @@ const ProductListPage = () => {
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImportProgress(0);
-    const loadingToast = toast.loading('Importing products...');
-    try {
-      // 1. Fetch categories and build map
-      const categoriesRes = await axios.get(API_ENDPOINTS.categories);
-      const categories = categoriesRes.data.results || categoriesRes.data;
-      const categoryMap: Record<string, string> = {};
-      console.log('Categories from API:', categories);
-      
-      categories.forEach((cat: {name: string, id: string}) => {
-        const key = cat.name.trim().toLowerCase();
-        categoryMap[key] = cat.id;
-        // Also add variations without spaces for more flexible matching
-        categoryMap[key.replace(/\s+/g, '')] = cat.id;
-      });
-      
-      console.log('Category mapping:', categoryMap);
+  const file = e.target.files?.[0];
+  if (!file) return;
+  setImportProgress(0);
+  const loadingToast = toast.loading('Importing products...');
+  try {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
 
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const data = new Uint8Array(e.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
+        // Parse Products Sheet
+        const productsSheet = workbook.Sheets['Products'];
+        if (!productsSheet) {
+          throw new Error('Products sheet not found in the Excel file');
+        }
+        const productsData = XLSX.utils.sheet_to_json<any>(productsSheet);
+        console.log('Parsed products data:', productsData);
 
-          // Parse General Sheet
-          const generalSheet = workbook.Sheets['General'];
-          if (!generalSheet) {
-            throw new Error('General sheet not found in the Excel file');
-          }
-          const generalData = XLSX.utils.sheet_to_json<ExcelGeneralRow>(generalSheet);
-          console.log('Parsed general data:', generalData);
+        // Filter out rows without required fields
+        const validProducts = productsData.filter((row: any) => {
+          return row['Name'] && row['Style Code'];
+        });
 
-          // Parse Attributes Sheet
-          const attributesSheet = workbook.Sheets['Attributes'];
-          const attributesData = attributesSheet ? 
-            XLSX.utils.sheet_to_json<ExcelAttributeRow>(attributesSheet) : [];
-          
-          // Create a map of attributes by style code
-          const attributesMap: Record<string, ProductAttribute> = {};
-          attributesData.forEach(row => {
-            attributesMap[row['Style Code']] = {
-              type: row['Type'] || '',
-              brand: row['Brand'] || '',
-              mrp: row['MRP'] || '',
-              material: row['Material'] || '',
-              color: row['Color'] || '',
-              pattern: row['Pattern'] || '',
-              season: row['Season'] || '',
-              occasion: row['Occasion'] || '',
-              gender: row['Gender'] || '',
-              ageGroup: row['Age Group'] || ''
-            };
-          });
-
-          // Parse BOM Sheet
-          const bomSheet = workbook.Sheets['BOM'];
-          const bomData = bomSheet ? 
-            XLSX.utils.sheet_to_json<ExcelBOMRow>(bomSheet) : [];
-          
-          // Create a map of BOM items by style code
-          const bomMap: Record<string, ProductBOM[]> = {};
-          bomData.forEach(row => {
-            if (!bomMap[row['Style Code']]) {
-              bomMap[row['Style Code']] = [];
-            }
-            bomMap[row['Style Code']].push({
-              material: row['Material'] || '',
-              quantity: Number(row['Quantity']) || 0
-            });
-          });
-
-          // Parse Processes Sheet
-          const processesSheet = workbook.Sheets['Processes'];
-          const processesData = processesSheet ? 
-            XLSX.utils.sheet_to_json<ExcelProcessRow>(processesSheet) : [];
-          
-          // Create a map of processes by style code
-          const processesMap: Record<string, ProductProcess[]> = {};
-          processesData.forEach(row => {
-            if (!processesMap[row['Style Code']]) {
-              processesMap[row['Style Code']] = [];
-            }
-            processesMap[row['Style Code']].push({
-              process: row['Process'] || '',
-              sequence: Number(row['Sequence']) || 0
-            });
-          });
-
-          // Combine data by Style Code
-          const products = generalData.map((row) => {
-            const styleCode = row['Style Code'];
-            
-            // Map category name to ID with more flexible matching
-            let categoryId = null;
-            const categoryName = (row['Category'] || '').trim();
-            const categoryNameLower = categoryName.toLowerCase();
-            
-            // Try direct match first
-            if (categoryMap[categoryNameLower]) {
-              categoryId = categoryMap[categoryNameLower];
-            } 
-            // Try without spaces
-            else if (categoryMap[categoryNameLower.replace(/\s+/g, '')]) {
-              categoryId = categoryMap[categoryNameLower.replace(/\s+/g, '')];
-            }
-            // If no match and we have categories, use the first one as fallback
-            else if (categories.length > 0 && categoryName) {
-              console.log(`Category not found: "${categoryName}", using first available category as fallback`);
-              categoryId = categories[0].id;
-            }
-            
-            console.log(`Row category "${categoryName}" mapped to ID:`, categoryId);
-
-            // Validate required fields with more detailed logging
-            if (!row['Product Name'] || !row['Style Code']) {
-              console.log('Skipping row due to missing critical fields (Product Name or Style Code):', row);
-              return null;
-            }
-            
-            // Skip if category is still missing after all attempts
-            if (!categoryId) {
-              console.log('Skipping row due to missing category mapping:', row);
-              return null;
-            }
-
-            // Get attributes for this style code
-            const attrs = attributesMap[styleCode] || {
-              type: '',
-              brand: '',
-              mrp: '',
-              material: '',
-              color: '',
-              pattern: '',
-              season: '',
-              occasion: '',
-              gender: '',
-              ageGroup: ''
-            };
-
-            // Get BOM items for this style code
-            const bomItems = bomMap[styleCode] || [];
-            
-            // Get processes for this style code
-            const processItems = processesMap[styleCode] || [];
-
-            return {
-              name: row['Product Name'],
-              styleCode: styleCode,
-              softwareCode: '',
-              internalCode: row['Internal Code'] || '',
-              vendorCode: row['Vendor Code'] || '',
-              factoryCode: row['Factory Code'] || '',
-              eanCode: row['EAN Code'] || '',
-              description: row['Description'] || '',
-              category: categoryId,
-              attributes: {
-                type: attrs.type,
-                brand: attrs.brand,
-                mrp: attrs.mrp,
-                material: attrs.material,
-                color: attrs.color,
-                pattern: attrs.pattern,
-                season: attrs.season,
-                occasion: attrs.occasion,
-                gender: attrs.gender,
-                ageGroup: attrs.ageGroup
-              },
-              bom: bomItems.map(item => ({
-                materialId: item.material, // Change to materialId if that's what the API expects
-                quantity: item.quantity
-              })),
-              processes: processItems.map(item => ({
-                processId: item.process // Change to processId if that's what the API expects
-              }))
-            };
-          }).filter(Boolean); // Remove nulls
-
-          // Update progress
-          setImportProgress(50);
-
-          // Send to API
-          try {
-            console.log('Sending products to API:', products);
-            // Check if we need to send products as an array or one by one
-            if (products.length === 0) {
-              toast.error('No valid products found in the Excel file');
-              setImportProgress(null);
-              toast.dismiss(loadingToast);
-              return;
-            }
-            
-            // Option 1: Send all products in one request (if API supports batch import)
-            // const response = await axios.post(`${API_ENDPOINTS.products}`, { products });
-            
-            // Option 2: Send products one by one
-            let successCount = 0;
-            let failCount = 0;
-            const totalProducts = products.length;
-            
-            for (let i = 0; i < products.length; i++) {
-              try {
-                const product = products[i];
-                await axios.post(API_ENDPOINTS.products, product);
-                successCount++;
-                setImportProgress(Math.floor((i + 1) / totalProducts * 100));
-              } catch (err) {
-                console.error(`Error importing product ${i+1}:`, err);
-                failCount++;
-              }
-            }
-            
-            console.log(`Import completed: ${successCount} succeeded, ${failCount} failed`);
-            
-            setImportProgress(100);
-            setTimeout(() => {
-              setImportProgress(null);
-              toast.dismiss(loadingToast);
-              
-              if (failCount === 0) {
-                toast.success(`${successCount} products imported successfully!`);
-              } else if (successCount === 0) {
-                toast.error(`Import failed for all ${failCount} products.`);
-              } else {
-                toast.success(`Import completed: ${successCount} products imported, ${failCount} failed.`);
-              }
-              
-              fetchProducts(); // Refresh the list
-            }, 500);
-          } catch (error: any) {
-            console.error('API Error:', error.response?.data || error.message);
-            setImportProgress(null);
-            toast.dismiss(loadingToast);
-            
-            // Handle specific API error responses
-            if (error.response) {
-              if (error.response.status === 400) {
-                const errorData = error.response.data;
-                if (errorData.message) {
-                  toast.error(`Import failed: ${errorData.message}`);
-                } else if (errorData.errors && Array.isArray(errorData.errors)) {
-                  toast.error(`Import failed: ${errorData.errors.join('; ')}`);
-                } else {
-                  toast.error('Import failed: Invalid data format. Please check your Excel file.');
-                }
-              } else {
-                toast.error(`Import failed: ${error.response.status} - ${error.response.statusText}`);
-              }
-            } else {
-              toast.error('Error processing import: ' + (error.message || 'Please check your file format and try again.'));
-            }
-          }
-        } catch (error: any) {
+        if (validProducts.length === 0) {
+          toast.error('No valid products found in the Excel file. Please ensure Name and Style Code are provided.');
           setImportProgress(null);
           toast.dismiss(loadingToast);
-          console.error('Excel processing error:', error);
-          toast.error('Error processing Excel file: ' + (error.message || 'Please check your file format and try again.'));
+          return;
         }
-      };
 
-      reader.readAsArrayBuffer(file);
-    } catch (error) {
-      setImportProgress(null);
-      toast.dismiss(loadingToast);
-      toast.error('Error importing products. Please try again.');
-    }
-  };
+        setImportProgress(50);
+
+        // Transform data for bulk import
+        const transformedProducts = validProducts.map((row: any) => ({
+          id: row['ID'] && row['ID'].trim() !== '' ? row['ID'] : undefined, // For updates
+          name: row['Name'],
+          styleCode: row['Style Code'],
+          internalCode: row['Internal Code'] || '',
+          vendorCode: row['Vendor Code'] || '',
+          factoryCode: row['Factory Code'] || '',
+          eanCode: row['EAN Code'] || '',
+          description: row['Description'] || '',
+          category: row['Category'] || '', // This should be a category ID
+          softwareCode: row['Software Code'] || undefined, // Will be auto-generated if not provided
+        }));
+
+        // Send bulk import request
+        const response = await axios.post(`${API_ENDPOINTS.products}/bulk-import`, {
+          products: transformedProducts,
+          batchSize: 50, // You can adjust this if needed
+        });
+
+        const { results } = response.data;
+
+        setImportProgress(100);
+        setTimeout(() => {
+          setImportProgress(null);
+          toast.dismiss(loadingToast);
+
+          if (results.failed === 0) {
+            toast.success(`Import completed successfully! ${results.created} created, ${results.updated} updated.`);
+          } else if (results.created === 0 && results.updated === 0) {
+            toast.error(`Import failed for all ${results.failed} products.`);
+          } else {
+            toast.success(`Import completed: ${results.created} created, ${results.updated} updated, ${results.failed} failed.`);
+          }
+
+          // Show detailed errors if any
+          if (results.errors && results.errors.length > 0) {
+            const errorMessages = results.errors.slice(0, 5).map((err: any) =>
+              `${err.productName}: ${err.error}`
+            ).join('\n');
+            if (results.errors.length > 5) {
+              toast.error(`Some products failed to import:\n${errorMessages}\n...and ${results.errors.length - 5} more errors`);
+            } else {
+              toast.error(`Some products failed to import:\n${errorMessages}`);
+            }
+          }
+
+          fetchProducts(); // Refresh the list
+        }, 500);
+
+      } catch (error: any) {
+        setImportProgress(null);
+        toast.dismiss(loadingToast);
+        console.error('Excel processing error:', error);
+        toast.error('Error processing Excel file: ' + (error.message || 'Please check your file format and try again.'));
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  } catch (error) {
+    setImportProgress(null);
+    toast.dismiss(loadingToast);
+    toast.error('Error importing products. Please try again.');
+  }
+};
 
   function getPagination(currentPage: number, totalPages: number) {
     const pages = [];
@@ -859,7 +522,7 @@ const ProductListPage = () => {
                             <td>{product.name}</td>
                             <td>{product.styleCode}</td>
                             <td>{product.internalCode}</td>
-                            <td>{product.category?.name}</td>
+                            <td>{product.category}</td>
                             <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>
                             <td>
                               <div className="flex space-x-2">
