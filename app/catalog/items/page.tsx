@@ -64,10 +64,12 @@ const ProductListPage = () => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
+  const [categories, setCategories] = useState<Array<{id: string, name: string}>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchProducts();
+    fetchCategories();
   }, [currentPage, itemsPerPage, searchQuery]);
 
   const fetchProducts = async () => {
@@ -84,6 +86,21 @@ const ProductListPage = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await axios.get(API_ENDPOINTS.categories);
+      const data = response.data;
+      setCategories(data.results || data);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  const getCategoryName = (categoryId: string) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    return category ? category.name : categoryId;
   };
 
   const handlePageChange = (page: number) => {
@@ -230,15 +247,19 @@ const ProductListPage = () => {
           '': ''
         },
         {
-          'Instructions': '4. ID field: Leave empty for new products, include ID for updating existing products.',
+          'Instructions': '4. To find category IDs, check the Categories section in your system.',
           '': ''
         },
         {
-          'Instructions': '5. Software Code: Leave empty for new products (auto-generated), include for updates.',
+          'Instructions': '5. ID field: Leave empty for new products, include ID for updating existing products.',
           '': ''
         },
         {
-          'Instructions': '6. All other fields are optional but recommended.',
+          'Instructions': '6. Software Code: Leave empty for new products (auto-generated), include for updates.',
+          '': ''
+        },
+        {
+          'Instructions': '7. All other fields are optional but recommended.',
           '': ''
         }
       ];
@@ -470,7 +491,7 @@ const ProductListPage = () => {
                   <input
                     type="text"
                     className="form-control py-3 pr-10"
-                    placeholder="Search by product name, style code, or category..."
+                    placeholder="Search by product name, style code, or category name..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                   />
@@ -522,7 +543,7 @@ const ProductListPage = () => {
                             <td>{product.name}</td>
                             <td>{product.styleCode}</td>
                             <td>{product.internalCode}</td>
-                            <td>{product.category}</td>
+                            <td>{getCategoryName(product.category)}</td>
                             <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>
                             <td>
                               <div className="flex space-x-2">
