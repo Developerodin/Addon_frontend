@@ -65,6 +65,7 @@ const ProductListPage = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
   const [categories, setCategories] = useState<Array<{id: string, name: string}>>([]);
+  const [showMoreExports, setShowMoreExports] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -188,6 +189,164 @@ const ProductListPage = () => {
     } catch (error) {
       console.error('Error exporting products:', error);
       toast.error('Error exporting products. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleExportByAttributes = async () => {
+    try {
+      setIsLoading(true);
+      
+      // If no products are selected, show error
+      if (selectedProducts.length === 0) {
+        toast.error('Please select at least one product to export');
+        return;
+      }
+
+      // Get only selected products
+      const selectedProductsData = products.filter(product => selectedProducts.includes(product.id));
+      
+      const wb = XLSX.utils.book_new();
+
+      // Create Attributes sheet for selected products only
+      const attributesData = selectedProductsData.flatMap(product => {
+        if (product.attributes && Object.keys(product.attributes).length > 0) {
+          return Object.entries(product.attributes).map(([attrName, attrValue]) => ({
+            'Product ID': product.id,
+            'Product Name': product.name,
+            'Attribute Name': attrName,
+            'Attribute Value': attrValue
+          }));
+        }
+        return [];
+      });
+      
+      if (attributesData.length > 0) {
+        const ws = XLSX.utils.json_to_sheet(attributesData);
+        XLSX.utils.book_append_sheet(wb, ws, 'Attributes');
+      } else {
+        // If no attributes found, create a sheet with just product info
+        const productData = selectedProductsData.map(product => ({
+          'Product ID': product.id,
+          'Product Name': product.name,
+          'Note': 'No attributes found for this product'
+        }));
+        const ws = XLSX.utils.json_to_sheet(productData);
+        XLSX.utils.book_append_sheet(wb, ws, 'Attributes');
+      }
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      saveAs(data2, `selected_products_attributes_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success(`Attributes exported for ${selectedProducts.length} selected product(s)`);
+    } catch (error) {
+      console.error('Error exporting attributes:', error);
+      toast.error('Error exporting attributes. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleExportByBOM = async () => {
+    try {
+      setIsLoading(true);
+      
+      // If no products are selected, show error
+      if (selectedProducts.length === 0) {
+        toast.error('Please select at least one product to export');
+        return;
+      }
+
+      // Get only selected products
+      const selectedProductsData = products.filter(product => selectedProducts.includes(product.id));
+      
+      const wb = XLSX.utils.book_new();
+
+      // Create BOM sheet for selected products only
+      const bomData = selectedProductsData.flatMap(product => 
+        (product.bom || []).map(bom => ({
+          'Product ID': product.id,
+          'Product Name': product.name,
+          'Material ID': bom.materialId,
+          'Quantity': bom.quantity
+        }))
+      );
+      
+      if (bomData.length > 0) {
+        const ws = XLSX.utils.json_to_sheet(bomData);
+        XLSX.utils.book_append_sheet(wb, ws, 'BOM');
+      } else {
+        // If no BOM found, create a sheet with just product info
+        const productData = selectedProductsData.map(product => ({
+          'Product ID': product.id,
+          'Product Name': product.name,
+          'Note': 'No BOM found for this product'
+        }));
+        const ws = XLSX.utils.json_to_sheet(productData);
+        XLSX.utils.book_append_sheet(wb, ws, 'BOM');
+      }
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      saveAs(data2, `selected_products_bom_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success(`BOM exported for ${selectedProducts.length} selected product(s)`);
+    } catch (error) {
+      console.error('Error exporting BOM:', error);
+      toast.error('Error exporting BOM. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleExportByProcesses = async () => {
+    try {
+      setIsLoading(true);
+      
+      // If no products are selected, show error
+      if (selectedProducts.length === 0) {
+        toast.error('Please select at least one product to export');
+        return;
+      }
+
+      // Get only selected products
+      const selectedProductsData = products.filter(product => selectedProducts.includes(product.id));
+      
+      const wb = XLSX.utils.book_new();
+
+      // Create Processes sheet for selected products only
+      const processesData = selectedProductsData.flatMap(product => 
+        (product.processes || []).map(process => ({
+          'Product ID': product.id,
+          'Product Name': product.name,
+          'Process ID': process.processId || process.process || ''
+        }))
+      );
+      
+      if (processesData.length > 0) {
+        const ws = XLSX.utils.json_to_sheet(processesData);
+        XLSX.utils.book_append_sheet(wb, ws, 'Processes');
+      } else {
+        // If no processes found, create a sheet with just product info
+        const productData = selectedProductsData.map(product => ({
+          'Product ID': product.id,
+          'Product Name': product.name,
+          'Note': 'No processes found for this product'
+        }));
+        const ws = XLSX.utils.json_to_sheet(productData);
+        XLSX.utils.book_append_sheet(wb, ws, 'Processes');
+      }
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      saveAs(data2, `selected_products_processes_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success(`Processes exported for ${selectedProducts.length} selected product(s)`);
+    } catch (error) {
+      console.error('Error exporting processes:', error);
+      toast.error('Error exporting processes. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -465,7 +624,55 @@ const ProductListPage = () => {
               </div>
             </div>
           </div>
-
+          
+          {/* Show More Button Section - Right Aligned */}
+          <div className="box !bg-transparent border-0 shadow-none">
+            <div className="flex justify-end mr-5">
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMoreExports(!showMoreExports)}
+                  className="ti-btn ti-btn-outline-primary"
+                  disabled={isLoading}
+                >
+                  <i className="ri-more-line me-2"></i>
+                  {showMoreExports ? 'Show Less' : 'Show More'}
+                </button>
+                {showMoreExports && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleExportByAttributes}
+                      className="ti-btn ti-btn-info"
+                      disabled={isLoading}
+                    >
+                      <i className="ri-download-2-line me-2"></i>
+                      Export by Attributes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportByBOM}
+                      className="ti-btn ti-btn-info"
+                      disabled={isLoading}
+                    >
+                      <i className="ri-download-2-line me-2"></i>
+                      Export by BOM
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportByProcesses}
+                      className="ti-btn ti-btn-info"
+                      disabled={isLoading}
+                    >
+                      <i className="ri-download-2-line me-2"></i>
+                      Export by Processes
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          
           {/* Content Box */}
           <div className="box">
             <div className="box-body">
