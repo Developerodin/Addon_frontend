@@ -142,6 +142,13 @@ const AddProductPage = () => {
   // Add image state
   const [productImage, setProductImage] = useState<File | null>(null);
 
+  // Modal and search states
+  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
+  const [materialSearchQuery, setMaterialSearchQuery] = useState('');
+  const [currentMaterialPage, setCurrentMaterialPage] = useState(1);
+  const [selectedMaterialIndex, setSelectedMaterialIndex] = useState<number | null>(null);
+  const materialsPerPage = 10;
+
   useEffect(() => {
     // Generate software code on component mount
     setSoftwareCode(generateSoftwareCode());
@@ -200,6 +207,48 @@ const AddProductPage = () => {
 
     fetchData();
   }, []);
+
+  // Material search and pagination functions
+  const filteredMaterials = rawMaterials.filter(material =>
+    material.name.toLowerCase().includes(materialSearchQuery.toLowerCase())
+  );
+
+  const totalMaterialPages = Math.ceil(filteredMaterials.length / materialsPerPage);
+  const paginatedMaterials = filteredMaterials.slice(
+    (currentMaterialPage - 1) * materialsPerPage,
+    currentMaterialPage * materialsPerPage
+  );
+
+  const handleMaterialSearch = (query: string) => {
+    setMaterialSearchQuery(query);
+    setCurrentMaterialPage(1); // Reset to first page when search changes
+  };
+
+  const handleMaterialPageChange = (page: number) => {
+    setCurrentMaterialPage(page);
+  };
+
+  const handleMaterialSelect = (material: RawMaterial) => {
+    if (selectedMaterialIndex !== null) {
+      const newBomItems = [...bomItems];
+      newBomItems[selectedMaterialIndex] = {
+        ...newBomItems[selectedMaterialIndex],
+        materialId: material.id,
+        materialName: material?.name,
+        materialUnit: material?.unit
+      };
+      setBomItems(newBomItems);
+    }
+    setIsMaterialModalOpen(false);
+    setSelectedMaterialIndex(null);
+    setMaterialSearchQuery('');
+    setCurrentMaterialPage(1);
+  };
+
+  const openMaterialModal = (index: number) => {
+    setSelectedMaterialIndex(index);
+    setIsMaterialModalOpen(true);
+  };
 
   const handleAddBomItem = () => {
     setBomItems([...bomItems, { materialId: '', quantity: 0 }]);
@@ -610,19 +659,19 @@ const AddProductPage = () => {
                           {bomItems.map((item, index) => (
                             <tr key={index} className="border-b border-gray-200">
                               <td>
-                                <select
-                                  className="form-select"
-                                  value={item.materialId}
-                                  onChange={(e) => handleBomItemChange(index, 'materialId', e.target.value)}
+                                <button
+                                  type="button"
+                                  onClick={() => openMaterialModal(index)}
+                                  className="ti-btn border-gray-300 w-full text-left justify-start hover:bg-gray-100"
                                   disabled={isLoading}
                                 >
-                                  <option value="">Select Material</option>
-                                  {rawMaterials.map((material) => (
-                                    <option key={material.id} value={material.id}>
-                                      {material.name}
-                                    </option>
-                                  ))}
-                                </select>
+                                  {item.materialName ? (
+                                    <span>{item.materialName}</span>
+                                  ) : (
+                                    <span className="text-gray-500">Select Material</span>
+                                  )}
+                                  <i className="ri-arrow-down-s-line ms-auto"></i>
+                                </button>
                               </td>
                               <td>
                                 {item.materialUnit || ''}
@@ -737,6 +786,179 @@ const AddProductPage = () => {
           </div>
         </div>
       </form>
+
+      {/* Material Selection Modal */}
+      {isMaterialModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold">Select Material</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMaterialModalOpen(false);
+                  setSelectedMaterialIndex(null);
+                  setMaterialSearchQuery('');
+                  setCurrentMaterialPage(1);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="ri-close-line text-xl"></i>
+              </button>
+            </div>
+
+            {/* Search Bar */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search materials..."
+                  value={materialSearchQuery}
+                  onChange={(e) => handleMaterialSearch(e.target.value)}
+                  autoFocus
+                  className="form-control pl-10"
+                />
+                <i className="ri-search-line absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+              </div>
+            </div>
+
+            {/* Materials List */}
+            <div className="flex-1 overflow-y-auto max-h-96">
+              {paginatedMaterials.length > 0 ? (
+                <div className="divide-y divide-gray-200">
+                  {paginatedMaterials.map((material, index) => (
+                    <div
+                      key={material.id}
+                      onClick={() => {
+                        setSelectedMaterialIndex(index);
+                        handleMaterialSelect(material);
+                      }}
+                      className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h2 className="font-medium text-lg text-gray-900">{material.name}</h2>
+                          <p className="text-sm text-gray-700 mt-1">{material.printName}</p>
+                          {material.description && (
+                            <p className="text-sm text-gray-700 mt-1 line-clamp-2">{material.description}</p>
+                          )}
+                        </div>
+                        <div className="text-right ml-4">
+                          <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {material.unit}
+                          </div>
+                          {material.color && (
+                            <div className="text-xs text-gray-500">{material.color}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center">
+                  <i className="ri-search-line text-4xl text-gray-300 mb-4"></i>
+                  <p className="text-gray-500">
+                    {materialSearchQuery ? 'No materials found matching your search.' : 'No materials available.'}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Pagination */}
+            {totalMaterialPages >= 1 && (
+              <div className="p-6 border-t border-gray-200">
+                <div className="flex justify-between items-center">
+                  <div className="text-sm text-gray-500">
+                    Showing {((currentMaterialPage - 1) * materialsPerPage) + 1} to{' '}
+                    {Math.min(currentMaterialPage * materialsPerPage, filteredMaterials.length)} of{' '}
+                    {filteredMaterials.length} materials
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => handleMaterialPageChange(currentMaterialPage - 1)}
+                      disabled={currentMaterialPage === 1}
+                      className="ti-btn ti-btn-outline-secondary ti-btn-sm"
+                    >
+                      <i className="ri-arrow-left-s-line"></i>
+                    </button>
+                    
+                    {/* Generate pagination items with ellipsis */}
+                    {(() => {
+                      const pages = [];
+                      const showPages = 5; // Number of page buttons to show
+                      
+                      if (totalMaterialPages <= showPages) {
+                        // Show all pages if total is small
+                        for (let i = 1; i <= totalMaterialPages; i++) {
+                          pages.push(i);
+                        }
+                      } else {
+                        // Always show first page
+                        pages.push(1);
+                        
+                        if (currentMaterialPage > 3) {
+                          pages.push('...');
+                        }
+                        
+                        // Show pages around current page
+                        const start = Math.max(2, currentMaterialPage - 1);
+                        const end = Math.min(totalMaterialPages - 1, currentMaterialPage + 1);
+                        
+                        for (let i = start; i <= end; i++) {
+                          if (i !== 1 && i !== totalMaterialPages) {
+                            pages.push(i);
+                          }
+                        }
+                        
+                        if (currentMaterialPage < totalMaterialPages - 2) {
+                          pages.push('...');
+                        }
+                        
+                        // Always show last page
+                        if (totalMaterialPages > 1) {
+                          pages.push(totalMaterialPages);
+                        }
+                      }
+                      
+                      return pages.map((page, index) => (
+                        <React.Fragment key={index}>
+                          {page === '...' ? (
+                            <span className="px-3 py-2 text-sm text-gray-500">...</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleMaterialPageChange(page as number)}
+                              className={`ti-btn ti-btn-sm ${
+                                currentMaterialPage === page
+                                  ? 'ti-btn-primary'
+                                  : 'ti-btn-outline-secondary'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          )}
+                        </React.Fragment>
+                      ));
+                    })()}
+                    
+                    <button
+                      type="button"
+                      onClick={() => handleMaterialPageChange(currentMaterialPage + 1)}
+                      disabled={currentMaterialPage === totalMaterialPages}
+                      className="ti-btn ti-btn-outline-secondary ti-btn-sm"
+                    >
+                      <i className="ri-arrow-right-s-line"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
