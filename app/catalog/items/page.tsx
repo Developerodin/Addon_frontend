@@ -67,6 +67,9 @@ const ProductListPage = () => {
   const [categories, setCategories] = useState<Array<{id: string, name: string}>>([]);
   const [showMoreExports, setShowMoreExports] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attributesFileInputRef = useRef<HTMLInputElement>(null);
+  const bomFileInputRef = useRef<HTMLInputElement>(null);
+  const processesFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchProducts();
@@ -436,105 +439,660 @@ const ProductListPage = () => {
     }
   };
 
+  const handleDownloadAttributesTemplate = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Create Attributes template
+      const attributesTemplateData = [
+        {
+          'Product ID': '680c7a2bc30d1e00643b84e8',
+          'Product Name': 'Example Product 1',
+          'Attribute Name': 'Color',
+          'Attribute Value': 'Red'
+        },
+        {
+          'Product ID': '680c7a2bc30d1e00643b84e8',
+          'Product Name': 'Example Product 1',
+          'Attribute Name': 'Size',
+          'Attribute Value': 'Large'
+        },
+        {
+          'Product ID': '68246cc23d04e20065d3d60a',
+          'Product Name': 'Example Product 2',
+          'Attribute Name': 'Material',
+          'Attribute Value': 'Cotton'
+        }
+      ];
+      
+      const ws = XLSX.utils.json_to_sheet(attributesTemplateData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Attributes');
+
+      // Add instructions sheet
+      const instructionsTemplate = [
+        {
+          'Instructions': 'How to use Attributes Import Template:',
+          '': ''
+        },
+        {
+          'Instructions': '1. This template is for updating product attributes only (not creating products).',
+          '': ''
+        },
+        {
+          'Instructions': '2. Product ID is required and must be a valid product ID from your system.',
+          '': ''
+        },
+        {
+          'Instructions': '3. Product Name is for reference only (not used in import).',
+          '': ''
+        },
+        {
+          'Instructions': '4. Attribute Name must match an existing attribute category name.',
+          '': ''
+        },
+        {
+          'Instructions': '5. Attribute Value must be a valid option value for that attribute.',
+          '': ''
+        },
+        {
+          'Instructions': '6. Each row represents one attribute-value pair for a product.',
+          '': ''
+        },
+        {
+          'Instructions': '7. Multiple attributes for the same product should be on separate rows.',
+          '': ''
+        }
+      ];
+      const wsInstructions = XLSX.utils.json_to_sheet(instructionsTemplate);
+      XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      saveAs(data, 'attributes_import_template.xlsx');
+      toast.success('Attributes template downloaded successfully');
+    } catch (error) {
+      console.error('Error generating attributes template:', error);
+      toast.error('Error generating attributes template. Please try again.');
+    }
+  };
+
+  const handleDownloadBOMTemplate = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Create BOM template
+      const bomTemplateData = [
+        {
+          'Product ID': '680c7a2bc30d1e00643b84e8',
+          'Product Name': 'Example Product 1',
+          'Material ID': '680b3411fa35ca00651ff788',
+          'Quantity': 2.5
+        },
+        {
+          'Product ID': '680c7a2bc30d1e00643b84e8',
+          'Product Name': 'Example Product 1',
+          'Material ID': '680b341dfa35ca00651ff792',
+          'Quantity': 1.0
+        },
+        {
+          'Product ID': '68246cc23d04e20065d3d60a',
+          'Product Name': 'Example Product 2',
+          'Material ID': '680b3411fa35ca00651ff788',
+          'Quantity': 3.0
+        }
+      ];
+      
+      const ws = XLSX.utils.json_to_sheet(bomTemplateData);
+      XLSX.utils.book_append_sheet(wb, ws, 'BOM');
+
+      // Add instructions sheet
+      const instructionsTemplate = [
+        {
+          'Instructions': 'How to use BOM Import Template:',
+          '': ''
+        },
+        {
+          'Instructions': '1. This template is for updating product BOM only (not creating products).',
+          '': ''
+        },
+        {
+          'Instructions': '2. Product ID is required and must be a valid product ID from your system.',
+          '': ''
+        },
+        {
+          'Instructions': '3. Product Name is for reference only (not used in import).',
+          '': ''
+        },
+        {
+          'Instructions': '4. Material ID must be a valid raw material ID from your system.',
+          '': ''
+        },
+        {
+          'Instructions': '5. Quantity must be a positive number.',
+          '': ''
+        },
+        {
+          'Instructions': '6. Each row represents one material-quantity pair for a product.',
+          '': ''
+        },
+        {
+          'Instructions': '7. Multiple materials for the same product should be on separate rows.',
+          '': ''
+        }
+      ];
+      const wsInstructions = XLSX.utils.json_to_sheet(instructionsTemplate);
+      XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      saveAs(data, 'bom_import_template.xlsx');
+      toast.success('BOM template downloaded successfully');
+    } catch (error) {
+      console.error('Error generating BOM template:', error);
+      toast.error('Error generating BOM template. Please try again.');
+    }
+  };
+
+  const handleDownloadProcessesTemplate = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Create Processes template
+      const processesTemplateData = [
+        {
+          'Product ID': '680c7a2bc30d1e00643b84e8',
+          'Product Name': 'Example Product 1',
+          'Process ID': '680b3411fa35ca00651ff788'
+        },
+        {
+          'Product ID': '680c7a2bc30d1e00643b84e8',
+          'Product Name': 'Example Product 1',
+          'Process ID': '680b341dfa35ca00651ff792'
+        },
+        {
+          'Product ID': '68246cc23d04e20065d3d60a',
+          'Product Name': 'Example Product 2',
+          'Process ID': '680b3411fa35ca00651ff788'
+        }
+      ];
+      
+      const ws = XLSX.utils.json_to_sheet(processesTemplateData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Processes');
+
+      // Add instructions sheet
+      const instructionsTemplate = [
+        {
+          'Instructions': 'How to use Processes Import Template:',
+          '': ''
+        },
+        {
+          'Instructions': '1. This template is for updating product processes only (not creating products).',
+          '': ''
+        },
+        {
+          'Instructions': '2. Product ID is required and must be a valid product ID from your system.',
+          '': ''
+        },
+        {
+          'Instructions': '3. Product Name is for reference only (not used in import).',
+          '': ''
+        },
+        {
+          'Instructions': '4. Process ID must be a valid process ID from your system.',
+          '': ''
+        },
+        {
+          'Instructions': '5. Each row represents one process for a product.',
+          '': ''
+        },
+        {
+          'Instructions': '6. Multiple processes for the same product should be on separate rows.',
+          '': ''
+        }
+      ];
+      const wsInstructions = XLSX.utils.json_to_sheet(instructionsTemplate);
+      XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      saveAs(data, 'processes_import_template.xlsx');
+      toast.success('Processes template downloaded successfully');
+    } catch (error) {
+      console.error('Error generating processes template:', error);
+      toast.error('Error generating processes template. Please try again.');
+    }
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  setImportProgress(0);
-  const loadingToast = toast.loading('Importing products...');
-  try {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportProgress(0);
+    const loadingToast = toast.loading('Importing products...');
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
 
-        // Parse Products Sheet
-        const productsSheet = workbook.Sheets['Products'];
-        if (!productsSheet) {
-          throw new Error('Products sheet not found in the Excel file');
-        }
-        const productsData = XLSX.utils.sheet_to_json<any>(productsSheet);
-        console.log('Parsed products data:', productsData);
+          // Parse Products Sheet
+          const productsSheet = workbook.Sheets['Products'];
+          if (!productsSheet) {
+            throw new Error('Products sheet not found in the Excel file');
+          }
+          const productsData = XLSX.utils.sheet_to_json<any>(productsSheet);
+          console.log('Parsed products data:', productsData);
 
-        // Filter out rows without required fields
-        const validProducts = productsData.filter((row: any) => {
-          return row['Name'] && row['Style Code'];
-        });
+          // Filter out rows without required fields
+          const validProducts = productsData.filter((row: any) => {
+            return row['Name'] && row['Style Code'];
+          });
 
-        if (validProducts.length === 0) {
-          toast.error('No valid products found in the Excel file. Please ensure Name and Style Code are provided.');
-          setImportProgress(null);
-          toast.dismiss(loadingToast);
-          return;
-        }
-
-        setImportProgress(50);
-
-        // Transform data for bulk import
-        const transformedProducts = validProducts.map((row: any) => ({
-          id: row['ID'] && row['ID'].trim() !== '' ? row['ID'] : undefined, // For updates
-          name: row['Name'],
-          styleCode: row['Style Code'],
-          internalCode: row['Internal Code'] || '',
-          vendorCode: row['Vendor Code'] || '',
-          factoryCode: row['Factory Code'] || '',
-          eanCode: row['EAN Code'] || '',
-          description: row['Description'] || '',
-          category: row['Category'] || '', // This should be a category ID
-          softwareCode: row['Software Code'] || undefined, // Will be auto-generated if not provided
-        }));
-
-        // Send bulk import request
-        const response = await axios.post(`${API_ENDPOINTS.products}/bulk-import`, {
-          products: transformedProducts,
-          batchSize: 50, // You can adjust this if needed
-        });
-
-        const { results } = response.data;
-
-        setImportProgress(100);
-        setTimeout(() => {
-          setImportProgress(null);
-          toast.dismiss(loadingToast);
-
-          if (results.failed === 0) {
-            toast.success(`Import completed successfully! ${results.created} created, ${results.updated} updated.`);
-          } else if (results.created === 0 && results.updated === 0) {
-            toast.error(`Import failed for all ${results.failed} products.`);
-          } else {
-            toast.success(`Import completed: ${results.created} created, ${results.updated} updated, ${results.failed} failed.`);
+          if (validProducts.length === 0) {
+            toast.error('No valid products found in the Excel file. Please ensure Name and Style Code are provided.');
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+            return;
           }
 
-          // Show detailed errors if any
-          if (results.errors && results.errors.length > 0) {
-            const errorMessages = results.errors.slice(0, 5).map((err: any) =>
-              `${err.productName}: ${err.error}`
-            ).join('\n');
-            if (results.errors.length > 5) {
-              toast.error(`Some products failed to import:\n${errorMessages}\n...and ${results.errors.length - 5} more errors`);
+          setImportProgress(50);
+
+          // Transform data for bulk import
+          const transformedProducts = validProducts.map((row: any) => ({
+            id: row['ID'] && row['ID'].trim() !== '' ? row['ID'] : undefined, // For updates
+            name: row['Name'],
+            styleCode: row['Style Code'],
+            internalCode: row['Internal Code'] || '',
+            vendorCode: row['Vendor Code'] || '',
+            factoryCode: row['Factory Code'] || '',
+            eanCode: row['EAN Code'] || '',
+            description: row['Description'] || '',
+            category: row['Category'] || '', // This should be a category ID
+            softwareCode: row['Software Code'] || undefined, // Will be auto-generated if not provided
+          }));
+
+          // Send bulk import request
+          const response = await axios.post(`${API_ENDPOINTS.products}/bulk-import`, {
+            products: transformedProducts,
+            batchSize: 50, // You can adjust this if needed
+          });
+
+          const { results } = response.data;
+
+          setImportProgress(100);
+          setTimeout(() => {
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+
+            if (results.failed === 0) {
+              toast.success(`Import completed successfully! ${results.created} created, ${results.updated} updated.`);
+            } else if (results.created === 0 && results.updated === 0) {
+              toast.error(`Import failed for all ${results.failed} products.`);
             } else {
-              toast.error(`Some products failed to import:\n${errorMessages}`);
+              toast.success(`Import completed: ${results.created} created, ${results.updated} updated, ${results.failed} failed.`);
+            }
+
+            // Show detailed errors if any
+            if (results.errors && results.errors.length > 0) {
+              const errorMessages = results.errors.slice(0, 5).map((err: any) =>
+                `${err.productName}: ${err.error}`
+              ).join('\n');
+              if (results.errors.length > 5) {
+                toast.error(`Some products failed to import:\n${errorMessages}\n...and ${results.errors.length - 5} more errors`);
+              } else {
+                toast.error(`Some products failed to import:\n${errorMessages}`);
+              }
+            }
+
+            fetchProducts(); // Refresh the list
+          }, 500);
+
+        } catch (error: any) {
+          setImportProgress(null);
+          toast.dismiss(loadingToast);
+          console.error('Excel processing error:', error);
+          toast.error('Error processing Excel file: ' + (error.message || 'Please check your file format and try again.'));
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      setImportProgress(null);
+      toast.dismiss(loadingToast);
+      toast.error('Error importing products. Please try again.');
+    }
+  };
+
+  const handleImportByAttributes = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportProgress(0);
+    const loadingToast = toast.loading('Importing attributes...');
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          // Parse Attributes Sheet
+          const attributesSheet = workbook.Sheets['Attributes'];
+          if (!attributesSheet) {
+            throw new Error('Attributes sheet not found in the Excel file');
+          }
+          const attributesData = XLSX.utils.sheet_to_json<any>(attributesSheet);
+          console.log('Parsed attributes data:', attributesData);
+
+          // Filter out rows without required fields
+          const validAttributes = attributesData.filter((row: any) => {
+            return row['Product ID'] && row['Attribute Name'] && row['Attribute Value'];
+          });
+
+          if (validAttributes.length === 0) {
+            toast.error('No valid attributes found in the Excel file. Please ensure Product ID, Attribute Name, and Attribute Value are provided.');
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+            return;
+          }
+
+          setImportProgress(50);
+
+          // Group attributes by product ID
+          const productAttributes: Record<string, Record<string, string>> = {};
+          validAttributes.forEach((row: any) => {
+            const productId = row['Product ID'].toString().trim();
+            const attributeName = row['Attribute Name'].toString().trim();
+            const attributeValue = row['Attribute Value'].toString().trim();
+            
+            if (!productAttributes[productId]) {
+              productAttributes[productId] = {};
+            }
+            productAttributes[productId][attributeName] = attributeValue;
+          });
+
+          // Update each product's attributes
+          let successCount = 0;
+          let errorCount = 0;
+          const errors: string[] = [];
+
+          for (const [productId, attributes] of Object.entries(productAttributes)) {
+            try {
+              await axios.patch(`${API_ENDPOINTS.products}/${productId}`, {
+                attributes: attributes
+              });
+              successCount++;
+            } catch (error: any) {
+              errorCount++;
+              const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+              errors.push(`Product ID ${productId}: ${errorMessage}`);
             }
           }
 
-          fetchProducts(); // Refresh the list
-        }, 500);
+          setImportProgress(100);
+          setTimeout(() => {
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
 
-      } catch (error: any) {
-        setImportProgress(null);
-        toast.dismiss(loadingToast);
-        console.error('Excel processing error:', error);
-        toast.error('Error processing Excel file: ' + (error.message || 'Please check your file format and try again.'));
-      }
-    };
+            if (errorCount === 0) {
+              toast.success(`Attributes imported successfully for ${successCount} product(s)!`);
+            } else if (successCount === 0) {
+              toast.error(`Failed to import attributes for all ${errorCount} products.`);
+            } else {
+              toast.success(`Attributes imported: ${successCount} successful, ${errorCount} failed.`);
+            }
 
-    reader.readAsArrayBuffer(file);
-  } catch (error) {
-    setImportProgress(null);
-    toast.dismiss(loadingToast);
-    toast.error('Error importing products. Please try again.');
-  }
-};
+            // Show detailed errors if any
+            if (errors.length > 0) {
+              const errorMessages = errors.slice(0, 5).join('\n');
+              if (errors.length > 5) {
+                toast.error(`Some attributes failed to import:\n${errorMessages}\n...and ${errors.length - 5} more errors`);
+              } else {
+                toast.error(`Some attributes failed to import:\n${errorMessages}`);
+              }
+            }
+
+            fetchProducts(); // Refresh the list
+          }, 500);
+
+        } catch (error: any) {
+          setImportProgress(null);
+          toast.dismiss(loadingToast);
+          console.error('Excel processing error:', error);
+          toast.error('Error processing Excel file: ' + (error.message || 'Please check your file format and try again.'));
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      setImportProgress(null);
+      toast.dismiss(loadingToast);
+      toast.error('Error importing attributes. Please try again.');
+    }
+  };
+
+  const handleImportByBOM = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportProgress(0);
+    const loadingToast = toast.loading('Importing BOM...');
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          // Parse BOM Sheet
+          const bomSheet = workbook.Sheets['BOM'];
+          if (!bomSheet) {
+            throw new Error('BOM sheet not found in the Excel file');
+          }
+          const bomData = XLSX.utils.sheet_to_json<any>(bomSheet);
+          console.log('Parsed BOM data:', bomData);
+
+          // Filter out rows without required fields
+          const validBOM = bomData.filter((row: any) => {
+            return row['Product ID'] && row['Material ID'] && row['Quantity'] !== undefined;
+          });
+
+          if (validBOM.length === 0) {
+            toast.error('No valid BOM entries found in the Excel file. Please ensure Product ID, Material ID, and Quantity are provided.');
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+            return;
+          }
+
+          setImportProgress(50);
+
+          // Group BOM by product ID
+          const productBOM: Record<string, Array<{materialId: string, quantity: number}>> = {};
+          validBOM.forEach((row: any) => {
+            const productId = row['Product ID'].toString().trim();
+            const materialId = row['Material ID'].toString().trim();
+            const quantity = parseFloat(row['Quantity']);
+            
+            if (!productBOM[productId]) {
+              productBOM[productId] = [];
+            }
+            productBOM[productId].push({
+              materialId: materialId,
+              quantity: quantity
+            });
+          });
+
+          // Update each product's BOM
+          let successCount = 0;
+          let errorCount = 0;
+          const errors: string[] = [];
+
+          for (const [productId, bom] of Object.entries(productBOM)) {
+            try {
+              await axios.patch(`${API_ENDPOINTS.products}/${productId}`, {
+                bom: bom
+              });
+              successCount++;
+            } catch (error: any) {
+              errorCount++;
+              const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+              errors.push(`Product ID ${productId}: ${errorMessage}`);
+            }
+          }
+
+          setImportProgress(100);
+          setTimeout(() => {
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+
+            if (errorCount === 0) {
+              toast.success(`BOM imported successfully for ${successCount} product(s)!`);
+            } else if (successCount === 0) {
+              toast.error(`Failed to import BOM for all ${errorCount} products.`);
+            } else {
+              toast.success(`BOM imported: ${successCount} successful, ${errorCount} failed.`);
+            }
+
+            // Show detailed errors if any
+            if (errors.length > 0) {
+              const errorMessages = errors.slice(0, 5).join('\n');
+              if (errors.length > 5) {
+                toast.error(`Some BOM entries failed to import:\n${errorMessages}\n...and ${errors.length - 5} more errors`);
+              } else {
+                toast.error(`Some BOM entries failed to import:\n${errorMessages}`);
+              }
+            }
+
+            fetchProducts(); // Refresh the list
+          }, 500);
+
+        } catch (error: any) {
+          setImportProgress(null);
+          toast.dismiss(loadingToast);
+          console.error('Excel processing error:', error);
+          toast.error('Error processing Excel file: ' + (error.message || 'Please check your file format and try again.'));
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      setImportProgress(null);
+      toast.dismiss(loadingToast);
+      toast.error('Error importing BOM. Please try again.');
+    }
+  };
+
+  const handleImportByProcesses = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportProgress(0);
+    const loadingToast = toast.loading('Importing processes...');
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          // Parse Processes Sheet
+          const processesSheet = workbook.Sheets['Processes'];
+          if (!processesSheet) {
+            throw new Error('Processes sheet not found in the Excel file');
+          }
+          const processesData = XLSX.utils.sheet_to_json<any>(processesSheet);
+          console.log('Parsed processes data:', processesData);
+
+          // Filter out rows without required fields
+          const validProcesses = processesData.filter((row: any) => {
+            return row['Product ID'] && row['Process ID'];
+          });
+
+          if (validProcesses.length === 0) {
+            toast.error('No valid processes found in the Excel file. Please ensure Product ID and Process ID are provided.');
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+            return;
+          }
+
+          setImportProgress(50);
+
+          // Group processes by product ID
+          const productProcesses: Record<string, Array<{processId: string}>> = {};
+          validProcesses.forEach((row: any) => {
+            const productId = row['Product ID'].toString().trim();
+            const processId = row['Process ID'].toString().trim();
+            
+            if (!productProcesses[productId]) {
+              productProcesses[productId] = [];
+            }
+            productProcesses[productId].push({
+              processId: processId
+            });
+          });
+
+          // Update each product's processes
+          let successCount = 0;
+          let errorCount = 0;
+          const errors: string[] = [];
+
+          for (const [productId, processes] of Object.entries(productProcesses)) {
+            try {
+              await axios.patch(`${API_ENDPOINTS.products}/${productId}`, {
+                processes: processes
+              });
+              successCount++;
+            } catch (error: any) {
+              errorCount++;
+              const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+              errors.push(`Product ID ${productId}: ${errorMessage}`);
+            }
+          }
+
+          setImportProgress(100);
+          setTimeout(() => {
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+
+            if (errorCount === 0) {
+              toast.success(`Processes imported successfully for ${successCount} product(s)!`);
+            } else if (successCount === 0) {
+              toast.error(`Failed to import processes for all ${errorCount} products.`);
+            } else {
+              toast.success(`Processes imported: ${successCount} successful, ${errorCount} failed.`);
+            }
+
+            // Show detailed errors if any
+            if (errors.length > 0) {
+              const errorMessages = errors.slice(0, 5).join('\n');
+              if (errors.length > 5) {
+                toast.error(`Some processes failed to import:\n${errorMessages}\n...and ${errors.length - 5} more errors`);
+              } else {
+                toast.error(`Some processes failed to import:\n${errorMessages}`);
+              }
+            }
+
+            fetchProducts(); // Refresh the list
+          }, 500);
+
+        } catch (error: any) {
+          setImportProgress(null);
+          toast.dismiss(loadingToast);
+          console.error('Excel processing error:', error);
+          toast.error('Error processing Excel file: ' + (error.message || 'Please check your file format and try again.'));
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      setImportProgress(null);
+      toast.dismiss(loadingToast);
+      toast.error('Error importing processes. Please try again.');
+    }
+  };
 
   function getPagination(currentPage: number, totalPages: number) {
     const pages = [];
@@ -578,6 +1136,27 @@ const ProductListPage = () => {
                   className="hidden"
                   accept=".xlsx,.xls"
                   onChange={handleImport}
+                />
+                <input
+                  type="file"
+                  ref={attributesFileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleImportByAttributes}
+                />
+                <input
+                  type="file"
+                  ref={bomFileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleImportByBOM}
+                />
+                <input
+                  type="file"
+                  ref={processesFileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleImportByProcesses}
                 />
                 <button
                   type="button"
@@ -667,6 +1246,60 @@ const ProductListPage = () => {
                       <i className="ri-download-2-line me-2"></i>
                       Export by Processes
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => attributesFileInputRef.current?.click()}
+                      className="ti-btn ti-btn-success"
+                      disabled={isLoading}
+                    >
+                      <i className="ri-file-excel-2-line me-2"></i>
+                      Import by Attributes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => bomFileInputRef.current?.click()}
+                      className="ti-btn ti-btn-success"
+                      disabled={isLoading}
+                    >
+                      <i className="ri-file-excel-2-line me-2"></i>
+                      Import by BOM
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => processesFileInputRef.current?.click()}
+                      className="ti-btn ti-btn-success"
+                      disabled={isLoading}
+                    >
+                      <i className="ri-file-excel-2-line me-2"></i>
+                      Import by Processes
+                    </button>
+                    {/* <button
+                      type="button"
+                      onClick={handleDownloadAttributesTemplate}
+                      className="ti-btn ti-btn-outline-secondary"
+                      disabled={isLoading}
+                    >
+                      <i className="ri-file-download-line me-2"></i>
+                      Attributes Template
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadBOMTemplate}
+                      className="ti-btn ti-btn-outline-secondary"
+                      disabled={isLoading}
+                    >
+                      <i className="ri-file-download-line me-2"></i>
+                      BOM Template
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadProcessesTemplate}
+                      className="ti-btn ti-btn-outline-secondary"
+                      disabled={isLoading}
+                    >
+                      <i className="ri-file-download-line me-2"></i>
+                      Processes Template
+                    </button> */}
                   </>
                 )}
               </div>
