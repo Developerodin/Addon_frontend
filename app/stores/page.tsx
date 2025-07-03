@@ -1,29 +1,63 @@
 "use client"
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Seo from '@/shared/layout-components/seo/seo'
 import Link from 'next/link'
+import { useStores } from '@/shared/hooks/useStores'
+import { toast } from 'react-hot-toast'
+import { exportStoresToExcel, generateSampleTemplate } from '@/shared/utils/storeUtils'
 
 const StoresPage = () => {
     const [selectedStores, setSelectedStores] = useState<string[]>([]);
     const [selectAll, setSelectAll] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 5;
+    const itemsPerPage = 10;
+    const [showFilters, setShowFilters] = useState(false);
+    const [filters, setFilters] = useState({
+        city: '',
+        creditRating: '',
+        isActive: '',
+        contactPerson: ''
+    });
 
-    // Sample data - replace with your actual data
-    const stores = [
-        { id: '1', name: 'Main Store', location: 'New York', manager: 'John Doe', status: 'Active', inventory: '2,345' },
-        { id: '2', name: 'Downtown Branch', location: 'Los Angeles', manager: 'Jane Smith', status: 'Active', inventory: '1,892' },
-        { id: '3', name: 'East Side Store', location: 'Chicago', manager: 'Mike Johnson', status: 'Active', inventory: '3,201' },
-        { id: '4', name: 'West End Branch', location: 'Houston', manager: 'Sarah Wilson', status: 'Inactive', inventory: '945' },
-        { id: '5', name: 'North Point', location: 'Phoenix', manager: 'Robert Brown', status: 'Active', inventory: '2,678' },
-    ];
+    // Use the stores hook
+    const { 
+        stores, 
+        loading, 
+        error, 
+        pagination, 
+        fetchStores, 
+        deleteStore,
+        clearError 
+    } = useStores();
+
+    // Fetch stores on component mount and when filters change
+    useEffect(() => {
+        const apiFilters = {
+            page: currentPage,
+            limit: itemsPerPage,
+            ...(searchQuery && { storeName: searchQuery }),
+            ...(filters.city && { city: filters.city }),
+            ...(filters.creditRating && { creditRating: filters.creditRating }),
+            ...(filters.isActive && { isActive: filters.isActive === 'true' }),
+            ...(filters.contactPerson && { contactPerson: filters.contactPerson })
+        };
+        fetchStores(apiFilters);
+    }, [currentPage, itemsPerPage, searchQuery, filters, fetchStores]);
+
+    // Handle error display
+    useEffect(() => {
+        if (error) {
+            toast.error(error);
+            clearError();
+        }
+    }, [error, clearError]);
 
     const handleSelectAll = () => {
         if (selectAll) {
             setSelectedStores([]);
         } else {
-            setSelectedStores(filteredStores.map(store => store.id));
+            setSelectedStores(stores.map(store => store.id));
         }
         setSelectAll(!selectAll);
     };
@@ -36,18 +70,80 @@ const StoresPage = () => {
         }
     };
 
-    // Filter stores based on search query
-    const filteredStores = stores.filter(store =>
-        Object.values(store).some(value =>
-            value.toString().toLowerCase().includes(searchQuery.toLowerCase())
-        )
-    );
+    const handleDeleteStore = async (storeId: string) => {
+        if (window.confirm('Are you sure you want to delete this store?')) {
+            try {
+                await deleteStore(storeId);
+                toast.success('Store deleted successfully');
+            } catch (error) {
+                toast.error('Failed to delete store');
+            }
+        }
+    };
 
-    // Calculate pagination
-    const totalPages = Math.ceil(filteredStores.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const currentStores = filteredStores.slice(startIndex, endIndex);
+    const handleBulkDelete = async () => {
+        if (selectedStores.length === 0) {
+            toast.error('Please select stores to delete');
+            return;
+        }
+
+        if (window.confirm(`Are you sure you want to delete ${selectedStores.length} stores?`)) {
+            try {
+                await Promise.all(selectedStores.map(storeId => deleteStore(storeId)));
+                setSelectedStores([]);
+                setSelectAll(false);
+                toast.success(`${selectedStores.length} stores deleted successfully`);
+            } catch (error) {
+                toast.error('Failed to delete some stores');
+            }
+        }
+    };
+
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page);
+        setSelectedStores([]);
+        setSelectAll(false);
+    };
+
+    const handleExport = () => {
+        try {
+            exportStoresToExcel(stores);
+            toast.success('Stores exported successfully');
+        } catch (error) {
+            toast.error('Failed to export stores');
+        }
+    };
+
+    const handleDownloadTemplate = () => {
+        try {
+            generateSampleTemplate();
+            toast.success('Template downloaded successfully');
+        } catch (error) {
+            toast.error('Failed to download template');
+        }
+    };
+
+    const handleFilterChange = (key: string, value: string) => {
+        setFilters(prev => ({ ...prev, [key]: value }));
+        setCurrentPage(1); // Reset to first page when filters change
+        setSelectedStores([]);
+        setSelectAll(false);
+    };
+
+    const clearFilters = () => {
+        setFilters({
+            city: '',
+            creditRating: '',
+            isActive: '',
+            contactPerson: ''
+        });
+        setSearchQuery('');
+        setCurrentPage(1);
+        setSelectedStores([]);
+        setSelectAll(false);
+    };
+
+    const hasActiveFilters = searchQuery || Object.values(filters).some(value => value !== '');
 
     return (
         <div className="main-content">
@@ -60,10 +156,27 @@ const StoresPage = () => {
                         <div className="box-header flex justify-between items-center">
                             <h1 className="box-title text-2xl font-semibold">Stores</h1>
                             <div className="box-tools flex items-center space-x-2">
-                                <button type="button" className="ti-btn ti-btn-primary">
-                                    <i className="ri-file-excel-2-line me-2"></i> Import
+                                {selectedStores.length > 0 && (
+                                    <button 
+                                        type="button" 
+                                        className="ti-btn ti-btn-danger"
+                                        onClick={handleBulkDelete}
+                                    >
+                                        <i className="ri-delete-bin-line me-2"></i> Delete Selected ({selectedStores.length})
+                                    </button>
+                                )}
+                                <button 
+                                    type="button" 
+                                    className="ti-btn ti-btn-primary"
+                                    onClick={handleDownloadTemplate}
+                                >
+                                    <i className="ri-download-line me-2"></i> Download Template
                                 </button>
-                                <button type="button" className="ti-btn ti-btn-primary">
+                                <button 
+                                    type="button" 
+                                    className="ti-btn ti-btn-primary"
+                                    onClick={handleExport}
+                                >
                                     <i className="ri-download-2-line me-2"></i> Export
                                 </button>
                                 <Link href="/stores/add" className="ti-btn ti-btn-primary">
@@ -73,132 +186,379 @@ const StoresPage = () => {
                         </div>
                     </div>
 
+                    {/* Statistics Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                        <div className="box bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+                            <div className="box-body p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-blue-100 text-sm font-medium">Total Stores</p>
+                                        <p className="text-2xl font-bold">{pagination.totalResults.toLocaleString()}</p>
+                                    </div>
+                                    <div className="text-blue-200">
+                                        <i className="ri-store-2-line text-3xl"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="box bg-gradient-to-r from-green-500 to-green-600 text-white">
+                            <div className="box-body p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-green-100 text-sm font-medium">Active Stores</p>
+                                        <p className="text-2xl font-bold">
+                                            {stores.filter(store => store.isActive).length}
+                                        </p>
+                                    </div>
+                                    <div className="text-green-200">
+                                        <i className="ri-check-line text-3xl"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="box bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
+                            <div className="box-body p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-yellow-100 text-sm font-medium">Premium Rating</p>
+                                        <p className="text-2xl font-bold">
+                                            {stores.filter(store => store.creditRating.startsWith('A')).length}
+                                        </p>
+                                    </div>
+                                    <div className="text-yellow-200">
+                                        <i className="ri-star-line text-3xl"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="box bg-gradient-to-r from-purple-500 to-purple-600 text-white">
+                            <div className="box-body p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-purple-100 text-sm font-medium">Cities</p>
+                                        <p className="text-2xl font-bold">
+                                            {new Set(stores.map(store => store.city)).size}
+                                        </p>
+                                    </div>
+                                    <div className="text-purple-200">
+                                        <i className="ri-map-pin-line text-3xl"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Content Box */}
                     <div className="box">
                         <div className="box-body">
-                            {/* Search Bar */}
-                            <div className="mb-4">
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        className="form-control py-3"
-                                        placeholder="Search stores..."
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                    />
-                                    <button className="absolute end-0 top-0 px-4 h-full">
-                                        <i className="ri-search-line text-lg"></i>
-                                    </button>
+                            {/* Search and Filters Header */}
+                            <div className="mb-6">
+                                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                                    {/* Filter Toggle and Actions */}
+                                    <div className="flex items-center gap-3 flex-shrink-0 order-2 sm:order-1">
+                                        <button
+                                            type="button"
+                                            className={`ti-btn ${showFilters ? 'ti-btn-primary' : 'ti-btn-secondary'}`}
+                                            onClick={() => setShowFilters(!showFilters)}
+                                        >
+                                            <i className="ri-filter-3-line me-2"></i>
+                                            Filters {hasActiveFilters && <span className="badge bg-white text-primary ml-1">●</span>}
+                                        </button>
+                                        
+                                        {hasActiveFilters && (
+                                            <button
+                                                type="button"
+                                                className="ti-btn ti-btn-light"
+                                                onClick={clearFilters}
+                                            >
+                                                <i className="ri-close-line me-1"></i>
+                                                Clear
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Search Bar */}
+                                    <div className="w-full sm:w-80 lg:w-96 order-1 sm:order-2">
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                className="form-control py-3 pl-10 pr-4 w-full"
+                                                placeholder="Search stores by name..."
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                            />
+                                            <i className="ri-search-line text-lg absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                        </div>
+                                    </div>
                                 </div>
+
+                                {/* Filters Panel */}
+                                {showFilters && (
+                                    <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                            {/* City Filter */}
+                                            <div>
+                                                <label className="form-label text-sm font-medium">City</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-control"
+                                                    placeholder="Filter by city..."
+                                                    value={filters.city}
+                                                    onChange={(e) => handleFilterChange('city', e.target.value)}
+                                                />
+                                            </div>
+
+                                            {/* Credit Rating Filter */}
+                                            <div>
+                                                <label className="form-label text-sm font-medium">Credit Rating</label>
+                                                <select
+                                                    className="form-select"
+                                                    value={filters.creditRating}
+                                                    onChange={(e) => handleFilterChange('creditRating', e.target.value)}
+                                                >
+                                                    <option value="">All Ratings</option>
+                                                    <option value="A+">A+</option>
+                                                    <option value="A">A</option>
+                                                    <option value="A-">A-</option>
+                                                    <option value="B+">B+</option>
+                                                    <option value="B">B</option>
+                                                    <option value="B-">B-</option>
+                                                    <option value="C+">C+</option>
+                                                    <option value="C">C</option>
+                                                    <option value="C-">C-</option>
+                                                    <option value="D">D</option>
+                                                    <option value="F">F</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Status Filter */}
+                                            <div>
+                                                <label className="form-label text-sm font-medium">Status</label>
+                                                <select
+                                                    className="form-select"
+                                                    value={filters.isActive}
+                                                    onChange={(e) => handleFilterChange('isActive', e.target.value)}
+                                                >
+                                                    <option value="">All Status</option>
+                                                    <option value="true">Active</option>
+                                                    <option value="false">Inactive</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Contact Person Filter */}
+                                            <div>
+                                                <label className="form-label text-sm font-medium">Contact Person</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-control"
+                                                    placeholder="Filter by contact..."
+                                                    value={filters.contactPerson}
+                                                    onChange={(e) => handleFilterChange('contactPerson', e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="table-responsive">
-                                <table className="table whitespace-nowrap table-bordered min-w-full">
-                                    <thead>
-                                        <tr className="border-b border-gray-200">
-                                            <th scope="col" className="!text-start">
-                                                <input 
-                                                    type="checkbox" 
-                                                    className="form-check-input" 
-                                                    checked={selectAll}
-                                                    onChange={handleSelectAll}
-                                                />
-                                            </th>
-                                            <th scope="col" className="text-start">Store Name</th>
-                                            <th scope="col" className="text-start">Location</th>
-                                            <th scope="col" className="text-start">Manager</th>
-                                            <th scope="col" className="text-start">Status</th>
-                                            <th scope="col" className="text-start">Inventory Items</th>
-                                            <th scope="col" className="text-start">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {currentStores.map((store, index) => (
-                                            <tr 
-                                                key={store.id}
-                                                className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}
-                                            >
-                                                <td>
+                            {loading ? (
+                                <div className="flex justify-center items-center py-12">
+                                    <div className="text-center">
+                                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                                        <p className="text-gray-600">Loading stores...</p>
+                                    </div>
+                                </div>
+                            ) : stores.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <div className="text-gray-400 mb-4">
+                                        <i className="ri-store-2-line text-6xl"></i>
+                                    </div>
+                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No stores found</h3>
+                                    <p className="text-gray-500 mb-4">
+                                        {hasActiveFilters 
+                                            ? 'Try adjusting your filters or search terms' 
+                                            : 'Get started by adding your first store'
+                                        }
+                                    </p>
+                                    {!hasActiveFilters && (
+                                        <Link href="/stores/add" className="ti-btn ti-btn-primary">
+                                            <i className="ri-add-line me-2"></i>
+                                            Add First Store
+                                        </Link>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="table-responsive">
+                                    <table className="table whitespace-nowrap min-w-full">
+                                        <thead>
+                                            <tr className="bg-gray-50 border-b border-gray-200">
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">
                                                     <input 
                                                         type="checkbox" 
                                                         className="form-check-input" 
-                                                        checked={selectedStores.includes(store.id)}
-                                                        onChange={() => handleStoreSelect(store.id)}
+                                                        checked={selectAll}
+                                                        onChange={handleSelectAll}
                                                     />
-                                                </td>
-                                                <td className="font-medium">{store.name}</td>
-                                                <td>{store.location}</td>
-                                                <td>{store.manager}</td>
-                                                <td>
-                                                    <span className={`badge ${store.status === 'Active' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
-                                                        {store.status}
-                                                    </span>
-                                                </td>
-                                                <td>{store.inventory}</td>
-                                                <td>
-                                                    <div className="flex space-x-2">
-                                                        <Link 
-                                                            href={`/stores/edit/${store.id}`}
-                                                            className="ti-btn ti-btn-primary ti-btn-sm"
-                                                        >
-                                                            <i className="ri-edit-line"></i>
-                                                        </Link>
-                                                        <button 
-                                                            className="ti-btn ti-btn-danger ti-btn-sm"
-                                                            onClick={() => {/* Add delete handler */}}
-                                                        >
-                                                            <i className="ri-delete-bin-line"></i>
-                                                        </button>
-                                                    </div>
-                                                </td>
+                                                </th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Store ID</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Store Name</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">City</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Contact Person</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Credit Rating</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Status</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Actions</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {stores.map((store, index) => (
+                                                <tr 
+                                                    key={store.id}
+                                                    className="hover:bg-gray-50 transition-colors duration-150"
+                                                >
+                                                    <td className="px-4 py-4">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="form-check-input" 
+                                                            checked={selectedStores.includes(store.id)}
+                                                            onChange={() => handleStoreSelect(store.id)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <span className="font-mono text-sm font-medium text-gray-900">{store.storeId}</span>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <div>
+                                                            <div className="font-medium text-gray-900">{store.storeName}</div>
+                                                            <div className="text-sm text-gray-500">{store.storeNumber}</div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex items-center">
+                                                            <i className="ri-map-pin-line text-gray-400 me-2"></i>
+                                                            <span className="text-gray-900">{store.city}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <div>
+                                                            <div className="font-medium text-gray-900">{store.contactPerson}</div>
+                                                            <div className="text-sm text-gray-500">{store.contactEmail}</div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                            store.creditRating.startsWith('A') ? 'bg-green-100 text-green-800' :
+                                                            store.creditRating.startsWith('B') ? 'bg-yellow-100 text-yellow-800' :
+                                                            store.creditRating.startsWith('C') ? 'bg-blue-100 text-blue-800' :
+                                                            'bg-red-100 text-red-800'
+                                                        }`}>
+                                                            {store.creditRating}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                            store.isActive 
+                                                                ? 'bg-green-100 text-green-800' 
+                                                                : 'bg-red-100 text-red-800'
+                                                        }`}>
+                                                            <span className={`w-2 h-2 rounded-full mr-2 ${
+                                                                store.isActive ? 'bg-green-400' : 'bg-red-400'
+                                                            }`}></span>
+                                                            {store.isActive ? 'Active' : 'Inactive'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex items-center space-x-2">
+                                                            <Link 
+                                                                href={`/stores/edit/${store.id}`}
+                                                                className="ti-btn ti-btn-primary ti-btn-sm"
+                                                                title="Edit Store"
+                                                            >
+                                                                <i className="ri-edit-line"></i>
+                                                            </Link>
+                                                            <button 
+                                                                className="ti-btn ti-btn-danger ti-btn-sm"
+                                                                onClick={() => handleDeleteStore(store.id)}
+                                                                title="Delete Store"
+                                                            >
+                                                                <i className="ri-delete-bin-line"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
 
                             {/* Pagination */}
-                            <div className="flex justify-between items-center mt-4">
-                                <div className="text-sm text-gray-500">
-                                    Showing {startIndex + 1} to {Math.min(endIndex, filteredStores.length)} of {filteredStores.length} entries
-                                </div>
-                                <nav aria-label="Page navigation" className="">
-                                    <ul className="flex flex-wrap items-center">
-                                        <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                                            <button
-                                                className="page-link py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                                disabled={currentPage === 1}
-                                            >
-                                                Previous
-                                            </button>
-                                        </li>
-                                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                            <li key={page} className="page-item">
+                            {!loading && stores.length > 0 && (
+                                <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-6 border-t border-gray-200">
+                                    <div className="text-sm text-gray-700 mb-4 sm:mb-0">
+                                        <span className="font-medium">
+                                            Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.totalResults)} 
+                                        </span>
+                                        <span className="text-gray-500"> of {pagination.totalResults.toLocaleString()} stores</span>
+                                    </div>
+                                    
+                                    <nav aria-label="Page navigation" className="flex items-center space-x-1">
+                                        <button
+                                            className={`px-3 py-2 text-sm font-medium rounded-md ${
+                                                pagination.hasPrevPage
+                                                    ? 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
+                                                    : 'text-gray-300 bg-gray-100 border border-gray-200 cursor-not-allowed'
+                                            }`}
+                                            onClick={() => handlePageChange(pagination.page - 1)}
+                                            disabled={!pagination.hasPrevPage}
+                                        >
+                                            <i className="ri-arrow-left-s-line"></i>
+                                        </button>
+                                        
+                                        {/* Page Numbers */}
+                                        {Array.from({ length: Math.min(pagination.totalPages, 7) }, (_, i) => {
+                                            let pageNum;
+                                            if (pagination.totalPages <= 7) {
+                                                pageNum = i + 1;
+                                            } else if (pagination.page <= 4) {
+                                                pageNum = i + 1;
+                                            } else if (pagination.page >= pagination.totalPages - 3) {
+                                                pageNum = pagination.totalPages - 6 + i;
+                                            } else {
+                                                pageNum = pagination.page - 3 + i;
+                                            }
+                                            
+                                            return (
                                                 <button
-                                                    className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
-                                                        currentPage === page 
-                                                        ? 'bg-primary text-white hover:bg-primary-dark' 
-                                                        : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                                                    key={pageNum}
+                                                    className={`px-3 py-2 text-sm font-medium rounded-md ${
+                                                        pagination.page === pageNum
+                                                            ? 'bg-primary text-white border border-primary'
+                                                            : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
                                                     }`}
-                                                    onClick={() => setCurrentPage(page)}
+                                                    onClick={() => handlePageChange(pageNum)}
                                                 >
-                                                    {page}
+                                                    {pageNum}
                                                 </button>
-                                            </li>
-                                        ))}
-                                        <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                                            <button
-                                                className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                                                disabled={currentPage === totalPages}
-                                            >
-                                                Next
-                                            </button>
-                                        </li>
-                                    </ul>
-                                </nav>
-                            </div>
+                                            );
+                                        })}
+                                        
+                                        <button
+                                            className={`px-3 py-2 text-sm font-medium rounded-md ${
+                                                pagination.hasNextPage
+                                                    ? 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
+                                                    : 'text-gray-300 bg-gray-100 border border-gray-200 cursor-not-allowed'
+                                            }`}
+                                            onClick={() => handlePageChange(pagination.page + 1)}
+                                            disabled={!pagination.hasNextPage}
+                                        >
+                                            <i className="ri-arrow-right-s-line"></i>
+                                        </button>
+                                    </nav>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

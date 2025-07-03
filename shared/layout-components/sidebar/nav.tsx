@@ -83,10 +83,27 @@ export const MenuItems: any = [
   {
     icon: SalesIcon,
     title: "Sales",
-    type: "link",
+    type: "sub",
     active: false,
     selected: false,
-    path: "/sales",
+    children: [
+      {
+        icon: SalesIcon,
+        path: "/sales",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "All Sales",
+      },
+      {
+        icon: SalesIcon,
+        path: "/sales/master",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Master Sales",
+      },
+    ],
   },
   {
     icon: StoresIcon,

@@ -1,79 +1,75 @@
 "use client"
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { useStores } from '@/shared/hooks/useStores';
-import { CreateStoreData } from '@/shared/services/storeService';
+import { Store, UpdateStoreData } from '@/shared/services/storeService';
 import { toast } from 'react-hot-toast';
 
-const AddStorePage = () => {
+const EditStorePage = () => {
     const router = useRouter();
-    const { createStore, loading } = useStores();
+    const params = useParams();
+    const storeId = params.id as string;
     
-    const [formData, setFormData] = useState<CreateStoreData>({
-        storeId: '',
-        storeName: '',
-        city: '',
-        addressLine1: '',
-        addressLine2: '',
-        storeNumber: '',
-        pincode: '',
-        contactPerson: '',
-        contactEmail: '',
-        contactPhone: '',
-        creditRating: 'B+',
-        isActive: true
-    });
-
-    const [errors, setErrors] = useState<Partial<CreateStoreData>>({});
+    const { updateStore, getStore, loading } = useStores();
+    
+    const [store, setStore] = useState<Store | null>(null);
+    const [formData, setFormData] = useState<UpdateStoreData>({});
+    const [errors, setErrors] = useState<Partial<UpdateStoreData>>({});
+    const [isLoading, setIsLoading] = useState(true);
 
     const creditRatingOptions = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
 
-    const validateForm = (): boolean => {
-        const newErrors: Partial<CreateStoreData> = {};
+    // Fetch store data on component mount
+    useEffect(() => {
+        const fetchStore = async () => {
+            try {
+                const storeData = await getStore(storeId);
+                setStore(storeData);
+                setFormData({
+                    storeId: storeData.storeId,
+                    storeName: storeData.storeName,
+                    city: storeData.city,
+                    addressLine1: storeData.addressLine1,
+                    addressLine2: storeData.addressLine2,
+                    storeNumber: storeData.storeNumber,
+                    pincode: storeData.pincode,
+                    contactPerson: storeData.contactPerson,
+                    contactEmail: storeData.contactEmail,
+                    contactPhone: storeData.contactPhone,
+                    creditRating: storeData.creditRating,
+                    isActive: storeData.isActive
+                });
+            } catch (error: any) {
+                toast.error(error.message || 'Failed to fetch store');
+                router.push('/stores');
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-        if (!formData.storeId.trim()) {
-            newErrors.storeId = 'Store ID is required';
-        } else if (!/^[A-Z0-9]+$/.test(formData.storeId)) {
+        if (storeId) {
+            fetchStore();
+        }
+    }, [storeId, getStore, router]);
+
+    const validateForm = (): boolean => {
+        const newErrors: Partial<UpdateStoreData> = {};
+
+        if (formData.storeId && !/^[A-Z0-9]+$/.test(formData.storeId)) {
             newErrors.storeId = 'Store ID must contain only uppercase letters and numbers';
         }
 
-        if (!formData.storeName.trim()) {
-            newErrors.storeName = 'Store name is required';
-        }
-
-        if (!formData.city.trim()) {
-            newErrors.city = 'City is required';
-        }
-
-        if (!formData.addressLine1.trim()) {
-            newErrors.addressLine1 = 'Address is required';
-        }
-
-        if (!formData.storeNumber.trim()) {
-            newErrors.storeNumber = 'Store number is required';
-        }
-
-        if (!formData.pincode.trim()) {
-            newErrors.pincode = 'Pincode is required';
-        } else if (!/^\d{6}$/.test(formData.pincode)) {
+        if (formData.pincode && !/^\d{6}$/.test(formData.pincode)) {
             newErrors.pincode = 'Pincode must be exactly 6 digits';
         }
 
-        if (!formData.contactPerson.trim()) {
-            newErrors.contactPerson = 'Contact person is required';
-        }
-
-        if (!formData.contactEmail.trim()) {
-            newErrors.contactEmail = 'Contact email is required';
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactEmail)) {
+        if (formData.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactEmail)) {
             newErrors.contactEmail = 'Please enter a valid email address';
         }
 
-        if (!formData.contactPhone.trim()) {
-            newErrors.contactPhone = 'Contact phone is required';
-        } else if (!/^[\+]?[0-9\s\-\(\)]{10,15}$/.test(formData.contactPhone.replace(/\s/g, ''))) {
+        if (formData.contactPhone && !/^[\+]?[0-9\s\-\(\)]{10,15}$/.test(formData.contactPhone.replace(/\s/g, ''))) {
             newErrors.contactPhone = 'Please enter a valid phone number';
         }
 
@@ -91,7 +87,7 @@ const AddStorePage = () => {
         }));
 
         // Clear error when user starts typing
-        if (errors[name as keyof CreateStoreData]) {
+        if (errors[name as keyof UpdateStoreData]) {
             setErrors(prev => ({
                 ...prev,
                 [name]: undefined
@@ -108,24 +104,48 @@ const AddStorePage = () => {
         }
 
         try {
-            await createStore(formData);
-            toast.success('Store created successfully');
+            await updateStore(storeId, formData);
+            toast.success('Store updated successfully');
             router.push('/stores');
         } catch (error: any) {
-            toast.error(error.message || 'Failed to create store');
+            toast.error(error.message || 'Failed to update store');
         }
     };
 
+    if (isLoading) {
+        return (
+            <div className="main-content">
+                <div className="flex justify-center items-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <span className="ml-2">Loading store...</span>
+                </div>
+            </div>
+        );
+    }
+
+    if (!store) {
+        return (
+            <div className="main-content">
+                <div className="text-center py-8">
+                    <p className="text-gray-500">Store not found</p>
+                    <Link href="/stores" className="ti-btn ti-btn-primary mt-4">
+                        Back to Stores
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="main-content">
-            <Seo title="Add New Store"/>
+            <Seo title={`Edit Store - ${store.storeName}`}/>
             
             <div className="grid grid-cols-12 gap-6">
                 <div className="col-span-12">
                     {/* Page Header */}
                     <div className="box !bg-transparent border-0 shadow-none">
                         <div className="box-header flex justify-between items-center">
-                            <h1 className="box-title text-2xl font-semibold">Add New Store</h1>
+                            <h1 className="box-title text-2xl font-semibold">Edit Store</h1>
                             <div className="box-tools">
                                 <Link href="/stores" className="ti-btn ti-btn-secondary">
                                     <i className="ri-arrow-left-line me-2"></i> Back to Stores
@@ -146,7 +166,7 @@ const AddStorePage = () => {
                                             type="text"
                                             name="storeId"
                                             className={`form-control ${errors.storeId ? 'border-danger' : ''}`}
-                                            value={formData.storeId}
+                                            value={formData.storeId || ''}
                                             onChange={handleInputChange}
                                             placeholder="e.g., STORE001"
                                         />
@@ -161,14 +181,11 @@ const AddStorePage = () => {
                                         <input
                                             type="text"
                                             name="storeName"
-                                            className={`form-control ${errors.storeName ? 'border-danger' : ''}`}
-                                            value={formData.storeName}
+                                            className="form-control"
+                                            value={formData.storeName || ''}
                                             onChange={handleInputChange}
                                             placeholder="e.g., Main Street Store"
                                         />
-                                        {errors.storeName && (
-                                            <div className="text-danger text-sm mt-1">{errors.storeName}</div>
-                                        )}
                                     </div>
 
                                     {/* City */}
@@ -177,14 +194,11 @@ const AddStorePage = () => {
                                         <input
                                             type="text"
                                             name="city"
-                                            className={`form-control ${errors.city ? 'border-danger' : ''}`}
-                                            value={formData.city}
+                                            className="form-control"
+                                            value={formData.city || ''}
                                             onChange={handleInputChange}
                                             placeholder="e.g., Mumbai"
                                         />
-                                        {errors.city && (
-                                            <div className="text-danger text-sm mt-1">{errors.city}</div>
-                                        )}
                                     </div>
 
                                     {/* Store Number */}
@@ -193,14 +207,11 @@ const AddStorePage = () => {
                                         <input
                                             type="text"
                                             name="storeNumber"
-                                            className={`form-control ${errors.storeNumber ? 'border-danger' : ''}`}
-                                            value={formData.storeNumber}
+                                            className="form-control"
+                                            value={formData.storeNumber || ''}
                                             onChange={handleInputChange}
                                             placeholder="e.g., A101"
                                         />
-                                        {errors.storeNumber && (
-                                            <div className="text-danger text-sm mt-1">{errors.storeNumber}</div>
-                                        )}
                                     </div>
 
                                     {/* Address Line 1 */}
@@ -209,14 +220,11 @@ const AddStorePage = () => {
                                         <input
                                             type="text"
                                             name="addressLine1"
-                                            className={`form-control ${errors.addressLine1 ? 'border-danger' : ''}`}
-                                            value={formData.addressLine1}
+                                            className="form-control"
+                                            value={formData.addressLine1 || ''}
                                             onChange={handleInputChange}
                                             placeholder="e.g., 123 Main Street"
                                         />
-                                        {errors.addressLine1 && (
-                                            <div className="text-danger text-sm mt-1">{errors.addressLine1}</div>
-                                        )}
                                     </div>
 
                                     {/* Address Line 2 */}
@@ -226,7 +234,7 @@ const AddStorePage = () => {
                                             type="text"
                                             name="addressLine2"
                                             className="form-control"
-                                            value={formData.addressLine2}
+                                            value={formData.addressLine2 || ''}
                                             onChange={handleInputChange}
                                             placeholder="e.g., Building A, Floor 2"
                                         />
@@ -239,7 +247,7 @@ const AddStorePage = () => {
                                             type="text"
                                             name="pincode"
                                             className={`form-control ${errors.pincode ? 'border-danger' : ''}`}
-                                            value={formData.pincode}
+                                            value={formData.pincode || ''}
                                             onChange={handleInputChange}
                                             placeholder="e.g., 400001"
                                             maxLength={6}
@@ -255,7 +263,7 @@ const AddStorePage = () => {
                                         <select
                                             name="creditRating"
                                             className="form-select"
-                                            value={formData.creditRating}
+                                            value={formData.creditRating || ''}
                                             onChange={handleInputChange}
                                         >
                                             {creditRatingOptions.map(rating => (
@@ -270,14 +278,11 @@ const AddStorePage = () => {
                                         <input
                                             type="text"
                                             name="contactPerson"
-                                            className={`form-control ${errors.contactPerson ? 'border-danger' : ''}`}
-                                            value={formData.contactPerson}
+                                            className="form-control"
+                                            value={formData.contactPerson || ''}
                                             onChange={handleInputChange}
                                             placeholder="e.g., John Doe"
                                         />
-                                        {errors.contactPerson && (
-                                            <div className="text-danger text-sm mt-1">{errors.contactPerson}</div>
-                                        )}
                                     </div>
 
                                     {/* Contact Email */}
@@ -287,7 +292,7 @@ const AddStorePage = () => {
                                             type="email"
                                             name="contactEmail"
                                             className={`form-control ${errors.contactEmail ? 'border-danger' : ''}`}
-                                            value={formData.contactEmail}
+                                            value={formData.contactEmail || ''}
                                             onChange={handleInputChange}
                                             placeholder="e.g., john.doe@store.com"
                                         />
@@ -303,7 +308,7 @@ const AddStorePage = () => {
                                             type="tel"
                                             name="contactPhone"
                                             className={`form-control ${errors.contactPhone ? 'border-danger' : ''}`}
-                                            value={formData.contactPhone}
+                                            value={formData.contactPhone || ''}
                                             onChange={handleInputChange}
                                             placeholder="e.g., +91-9876543210"
                                         />
@@ -320,7 +325,7 @@ const AddStorePage = () => {
                                                 name="isActive"
                                                 id="isActive"
                                                 className="form-check-input me-2"
-                                                checked={formData.isActive}
+                                                checked={formData.isActive ?? true}
                                                 onChange={handleInputChange}
                                             />
                                             <label htmlFor="isActive" className="form-label mb-0">
@@ -343,12 +348,12 @@ const AddStorePage = () => {
                                         {loading ? (
                                             <>
                                                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2"></div>
-                                                Creating...
+                                                Updating...
                                             </>
                                         ) : (
                                             <>
                                                 <i className="ri-save-line me-2"></i>
-                                                Create Store
+                                                Update Store
                                             </>
                                         )}
                                     </button>
@@ -362,4 +367,4 @@ const AddStorePage = () => {
     );
 };
 
-export default AddStorePage;
+export default EditStorePage; 
