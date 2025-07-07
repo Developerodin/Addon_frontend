@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { salesService, SalesRecord } from '@/shared/services/salesService';
+import { useRouter, useParams } from 'next/navigation';
+import { salesService, SalesRecord, Plant, MaterialCode, getSaleId } from '@/shared/services/salesService';
 import axios from 'axios';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 
@@ -53,35 +53,41 @@ interface ProductsResponse {
   totalResults: number;
 }
 
-const AddSalePage = () => {
+const EditSalePage = () => {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const params = useParams();
+  const saleId = params.id as string;
+  
+
+  
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProductModal, setShowProductModal] = useState(false);
+  const [showStoreModal, setShowStoreModal] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [storesLoading, setStoresLoading] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [storeSearchQuery, setStoreSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [storeCurrentPage, setStoreCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [storeTotalPages, setStoreTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  const [storeTotalResults, setStoreTotalResults] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
-  const [showStoreModal, setShowStoreModal] = useState(false);
-  const [stores, setStores] = useState<Store[]>([]);
-  const [storesLoading, setStoresLoading] = useState(false);
-  const [storeSearchQuery, setStoreSearchQuery] = useState('');
-  const [storeCurrentPage, setStoreCurrentPage] = useState(1);
-  const [storeTotalPages, setStoreTotalPages] = useState(1);
-  const [storeTotalResults, setStoreTotalResults] = useState(0);
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState<string>('');
   
   const [formData, setFormData] = useState({
     calendar_date: '',
     plant: '',
-    plant_display: '', // For display purposes
+    plant_display: '',
     material_code: '',
-    material_code_display: '', // For display purposes
+    material_code_display: '',
     quantity: '',
     mrp: '',
     discount: '0.00',
@@ -89,6 +95,123 @@ const AddSalePage = () => {
     nsv: '0.00',
     total_tax: '0.00'
   });
+
+  // Load sale data on component mount
+  useEffect(() => {
+    const loadSale = async () => {
+      try {
+        if (!saleId || saleId === 'undefined') {
+          setError('Invalid sale ID');
+          setLoading(false);
+          return;
+        }
+
+        const sale = await salesService.getSaleById(saleId);
+        
+        // Handle plant data
+        let plantId = '';
+        let plantDisplay = '';
+        if (typeof sale.plant === 'object' && sale.plant) {
+          const plantObj = sale.plant as any;
+          plantId = plantObj.id || plantObj._id || '';
+          plantDisplay = plantObj.storeId || '';
+        } else {
+          plantId = sale.plant as string;
+          // Fetch store details to get display value
+          try {
+            const storeResponse = await axios.get(`${API_BASE_URL}/stores/${plantId}`);
+            const storeData = storeResponse.data;
+            plantDisplay = storeData.storeId || plantId;
+            // Set selected store for display
+            setSelectedStore({
+              id: storeData.id || storeData._id || plantId,
+              storeId: storeData.storeId || '',
+              storeName: storeData.storeName || '',
+              city: storeData.city || storeData.addressLine2 || '',
+              isActive: storeData.isActive || false,
+              creditRating: storeData.creditRating || ''
+            });
+            setSelectedStoreId(storeData.id || storeData._id || plantId);
+          } catch (error) {
+            console.error('Error fetching store details:', error);
+            plantDisplay = plantId;
+          }
+        }
+
+        // Handle material code data
+        let materialId = '';
+        let materialDisplay = '';
+        if (typeof sale.materialCode === 'object' && sale.materialCode) {
+          const materialObj = sale.materialCode as any;
+          materialId = materialObj.id || materialObj._id || '';
+          materialDisplay = materialObj.styleCode || '';
+        } else {
+          materialId = sale.materialCode as string;
+          // Fetch product details to get display value
+          try {
+            const productResponse = await axios.get(`${API_BASE_URL}/products/${materialId}`);
+            const productData = productResponse.data;
+            materialDisplay = productData.styleCode || materialId;
+            // Set selected product for display
+            setSelectedProduct({
+              id: productData.id || productData._id || materialId,
+              styleCode: productData.styleCode || '',
+              name: productData.name || '',
+              internalCode: productData.internalCode || '',
+              vendorCode: productData.vendorCode || '',
+              factoryCode: productData.factoryCode || '',
+              eanCode: productData.eanCode || '',
+              description: productData.description || '',
+              category: productData.category || '',
+              status: productData.status || ''
+            });
+            setSelectedProductId(productData.id || productData._id || materialId);
+          } catch (error) {
+            console.error('Error fetching product details:', error);
+            materialDisplay = materialId;
+          }
+        }
+
+        // Format date for HTML date input (YYYY-MM-DD)
+        const formatDateForInput = (dateString: string) => {
+          try {
+            const date = new Date(dateString);
+            return date.toISOString().split('T')[0]; // Returns YYYY-MM-DD
+          } catch (error) {
+            console.error('Error formatting date:', error);
+            return '';
+          }
+        };
+
+        setFormData({
+          calendar_date: formatDateForInput(sale.date),
+          plant: plantId,
+          plant_display: plantDisplay,
+          material_code: materialId,
+          material_code_display: materialDisplay,
+          quantity: sale.quantity.toString(),
+          mrp: sale.mrp.toString(),
+          discount: (sale.discount || 0).toString(),
+          gsv: sale.gsv.toString(),
+          nsv: sale.nsv.toString(),
+          total_tax: (sale.totalTax || 0).toString()
+        });
+
+
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load sale data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (saleId && saleId !== 'undefined') {
+      loadSale();
+    } else {
+      setError('Invalid sale ID provided');
+      setLoading(false);
+    }
+  }, [saleId]);
 
   // Fetch products for modal
   const fetchProducts = async (page: number = 1, search: string = '') => {
@@ -106,13 +229,6 @@ const AddSalePage = () => {
     }
   };
 
-  // Load products when modal opens
-  useEffect(() => {
-    if (showProductModal) {
-      fetchProducts(1, productSearchQuery);
-    }
-  }, [showProductModal]);
-
   // Fetch stores for modal
   const fetchStores = async (page: number = 1, search: string = '') => {
     setStoresLoading(true);
@@ -128,6 +244,13 @@ const AddSalePage = () => {
       setStoresLoading(false);
     }
   };
+
+  // Load products when modal opens
+  useEffect(() => {
+    if (showProductModal) {
+      fetchProducts(1, productSearchQuery);
+    }
+  }, [showProductModal]);
 
   // Load stores when modal opens
   useEffect(() => {
@@ -173,10 +296,16 @@ const AddSalePage = () => {
     }));
   };
 
-  const handleConfirmSelection = () => {
+  const handleConfirmProductSelection = () => {
     if (selectedProduct) {
       setShowProductModal(false);
     }
+  };
+
+  const handleProductSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    fetchProducts(1, productSearchQuery);
   };
 
   const handleStoreSelect = (store: Store) => {
@@ -201,23 +330,17 @@ const AddSalePage = () => {
     fetchStores(1, storeSearchQuery);
   };
 
-  const handleProductSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setCurrentPage(1);
-    fetchProducts(1, productSearchQuery);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setError(null);
 
     try {
       // Transform form data to match API schema
-      const saleData: Omit<SalesRecord, '_id' | 'createdAt' | 'updatedAt'> = {
+      const saleData: Partial<SalesRecord> = {
         date: formData.calendar_date,
         plant: formData.plant,
-        materialCode: formData.material_code, // This will be the product ID
+        materialCode: formData.material_code,
         quantity: parseFloat(formData.quantity),
         mrp: parseFloat(formData.mrp),
         gsv: parseFloat(formData.gsv),
@@ -226,25 +349,37 @@ const AddSalePage = () => {
         totalTax: parseFloat(formData.total_tax)
       };
 
-      await salesService.createSale(saleData);
+      await salesService.updateSale(saleId, saleData);
       router.push('/sales?success=true');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create sale');
+      setError(err instanceof Error ? err.message : 'Failed to update sale');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="main-content">
+        <Seo title="Edit Sale"/>
+        <div className="text-center py-8">
+          <i className="ri-loader-4-line animate-spin text-2xl"></i>
+          <p className="mt-2">Loading sale data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="main-content">
-      <Seo title="Add New Sale"/>
+      <Seo title="Edit Sale"/>
       
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
           {/* Page Header */}
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
-              <h1 className="box-title text-2xl font-semibold">Add New Sale</h1>
+              <h1 className="box-title text-2xl font-semibold">Edit Sale</h1>
               <div className="box-tools">
                 <Link href="/sales" className="ti-btn ti-btn-primary">
                   <i className="ri-arrow-left-line me-2"></i> Back to Sales
@@ -422,15 +557,15 @@ const AddSalePage = () => {
                   <button 
                     type="submit" 
                     className="ti-btn ti-btn-primary"
-                    disabled={loading}
+                    disabled={saving}
                   >
-                    {loading ? (
+                    {saving ? (
                       <>
                         <i className="ri-loader-4-line animate-spin me-2"></i>
-                        Saving...
+                        Updating...
                       </>
                     ) : (
-                      'Save Sale'
+                      'Update Sale'
                     )}
                   </button>
                 </div>
@@ -483,67 +618,67 @@ const AddSalePage = () => {
                 <>
                   <div className="overflow-x-auto">
                     <table className="table whitespace-nowrap table-bordered min-w-full">
-                                             <thead>
-                         <tr className="border-b border-gray-200">
-                           <th className="text-start">
-                             <input
-                               type="checkbox"
-                               className="form-check-input"
-                               checked={selectedProductId !== ''}
-                               onChange={() => {
-                                 if (selectedProductId !== '') {
-                                   setSelectedProductId('');
-                                   setSelectedProduct(null);
-                                   setFormData(prev => ({
-                                     ...prev,
-                                     material_code: '',
-                                     material_code_display: ''
-                                   }));
-                                 }
-                               }}
-                             />
-                           </th>
-                           <th className="text-start">Name</th>
-                           <th className="text-start">Style Code</th>
-                           <th className="text-start">Internal Code</th>
-                           <th className="text-start">Vendor Code</th>
-                           <th className="text-start">Factory Code</th>
-                           <th className="text-start">EAN Code</th>
-                         </tr>
-                       </thead>
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-start">
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              checked={selectedProductId !== ''}
+                              onChange={() => {
+                                if (selectedProductId !== '') {
+                                  setSelectedProductId('');
+                                  setSelectedProduct(null);
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    material_code: '',
+                                    material_code_display: ''
+                                  }));
+                                }
+                              }}
+                            />
+                          </th>
+                          <th className="text-start">Name</th>
+                          <th className="text-start">Style Code</th>
+                          <th className="text-start">Internal Code</th>
+                          <th className="text-start">Vendor Code</th>
+                          <th className="text-start">Factory Code</th>
+                          <th className="text-start">EAN Code</th>
+                        </tr>
+                      </thead>
                       <tbody>
-                                                 {products.length === 0 ? (
-                           <tr>
-                             <td colSpan={7} className="text-center py-8 text-gray-500">
-                               No products found
-                             </td>
-                           </tr>
-                         ) : (
-                           products.map((product) => (
-                             <tr 
-                               key={product.id} 
-                               className={`border-b border-gray-200 hover:bg-gray-50 cursor-pointer ${
-                                 selectedProductId === product.id ? 'bg-blue-50' : ''
-                               }`}
-                               onClick={() => handleProductSelect(product)}
-                             >
-                               <td onClick={(e) => e.stopPropagation()}>
-                                 <input
-                                   type="checkbox"
-                                   className="form-check-input"
-                                   checked={selectedProductId === product.id}
-                                   onChange={() => handleProductSelect(product)}
-                                 />
-                               </td>
-                               <td>{product.name}</td>
-                               <td>{product.styleCode}</td>
-                               <td>{product.internalCode}</td>
-                               <td>{product.vendorCode}</td>
-                               <td>{product.factoryCode}</td>
-                               <td>{product.eanCode}</td>
-                             </tr>
-                           ))
-                         )}
+                        {products.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="text-center py-8 text-gray-500">
+                              No products found
+                            </td>
+                          </tr>
+                        ) : (
+                          products.map((product) => (
+                            <tr 
+                              key={product.id} 
+                              className={`border-b border-gray-200 hover:bg-gray-50 cursor-pointer ${
+                                selectedProductId === product.id ? 'bg-blue-50' : ''
+                              }`}
+                              onClick={() => handleProductSelect(product)}
+                            >
+                              <td onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  className="form-check-input"
+                                  checked={selectedProductId === product.id}
+                                  onChange={() => handleProductSelect(product)}
+                                />
+                              </td>
+                              <td>{product.name}</td>
+                              <td>{product.styleCode}</td>
+                              <td>{product.internalCode}</td>
+                              <td>{product.vendorCode}</td>
+                              <td>{product.factoryCode}</td>
+                              <td>{product.eanCode}</td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -605,22 +740,22 @@ const AddSalePage = () => {
               )}
             </div>
 
-                         {/* Modal Footer */}
-             <div className="flex justify-end p-6 border-t space-x-2">
-               <button
-                 onClick={() => setShowProductModal(false)}
-                 className="ti-btn ti-btn-light"
-               >
-                 Cancel
-               </button>
-               <button
-                 onClick={handleConfirmSelection}
-                 className="ti-btn ti-btn-primary"
-                 disabled={!selectedProduct}
-               >
-                 Confirm Selection
-               </button>
-             </div>
+            {/* Modal Footer */}
+            <div className="flex justify-end p-6 border-t space-x-2">
+              <button
+                onClick={() => setShowProductModal(false)}
+                className="ti-btn ti-btn-light"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmProductSelection}
+                className="ti-btn ti-btn-primary"
+                disabled={!selectedProduct}
+              >
+                Confirm Selection
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -830,4 +965,4 @@ const AddSalePage = () => {
   );
 };
 
-export default AddSalePage; 
+export default EditSalePage; 
