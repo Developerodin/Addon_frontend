@@ -173,4 +173,9 @@ export class FileUploadService {
     // Generic documents
     return '📁';
   }
-} 
+}
+
+// Standalone function exports for backward compatibility
+export const formatFileSize = FileUploadService.formatFileSize;
+export const getFileTypeName = FileUploadService.getFileTypeName;
+export const getFileIcon = FileUploadService.getFileIcon; 

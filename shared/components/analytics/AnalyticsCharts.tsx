@@ -13,6 +13,7 @@ import {
   getMRPDistributionChart,
   getMonthlySalesChart
 } from '@/shared/data/charts/analyticsCharts';
+import { validateChartData, sanitizeChartData, validateChartConfig, createSafeChartConfig, debugChartData } from '@/shared/utils/chartUtils';
 
 // Generate empty chart data for when no real data is available
 const getEmptyChartData = (chartTitle: string) => {
@@ -112,6 +113,131 @@ interface AnalyticsChartsProps {
   discountImpact: DiscountImpact[];
   taxMRPData: TaxMRPData | null;
 }
+
+// Error boundary component for individual charts
+const ChartErrorBoundary: React.FC<{ children: React.ReactNode; chartTitle: string }> = ({ children, chartTitle }) => {
+  const [hasError, setHasError] = React.useState(false);
+  const [errorCount, setErrorCount] = React.useState(0);
+
+  React.useEffect(() => {
+    const handleError = (error: ErrorEvent) => {
+      // Check if this is an ApexCharts-related error
+      if (error.message && (
+        error.message.includes('toString') || 
+        error.message.includes('apexcharts') ||
+        error.message.includes('Cannot read properties of undefined')
+      )) {
+        console.error(`ApexCharts error in ${chartTitle}:`, error);
+        setErrorCount(prev => prev + 1);
+        
+        // Only set error state after multiple failures to avoid false positives
+        if (errorCount >= 2) {
+          setHasError(true);
+        }
+      }
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (event.reason && (
+        event.reason.message?.includes('toString') ||
+        event.reason.message?.includes('apexcharts') ||
+        event.reason.message?.includes('Cannot read properties of undefined')
+      )) {
+        console.error(`ApexCharts promise rejection in ${chartTitle}:`, event.reason);
+        setErrorCount(prev => prev + 1);
+        
+        if (errorCount >= 2) {
+          setHasError(true);
+        }
+      }
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, [chartTitle, errorCount]);
+
+  // Reset error state when chart title changes
+  React.useEffect(() => {
+    setHasError(false);
+    setErrorCount(0);
+  }, [chartTitle]);
+
+  if (hasError) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-400">
+        <div className="text-center">
+          <i className="ri-error-warning-line text-4xl mb-2"></i>
+          <p>Chart failed to load</p>
+          <p className="text-sm">{chartTitle}</p>
+          <button 
+            onClick={() => {
+              setHasError(false);
+              setErrorCount(0);
+            }}
+            className="mt-2 text-xs text-blue-500 hover:text-blue-600"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
+
+// Safe wrapper for ReactApexChart with additional error handling
+const SafeApexChart: React.FC<any> = (props) => {
+  const [hasError, setHasError] = React.useState(false);
+
+  React.useEffect(() => {
+    // Reset error state when props change
+    setHasError(false);
+  }, [props.options, props.series, props.type]);
+
+  if (hasError) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-400">
+        <div className="text-center">
+          <i className="ri-error-warning-line text-2xl mb-2"></i>
+          <p>Chart rendering failed</p>
+          <button 
+            onClick={() => setHasError(false)}
+            className="mt-2 text-xs text-blue-500 hover:text-blue-600"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  try {
+    return <ReactApexChart {...props} />;
+  } catch (error) {
+    console.error('Error rendering ApexChart:', error);
+    setHasError(true);
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-400">
+        <div className="text-center">
+          <i className="ri-error-warning-line text-2xl mb-2"></i>
+          <p>Chart rendering failed</p>
+          <button 
+            onClick={() => setHasError(false)}
+            className="mt-2 text-xs text-blue-500 hover:text-blue-600"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+};
 
 export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
   timeBasedTrends,
@@ -238,52 +364,56 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
     return colorMap[color] || colorMap.blue;
   };
 
-  // Safe chart configuration function
+  // Enhanced safe chart configuration function with comprehensive data validation
   const getSafeChartConfig = (chart: any) => {
     try {
+      console.log(`Configuring chart: ${chart.title}`, {
+        dataLength: chart.data?.length,
+        dataType: typeof chart.data,
+        isArray: Array.isArray(chart.data)
+      });
+
+      // Use utility functions for validation and sanitization
       const chartData = chart.data && chart.data.length > 0 ? chart.data : getEmptyChartData(chart.title);
       
-      // Ensure chartData is not null/undefined and has the expected structure
-      if (!chartData || !Array.isArray(chartData)) {
-        throw new Error('Invalid chart data');
+      // Validate the data first
+      const validation = validateChartData(chartData, chart.title);
+      if (!validation.isValid) {
+        console.error(`Chart data validation failed for ${chart.title}:`, validation.errors);
+        throw new Error(`Data validation failed: ${validation.errors.join(', ')}`);
       }
 
-      const chartOptions = typeof chart.chartConfig === 'function' ? chart.chartConfig(chartData) : chart.chartConfig(chartData);
+      if (validation.warnings.length > 0) {
+        console.warn(`Chart data warnings for ${chart.title}:`, validation.warnings);
+      }
+
+      // Debug the data if needed
+      debugChartData(chartData, chart.title);
+
+      // Sanitize the data
+      const sanitizedData = sanitizeChartData(chartData, chart.title);
+
+      console.log(`Sanitized chart data for ${chart.title}:`, sanitizedData.slice(0, 2)); // Log first 2 items
+
+      const chartOptions = typeof chart.chartConfig === 'function' ? chart.chartConfig(sanitizedData) : chart.chartConfig(sanitizedData);
       
-      // Validate chart options
-      if (!chartOptions || !chartOptions.options || !chartOptions.series) {
-        throw new Error('Invalid chart configuration');
+      // Validate the chart configuration
+      const configValidation = validateChartConfig(chartOptions, chart.title);
+      if (!configValidation.isValid) {
+        console.error(`Chart configuration validation failed for ${chart.title}:`, configValidation.errors);
+        throw new Error(`Configuration validation failed: ${configValidation.errors.join(', ')}`);
       }
 
+      if (configValidation.warnings.length > 0) {
+        console.warn(`Chart configuration warnings for ${chart.title}:`, configValidation.warnings);
+      }
+
+      console.log(`Chart configuration successful for ${chart.title}`);
       return chartOptions;
     } catch (error) {
       console.error(`Error configuring chart "${chart.title}":`, error);
-      // Return a safe fallback configuration
-      return {
-        series: [{
-          name: 'No Data',
-          data: [0]
-        }],
-        options: {
-          chart: {
-            type: chart.type,
-            height: chart.height,
-            toolbar: { show: false }
-          },
-          xaxis: {
-            categories: ['No Data']
-          },
-          yaxis: {
-            title: { text: 'No Data Available' }
-          },
-          tooltip: {
-            enabled: false
-          },
-          dataLabels: {
-            enabled: false
-          }
-        }
-      };
+      // Return a safe fallback configuration using utility function
+      return createSafeChartConfig(chart.type, chart.height);
     }
   };
 
@@ -317,12 +447,14 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
 
               {/* Chart Content */}
               <div className="p-6">
-                <ReactApexChart
-                  options={chartOptions.options}
-                  series={chartOptions.series}
-                  type={chart.type}
-                  height={chart.height}
-                />
+                <ChartErrorBoundary chartTitle={chart.title}>
+                  <SafeApexChart
+                    options={chartOptions.options}
+                    series={chartOptions.series}
+                    type={chart.type}
+                    height={chart.height}
+                  />
+                </ChartErrorBoundary>
               </div>
             </div>
           </div>

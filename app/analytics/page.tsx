@@ -6,6 +6,83 @@ import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import { useAnalytics } from '@/shared/hooks/useAnalytics';
 import { AnalyticsKPIs, AnalyticsCharts, AnalyticsTables } from '@/shared/components/analytics';
 
+// Error boundary for the entire analytics page
+const AnalyticsErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [hasError, setHasError] = React.useState(false);
+  const [errorInfo, setErrorInfo] = React.useState<string>('');
+
+  React.useEffect(() => {
+    const handleError = (error: ErrorEvent) => {
+      // Check if this is an ApexCharts-related error
+      if (error.message && (
+        error.message.includes('toString') || 
+        error.message.includes('apexcharts') ||
+        error.message.includes('Cannot read properties of undefined')
+      )) {
+        console.error('ApexCharts error in analytics page:', error);
+        // Don't set error state for ApexCharts errors, let individual charts handle them
+        return;
+      }
+      
+      console.error('Analytics page error:', error);
+      setErrorInfo(error.message || 'Unknown error occurred');
+      setHasError(true);
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      // Check if this is an ApexCharts-related promise rejection
+      if (event.reason && (
+        event.reason.message?.includes('toString') ||
+        event.reason.message?.includes('apexcharts') ||
+        event.reason.message?.includes('Cannot read properties of undefined')
+      )) {
+        console.error('ApexCharts promise rejection in analytics page:', event.reason);
+        // Don't set error state for ApexCharts errors, let individual charts handle them
+        return;
+      }
+      
+      console.error('Unhandled promise rejection:', event.reason);
+      setErrorInfo(event.reason?.message || 'Promise rejection occurred');
+      setHasError(true);
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
+  if (hasError) {
+    return (
+      <>
+        <Seo title="Analytics" />
+        <Pageheader currentpage="Analytics" activepage="Dashboards" mainpage="Analytics" />
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center max-w-md mx-auto">
+            <div className="bg-red-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+              <i className="ri-error-warning-line text-2xl text-red-500"></i>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Analytics Error</h3>
+            <p className="text-gray-600 mb-4">{errorInfo}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200"
+            >
+              <i className="ri-refresh-line mr-2"></i>
+              Reload Page
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return <>{children}</>;
+};
+
 export default function AnalyticsPage() {
   const { loading, error, dateRange, data, loadAnalyticsData, updateDateRange } = useAnalytics();
 
@@ -13,6 +90,26 @@ export default function AnalyticsPage() {
   const handleDateRangeChange = (field: 'dateFrom' | 'dateTo', value: string) => {
     updateDateRange(field, value);
   };
+
+  // Validate and sanitize data before passing to components
+  const sanitizedData = React.useMemo(() => {
+    if (!data) return data;
+    
+    return {
+      ...data,
+      timeBasedTrends: Array.isArray(data.timeBasedTrends) ? data.timeBasedTrends : [],
+      productPerformance: Array.isArray(data.productPerformance) ? data.productPerformance : [],
+      storePerformance: Array.isArray(data.storePerformance) ? data.storePerformance : [],
+      brandPerformance: Array.isArray(data.brandPerformance) ? data.brandPerformance : [],
+      discountImpact: Array.isArray(data.discountImpact) ? data.discountImpact : [],
+      taxMRPData: data.taxMRPData ? {
+        ...data.taxMRPData,
+        dailyTaxData: Array.isArray(data.taxMRPData.dailyTaxData) ? data.taxMRPData.dailyTaxData : [],
+        mrpDistribution: Array.isArray(data.taxMRPData.mrpDistribution) ? data.taxMRPData.mrpDistribution : []
+      } : null,
+      summaryKPIs: data.summaryKPIs || null
+    };
+  }, [data]);
 
   // Loading component with modern skeleton
   if (loading) {
@@ -83,7 +180,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <>
+    <AnalyticsErrorBoundary>
       <Seo title="Analytics" />
       <Pageheader currentpage="Analytics" activepage="Dashboards" mainpage="Analytics" />
       
@@ -119,7 +216,7 @@ export default function AnalyticsPage() {
             </div>
             
             <div className="flex items-center gap-3">
-              {data.usingMockData && (
+              {sanitizedData?.usingMockData && (
                 <div className="flex items-center gap-2 px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-sm">
                   <i className="ri-information-line"></i>
                   <span>Mock Data</span>
@@ -138,23 +235,23 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Summary KPIs */}
-      <AnalyticsKPIs summaryKPIs={data.summaryKPIs} />
+      <AnalyticsKPIs summaryKPIs={sanitizedData?.summaryKPIs} />
 
       {/* Charts Grid */}
       <AnalyticsCharts
-        timeBasedTrends={data.timeBasedTrends}
-        productPerformance={data.productPerformance}
-        storePerformance={data.storePerformance}
-        brandPerformance={data.brandPerformance}
-        discountImpact={data.discountImpact}
-        taxMRPData={data.taxMRPData}
+        timeBasedTrends={sanitizedData?.timeBasedTrends || []}
+        productPerformance={sanitizedData?.productPerformance || []}
+        storePerformance={sanitizedData?.storePerformance || []}
+        brandPerformance={sanitizedData?.brandPerformance || []}
+        discountImpact={sanitizedData?.discountImpact || []}
+        taxMRPData={sanitizedData?.taxMRPData}
       />
 
       {/* Data Tables */}
       <AnalyticsTables
-        productPerformance={data.productPerformance}
-        storePerformance={data.storePerformance}
+        productPerformance={sanitizedData?.productPerformance || []}
+        storePerformance={sanitizedData?.storePerformance || []}
       />
-    </>
+    </AnalyticsErrorBoundary>
   );
 } 

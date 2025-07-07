@@ -7,11 +7,50 @@ interface ChartConfig {
   options: ApexOptions;
 }
 
-// Helper function to safely access properties
+// Helper function to safely access properties with enhanced validation
 const safeGet = (obj: any, path: string, defaultValue: any = 0) => {
-  return path.split('.').reduce((acc, part) => {
-    return acc && acc[part] !== undefined ? acc[part] : defaultValue;
+  if (!obj || typeof obj !== 'object') {
+    return defaultValue;
+  }
+  
+  const result = path.split('.').reduce((acc, part) => {
+    if (acc === null || acc === undefined) {
+      return defaultValue;
+    }
+    return acc[part] !== undefined ? acc[part] : defaultValue;
   }, obj);
+  
+  // Additional validation for numeric values
+  if (typeof result === 'number' && (isNaN(result) || !isFinite(result))) {
+    return defaultValue;
+  }
+  
+  // Handle empty strings for string fields
+  if (typeof result === 'string' && result.trim() === '') {
+    return defaultValue === 0 ? 'Unknown' : defaultValue;
+  }
+  
+  return result;
+};
+
+// Enhanced safe number conversion
+const safeNumber = (value: any, defaultValue: number = 0): number => {
+  if (value === null || value === undefined) {
+    return defaultValue;
+  }
+  
+  const num = typeof value === 'number' ? value : parseFloat(value);
+  return isNaN(num) || !isFinite(num) ? defaultValue : num;
+};
+
+// Enhanced safe string conversion
+const safeString = (value: any, defaultValue: string = 'Unknown'): string => {
+  if (value === null || value === undefined) {
+    return defaultValue;
+  }
+  
+  const str = String(value).trim();
+  return str === '' ? defaultValue : str;
 };
 
 // 1. Time-Based Sales Trends - Line Chart
@@ -30,29 +69,41 @@ export const getTimeBasedTrendsChart = (data: any[]): ChartConfig => {
     };
   }
 
+  // Safely extract and validate data
   const dates = data.map(item => {
     const date = safeGet(item, 'date');
-    return date ? new Date(date).toLocaleDateString() : 'Unknown';
+    if (!date) return 'Unknown';
+    
+    try {
+      const dateObj = new Date(date);
+      return isNaN(dateObj.getTime()) ? 'Unknown' : dateObj.toLocaleDateString();
+    } catch {
+      return 'Unknown';
+    }
   });
-  const quantities = data.map(item => safeGet(item, 'totalQuantity', 0));
-  const nsvValues = data.map(item => safeGet(item, 'totalNSV', 0));
+  
+  const quantities = data.map(item => safeNumber(safeGet(item, 'totalQuantity'), 0));
+  const nsvValues = data.map(item => safeNumber(safeGet(item, 'totalNSV'), 0));
   
   // Check if all values are zero (empty data)
   const isEmptyData = quantities.every(q => q === 0) && nsvValues.every(n => n === 0);
 
+  // Ensure we have valid series data
+  const series = [
+    {
+      name: 'Quantity',
+      type: 'line' as const,
+      data: quantities.map(q => safeNumber(q, 0))
+    },
+    {
+      name: 'NSV',
+      type: 'line' as const,
+      data: nsvValues.map(n => safeNumber(n, 0))
+    }
+  ];
+
   return {
-    series: [
-      {
-        name: 'Quantity',
-        type: 'line',
-        data: quantities
-      },
-      {
-        name: 'NSV',
-        type: 'line',
-        data: nsvValues
-      }
-    ],
+    series,
     options: {
       chart: {
         type: 'line',
@@ -124,7 +175,8 @@ export const getTimeBasedTrendsChart = (data: any[]): ChartConfig => {
             if (isEmptyData) {
               return seriesIndex === 0 ? 'No data available' : 'No data available';
             }
-            return seriesIndex === 0 ? `${val.toLocaleString()} units` : `₹${val.toLocaleString()}`;
+            const safeVal = safeNumber(val, 0);
+            return seriesIndex === 0 ? `${safeVal.toLocaleString()} units` : `₹${safeVal.toLocaleString()}`;
           }
         }
       },
