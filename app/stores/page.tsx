@@ -17,7 +17,9 @@ const StoresPage = () => {
         city: '',
         creditRating: '',
         isActive: '',
-        contactPerson: ''
+        contactPerson: '',
+        brand: '',
+        bpCode: ''
     });
 
     // Use the stores hook
@@ -40,7 +42,9 @@ const StoresPage = () => {
             ...(filters.city && { city: filters.city }),
             ...(filters.creditRating && { creditRating: filters.creditRating }),
             ...(filters.isActive && { isActive: filters.isActive === 'true' }),
-            ...(filters.contactPerson && { contactPerson: filters.contactPerson })
+            ...(filters.contactPerson && { contactPerson: filters.contactPerson }),
+            ...(filters.brand && { brand: filters.brand }),
+            ...(filters.bpCode && { bpCode: filters.bpCode })
         };
         fetchStores(apiFilters);
     }, [currentPage, itemsPerPage, searchQuery, filters, fetchStores]);
@@ -135,7 +139,9 @@ const StoresPage = () => {
             city: '',
             creditRating: '',
             isActive: '',
-            contactPerson: ''
+            contactPerson: '',
+            brand: '',
+            bpCode: ''
         });
         setSearchQuery('');
         setCurrentPage(1);
@@ -298,7 +304,7 @@ const StoresPage = () => {
                                 {/* Filters Panel */}
                                 {showFilters && (
                                     <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                             {/* City Filter */}
                                             <div>
                                                 <label className="form-label text-sm font-medium">City</label>
@@ -359,6 +365,30 @@ const StoresPage = () => {
                                                     onChange={(e) => handleFilterChange('contactPerson', e.target.value)}
                                                 />
                                             </div>
+
+                                            {/* Brand Filter */}
+                                            <div>
+                                                <label className="form-label text-sm font-medium">Brand</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-control"
+                                                    placeholder="Filter by brand..."
+                                                    value={filters.brand}
+                                                    onChange={(e) => handleFilterChange('brand', e.target.value)}
+                                                />
+                                            </div>
+
+                                            {/* BP Code Filter */}
+                                            <div>
+                                                <label className="form-label text-sm font-medium">BP Code</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-control"
+                                                    placeholder="Filter by BP code..."
+                                                    value={filters.bpCode}
+                                                    onChange={(e) => handleFilterChange('bpCode', e.target.value)}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -403,11 +433,11 @@ const StoresPage = () => {
                                                         onChange={handleSelectAll}
                                                     />
                                                 </th>
-                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Store ID</th>
-                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Store Name</th>
-                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">City</th>
-                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Contact Person</th>
-                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Credit Rating</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Store Info</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Address</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Contact</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Business</th>
+                                                <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Norms</th>
                                                 <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Status</th>
                                                 <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Actions</th>
                                             </tr>
@@ -427,47 +457,132 @@ const StoresPage = () => {
                                                         />
                                                     </td>
                                                     <td className="px-4 py-4">
-                                                        <span className="font-mono text-sm font-medium text-gray-900">{store.storeId}</span>
-                                                    </td>
-                                                    <td className="px-4 py-4">
-                                                        <div>
+                                                        <div className="space-y-1">
                                                             <div className="font-medium text-gray-900">{store.storeName}</div>
-                                                            <div className="text-sm text-gray-500">{store.storeNumber}</div>
+                                                            <div className="text-sm text-gray-500">
+                                                                <span className="font-mono">{store.storeId}</span>
+                                                                {store.storeNumber && (
+                                                                    <span className="ml-2">• {store.storeNumber}</span>
+                                                                )}
+                                                            </div>
+                                                            {store.bpCode && (
+                                                                <div className="text-xs text-gray-400">
+                                                                    BP: {store.bpCode}
+                                                                    {store.bpName && ` (${store.bpName})`}
+                                                                </div>
+                                                            )}
+                                                            {store.oldStoreCode && (
+                                                                <div className="text-xs text-gray-400">
+                                                                    Old: {store.oldStoreCode}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-4">
-                                                        <div className="flex items-center">
-                                                            <i className="ri-map-pin-line text-gray-400 me-2"></i>
-                                                            <span className="text-gray-900">{store.city}</span>
+                                                        <div className="space-y-1">
+                                                            <div className="flex items-center">
+                                                                <i className="ri-map-pin-line text-gray-400 me-2"></i>
+                                                                <span className="text-gray-900">{store.city}</span>
+                                                            </div>
+                                                            {store.addressLine1 && (
+                                                                <div className="text-sm text-gray-600 truncate max-w-48">
+                                                                    {store.addressLine1}
+                                                                </div>
+                                                            )}
+                                                            {store.street && (
+                                                                <div className="text-xs text-gray-500">
+                                                                    {store.street}
+                                                                    {store.block && `, ${store.block}`}
+                                                                </div>
+                                                            )}
+                                                            <div className="text-xs text-gray-500">
+                                                                {store.state && `${store.state}, `}
+                                                                {store.country && `${store.country}`}
+                                                                {store.pincode && ` • ${store.pincode}`}
+                                                            </div>
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-4">
-                                                        <div>
+                                                        <div className="space-y-1">
                                                             <div className="font-medium text-gray-900">{store.contactPerson}</div>
-                                                            <div className="text-sm text-gray-500">{store.contactEmail}</div>
+                                                            <div className="text-sm text-gray-600">{store.contactEmail}</div>
+                                                            <div className="text-sm text-gray-600">{store.contactPhone}</div>
+                                                            {store.telephone && (
+                                                                <div className="text-xs text-gray-500">
+                                                                    Tel: {store.telephone}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-4">
-                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                            store.creditRating.startsWith('A') ? 'bg-green-100 text-green-800' :
-                                                            store.creditRating.startsWith('B') ? 'bg-yellow-100 text-yellow-800' :
-                                                            store.creditRating.startsWith('C') ? 'bg-blue-100 text-blue-800' :
-                                                            'bg-red-100 text-red-800'
-                                                        }`}>
-                                                            {store.creditRating}
-                                                        </span>
+                                                        <div className="space-y-1">
+                                                            {store.brand && (
+                                                                <div className="text-sm font-medium text-gray-900">
+                                                                    {store.brand}
+                                                                </div>
+                                                            )}
+                                                            {store.brandGrouping && (
+                                                                <div className="text-xs text-gray-600">
+                                                                    {store.brandGrouping}
+                                                                </div>
+                                                            )}
+                                                            {store.internalSapCode && (
+                                                                <div className="text-xs text-gray-500">
+                                                                    SAP: {store.internalSapCode}
+                                                                </div>
+                                                            )}
+                                                            {store.internalSoftwareCode && (
+                                                                <div className="text-xs text-gray-500">
+                                                                    SW: {store.internalSoftwareCode}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="px-4 py-4">
-                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                            store.isActive 
-                                                                ? 'bg-green-100 text-green-800' 
-                                                                : 'bg-red-100 text-red-800'
-                                                        }`}>
-                                                            <span className={`w-2 h-2 rounded-full mr-2 ${
-                                                                store.isActive ? 'bg-green-400' : 'bg-red-400'
-                                                            }`}></span>
-                                                            {store.isActive ? 'Active' : 'Inactive'}
-                                                        </span>
+                                                        <div className="space-y-1">
+                                                            {store.hankyNorms > 0 && (
+                                                                <div className="text-xs text-gray-600">
+                                                                    Hanky: {store.hankyNorms}
+                                                                </div>
+                                                            )}
+                                                            {store.socksNorms > 0 && (
+                                                                <div className="text-xs text-gray-600">
+                                                                    Socks: {store.socksNorms}
+                                                                </div>
+                                                            )}
+                                                            {store.towelNorms > 0 && (
+                                                                <div className="text-xs text-gray-600">
+                                                                    Towel: {store.towelNorms}
+                                                                </div>
+                                                            )}
+                                                            {(store.hankyNorms === 0 && store.socksNorms === 0 && store.towelNorms === 0) && (
+                                                                <div className="text-xs text-gray-400">No norms set</div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="space-y-2">
+                                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                                store.creditRating.startsWith('A') ? 'bg-green-100 text-green-800' :
+                                                                store.creditRating.startsWith('B') ? 'bg-yellow-100 text-yellow-800' :
+                                                                store.creditRating.startsWith('C') ? 'bg-blue-100 text-blue-800' :
+                                                                'bg-red-100 text-red-800'
+                                                            }`}>
+                                                                {store.creditRating}
+                                                            </span>
+                                                            <div>
+                                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                                    store.isActive 
+                                                                        ? 'bg-green-100 text-green-800' 
+                                                                        : 'bg-red-100 text-red-800'
+                                                                }`}>
+                                                                    <span className={`w-2 h-2 rounded-full mr-2 ${
+                                                                        store.isActive ? 'bg-green-400' : 'bg-red-400'
+                                                                    }`}></span>
+                                                                    {store.isActive ? 'Active' : 'Inactive'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
                                                     </td>
                                                     <td className="px-4 py-4">
                                                         <div className="flex items-center space-x-2">
