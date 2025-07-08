@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Seo from '@/shared/layout-components/seo/seo'
 import Link from 'next/link'
 import { useStores } from '@/shared/hooks/useStores'
@@ -21,6 +21,8 @@ const StoresPage = () => {
         brand: '',
         bpCode: ''
     });
+    const [importProgress, setImportProgress] = useState<number | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Use the stores hook
     const { 
@@ -173,11 +175,34 @@ const StoresPage = () => {
                                 )}
                                 <button 
                                     type="button" 
-                                    className="ti-btn ti-btn-primary"
+                                    className="ti-btn ti-btn-secondary"
                                     onClick={handleDownloadTemplate}
                                 >
                                     <i className="ri-download-line me-2"></i> Download Template
                                 </button>
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    accept=".xlsx,.xls"
+                                    // onChange={handleImport}
+                                />
+                                <button 
+                                    type="button" 
+                                    className="ti-btn ti-btn-success"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <i className="ri-file-excel-2-line me-2"></i> Import
+                                </button>
+                                {importProgress !== null && (
+                                    <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
+                                        <div
+                                            className="bg-primary h-full transition-all duration-200"
+                                            style={{ width: `${importProgress}%` }}
+                                        ></div>
+                                        <span className="ml-2 text-xs text-gray-700">{importProgress}%</span>
+                                    </div>
+                                )}
                                 <button 
                                     type="button" 
                                     className="ti-btn ti-btn-primary"
@@ -199,7 +224,7 @@ const StoresPage = () => {
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-blue-100 text-sm font-medium">Total Stores</p>
-                                        <p className="text-2xl font-bold">{pagination.totalResults.toLocaleString()}</p>
+                                        <p className="text-2xl font-bold text-white">{pagination.totalResults.toLocaleString()}</p>
                                     </div>
                                     <div className="text-blue-200">
                                         <i className="ri-store-2-line text-3xl"></i>
@@ -213,7 +238,7 @@ const StoresPage = () => {
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-green-100 text-sm font-medium">Active Stores</p>
-                                        <p className="text-2xl font-bold">
+                                        <p className="text-2xl font-bold text-white">
                                             {stores.filter(store => store.isActive).length}
                                         </p>
                                     </div>
@@ -229,7 +254,7 @@ const StoresPage = () => {
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-yellow-100 text-sm font-medium">Premium Rating</p>
-                                        <p className="text-2xl font-bold">
+                                        <p className="text-2xl font-bold text-white">
                                             {stores.filter(store => store.creditRating.startsWith('A')).length}
                                         </p>
                                     </div>
@@ -245,7 +270,7 @@ const StoresPage = () => {
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-purple-100 text-sm font-medium">Cities</p>
-                                        <p className="text-2xl font-bold">
+                                        <p className="text-2xl font-bold text-white">
                                             {new Set(stores.map(store => store.city)).size}
                                         </p>
                                     </div>

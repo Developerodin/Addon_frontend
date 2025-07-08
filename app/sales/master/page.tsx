@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import { toast, Toaster } from 'react-hot-toast';
 
 // Interface for Seals Excel Master data based on actual API response
 interface SealsExcelMaster {
@@ -37,47 +38,48 @@ const MasterSalesPage = () => {
   const [records, setRecords] = useState<SealsExcelMaster[]>([]);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
   const itemsPerPage = 10;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
 
+  // Fetch records from API
+  const fetchRecords = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/seals-excel-master?limit=${itemsPerPage}&page=${currentPage}`);
 
-  useEffect(() => {
-    // Fetch records from API
-    const fetchRecords = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/seals-excel-master?limit=${itemsPerPage}&page=${currentPage}`);
-
-        if (response.ok) {
-          const result = await response.json();
-          
-          // Handle direct response structure (no status/data wrapper)
-          if (result.results && Array.isArray(result.results)) {
-            setRecords(result.results);
-            setTotalResults(result.totalResults || result.results.length);
-            setTotalPages(result.totalPages || 1);
-          } else {
-            console.error('Invalid response structure:', result);
-            setRecords([]);
-            setTotalResults(0);
-            setTotalPages(1);
-          }
+      if (response.ok) {
+        const result = await response.json();
+        
+        // Handle direct response structure (no status/data wrapper)
+        if (result.results && Array.isArray(result.results)) {
+          setRecords(result.results);
+          setTotalResults(result.totalResults || result.results.length);
+          setTotalPages(result.totalPages || 1);
         } else {
-          console.error('API request failed:', response.status);
+          console.error('Invalid response structure:', result);
           setRecords([]);
           setTotalResults(0);
           setTotalPages(1);
         }
-      } catch (error) {
-        console.error('Error fetching records:', error);
+      } else {
+        console.error('API request failed:', response.status);
         setRecords([]);
         setTotalResults(0);
         setTotalPages(1);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (error) {
+      console.error('Error fetching records:', error);
+      setRecords([]);
+      setTotalResults(0);
+      setTotalPages(1);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchRecords();
   }, [currentPage, itemsPerPage]);
 
@@ -222,23 +224,57 @@ const MasterSalesPage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <h1 className="box-title text-2xl font-semibold">Master Sales Records</h1>
-              <div className="box-tools flex items-center space-x-2">
-                {selectedRecords.length > 0 && (
-                  <button 
-                    type="button" 
-                    className="ti-btn ti-btn-danger"
-                    onClick={handleBulkDelete}
-                  >
-                    <i className="ri-delete-bin-line me-2"></i> Delete Selected ({selectedRecords.length})
-                  </button>
-                )}
-                <button type="button" className="ti-btn ti-btn-primary">
-                  <i className="ri-file-excel-2-line me-2"></i> Export
+                          <div className="box-tools flex items-center space-x-2">
+              <button
+                type="button"
+                // onClick={handleDownloadTemplate}
+                className="ti-btn ti-btn-secondary"
+                disabled={loading}
+              >
+                <i className="ri-file-download-line me-2"></i>
+                Download Template
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".xlsx,.xls"
+                // onChange={handleImport}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="ti-btn ti-btn-success"
+                disabled={loading}
+              >
+                <i className="ri-file-excel-2-line me-2"></i>
+                Import
+              </button>
+              {importProgress !== null && (
+                <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
+                  <div
+                    className="bg-primary h-full transition-all duration-200"
+                    style={{ width: `${importProgress}%` }}
+                  ></div>
+                  <span className="ml-2 text-xs text-gray-700">{importProgress}%</span>
+                </div>
+              )}
+              {selectedRecords.length > 0 && (
+                <button 
+                  type="button" 
+                  className="ti-btn ti-btn-danger"
+                  onClick={handleBulkDelete}
+                >
+                  <i className="ri-delete-bin-line me-2"></i> Delete Selected ({selectedRecords.length})
                 </button>
-                <Link href="/sales/master/add" className="ti-btn ti-btn-primary">
-                  <i className="ri-add-line me-2"></i> Add Master Sale
-                </Link>
-              </div>
+              )}
+              <button type="button" className="ti-btn ti-btn-primary">
+                <i className="ri-file-excel-2-line me-2"></i> Export
+              </button>
+              <Link href="/sales/master/add" className="ti-btn ti-btn-primary">
+                <i className="ri-add-line me-2"></i> Add Master Sale
+              </Link>
+            </div>
             </div>
           </div>
 
@@ -447,6 +483,7 @@ const MasterSalesPage = () => {
           </div>
         </div>
       </div>
+      <Toaster position="top-right" />
     </div>
   );
 };

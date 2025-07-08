@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useRef } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { salesService, SalesRecord, SalesFilters, Plant, MaterialCode, getSaleId } from '@/shared/services/salesService';
+import { toast, Toaster } from 'react-hot-toast';
 
 const SalesContent = () => {
   const searchParams = useSearchParams();
@@ -18,7 +19,9 @@ const SalesContent = () => {
   const [salesData, setSalesData] = useState<SalesRecord[]>([]);
   const [totalPages, setTotalPages] = useState(0);
   const [totalRecords, setTotalRecords] = useState(0);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
   const itemsPerPage = 10;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch sales data
   const fetchSales = async (filters: SalesFilters = {}) => {
@@ -106,6 +109,40 @@ const SalesContent = () => {
           <div className="box-header flex justify-between items-center">
             <h1 className="box-title text-2xl font-semibold">Sales Records</h1>
             <div className="box-tools flex items-center space-x-2">
+              <button
+                type="button"
+                // onClick={handleDownloadTemplate}
+                className="ti-btn ti-btn-secondary"
+                disabled={loading}
+              >
+                <i className="ri-file-download-line me-2"></i>
+                Download Template
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".xlsx,.xls"
+                // onChange={handleImport}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="ti-btn ti-btn-success"
+                disabled={loading}
+              >
+                <i className="ri-file-excel-2-line me-2"></i>
+                Import
+              </button>
+              {importProgress !== null && (
+                <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
+                  <div
+                    className="bg-primary h-full transition-all duration-200"
+                    style={{ width: `${importProgress}%` }}
+                  ></div>
+                  <span className="ml-2 text-xs text-gray-700">{importProgress}%</span>
+                </div>
+              )}
               <button type="button" className="ti-btn ti-btn-primary">
                 <i className="ri-file-excel-2-line me-2"></i> Export
               </button>
@@ -324,6 +361,7 @@ const SalesPage = () => {
       }>
         <SalesContent />
       </Suspense>
+      <Toaster position="top-right" />
     </div>
   );
 };
