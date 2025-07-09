@@ -6,7 +6,7 @@ import { FilePreview } from './FilePreview';
 import './fileUpload.scss';
 
 export interface FileUploadProps {
-  onUploadSuccess?: (file: UploadedFile) => void;
+  onUploadSuccess?: (file: UploadedFile, originalFile?: File) => void;
   onUploadError?: (error: string) => void;
   onFileRemove?: (fileKey: string) => void;
   multiple?: boolean;
@@ -86,7 +86,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
           uploadedFile
         })));
 
-        onUploadSuccess?.(uploadedFile);
+        onUploadSuccess?.(uploadedFile, file);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Upload failed';
         

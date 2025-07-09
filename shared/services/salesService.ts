@@ -153,6 +153,85 @@ class SalesService {
 
     return response.json();
   }
+
+  // Export sales data
+  async exportSales(filters: SalesFilters = {}, format: 'csv' | 'excel' = 'csv'): Promise<Blob> {
+    const params = new URLSearchParams();
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, value.toString());
+      }
+    });
+
+    params.append('format', format);
+
+    const url = `${this.baseUrl}/export?${params.toString()}`;
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`Failed to export sales: ${response.statusText}`);
+    }
+
+    return response.blob();
+  }
+
+  // Generate CSV from sales data (client-side fallback)
+  generateCSV(salesData: SalesRecord[]): string {
+    const headers = [
+      'Date',
+      'Plant ID',
+      'Plant Name',
+      'Material Code',
+      'Material Name',
+      'Quantity',
+      'MRP',
+      'Discount',
+      'GSV',
+      'NSV',
+      'Total Tax',
+      'Created At'
+    ];
+
+    const rows = salesData.map(sale => [
+      new Date(sale.date).toLocaleDateString(),
+      typeof sale.plant === 'string' ? sale.plant : sale.plant.storeId,
+      typeof sale.plant === 'string' ? '-' : sale.plant.storeName,
+      typeof sale.materialCode === 'string' ? sale.materialCode : sale.materialCode.styleCode,
+      typeof sale.materialCode === 'string' ? '-' : sale.materialCode.name,
+      sale.quantity,
+      sale.mrp.toFixed(2),
+      (sale.discount || 0).toFixed(2),
+      sale.gsv.toFixed(2),
+      sale.nsv.toFixed(2),
+      (sale.totalTax || 0).toFixed(2),
+      sale.createdAt ? new Date(sale.createdAt).toLocaleString() : '-'
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    return csvContent;
+  }
+
+  // Download CSV file
+  downloadCSV(salesData: SalesRecord[], filename: string = 'sales_export.csv'): void {
+    const csvContent = this.generateCSV(salesData);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  }
 }
 
 export const salesService = new SalesService(); 

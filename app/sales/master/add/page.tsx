@@ -7,6 +7,8 @@ import { FileUpload } from '@/shared/layout-components/file-upload';
 import type { UploadedFile } from '@/shared/services/fileUploadService';
 import Link from 'next/link';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import { SalesImportService, ImportProgress as ImportProgressType } from '@/shared/services/salesImportService';
+import ImportProgress from '@/shared/components/ImportProgress';
 
 interface SealsExcelMasterForm {
   fileName: string;
@@ -30,7 +32,10 @@ const AddMasterSalePage = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
+  const [uploadedFileBlob, setUploadedFileBlob] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState<ImportProgressType | null>(null);
+  const [showImportProgress, setShowImportProgress] = useState(false);
   const [formData, setFormData] = useState<SealsExcelMasterForm>({
     fileName: '',
     description: '',
@@ -49,8 +54,9 @@ const AddMasterSalePage = () => {
     isActive: true
   });
 
-  const handleFileUploadSuccess = (file: UploadedFile) => {
+  const handleFileUploadSuccess = (file: UploadedFile, originalFile?: File) => {
     setUploadedFile(file);
+    setUploadedFileBlob(originalFile || null);
     setUploadError(null);
     
     // Auto-fill form data from uploaded file
@@ -72,6 +78,7 @@ const AddMasterSalePage = () => {
 
   const handleFileRemove = (fileKey: string) => {
     setUploadedFile(null);
+    setUploadedFileBlob(null);
     setFormData(prev => ({
       ...prev,
       fileName: '',
@@ -104,9 +111,31 @@ const AddMasterSalePage = () => {
     }
 
     setLoading(true);
+    setShowImportProgress(true);
 
     try {
-      // Create seals excel master record
+      // Step 1: Process and import sales data FIRST
+      if (!uploadedFileBlob) {
+        throw new Error('No file available for processing');
+      }
+
+      // Process the file
+      const records = await SalesImportService.processExcelFile(uploadedFileBlob, (progress) => {
+        setImportProgress({
+          ...progress,
+          message: `Processing file: ${progress.message}`
+        });
+      });
+
+      // Import sales records
+      await SalesImportService.bulkImport(records, 50, (progress) => {
+        setImportProgress({
+          ...progress,
+          message: `Importing sales data: ${progress.message}`
+        });
+      });
+
+      // Step 2: Only if sales import succeeds, create master record
       const response = await fetch(`${API_BASE_URL}/seals-excel-master`, {
         method: 'POST',
         headers: {
@@ -114,20 +143,39 @@ const AddMasterSalePage = () => {
         },
         body: JSON.stringify({
           ...formData,
-          recordsCount: parseInt(formData.recordsCount.toString()) || 0
+          recordsCount: records.length, // Use actual imported records count
+          processingStatus: 'completed' // Mark as completed since import succeeded
         })
       });
 
-      if (response.ok) {
-        alert('Master sale record created successfully!');
-        router.push('/sales/master');
-      } else {
+      if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to create record');
+        throw new Error(error.message || 'Failed to create master record');
       }
+
+      // Success - both sales import and master record creation succeeded
+      setImportProgress({
+        current: records.length,
+        total: records.length,
+        percentage: 100,
+        status: 'completed',
+        message: `Successfully imported ${records.length} sales records and created master record`
+      });
+
+      setTimeout(() => {
+        router.push('/sales/master');
+      }, 2000);
+
     } catch (error) {
-      console.error('Error creating record:', error);
-      alert(`Error: ${error instanceof Error ? error.message : 'Failed to create record'}`);
+      console.error('Error:', error);
+      setImportProgress({
+        current: 0,
+        total: 0,
+        percentage: 0,
+        status: 'failed',
+        message: 'Operation failed',
+        errors: [error instanceof Error ? error.message : 'Unknown error']
+      });
     } finally {
       setLoading(false);
     }
@@ -372,6 +420,14 @@ const AddMasterSalePage = () => {
                 {/* Submit Section */}
                 <div className="border-t border-gray-200 pt-6">
                   <div className="flex justify-end space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => SalesImportService.testApiStructure()}
+                      className="ti-btn ti-btn-warning"
+                    >
+                      <i className="ri-bug-line me-2"></i>
+                      Test API
+                    </button>
                     <Link href="/sales/master" className="ti-btn ti-btn-secondary">
                       Cancel
                     </Link>
@@ -399,6 +455,18 @@ const AddMasterSalePage = () => {
           </div>
         </div>
       </div>
+
+      {/* Import Progress Modal */}
+      <ImportProgress
+        progress={showImportProgress ? importProgress : null}
+        onClose={() => {
+          setShowImportProgress(false);
+          setImportProgress(null);
+          if (importProgress?.status === 'completed') {
+            router.push('/sales/master');
+          }
+        }}
+      />
     </div>
   );
 };

@@ -101,6 +101,46 @@ const SalesContent = () => {
     setCurrentPage(1); // Reset to first page when searching
   };
 
+  const handleExport = async () => {
+    try {
+      setLoading(true);
+      
+      // Get all sales data for export (without pagination)
+      const filters: SalesFilters = {};
+      if (searchQuery) {
+        filters.materialCode = searchQuery;
+      }
+      
+      // Remove pagination for export
+      delete filters.page;
+      delete filters.limit;
+      
+      const response = await salesService.getSales(filters);
+      const allSalesData = response.results || [];
+      
+      if (allSalesData.length === 0) {
+        toast.error('No data to export');
+        return;
+      }
+      
+      // Generate filename with current date
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const filename = `sales_export_${dateStr}.csv`;
+      
+      // Download CSV
+      salesService.downloadCSV(allSalesData, filename);
+      
+      toast.success(`Exported ${allSalesData.length} sales records`);
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export sales data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-12 gap-6">
       <div className="col-span-12">
@@ -109,42 +149,25 @@ const SalesContent = () => {
           <div className="box-header flex justify-between items-center">
             <h1 className="box-title text-2xl font-semibold">Sales Records</h1>
             <div className="box-tools flex items-center space-x-2">
-              <button
-                type="button"
-                // onClick={handleDownloadTemplate}
-                className="ti-btn ti-btn-secondary"
+              
+            
+              
+              <button 
+                type="button" 
+                className="ti-btn ti-btn-primary"
+                onClick={handleExport}
                 disabled={loading}
               >
-                <i className="ri-file-download-line me-2"></i>
-                Download Template
-              </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                accept=".xlsx,.xls"
-                // onChange={handleImport}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="ti-btn ti-btn-success"
-                disabled={loading}
-              >
-                <i className="ri-file-excel-2-line me-2"></i>
-                Import
-              </button>
-              {importProgress !== null && (
-                <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
-                  <div
-                    className="bg-primary h-full transition-all duration-200"
-                    style={{ width: `${importProgress}%` }}
-                  ></div>
-                  <span className="ml-2 text-xs text-gray-700">{importProgress}%</span>
-                </div>
-              )}
-              <button type="button" className="ti-btn ti-btn-primary">
-                <i className="ri-file-excel-2-line me-2"></i> Export
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2"></div>
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-file-excel-2-line me-2"></i> Export
+                  </>
+                )}
               </button>
               <Link href="/sales/add" className="ti-btn ti-btn-primary">
                 <i className="ri-add-line me-2"></i> Add New Sale

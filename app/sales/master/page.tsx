@@ -5,6 +5,8 @@ import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import { toast, Toaster } from 'react-hot-toast';
+import { SalesImportService } from '@/shared/services/salesImportService';
+import TemplateDownload from '@/shared/components/TemplateDownload';
 
 // Interface for Seals Excel Master data based on actual API response
 interface SealsExcelMaster {
@@ -39,6 +41,9 @@ const MasterSalesPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [importProgress, setImportProgress] = useState<number | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
   const itemsPerPage = 10;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -156,6 +161,48 @@ const MasterSalesPage = () => {
     window.open(record.fileUrl, '_blank');
   };
 
+  const handleDownloadTemplate = () => {
+    setShowTemplateModal(true);
+  };
+
+  const handleImportFile = async (file: File) => {
+    setImportFile(file);
+    setShowImportModal(true);
+  };
+
+  const handleImportSubmit = async () => {
+    if (!importFile) return;
+
+    try {
+      setImportProgress(0);
+      
+      // Process the file
+      const records = await SalesImportService.processExcelFile(importFile, (progress) => {
+        setImportProgress(progress.percentage);
+      });
+
+      // Import the records
+      await SalesImportService.bulkImport(records, 50, (progress) => {
+        setImportProgress(progress.percentage);
+      });
+
+      toast.success(`Successfully imported ${records.length} sales records!`);
+      setShowImportModal(false);
+      setImportFile(null);
+      setImportProgress(null);
+      
+      // Refresh the list
+      fetchRecords();
+      
+    } catch (error) {
+      console.error('Import error:', error);
+      toast.error(error instanceof Error ? error.message : 'Import failed');
+      setShowImportModal(false);
+      setImportFile(null);
+      setImportProgress(null);
+    }
+  };
+
   const handleDelete = async (recordId: string) => {
     if (confirm('Are you sure you want to delete this record?')) {
       try {
@@ -214,6 +261,79 @@ const MasterSalesPage = () => {
     }
   };
 
+  const handleExport = async () => {
+    try {
+      setLoading(true);
+      
+      // Get all master records for export (without pagination)
+      const response = await fetch(`${API_BASE_URL}/seals-excel-master?limit=1000`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch data for export');
+      }
+      
+      const result = await response.json();
+      const allRecords = result.results || [];
+      
+      if (allRecords.length === 0) {
+        toast.error('No data to export');
+        return;
+      }
+      
+      // Generate CSV content
+      const headers = [
+        'File Name',
+        'Description',
+        'Uploaded By',
+        'File Size (MB)',
+        'Records Count',
+        'Processing Status',
+        'Created At',
+        'File URL'
+      ];
+
+      const rows = allRecords.map((record: any) => [
+        record.fileName,
+        record.description,
+        record.uploadedBy,
+        (record.fileSize / (1024 * 1024)).toFixed(2),
+        record.recordsCount,
+        record.processingStatus,
+        new Date(record.createdAt).toLocaleString(),
+        record.fileUrl
+      ]);
+
+      const csvContent = [headers, ...rows]
+        .map(row => row.map((cell: any) => `"${cell}"`).join(','))
+        .join('\n');
+      
+      // Generate filename with current date
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const filename = `master_sales_export_${dateStr}.csv`;
+      
+      // Download CSV
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast.success(`Exported ${allRecords.length} master records`);
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export master records');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="main-content">
       <Seo title="Master Sales Records"/>
@@ -227,7 +347,7 @@ const MasterSalesPage = () => {
                           <div className="box-tools flex items-center space-x-2">
               <button
                 type="button"
-                // onClick={handleDownloadTemplate}
+                onClick={handleDownloadTemplate}
                 className="ti-btn ti-btn-secondary"
                 disabled={loading}
               >
@@ -238,8 +358,13 @@ const MasterSalesPage = () => {
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
-                accept=".xlsx,.xls"
-                // onChange={handleImport}
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleImportFile(file);
+                  }
+                }}
               />
               <button
                 type="button"
@@ -248,7 +373,7 @@ const MasterSalesPage = () => {
                 disabled={loading}
               >
                 <i className="ri-file-excel-2-line me-2"></i>
-                Import
+                Import Sales
               </button>
               {importProgress !== null && (
                 <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
@@ -268,8 +393,22 @@ const MasterSalesPage = () => {
                   <i className="ri-delete-bin-line me-2"></i> Delete Selected ({selectedRecords.length})
                 </button>
               )}
-              <button type="button" className="ti-btn ti-btn-primary">
-                <i className="ri-file-excel-2-line me-2"></i> Export
+              <button 
+                type="button" 
+                className="ti-btn ti-btn-primary"
+                onClick={handleExport}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2"></div>
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-file-excel-2-line me-2"></i> Export
+                  </>
+                )}
               </button>
               <Link href="/sales/master/add" className="ti-btn ti-btn-primary">
                 <i className="ri-add-line me-2"></i> Add Master Sale
@@ -484,6 +623,82 @@ const MasterSalesPage = () => {
         </div>
       </div>
       <Toaster position="top-right" />
+
+      {/* Import Modal */}
+      {showImportModal && importFile && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold mb-4">Import Sales Data</h3>
+              
+              <div className="mb-4">
+                <div className="flex items-center p-3 bg-blue-50 border border-blue-200 rounded">
+                  <i className="ri-file-excel-2-line text-blue-600 me-3"></i>
+                  <div>
+                    <div className="font-medium">{importFile.name}</div>
+                    <div className="text-sm text-blue-600">
+                      {(importFile.size / 1024 / 1024).toFixed(2)} MB
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {importProgress !== null && (
+                <div className="mb-4">
+                  <div className="flex justify-between text-sm text-gray-600 mb-2">
+                    <span>Processing...</span>
+                    <span>{importProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${importProgress}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportFile(null);
+                    setImportProgress(null);
+                  }}
+                  className="ti-btn ti-btn-secondary"
+                  disabled={importProgress !== null}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportSubmit}
+                  className="ti-btn ti-btn-primary"
+                  disabled={importProgress !== null}
+                >
+                  {importProgress !== null ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-upload-line me-2"></i>
+                      Import
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Download Modal */}
+      {showTemplateModal && (
+        <TemplateDownload
+          onClose={() => setShowTemplateModal(false)}
+        />
+      )}
     </div>
   );
 };
