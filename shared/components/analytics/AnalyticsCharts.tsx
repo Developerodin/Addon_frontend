@@ -14,6 +14,7 @@ import {
   getMonthlySalesChart
 } from '@/shared/data/charts/analyticsCharts';
 import { validateChartData, sanitizeChartData, validateChartConfig, createSafeChartConfig, debugChartData } from '@/shared/utils/chartUtils';
+import SafeChart from '@/shared/components/SafeChart';
 
 // Generate empty chart data for when no real data is available
 const getEmptyChartData = (chartTitle: string) => {
@@ -102,7 +103,7 @@ const getEmptyChartData = (chartTitle: string) => {
   }
 };
 
-// Dynamic import for ApexCharts to avoid SSR issues
+// Dynamic import for ApexCharts to avoid SSR issues (fallback)
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 interface AnalyticsChartsProps {
@@ -448,11 +449,13 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
               {/* Chart Content */}
               <div className="p-6">
                 <ChartErrorBoundary chartTitle={chart.title}>
-                  <SafeApexChart
+                  <SafeChart
                     options={chartOptions.options}
                     series={chartOptions.series}
                     type={chart.type}
                     height={chart.height}
+                    chartTitle={chart.title}
+                    fallbackMessage={`Unable to load ${chart.title}`}
                   />
                 </ChartErrorBoundary>
               </div>

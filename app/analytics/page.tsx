@@ -5,6 +5,7 @@ import Seo from '@/shared/layout-components/seo/seo';
 import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import { useAnalytics } from '@/shared/hooks/useAnalytics';
 import { AnalyticsKPIs, AnalyticsCharts, AnalyticsTables } from '@/shared/components/analytics';
+import { useGlobalErrorHandler } from '@/shared/utils/errorBoundary';
 
 // Error boundary for the entire analytics page
 const AnalyticsErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -85,6 +86,9 @@ const AnalyticsErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ child
 
 export default function AnalyticsPage() {
   const { loading, error, dateRange, data, loadAnalyticsData, updateDateRange } = useAnalytics();
+  
+  // Use global error handler for ApexCharts errors
+  useGlobalErrorHandler();
 
   // Handle date range change
   const handleDateRangeChange = (field: 'dateFrom' | 'dateTo', value: string) => {

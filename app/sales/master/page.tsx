@@ -354,36 +354,7 @@ const MasterSalesPage = () => {
                 <i className="ri-file-download-line me-2"></i>
                 Download Template
               </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                accept=".xlsx,.xls,.csv"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    handleImportFile(file);
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="ti-btn ti-btn-success"
-                disabled={loading}
-              >
-                <i className="ri-file-excel-2-line me-2"></i>
-                Import Sales
-              </button>
-              {importProgress !== null && (
-                <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
-                  <div
-                    className="bg-primary h-full transition-all duration-200"
-                    style={{ width: `${importProgress}%` }}
-                  ></div>
-                  <span className="ml-2 text-xs text-gray-700">{importProgress}%</span>
-                </div>
-              )}
+            
               {selectedRecords.length > 0 && (
                 <button 
                   type="button" 
