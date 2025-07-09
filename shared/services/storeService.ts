@@ -28,6 +28,7 @@ export interface Store {
   hankyNorms: number;
   socksNorms: number;
   towelNorms: number;
+  totalNorms: number;
   creditRating: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
   isActive: boolean;
   createdAt: string;
@@ -84,6 +85,7 @@ export interface CreateStoreData {
   hankyNorms: number;
   socksNorms: number;
   towelNorms: number;
+  totalNorms: number;
   creditRating: Store['creditRating'];
   isActive?: boolean;
 }

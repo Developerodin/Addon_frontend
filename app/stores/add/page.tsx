@@ -38,6 +38,7 @@ const AddStorePage = () => {
         hankyNorms: 0,
         socksNorms: 0,
         towelNorms: 0,
+        totalNorms: 0,
         creditRating: 'B+',
         isActive: true
     });
@@ -113,7 +114,9 @@ const AddStorePage = () => {
                 if (formData.socksNorms < 0) {
                     newErrors.socksNorms = 'Socks norms must be 0 or greater' as any;
                 }
-                // Towel norms is auto-calculated, so no validation needed
+                if (formData.towelNorms < 0) {
+                    newErrors.towelNorms = 'Towel norms must be 0 or greater' as any;
+                }
                 break;
         }
 
@@ -172,7 +175,9 @@ const AddStorePage = () => {
         if (formData.socksNorms < 0) {
             newErrors.socksNorms = 'Socks norms must be 0 or greater' as any;
         }
-        // Towel norms is auto-calculated, so no validation needed
+        if (formData.towelNorms < 0) {
+            newErrors.towelNorms = 'Towel norms must be 0 or greater' as any;
+        }
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -185,7 +190,7 @@ const AddStorePage = () => {
         let processedValue: any = type === 'checkbox' ? checked : value;
         
         // Handle numeric fields
-        if (['hankyNorms', 'socksNorms', 'towelNorms'].includes(name)) {
+        if (['hankyNorms', 'socksNorms', 'towelNorms', 'totalNorms'].includes(name)) {
             processedValue = value === '' ? 0 : Number(value);
         }
         
@@ -195,13 +200,14 @@ const AddStorePage = () => {
                 [name]: processedValue
             };
             
-            // Auto-calculate towel norms when hanky norms or socks norms change
-            if (name === 'hankyNorms' || name === 'socksNorms') {
+            // Auto-calculate total norms when any norm changes
+            if (['hankyNorms', 'socksNorms', 'towelNorms'].includes(name)) {
                 const hankyNorms = name === 'hankyNorms' ? processedValue : prev.hankyNorms;
                 const socksNorms = name === 'socksNorms' ? processedValue : prev.socksNorms;
+                const towelNorms = name === 'towelNorms' ? processedValue : prev.towelNorms;
                 
-                // Calculate towel norms: sum of hanky norms and socks norms
-                updatedData.towelNorms = hankyNorms + socksNorms;
+                // Calculate total norms: sum of all three norms
+                updatedData.totalNorms = hankyNorms + socksNorms + towelNorms;
             }
             
             return updatedData;
@@ -606,7 +612,7 @@ const AddStorePage = () => {
                         {/* Norms */}
                         <div>
                             <h4 className="text-md font-medium mb-4 text-gray-700">Norms</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                 {/* Hanky Norms */}
                                 <div>
                                     <label className="form-label">Hanky Norms</label>
@@ -643,22 +649,36 @@ const AddStorePage = () => {
 
                                 {/* Towel Norms */}
                                 <div>
-                                    <label className="form-label">Towel Norms (Auto-calculated)</label>
+                                    <label className="form-label">Towel Norms</label>
                                     <input
                                         type="number"
                                         name="towelNorms"
-                                        className={`form-control bg-gray-50 ${errors.towelNorms ? 'border-danger' : ''}`}
+                                        className={`form-control ${errors.towelNorms ? 'border-danger' : ''}`}
                                         value={formData.towelNorms}
+                                        onChange={handleInputChange}
+                                        placeholder="0"
+                                        min="0"
+                                    />
+                                    {errors.towelNorms && (
+                                        <div className="text-danger text-sm mt-1">{errors.towelNorms}</div>
+                                    )}
+                                </div>
+
+                                {/* Total Norms */}
+                                <div>
+                                    <label className="form-label">Total Norms (Auto-calculated)</label>
+                                    <input
+                                        type="number"
+                                        name="totalNorms"
+                                        className="form-control bg-gray-50"
+                                        value={formData.totalNorms}
                                         readOnly
                                         placeholder="0"
                                         min="0"
                                     />
                                     <div className="text-muted text-sm mt-1">
-                                        Auto-calculated: Hanky Norms + Socks Norms
+                                        Auto-calculated: Hanky + Socks + Towel Norms
                                     </div>
-                                    {errors.towelNorms && (
-                                        <div className="text-danger text-sm mt-1">{errors.towelNorms}</div>
-                                    )}
                                 </div>
                             </div>
                         </div>

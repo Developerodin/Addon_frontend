@@ -64,6 +64,7 @@ const EditStorePage = () => {
                     hankyNorms: storeData.hankyNorms,
                     socksNorms: storeData.socksNorms,
                     towelNorms: storeData.towelNorms,
+                    totalNorms: storeData.totalNorms,
                     creditRating: storeData.creditRating,
                     isActive: storeData.isActive
                 });
@@ -164,14 +165,28 @@ const EditStorePage = () => {
         let processedValue: any = type === 'checkbox' ? checked : value;
         
         // Handle numeric fields
-        if (['hankyNorms', 'socksNorms', 'towelNorms'].includes(name)) {
+        if (['hankyNorms', 'socksNorms', 'towelNorms', 'totalNorms'].includes(name)) {
             processedValue = value === '' ? 0 : Number(value);
         }
         
-        setFormData(prev => ({
-            ...prev,
-            [name]: processedValue
-        }));
+        setFormData(prev => {
+            const updatedData = {
+                ...prev,
+                [name]: processedValue
+            };
+            
+            // Auto-calculate total norms when any norm changes
+            if (['hankyNorms', 'socksNorms', 'towelNorms'].includes(name)) {
+                const hankyNorms = name === 'hankyNorms' ? processedValue : prev.hankyNorms;
+                const socksNorms = name === 'socksNorms' ? processedValue : prev.socksNorms;
+                const towelNorms = name === 'towelNorms' ? processedValue : prev.towelNorms;
+                
+                // Calculate total norms: sum of all three norms
+                updatedData.totalNorms = hankyNorms + socksNorms + towelNorms;
+            }
+            
+            return updatedData;
+        });
 
         // Clear error when user starts typing
         if (errors[name as keyof UpdateStoreData]) {
@@ -557,7 +572,7 @@ const EditStorePage = () => {
                         {/* Norms */}
                         <div>
                             <h4 className="text-md font-medium mb-4 text-gray-700">Norms</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                 {/* Hanky Norms */}
                                 <div>
                                     <label className="form-label">Hanky Norms</label>
@@ -607,6 +622,23 @@ const EditStorePage = () => {
                                     {errors.towelNorms && (
                                         <div className="text-danger text-sm mt-1">{errors.towelNorms}</div>
                                     )}
+                                </div>
+
+                                {/* Total Norms */}
+                                <div>
+                                    <label className="form-label">Total Norms (Auto-calculated)</label>
+                                    <input
+                                        type="number"
+                                        name="totalNorms"
+                                        className="form-control bg-gray-50"
+                                        value={formData.totalNorms ?? 0}
+                                        readOnly
+                                        placeholder="0"
+                                        min="0"
+                                    />
+                                    <div className="text-muted text-sm mt-1">
+                                        Auto-calculated: Hanky + Socks + Towel Norms
+                                    </div>
                                 </div>
                             </div>
                         </div>
