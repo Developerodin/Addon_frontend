@@ -59,71 +59,91 @@ export interface BulkImportResult {
 export const validateStoreData = (data: StoreImportRow): { isValid: boolean; errors: string[] } => {
   const errors: string[] = [];
 
+  // Helper function to safely convert to string
+  const safeString = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+  };
+
   // Required fields validation
-  if (!data.storeId?.trim()) {
+  const storeId = safeString(data.storeId);
+  if (!storeId) {
     errors.push('Store ID is required');
-  } else if (!/^[A-Z0-9]+$/.test(data.storeId.toUpperCase())) {
+  } else if (!/^[A-Z0-9]+$/.test(storeId.toUpperCase())) {
     errors.push('Store ID must contain only uppercase letters and numbers');
   }
 
-  if (!data.storeName?.trim()) {
+  const storeName = safeString(data.storeName);
+  if (!storeName) {
     errors.push('Store name is required');
   }
 
-  if (!data.city?.trim()) {
+  const city = safeString(data.city);
+  if (!city) {
     errors.push('City is required');
   }
 
-  if (!data.addressLine1?.trim()) {
+  const addressLine1 = safeString(data.addressLine1);
+  if (!addressLine1) {
     errors.push('Address is required');
   }
 
-  if (!data.storeNumber?.trim()) {
+  const storeNumber = safeString(data.storeNumber);
+  if (!storeNumber) {
     errors.push('Store number is required');
   }
 
-  if (!data.pincode?.trim()) {
+  const pincode = safeString(data.pincode);
+  if (!pincode) {
     errors.push('Pincode is required');
-  } else if (!/^\d{6}$/.test(data.pincode)) {
-    errors.push('Pincode must be exactly 6 digits');
+  } else if (!/^\d+$/.test(pincode)) {
+    errors.push('Pincode must contain only digits');
   }
 
-  if (!data.contactPerson?.trim()) {
+  const contactPerson = safeString(data.contactPerson);
+  if (!contactPerson) {
     errors.push('Contact person is required');
   }
 
-  if (!data.contactEmail?.trim()) {
+  const contactEmail = safeString(data.contactEmail);
+  if (!contactEmail) {
     errors.push('Contact email is required');
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.contactEmail)) {
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
     errors.push('Please enter a valid email address');
   }
 
-  if (!data.contactPhone?.trim()) {
+  const contactPhone = safeString(data.contactPhone);
+  if (!contactPhone) {
     errors.push('Contact phone is required');
-  } else if (!/^[\+]?[0-9\s\-\(\)]{10,15}$/.test(data.contactPhone.replace(/\s/g, ''))) {
+  } else if (!/^[\+]?[0-9\s\-\(\)]{10,15}$/.test(contactPhone.replace(/\s/g, ''))) {
     errors.push('Please enter a valid phone number');
   }
 
   // Credit rating validation
+  const creditRating = safeString(data.creditRating);
   const validCreditRatings = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
-  if (!data.creditRating || !validCreditRatings.includes(data.creditRating)) {
+  if (!creditRating || !validCreditRatings.includes(creditRating)) {
     errors.push('Credit rating must be one of: A+, A, A-, B+, B, B-, C+, C, C-, D, F');
   }
 
   // Optional fields validation
-  if (data.hankyNorms && (isNaN(Number(data.hankyNorms)) || Number(data.hankyNorms) < 0)) {
+  const hankyNorms = Number(data.hankyNorms);
+  if (data.hankyNorms && (isNaN(hankyNorms) || hankyNorms < 0)) {
     errors.push('Hanky norms must be a non-negative number');
   }
 
-  if (data.socksNorms && (isNaN(Number(data.socksNorms)) || Number(data.socksNorms) < 0)) {
+  const socksNorms = Number(data.socksNorms);
+  if (data.socksNorms && (isNaN(socksNorms) || socksNorms < 0)) {
     errors.push('Socks norms must be a non-negative number');
   }
 
-  if (data.towelNorms && (isNaN(Number(data.towelNorms)) || Number(data.towelNorms) < 0)) {
+  const towelNorms = Number(data.towelNorms);
+  if (data.towelNorms && (isNaN(towelNorms) || towelNorms < 0)) {
     errors.push('Towel norms must be a non-negative number');
   }
 
-  if (data.totalNorms && (isNaN(Number(data.totalNorms)) || Number(data.totalNorms) < 0)) {
+  const totalNorms = Number(data.totalNorms);
+  if (data.totalNorms && (isNaN(totalNorms) || totalNorms < 0)) {
     errors.push('Total norms must be a non-negative number');
   }
 
@@ -133,22 +153,167 @@ export const validateStoreData = (data: StoreImportRow): { isValid: boolean; err
   };
 };
 
+// Helper function to validate file before parsing
+export const validateFileForImport = (file: File): { isValid: boolean; error?: string } => {
+  // Check file size
+  if (file.size === 0) {
+    return { isValid: false, error: 'File is empty' };
+  }
+  
+  if (file.size > 10 * 1024 * 1024) {
+    return { isValid: false, error: 'File size must be less than 10MB' };
+  }
+  
+  // Check file type
+  const validTypes = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'text/csv'
+  ];
+  
+  const isValidType = validTypes.includes(file.type) || 
+                     file.name.toLowerCase().endsWith('.xlsx') ||
+                     file.name.toLowerCase().endsWith('.xls') ||
+                     file.name.toLowerCase().endsWith('.csv');
+  
+  if (!isValidType) {
+    return { isValid: false, error: 'Please select a valid Excel file (.xlsx, .xls) or CSV file' };
+  }
+  
+  return { isValid: true };
+};
+
+// Test function to verify Excel parsing works
+export const testExcelParsing = async (file: File): Promise<{ success: boolean; message: string; data?: any }> => {
+  try {
+    console.log('Testing Excel parsing for file:', file.name);
+    
+    const validation = validateFileForImport(file);
+    if (!validation.isValid) {
+      return { success: false, message: validation.error || 'File validation failed' };
+    }
+    
+    const { data, errors } = await parseExcelFile(file);
+    
+    return {
+      success: errors.length === 0,
+      message: errors.length === 0 
+        ? `Successfully parsed ${data.length} rows` 
+        : `Parsed with ${errors.length} errors: ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}`,
+      data: { rowCount: data.length, sampleRow: data[0], errors }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { success: false, message: `Parsing failed: ${errorMessage}` };
+  }
+};
+
 export const parseExcelFile = (file: File): Promise<{ data: StoreImportRow[]; errors: string[] }> => {
   return new Promise((resolve, reject) => {
+    // Log file details for debugging
+    console.log('Parsing file:', {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: new Date(file.lastModified).toISOString()
+    });
+
     const reader = new FileReader();
     
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        if (!e.target?.result) {
+          throw new Error('No file data received');
+        }
+
+        const data = new Uint8Array(e.target.result as ArrayBuffer);
+        
+        if (data.length === 0) {
+          throw new Error('File is empty');
+        }
+
+        // Check file signature for Excel files
+        const isExcelFile = (data[0] === 0x50 && data[1] === 0x4B) || // ZIP signature (XLSX)
+                           (data[0] === 0xD0 && data[1] === 0xCF) || // OLE signature (XLS)
+                           (data[0] === 0x09 && data[1] === 0x08);   // BIFF signature (XLS)
+        
+        const isCSVFile = file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv');
+        
+        if (!isExcelFile && !isCSVFile) {
+          console.warn('File signature check failed, attempting to parse anyway...');
+        }
+
+        // Handle different file types
+        let workbook;
+        if (file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')) {
+          // For CSV files, convert to string and parse
+          const text = new TextDecoder().decode(data);
+          workbook = XLSX.read(text, { type: 'string' });
+        } else {
+          // For Excel files
+          try {
+            workbook = XLSX.read(data, { type: 'array' });
+          } catch (excelError) {
+            // Try as string if array fails (some Excel files might work better as string)
+            try {
+              const text = new TextDecoder().decode(data);
+              workbook = XLSX.read(text, { type: 'string' });
+            } catch (stringError) {
+              throw new Error(`Failed to parse Excel file: ${excelError instanceof Error ? excelError.message : 'Unknown error'}`);
+            }
+          }
+        }
+        
+        console.log('Workbook parsed:', {
+          sheetNames: workbook.SheetNames,
+          sheetCount: workbook.SheetNames?.length
+        });
+        
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error('No sheets found in the Excel file');
+        }
+
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
+        
+        console.log('Worksheet details:', {
+          sheetName,
+          hasWorksheet: !!worksheet,
+          range: worksheet ? XLSX.utils.decode_range(worksheet['!ref'] || 'A1') : null
+        });
+        
+        if (!worksheet) {
+          throw new Error(`Sheet "${sheetName}" not found or is empty`);
+        }
+
         const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+        
+        console.log('Parsed data:', {
+          rowCount: jsonData.length,
+          sampleRow: jsonData[0],
+          columnNames: jsonData.length > 0 ? Object.keys(jsonData[0]) : []
+        });
+        
+        if (!Array.isArray(jsonData) || jsonData.length === 0) {
+          throw new Error('No data rows found in the Excel sheet');
+        }
 
         const errors: string[] = [];
         const validData: StoreImportRow[] = [];
 
         jsonData.forEach((row, index) => {
+          // Log the first row for debugging
+          if (index === 0) {
+            console.log('First row data types:', {
+              'Store ID': { value: row['Store ID'], type: typeof row['Store ID'] },
+              'Store Name': { value: row['Store Name'], type: typeof row['Store Name'] },
+              'City': { value: row['City'], type: typeof row['City'] },
+              'Pincode': { value: row['Pincode'], type: typeof row['Pincode'] },
+              'Credit Rating': { value: row['Credit Rating'], type: typeof row['Credit Rating'] },
+              'Is Active': { value: row['Is Active'], type: typeof row['Is Active'] }
+            });
+          }
+
           // Map Excel column names to our interface
           const mappedRow: StoreImportRow = {
             id: row['ID'] || undefined,
@@ -194,48 +359,71 @@ export const parseExcelFile = (file: File): Promise<{ data: StoreImportRow[]; er
 
         resolve({ data: validData, errors });
       } catch (error) {
-        reject(new Error('Failed to parse Excel file'));
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        reject(new Error(`Failed to parse Excel file: ${errorMessage}`));
       }
     };
 
-    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.onerror = (error) => {
+      const errorMessage = error instanceof Error ? error.message : 'File read error';
+      reject(new Error(`Failed to read file: ${errorMessage}`));
+    };
+    
     reader.readAsArrayBuffer(file);
   });
 };
 
 export const convertToCreateStoreData = (row: StoreImportRow): CreateStoreData => {
-  const hankyNorms = parseFloat(row.hankyNorms || '0') || 0;
-  const socksNorms = parseFloat(row.socksNorms || '0') || 0;
-  const towelNorms = parseFloat(row.towelNorms || '0') || 0;
-  const totalNorms = parseFloat(row.totalNorms || '0') || (hankyNorms + socksNorms + towelNorms);
+  const hankyNorms = parseFloat(String(row.hankyNorms || '0')) || 0;
+  const socksNorms = parseFloat(String(row.socksNorms || '0')) || 0;
+  const towelNorms = parseFloat(String(row.towelNorms || '0')) || 0;
+  const totalNorms = parseFloat(String(row.totalNorms || '0')) || (hankyNorms + socksNorms + towelNorms);
+
+  // Helper function to safely convert to string and trim
+  const safeString = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+  };
+
+  // Helper function to safely convert to string, trim, and uppercase
+  const safeStringUpper = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    return String(value).trim().toUpperCase();
+  };
+
+  // Helper function to safely convert to string, trim, and lowercase
+  const safeStringLower = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    return String(value).trim().toLowerCase();
+  };
 
   return {
-    storeId: row.storeId.toUpperCase(),
-    storeName: row.storeName.trim(),
-    city: row.city.trim(),
-    addressLine1: row.addressLine1.trim(),
-    addressLine2: row.addressLine2?.trim() || '',
-    storeNumber: row.storeNumber.trim(),
-    pincode: row.pincode.trim(),
-    contactPerson: row.contactPerson.trim(),
-    contactEmail: row.contactEmail.toLowerCase().trim(),
-    contactPhone: row.contactPhone.trim(),
-    creditRating: row.creditRating as CreateStoreData['creditRating'],
-    isActive: row.isActive?.toLowerCase() === 'true' || row.isActive?.toLowerCase() === 'yes' || row.isActive?.toLowerCase() === '1',
+    storeId: safeStringUpper(row.storeId),
+    storeName: safeString(row.storeName),
+    city: safeString(row.city),
+    addressLine1: safeString(row.addressLine1),
+    addressLine2: safeString(row.addressLine2),
+    storeNumber: safeString(row.storeNumber),
+    pincode: safeString(row.pincode),
+    contactPerson: safeString(row.contactPerson),
+    contactEmail: safeStringLower(row.contactEmail),
+    contactPhone: safeString(row.contactPhone),
+    creditRating: safeString(row.creditRating) as CreateStoreData['creditRating'],
+    isActive: safeStringLower(row.isActive) === 'true' || safeStringLower(row.isActive) === 'yes' || safeStringLower(row.isActive) === '1',
     // Optional fields
-    bpCode: row.bpCode?.trim() || undefined,
-    oldStoreCode: row.oldStoreCode?.trim() || undefined,
-    bpName: row.bpName?.trim() || undefined,
-    street: row.street?.trim() || undefined,
-    block: row.block?.trim() || undefined,
-    zipCode: row.zipCode?.trim() || undefined,
-    state: row.state?.trim() || undefined,
-    country: row.country?.trim() || undefined,
-    telephone: row.telephone?.trim() || undefined,
-    internalSapCode: row.internalSapCode?.trim() || undefined,
-    internalSoftwareCode: row.internalSoftwareCode?.trim() || undefined,
-    brandGrouping: row.brandGrouping?.trim() || undefined,
-    brand: row.brand?.trim() || undefined,
+    bpCode: row.bpCode ? safeString(row.bpCode) : undefined,
+    oldStoreCode: row.oldStoreCode ? safeString(row.oldStoreCode) : undefined,
+    bpName: row.bpName ? safeString(row.bpName) : undefined,
+    street: row.street ? safeString(row.street) : undefined,
+    block: row.block ? safeString(row.block) : undefined,
+    zipCode: row.zipCode ? safeString(row.zipCode) : undefined,
+    state: row.state ? safeString(row.state) : undefined,
+    country: row.country ? safeString(row.country) : undefined,
+    telephone: row.telephone ? safeString(row.telephone) : undefined,
+    internalSapCode: row.internalSapCode ? safeString(row.internalSapCode) : undefined,
+    internalSoftwareCode: row.internalSoftwareCode ? safeString(row.internalSoftwareCode) : undefined,
+    brandGrouping: row.brandGrouping ? safeString(row.brandGrouping) : undefined,
+    brand: row.brand ? safeString(row.brand) : undefined,
     hankyNorms,
     socksNorms,
     towelNorms,
@@ -419,7 +607,7 @@ export const generateSampleTemplate = () => {
       '': ''
     },
     {
-      'Instructions': '4. Pincode must be exactly 6 digits',
+      'Instructions': '4. Pincode must contain only digits (can be any length)',
       '': ''
     },
     {
@@ -629,13 +817,16 @@ export const processBulkImport = async (
     };
 
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    console.error('Bulk import error:', error);
+    
     return {
       success: false,
       totalProcessed: 0,
       successCount: 0,
       errorCount: 1,
-      errors: [error instanceof Error ? error.message : 'Unknown error occurred'],
-      message: 'Import failed due to an unexpected error.'
+      errors: [errorMessage],
+      message: `Import failed: ${errorMessage}`
     };
   }
 }; 

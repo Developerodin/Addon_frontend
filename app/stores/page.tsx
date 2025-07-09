@@ -4,7 +4,7 @@ import Seo from '@/shared/layout-components/seo/seo'
 import Link from 'next/link'
 import { useStores } from '@/shared/hooks/useStores'
 import { toast } from 'react-hot-toast'
-import { exportStoresToExcel, generateSampleTemplate, processBulkImport, ImportProgress } from '@/shared/utils/storeUtils'
+import { exportStoresToExcel, generateSampleTemplate, processBulkImport, validateFileForImport, testExcelParsing, ImportProgress } from '@/shared/utils/storeUtils'
 
 const StoresPage = () => {
     const [selectedStores, setSelectedStores] = useState<string[]>([]);
@@ -130,6 +130,28 @@ const StoresPage = () => {
         }
     };
 
+    const handleTestFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        // Reset file input
+        event.target.value = '';
+
+        try {
+            const result = await testExcelParsing(file);
+            if (result.success) {
+                toast.success(result.message);
+                console.log('Test result:', result.data);
+            } else {
+                toast.error(result.message);
+                console.error('Test failed:', result);
+            }
+        } catch (error) {
+            toast.error('Test failed due to an unexpected error');
+            console.error('Test error:', error);
+        }
+    };
+
     const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -137,21 +159,10 @@ const StoresPage = () => {
         // Reset file input
         event.target.value = '';
 
-        // Validate file type
-        const validTypes = [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/vnd.ms-excel',
-            'text/csv'
-        ];
-        
-        if (!validTypes.includes(file.type)) {
-            toast.error('Please select a valid Excel file (.xlsx, .xls) or CSV file');
-            return;
-        }
-
-        // Validate file size (max 10MB)
-        if (file.size > 10 * 1024 * 1024) {
-            toast.error('File size must be less than 10MB');
+        // Validate file before processing
+        const validation = validateFileForImport(file);
+        if (!validation.isValid) {
+            toast.error(validation.error || 'Invalid file');
             return;
         }
 
@@ -196,7 +207,8 @@ const StoresPage = () => {
                 }
             }
         } catch (error) {
-            toast.error('Import failed due to an unexpected error');
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            toast.error(`Import failed: ${errorMessage}`);
             console.error('Import error:', error);
         } finally {
             setIsImporting(false);
@@ -256,6 +268,7 @@ const StoresPage = () => {
                                 >
                                     <i className="ri-download-line me-2"></i> Download Template
                                 </button>
+                              
                                 <input
                                     type="file"
                                     ref={fileInputRef}
