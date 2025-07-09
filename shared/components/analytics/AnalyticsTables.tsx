@@ -1,6 +1,38 @@
 import React from 'react';
 import { ProductPerformance, StorePerformance } from '@/shared/services/analyticsService';
 
+// Format number to show only 2 decimal places and hide trailing zeros
+const formatNumber = (value: number): string => {
+  if (value === 0) return '0';
+  
+  // Round to 2 decimal places
+  const rounded = Math.round(value * 100) / 100;
+  
+  // Convert to string and remove trailing zeros after decimal
+  const str = rounded.toString();
+  if (str.includes('.')) {
+    return str.replace(/\.?0+$/, '');
+  }
+  
+  return str;
+};
+
+// Format currency with proper decimal handling
+const formatCurrency = (value: number): string => {
+  if (value === 0) return '₹0';
+  
+  // Round to 2 decimal places
+  const rounded = Math.round(value * 100) / 100;
+  
+  // Format with locale and remove trailing zeros
+  const formatted = rounded.toLocaleString('en-IN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+  
+  return `₹${formatted}`;
+};
+
 interface AnalyticsTablesProps {
   productPerformance: ProductPerformance[];
   storePerformance: StorePerformance[];
@@ -94,10 +126,10 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                       {product.categoryName}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${productPerformance.length === 0 ? 'text-gray-400' : 'text-gray-900'}`}>
-                      {product.totalQuantity.toLocaleString()}
+                      {formatNumber(product.totalQuantity)}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${productPerformance.length === 0 ? 'text-gray-400' : 'text-green-600'}`}>
-                      ₹{product.totalNSV.toLocaleString()}
+                      {formatCurrency(product.totalNSV)}
                     </td>
                   </tr>
                 ))}
@@ -169,10 +201,10 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                       {store.city}, {store.state}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${storePerformance.length === 0 ? 'text-gray-400' : 'text-gray-900'}`}>
-                      {store.totalQuantity.toLocaleString()}
+                      {formatNumber(store.totalQuantity)}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${storePerformance.length === 0 ? 'text-gray-400' : 'text-green-600'}`}>
-                      ₹{store.totalNSV.toLocaleString()}
+                      {formatCurrency(store.totalNSV)}
                     </td>
                   </tr>
                 ))}

@@ -69,16 +69,16 @@ export const useAnalytics = () => {
       // Extract results and handle individual failures
       const [kpisResult, trendsResult, productResult, storeResult, brandResult, discountResult, taxResult] = results;
 
-      // Set data with fallbacks for failed requests - use mock data when API fails
-      setData({
-        summaryKPIs: kpisResult.status === 'fulfilled' ? kpisResult.value : generateMockSummaryKPIs(),
-        timeBasedTrends: trendsResult.status === 'fulfilled' ? trendsResult.value : generateMockTimeBasedTrends(dateRange.dateFrom, dateRange.dateTo),
-        productPerformance: productResult.status === 'fulfilled' ? productResult.value : generateMockProductPerformance(),
-        storePerformance: storeResult.status === 'fulfilled' ? storeResult.value : generateMockStorePerformance(),
-        brandPerformance: brandResult.status === 'fulfilled' ? brandResult.value : generateMockBrandPerformance(),
-        discountImpact: discountResult.status === 'fulfilled' ? discountResult.value : generateMockDiscountImpact(dateRange.dateFrom, dateRange.dateTo),
-        taxMRPData: taxResult.status === 'fulfilled' ? taxResult.value : generateMockTaxMRPData(dateRange.dateFrom, dateRange.dateTo)
-      });
+      // Debug logging for brand performance
+      console.log('=== BRAND PERFORMANCE HOOK DEBUG ===');
+      console.log('Brand result status:', brandResult.status);
+      if (brandResult.status === 'fulfilled') {
+        console.log('Brand performance API data:', brandResult.value);
+        console.log('Brand performance data length:', brandResult.value?.length);
+      } else {
+        console.log('Brand performance API failed:', brandResult.reason);
+      }
+      console.log('=== END BRAND PERFORMANCE HOOK DEBUG ===');
 
       // Check if any requests failed and show partial error message
       const failedRequests = results.filter(result => result.status === 'rejected');

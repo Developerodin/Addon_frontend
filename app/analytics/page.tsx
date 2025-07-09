@@ -99,6 +99,17 @@ export default function AnalyticsPage() {
   const sanitizedData = React.useMemo(() => {
     if (!data) return data;
     
+    // Debug logging for brand performance data
+    console.log('=== ANALYTICS PAGE BRAND PERFORMANCE DEBUG ===');
+    console.log('Raw brand performance data:', data.brandPerformance);
+    console.log('Brand performance type:', typeof data.brandPerformance);
+    console.log('Brand performance is array:', Array.isArray(data.brandPerformance));
+    console.log('Brand performance length:', data.brandPerformance?.length);
+    if (data.brandPerformance && Array.isArray(data.brandPerformance) && data.brandPerformance.length > 0) {
+      console.log('First brand performance item:', data.brandPerformance[0]);
+    }
+    console.log('=== END ANALYTICS PAGE BRAND PERFORMANCE DEBUG ===');
+    
     return {
       ...data,
       timeBasedTrends: Array.isArray(data.timeBasedTrends) ? data.timeBasedTrends : [],
