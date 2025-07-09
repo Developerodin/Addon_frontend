@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import { ErrorHandler } from '@/shared/utils/errorHandler';
+import * as XLSX from 'xlsx';
 
 export interface SalesRecord {
   date?: string;
@@ -189,190 +190,149 @@ export class SalesImportService {
     static async processExcelFile(file: File, onProgress?: (progress: ImportProgress) => void): Promise<SalesRecord[]> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      
       reader.onload = async (e) => {
         try {
-          let text: string;
-          
-          // Handle different file types
-          if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
-            text = e.target?.result as string;
-          } else if (file.type.includes('excel') || file.type.includes('spreadsheet') || 
-                     file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-            // For Excel files, we'll try to read as text first
-            // In a real implementation, you'd use a library like xlsx
-            text = e.target?.result as string;
+          let workbook: XLSX.WorkBook;
+          let isExcel = false;
+          if (
+            file.type.includes('excel') ||
+            file.type.includes('spreadsheet') ||
+            file.name.endsWith('.xlsx') ||
+            file.name.endsWith('.xls')
+          ) {
+            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            workbook = XLSX.read(data, { type: 'array' });
+            isExcel = true;
+          }
+          let sheetName = '';
+          let sheetNames: string[] = [];
+          let sheet: XLSX.WorkSheet | undefined;
+          if (isExcel) {
+            sheetNames = workbook.SheetNames;
+            sheetName = sheetNames.find(
+              (name) => name.trim().toLowerCase() === 'sale'
+            ) || '';
+            if (!sheetName) {
+              reject(new Error("'Sale' sheet not found in the Excel file"));
+              return;
+            }
+            sheet = workbook.Sheets[sheetName];
+            if (!sheet) {
+              reject(new Error("'Sale' sheet is missing in the Excel file"));
+              return;
+            }
           } else {
-            throw new Error('Unsupported file format. Please use CSV or Excel files.');
+            reject(new Error('Unsupported file format. Please use Excel files (.xlsx, .xls) for import.'));
+            return;
           }
-          
-          const lines = text.split('\n').filter(line => line.trim());
-          
-          if (lines.length < 2) {
-            throw new Error('Invalid file format. Please use the provided template.');
+          // Parse sheet to JSON
+          const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          if (rawRows.length < 2) {
+            reject(new Error('The "Sale" sheet is empty or missing headers.'));
+            return;
           }
-
-          // Parse headers - handle both comma and tab separated
-          const firstLine = lines[0];
-          const isTabSeparated = firstLine.includes('\t');
-          const separator = isTabSeparated ? '\t' : ',';
-          
-          const headers = firstLine.split(separator).map(h => h.trim().toLowerCase());
-          
-          // Validate headers
-          const requiredHeaders = TEMPLATE_COLUMNS.filter(col => col.required).map(col => col.header.toLowerCase());
-          const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
-          
-          if (missingHeaders.length > 0) {
-            const error = ErrorHandler.formatValidationErrors([
-              `Missing required columns: ${missingHeaders.join(', ')}`
-            ]);
-            throw error;
+          // Map columns (case-insensitive, pick first for duplicates)
+          const headerRow = rawRows[0].map((h: any) => (h ? h.toString().trim() : ''));
+          const lowerHeaders = headerRow.map((h: string) => h.toLowerCase());
+          // Required columns (case-insensitive)
+          const requiredCols = [
+            'calendar year/month',
+            'calendar day',
+            'plant',
+            'division',
+            'matl group',
+            'material',
+            'qty',
+            'mrp',
+            'discount',
+            'gsv',
+            'nsv',
+            'total tax',
+          ];
+          const colIndexes: Record<string, number> = {};
+          for (const col of requiredCols) {
+            const idx = lowerHeaders.findIndex((h) => h === col.toLowerCase());
+            if (idx === -1) {
+              reject(new Error(`Missing required column: ${col}`));
+              return;
+            }
+            if (!(col in colIndexes)) colIndexes[col] = idx; // pick first occurrence
           }
-
-          // Process data rows
+          // Parse data rows
           const records: SalesRecord[] = [];
           const errors: string[] = [];
-          
-          for (let i = 1; i < lines.length; i++) {
+          for (let i = 1; i < rawRows.length; i++) {
+            const row = rawRows[i];
+            if (!row || row.length === 0 || row.every((cell: any) => !cell || cell.toString().trim() === '')) continue;
             try {
-              const line = lines[i];
-              if (!line.trim()) continue;
-              
-              const values = line.split(separator).map(v => v.trim());
-              const record: Partial<SalesRecord> = {};
-              
-              // Map values to record
-              headers.forEach((header, index) => {
-                const value = values[index] || '';
-                const column = TEMPLATE_COLUMNS.find(col => col.header.toLowerCase() === header);
-                
-                if (column) {
-                  switch (column.key) {
-                    case 'date':
-                      if (value) {
-                        try {
-                          // Handle multiple date formats
-                          let parsedDate: Date;
-                          
-                          // Try different date formats
-                          if (value.includes('-')) {
-                            const parts = value.split('-');
-                            if (parts.length === 3) {
-                              // Handle DD-MM-YYYY format (Indian format)
-                              if (parts[0].length === 2 && parts[1].length === 2 && parts[2].length === 4) {
-                                parsedDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                              }
-                              // Handle YYYY-MM-DD format
-                              else if (parts[0].length === 4 && parts[1].length === 2 && parts[2].length === 2) {
-                                parsedDate = new Date(value);
-                              }
-                              // Handle MM-DD-YYYY format
-                              else if (parts[0].length === 2 && parts[1].length === 2 && parts[2].length === 4) {
-                                parsedDate = new Date(`${parts[2]}-${parts[0]}-${parts[1]}`);
-                              }
-                              else {
-                                parsedDate = new Date(value);
-                              }
-                            } else {
-                              parsedDate = new Date(value);
-                            }
-                          }
-                          // Handle DD/MM/YYYY format
-                          else if (value.includes('/')) {
-                            const parts = value.split('/');
-                            if (parts.length === 3) {
-                              if (parts[0].length === 2 && parts[1].length === 2 && parts[2].length === 4) {
-                                parsedDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                              } else {
-                                parsedDate = new Date(value);
-                              }
-                            } else {
-                              parsedDate = new Date(value);
-                            }
-                          }
-                          // Default to standard Date constructor
-                          else {
-                            parsedDate = new Date(value);
-                          }
-                          
-                          // Validate the parsed date
-                          if (isNaN(parsedDate.getTime())) {
-                            throw new Error(`Invalid date format for ${column.header}: ${value}`);
-                          }
-                          
-                          record.date = parsedDate.toISOString();
-                        } catch (dateError) {
-                          throw new Error(`Invalid date format for ${column.header}: ${value}. Expected formats: DD-MM-YYYY, YYYY-MM-DD, DD/MM/YYYY`);
-                        }
-                      }
-                      break;
-                    case 'plant':
-                    case 'materialCode':
-                      record[column.key] = value;
-                      break;
-                    case 'quantity':
-                    case 'mrp':
-                    case 'discount':
-                    case 'gsv':
-                    case 'nsv':
-                    case 'totalTax':
-                      const numValue = parseFloat(value.replace(/[^\d.-]/g, ''));
-                      if (!isNaN(numValue) && numValue >= 0) {
-                        record[column.key] = numValue;
-                      } else if (value && isNaN(numValue)) {
-                        throw new Error(`Invalid number value for ${column.header}: ${value}`);
-                      }
-                      break;
-                  }
+              // Map columns
+              const plant = row[colIndexes['plant']]?.toString().trim() || '';
+              const materialCode = row[colIndexes['material']]?.toString().trim() || '';
+              const quantity = parseFloat(row[colIndexes['qty']]?.toString().replace(/[^\d.-]/g, '') || '0');
+              const mrp = parseFloat(row[colIndexes['mrp']]?.toString().replace(/[^\d.-]/g, '') || '0');
+              const discount = parseFloat(row[colIndexes['discount']]?.toString().replace(/[^\d.-]/g, '') || '0');
+              const gsv = parseFloat(row[colIndexes['gsv']]?.toString().replace(/[^\d.-]/g, '') || '0');
+              const nsv = parseFloat(row[colIndexes['nsv']]?.toString().replace(/[^\d.-]/g, '') || '0');
+              const totalTax = parseFloat(row[colIndexes['total tax']]?.toString().replace(/[^\d.-]/g, '') || '0');
+              // Calendar Day conversion
+              let date = row[colIndexes['calendar day']]?.toString().trim() || '';
+              if (date) {
+                // Convert DD.MM.YYYY to ISO
+                if (/^\d{2}\.\d{2}\.\d{4}$/.test(date)) {
+                  const [dd, mm, yyyy] = date.split('.');
+                  date = new Date(`${yyyy}-${mm}-${dd}`).toISOString();
+                } else if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                  date = new Date(date).toISOString();
+                } else {
+                  // fallback: try Date constructor
+                  const d = new Date(date);
+                  if (!isNaN(d.getTime())) date = d.toISOString();
+                  else throw new Error(`Invalid date format: ${row[colIndexes['calendar day']]}`);
                 }
-              });
-              
-              // Validate required fields
-              const missingFields = TEMPLATE_COLUMNS
-                .filter(col => col.required && !record[col.key])
-                .map(col => col.header);
-              
-              if (missingFields.length > 0) {
-                throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
               }
-              
-              records.push(record as SalesRecord);
-              
-              // Update progress
+              // Validate required fields
+              if (!plant || !materialCode || isNaN(quantity) || isNaN(mrp) || isNaN(gsv) || isNaN(nsv)) {
+                throw new Error('Missing or invalid required fields');
+              }
+              records.push({
+                plant,
+                materialCode,
+                quantity,
+                mrp,
+                discount: isNaN(discount) ? undefined : discount,
+                gsv,
+                nsv,
+                totalTax: isNaN(totalTax) ? undefined : totalTax,
+                date,
+              });
               if (onProgress) {
                 onProgress({
                   current: i,
-                  total: lines.length - 1,
-                  percentage: Math.round((i / (lines.length - 1)) * 100),
+                  total: rawRows.length - 1,
+                  percentage: Math.round((i / (rawRows.length - 1)) * 100),
                   status: 'processing',
-                  message: `Processing row ${i} of ${lines.length - 1}`
+                  message: `Processing row ${i} of ${rawRows.length - 1}`,
                 });
               }
-              
-            } catch (rowError) {
-              errors.push(`Row ${i + 1}: ${rowError instanceof Error ? rowError.message : 'Invalid data'}`);
+            } catch (err: any) {
+              errors.push(`Row ${i + 1}: ${err.message || 'Invalid data'}`);
             }
           }
-          
           if (errors.length > 0) {
-            const error = ErrorHandler.formatValidationErrors(errors);
-            throw error;
+            reject(new Error(errors.join('\n')));
+            return;
           }
-          
           if (records.length === 0) {
-            throw new Error('No valid records found in the file');
+            reject(new Error('No valid records found in the "Sale" sheet'));
+            return;
           }
-          
           resolve(records);
-          
         } catch (error) {
           reject(error);
         }
       };
-      
       reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsText(file);
+      reader.readAsArrayBuffer(file);
     });
   }
 

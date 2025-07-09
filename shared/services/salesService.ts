@@ -41,8 +41,24 @@ export const getSaleId = (sale: SalesRecord): string => {
 
 export interface SalesFilters {
   date?: string;
+  dateFrom?: string;
+  dateTo?: string;
   plant?: string;
   materialCode?: string;
+  division?: string;
+  materialGroup?: string;
+  minQuantity?: number;
+  maxQuantity?: number;
+  minMrp?: number;
+  maxMrp?: number;
+  minGsv?: number;
+  maxGsv?: number;
+  minNsv?: number;
+  maxNsv?: number;
+  minDiscount?: number;
+  maxDiscount?: number;
+  minTax?: number;
+  maxTax?: number;
   page?: number;
   limit?: number;
   sortBy?: string;
