@@ -535,7 +535,7 @@ const SalesContent = () => {
                   </>
                 ) : (
                   <>
-                    <i className="ri-file-excel-2-line me-2"></i> Export
+                <i className="ri-file-excel-2-line me-2"></i> Export
                   </>
                 )}
               </button>
@@ -549,20 +549,41 @@ const SalesContent = () => {
         {/* Content Box */}
         <div className="box">
           <div className="box-body">
-            {/* Search Bar */}
+            {/* Search and Controls Bar */}
             <div className="mb-4">
-              <form onSubmit={handleSearch} className="relative">
-                <input
-                  type="text"
-                  className="form-control py-3"
-                  placeholder="Search by style code or store ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <button type="submit" className="absolute end-0 top-0 px-4 h-full">
-                  <i className="ri-search-line text-lg"></i>
-                </button>
-              </form>
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+                {/* Search Bar */}
+                <div className="flex-1 w-full lg:w-auto">
+                  <form onSubmit={handleSearch} className="relative">
+                    <input
+                      type="text"
+                      className="form-control py-3"
+                      placeholder="Search by style code or store ID..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <button type="submit" className="absolute end-0 top-0 px-4 h-full">
+                      <i className="ri-search-line text-lg"></i>
+                    </button>
+                  </form>
+                </div>
+
+                {/* Page Size Selector */}
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-gray-600">Show:</label>
+                  <select
+                    className="form-select form-select-sm w-20"
+                    value={pageSize}
+                    onChange={(e) => handlePageSizeChange(parseInt(e.target.value))}
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <span className="text-sm text-gray-600">entries</span>
+                </div>
+              </div>
             </div>
 
             {error && (
@@ -640,7 +661,7 @@ const SalesContent = () => {
                             />
                           )}
                         </td>
-                        <td>{new Date(sale.date).toLocaleDateString()}</td>
+                                                  <td>{new Date(sale.date).toLocaleDateString()}</td>
                         <td>{(sale.plant as Plant)?.storeId || (sale.plant as string) || '-'}</td>
                         <td>{(sale.materialCode as MaterialCode)?.styleCode || (sale.materialCode as string) || '-'}</td>
                         <td className="text-right">{sale.quantity}</td>
@@ -649,36 +670,36 @@ const SalesContent = () => {
                         <td className="text-right">{sale.gsv.toFixed(2)}</td>
                         <td className="text-right">{sale.nsv.toFixed(2)}</td>
                         <td className="text-right">{(sale.totalTax || 0).toFixed(2)}</td>
-                        <td>
-                          <div className="flex space-x-2">
-                            {getSaleId(sale) ? (
-                              <Link 
-                                href={`/sales/edit/${getSaleId(sale)}`}
-                                className="ti-btn ti-btn-primary ti-btn-sm"
-                              >
-                                <i className="ri-edit-line"></i>
-                              </Link>
-                            ) : (
-                              <span className="ti-btn ti-btn-primary ti-btn-sm opacity-50 cursor-not-allowed" title="No ID available">
-                                <i className="ri-edit-line"></i>
-                              </span>
-                            )}
-                            {getSaleId(sale) ? (
-                              <button 
-                                className="ti-btn ti-btn-danger ti-btn-sm"
-                                onClick={() => handleDeleteSale(getSaleId(sale))}
-                              >
-                                <i className="ri-delete-bin-line"></i>
-                              </button>
-                            ) : (
-                              <span className="ti-btn ti-btn-danger ti-btn-sm opacity-50 cursor-not-allowed" title="No ID available">
-                                <i className="ri-delete-bin-line"></i>
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                          <td>
+                            <div className="flex space-x-2">
+                              {getSaleId(sale) ? (
+                                <Link 
+                                  href={`/sales/edit/${getSaleId(sale)}`}
+                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                >
+                                  <i className="ri-edit-line"></i>
+                                </Link>
+                              ) : (
+                                <span className="ti-btn ti-btn-primary ti-btn-sm opacity-50 cursor-not-allowed" title="No ID available">
+                                  <i className="ri-edit-line"></i>
+                                </span>
+                              )}
+                              {getSaleId(sale) ? (
+                                <button 
+                                  className="ti-btn ti-btn-danger ti-btn-sm"
+                                  onClick={() => handleDeleteSale(getSaleId(sale))}
+                                >
+                                  <i className="ri-delete-bin-line"></i>
+                                </button>
+                              ) : (
+                                <span className="ti-btn ti-btn-danger ti-btn-sm opacity-50 cursor-not-allowed" title="No ID available">
+                                  <i className="ri-delete-bin-line"></i>
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
                   )}
                 </tbody>
               </table>
@@ -686,32 +707,15 @@ const SalesContent = () => {
 
             )}
 
-            {/* Pagination and Page Size */}
-            <div className="flex justify-between items-center mt-4">
-              <div className="flex items-center space-x-4">
-                <div className="text-sm text-gray-500">
-                  {totalRecords > 0 ? (
-                    `Showing ${((currentPage - 1) * pageSize) + 1} to ${Math.min(currentPage * pageSize, totalRecords)} of ${totalRecords} entries`
-                  ) : (
-                    'No entries to show'
-                  )}
-                </div>
-                
-                {/* Page Size Selector */}
-                <div className="flex items-center space-x-2">
-                  <label className="text-sm text-gray-600">Show:</label>
-                  <select
-                    className="form-select form-select-sm w-20"
-                    value={pageSize}
-                    onChange={(e) => handlePageSizeChange(parseInt(e.target.value))}
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                  <span className="text-sm text-gray-600">entries</span>
-                </div>
+            {/* Pagination and Results Info */}
+            <div className="flex flex-col lg:flex-row justify-between items-center mt-4">
+              {/* Results Info */}
+              <div className="text-sm text-gray-500 mb-2 lg:mb-0">
+                {totalRecords > 0 ? (
+                  `Showing ${((currentPage - 1) * pageSize) + 1} to ${Math.min(currentPage * pageSize, totalRecords)} of ${totalRecords} entries`
+                ) : (
+                  'No entries to show'
+                )}
               </div>
 
               {/* Pagination */}
@@ -735,16 +739,16 @@ const SalesContent = () => {
                             ...
                           </span>
                         ) : (
-                          <button
-                            className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
-                              currentPage === page 
-                              ? 'bg-primary text-white hover:bg-primary-dark' 
-                              : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                            }`}
+                        <button
+                          className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
+                            currentPage === page 
+                            ? 'bg-primary text-white hover:bg-primary-dark' 
+                            : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                          }`}
                             onClick={() => setCurrentPage(page as number)}
-                          >
-                            {page}
-                          </button>
+                        >
+                          {page}
+                        </button>
                         )}
                       </li>
                     ))}
