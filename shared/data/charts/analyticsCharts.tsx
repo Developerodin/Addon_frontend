@@ -180,9 +180,6 @@ export const getTimeBasedTrendsChart = (data: any[]): ChartConfig => {
           rotate: -45,
           style: {
             fontSize: '12px'
-          },
-          formatter: function(val: number) {
-            return formatNumber(val);
           }
         }
       },
@@ -190,22 +187,12 @@ export const getTimeBasedTrendsChart = (data: any[]): ChartConfig => {
         {
           title: {
             text: 'Quantity'
-          },
-          labels: {
-            formatter: function(val: number) {
-              return formatNumber(val);
-            }
           }
         },
         {
           opposite: true,
           title: {
             text: 'NSV (₹)'
-          },
-          labels: {
-            formatter: function(val: number) {
-              return formatCurrency(val);
-            }
           }
         }
       ],
@@ -312,22 +299,12 @@ export const getProductPerformanceChart = (data: any[]): ChartConfig => {
         {
           title: {
             text: 'Quantity'
-          },
-          labels: {
-            formatter: function(val: number) {
-              return formatNumber(val);
-            }
           }
         },
         {
           opposite: true,
           title: {
             text: 'NSV (₹)'
-          },
-          labels: {
-            formatter: function(val: number) {
-              return formatCurrency(val);
-            }
           }
         }
       ],
@@ -420,11 +397,6 @@ export const getProductPerformanceHorizontalChart = (data: any[], metric: 'quant
       yaxis: {
         title: {
           text: metric === 'quantity' ? 'Quantity' : 'NSV (₹)'
-        },
-        labels: {
-          formatter: function(val: number) {
-            return formatCurrency(val);
-          }
         }
       },
       tooltip: {
@@ -506,22 +478,12 @@ export const getStorePerformanceChart = (data: any[]): ChartConfig => {
         {
           title: {
             text: 'NSV (₹)'
-          },
-          labels: {
-            formatter: function(val: number) {
-              return formatCurrency(val);
-            }
           }
         },
         {
           opposite: true,
           title: {
             text: 'Quantity'
-          },
-          labels: {
-            formatter: function(val: number) {
-              return formatNumber(val);
-            }
           }
         }
       ],
@@ -647,10 +609,7 @@ export const getStorePerformanceHorizontalChart = (data: any[], metric: 'nsv' | 
           },
           maxWidth: 120,
           trim: true,
-          trimAmount: 0,
-          formatter: function(val: number) {
-            return metric === 'nsv' ? formatCurrency(val) : formatNumber(val);
-          }
+          trimAmount: 0
         }
       },
       tooltip: {
@@ -869,7 +828,7 @@ export const getBrandPerformanceChart = (data: any[]): ChartConfig => {
             fontSize: '12px',
             fontFamily: 'Helvetica, Arial, sans-serif'
           },
-          formatter: function(val: number) {
+          formatter: function (val: number) {
             return formatCurrency(val);
           }
         }
@@ -1053,11 +1012,6 @@ export const getTaxAnalyticsChart = (data: any[]): ChartConfig => {
       yaxis: {
         title: {
           text: 'Total Tax (₹)'
-        },
-        labels: {
-          formatter: function(val: number) {
-            return formatCurrency(val);
-          }
         }
       },
       tooltip: {
@@ -1136,11 +1090,6 @@ export const getMRPDistributionChart = (data: any[]): ChartConfig => {
       yaxis: {
         title: {
           text: 'Number of Products'
-        },
-        labels: {
-          formatter: function(val: number) {
-            return formatNumber(val);
-          }
         }
       },
       fill: {
@@ -1253,21 +1202,11 @@ export const getMonthlySalesChart = (data: any[]): ChartConfig => {
           } catch (error) {
             return month;
           }
-        }),
-        labels: {
-          formatter: function(val: number) {
-            return formatNumber(val);
-          }
-        }
+        })
       },
       yaxis: {
         title: {
           text: 'Sales Value (₹)'
-        },
-        labels: {
-          formatter: function(val: number) {
-            return formatCurrency(val);
-          }
         }
       },
       fill: {
