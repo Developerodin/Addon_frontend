@@ -47,6 +47,8 @@ export interface SalesFilters {
   materialCode?: string;
   division?: string;
   materialGroup?: string;
+  city?: string;
+  category?: string;
   minQuantity?: number;
   maxQuantity?: number;
   minMrp?: number;

@@ -33,7 +33,7 @@ const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose, filters, onA
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Sales Filters</h3>
+          <h3 className="text-lg font-semibold">Advanced Filters</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <i className="ri-close-line text-xl"></i>
           </button>
@@ -257,13 +257,28 @@ const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose, filters, onA
   );
 };
 
+// Group sales records by date
+const groupSalesByDate = (salesData: SalesRecord[]) => {
+  const grouped: { [key: string]: SalesRecord[] } = {};
+  
+  salesData.forEach(sale => {
+    const dateKey = new Date(sale.date).toLocaleDateString();
+    if (!grouped[dateKey]) {
+      grouped[dateKey] = [];
+    }
+    grouped[dateKey].push(sale);
+  });
+  
+  return grouped;
+};
+
 const SalesContent = () => {
   const searchParams = useSearchParams();
   const [selectedSales, setSelectedSales] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25); // Default to 25 rows
+  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -273,7 +288,15 @@ const SalesContent = () => {
   const [importProgress, setImportProgress] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<SalesFilters>({});
+  const [selectedCity, setSelectedCity] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Mock data for dropdowns (replace with actual API calls)
+  const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Kolkata', 'Hyderabad', 'Pune', 'Ahmedabad'];
+  const categories = ['All', 'Socks', 'Towel', 'Hanky'];
 
   // Fetch sales data
   const fetchSales = async (filters: SalesFilters = {}) => {
@@ -285,6 +308,8 @@ const SalesContent = () => {
         ...filters,
         page: currentPage,
         limit: pageSize,
+        sortBy: sortBy,
+        sortOrder: sortOrder,
       });
       
       setSalesData(response.results || []);
@@ -304,17 +329,21 @@ const SalesContent = () => {
   useEffect(() => {
     const filters: SalesFilters = { ...activeFilters };
     if (searchQuery) {
-      // Search by material code (style code) or plant (store ID)
       filters.materialCode = searchQuery;
     }
+    if (selectedCity) {
+      filters.city = selectedCity;
+    }
+    if (selectedCategory && selectedCategory !== 'All') {
+      filters.category = selectedCategory;
+    }
     fetchSales(filters);
-  }, [currentPage, pageSize, searchQuery, activeFilters]);
+  }, [currentPage, pageSize, searchQuery, activeFilters, selectedCity, selectedCategory, sortBy, sortOrder]);
 
   // Check for success message from URL params
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
       setSuccess('Sale saved successfully!');
-      // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
     }
   }, [searchParams]);
@@ -340,7 +369,6 @@ const SalesContent = () => {
     if (window.confirm('Are you sure you want to delete this sale?')) {
       try {
         await salesService.deleteSale(saleId);
-        // Refresh the data
         fetchSales(activeFilters);
         toast.success('Sale deleted successfully');
       } catch (err) {
@@ -379,13 +407,9 @@ const SalesContent = () => {
 
         const result = await response.json();
         
-        // Clear selections
         setSelectedSales([]);
         setSelectAll(false);
-        
-        // Refresh the data
         fetchSales(activeFilters);
-        
         toast.success(`Successfully deleted ${selectedSales.length} sale${selectedSales.length > 1 ? 's' : ''}`);
         
       } catch (err) {
@@ -401,30 +425,44 @@ const SalesContent = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setCurrentPage(1); // Reset to first page when searching
+    setCurrentPage(1);
   };
 
   const handleApplyFilters = (filters: SalesFilters) => {
     setActiveFilters(filters);
-    setCurrentPage(1); // Reset to first page when applying filters
+    setCurrentPage(1);
   };
 
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
-    setCurrentPage(1); // Reset to first page when changing page size
+    setCurrentPage(1);
+  };
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('desc');
+    }
+    setCurrentPage(1);
   };
 
   const handleExport = async () => {
     try {
       setLoading(true);
       
-      // Get all sales data for export (without pagination)
       const filters: SalesFilters = { ...activeFilters };
       if (searchQuery) {
         filters.materialCode = searchQuery;
       }
+      if (selectedCity) {
+        filters.city = selectedCity;
+      }
+      if (selectedCategory && selectedCategory !== 'All') {
+        filters.category = selectedCategory;
+      }
       
-      // Remove pagination for export
       delete filters.page;
       delete filters.limit;
       
@@ -436,14 +474,11 @@ const SalesContent = () => {
         return;
       }
       
-      // Generate filename with current date
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
       const filename = `sales_export_${dateStr}.csv`;
       
-      // Download CSV
       salesService.downloadCSV(allSalesData, filename);
-      
       toast.success(`Exported ${allSalesData.length} sales records`);
       
     } catch (error) {
@@ -456,7 +491,7 @@ const SalesContent = () => {
 
   // Calculate pagination range
   const getPaginationRange = () => {
-    const delta = 2; // Number of pages to show on each side of current page
+    const delta = 2;
     const range = [];
     const rangeWithDots = [];
 
@@ -481,8 +516,8 @@ const SalesContent = () => {
     return rangeWithDots;
   };
 
-  // Check if any filters are active
-  const hasActiveFilters = Object.keys(activeFilters).length > 0;
+  const hasActiveFilters = Object.keys(activeFilters).length > 0 || selectedCity || (selectedCategory && selectedCategory !== 'All');
+  const groupedSales = groupSalesByDate(salesData);
 
   return (
     <div className="grid grid-cols-12 gap-6">
@@ -519,7 +554,7 @@ const SalesContent = () => {
                 onClick={() => setShowFilters(true)}
               >
                 <i className="ri-filter-3-line me-2"></i>
-                Filters {hasActiveFilters && <span className="bg-white text-warning rounded-full px-2 py-1 text-xs ml-1">●</span>}
+                Advanced Filters {hasActiveFilters && <span className="bg-white text-warning rounded-full px-2 py-1 text-xs ml-1">●</span>}
               </button>
               
               <button 
@@ -552,20 +587,79 @@ const SalesContent = () => {
             {/* Search and Controls Bar */}
             <div className="mb-4">
               <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-                {/* Search Bar */}
+                {/* Search Bar with Dropdowns */}
                 <div className="flex-1 w-full lg:w-auto">
-                  <form onSubmit={handleSearch} className="relative">
-                    <input
-                      type="text"
-                      className="form-control py-3"
-                      placeholder="Search by style code or store ID..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    <button type="submit" className="absolute end-0 top-0 px-4 h-full">
-                      <i className="ri-search-line text-lg"></i>
-                    </button>
+                  <form onSubmit={handleSearch} className="flex gap-2">
+                    <div className="relative flex-1 max-w-xs">
+                      <input
+                        type="text"
+                        className="form-control py-2 text-sm"
+                        placeholder="Search by style code..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                      <button type="submit" className="absolute end-0 top-0 px-3 h-full">
+                        <i className="ri-search-line text-sm"></i>
+                      </button>
+                    </div>
+                    
+                    {/* City Dropdown */}
+                    <select
+                      className="form-select py-2 text-sm w-32"
+                      value={selectedCity}
+                      onChange={(e) => {
+                        setSelectedCity(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <option value="">All Cities</option>
+                      {cities.map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
+                    
+                    {/* Category Dropdown */}
+                    <select
+                      className="form-select py-2 text-sm w-32"
+                      value={selectedCategory}
+                      onChange={(e) => {
+                        setSelectedCategory(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                    >
+                      {categories.map(category => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
                   </form>
+                </div>
+
+                {/* Sort Options */}
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-gray-600">Sort by:</label>
+                  <select
+                    className="form-select form-select-sm w-24"
+                    value={sortBy}
+                    onChange={(e) => handleSort(e.target.value)}
+                  >
+                    <option value="date">Date</option>
+                    <option value="quantity">Qty</option>
+                    <option value="mrp">MRP</option>
+                    <option value="nsv">NSV</option>
+                  </select>
+                  
+                  <label className="text-sm text-gray-600">Order:</label>
+                  <select
+                    className="form-select form-select-sm w-20"
+                    value={sortOrder}
+                    onChange={(e) => {
+                      setSortOrder(e.target.value as 'asc' | 'desc');
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option value="desc">Desc</option>
+                    <option value="asc">Asc</option>
+                  </select>
                 </div>
 
                 {/* Page Size Selector */}
@@ -606,105 +700,115 @@ const SalesContent = () => {
                 <p className="mt-2">Loading sales data...</p>
               </div>
             ) : (
-
-            <div className="overflow-x-auto">
-              <table className="table whitespace-nowrap table-bordered min-w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th scope="col" className="!text-start">
-                      <input 
-                        type="checkbox" 
-                        className="form-check-input" 
-                        checked={selectAll}
-                        onChange={handleSelectAll}
-                      />
-                    </th>
-                    <th scope="col" className="text-start">Date</th>
-                    <th scope="col" className="text-start">Plant ID</th>
-                    <th scope="col" className="text-start">Material Code</th>
-                    <th scope="col" className="text-start">Qty</th>
-                    <th scope="col" className="text-start">MRP</th>
-                    <th scope="col" className="text-start">Discount</th>
-                    <th scope="col" className="text-start">GSV</th>
-                    <th scope="col" className="text-start">NSV</th>
-                    <th scope="col" className="text-start">Tax</th>
-                    <th scope="col" className="text-start">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {!salesData || salesData.length === 0 ? (
-                    <tr>
-                      <td colSpan={11} className="text-center py-8 text-gray-500">
-                        No sales records found
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="table whitespace-nowrap table-bordered min-w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th scope="col" className="!text-start">
+                        <input 
+                          type="checkbox" 
+                          className="form-check-input" 
+                          checked={selectAll}
+                          onChange={handleSelectAll}
+                        />
+                      </th>
+                      <th scope="col" className="text-start">Date</th>
+                      <th scope="col" className="text-start">Plant ID</th>
+                      <th scope="col" className="text-start">Material Code</th>
+                      <th scope="col" className="text-start">Qty</th>
+                      <th scope="col" className="text-start">MRP</th>
+                      <th scope="col" className="text-start">Discount</th>
+                      <th scope="col" className="text-start">GSV</th>
+                      <th scope="col" className="text-start">NSV</th>
+                      <th scope="col" className="text-start">Tax</th>
+                      <th scope="col" className="text-start">Action</th>
                     </tr>
-                  ) : (
-                    salesData.map((sale, index) => (
-                      <tr 
-                        key={getSaleId(sale) || `sale-${index}`}
-                        className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}
-                      >
-                        <td>
-                          {getSaleId(sale) ? (
-                            <input 
-                              type="checkbox" 
-                              className="form-check-input" 
-                              checked={selectedSales.includes(getSaleId(sale))}
-                              onChange={() => handleSaleSelect(getSaleId(sale))}
-                            />
-                          ) : (
-                            <input 
-                              type="checkbox" 
-                              className="form-check-input opacity-50" 
-                              disabled
-                              title="No ID available"
-                            />
-                          )}
+                  </thead>
+                  <tbody>
+                    {!salesData || salesData.length === 0 ? (
+                      <tr>
+                        <td colSpan={11} className="text-center py-8 text-gray-500">
+                          No sales records found
                         </td>
-                                                  <td>{new Date(sale.date).toLocaleDateString()}</td>
-                        <td>{(sale.plant as Plant)?.storeId || (sale.plant as string) || '-'}</td>
-                        <td>{(sale.materialCode as MaterialCode)?.styleCode || (sale.materialCode as string) || '-'}</td>
-                        <td className="text-right">{sale.quantity}</td>
-                        <td className="text-right">{sale.mrp.toFixed(2)}</td>
-                        <td className="text-right">{(sale.discount || 0).toFixed(2)}</td>
-                        <td className="text-right">{sale.gsv.toFixed(2)}</td>
-                        <td className="text-right">{sale.nsv.toFixed(2)}</td>
-                        <td className="text-right">{(sale.totalTax || 0).toFixed(2)}</td>
-                          <td>
-                            <div className="flex space-x-2">
-                              {getSaleId(sale) ? (
-                                <Link 
-                                  href={`/sales/edit/${getSaleId(sale)}`}
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
-                                >
-                                  <i className="ri-edit-line"></i>
-                                </Link>
-                              ) : (
-                                <span className="ti-btn ti-btn-primary ti-btn-sm opacity-50 cursor-not-allowed" title="No ID available">
-                                  <i className="ri-edit-line"></i>
-                                </span>
-                              )}
-                              {getSaleId(sale) ? (
-                                <button 
-                                  className="ti-btn ti-btn-danger ti-btn-sm"
-                                  onClick={() => handleDeleteSale(getSaleId(sale))}
-                                >
-                                  <i className="ri-delete-bin-line"></i>
-                                </button>
-                              ) : (
-                                <span className="ti-btn ti-btn-danger ti-btn-sm opacity-50 cursor-not-allowed" title="No ID available">
-                                  <i className="ri-delete-bin-line"></i>
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
+                      </tr>
+                    ) : (
+                      Object.entries(groupedSales).map(([dateKey, salesForDate], groupIndex) => (
+                        <React.Fragment key={dateKey}>
+                          {/* Date Group Header */}
+                          <tr className="bg-gray-100 font-semibold">
+                            <td colSpan={11} className="px-4 py-2 text-gray-700">
+                              <i className="ri-calendar-line me-2"></i>
+                              {dateKey} ({salesForDate.length} records)
+                            </td>
+                          </tr>
+                          {/* Sales Records for this date */}
+                          {salesForDate.map((sale, index) => (
+                            <tr 
+                              key={getSaleId(sale) || `sale-${groupIndex}-${index}`}
+                              className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}
+                            >
+                              <td>
+                                {getSaleId(sale) ? (
+                                  <input 
+                                    type="checkbox" 
+                                    className="form-check-input" 
+                                    checked={selectedSales.includes(getSaleId(sale))}
+                                    onChange={() => handleSaleSelect(getSaleId(sale))}
+                                  />
+                                ) : (
+                                  <input 
+                                    type="checkbox" 
+                                    className="form-check-input opacity-50" 
+                                    disabled
+                                    title="No ID available"
+                                  />
+                                )}
+                              </td>
+                              <td>{new Date(sale.date).toLocaleDateString()}</td>
+                              <td>{(sale.plant as Plant)?.storeId || (sale.plant as string) || '-'}</td>
+                              <td>{(sale.materialCode as MaterialCode)?.styleCode || (sale.materialCode as string) || '-'}</td>
+                              <td className="text-right">{sale.quantity}</td>
+                              <td className="text-right">{sale.mrp.toFixed(2)}</td>
+                              <td className="text-right">{(sale.discount || 0).toFixed(2)}</td>
+                              <td className="text-right">{sale.gsv.toFixed(2)}</td>
+                              <td className="text-right">{sale.nsv.toFixed(2)}</td>
+                              <td className="text-right">{(sale.totalTax || 0).toFixed(2)}</td>
+                              <td>
+                                <div className="flex space-x-2">
+                                  {getSaleId(sale) ? (
+                                    <Link 
+                                      href={`/sales/edit/${getSaleId(sale)}`}
+                                      className="ti-btn ti-btn-primary ti-btn-sm"
+                                    >
+                                      <i className="ri-edit-line"></i>
+                                    </Link>
+                                  ) : (
+                                    <span className="ti-btn ti-btn-primary ti-btn-sm opacity-50 cursor-not-allowed" title="No ID available">
+                                      <i className="ri-edit-line"></i>
+                                    </span>
+                                  )}
+                                  {getSaleId(sale) ? (
+                                    <button 
+                                      className="ti-btn ti-btn-danger ti-btn-sm"
+                                      onClick={() => handleDeleteSale(getSaleId(sale))}
+                                    >
+                                      <i className="ri-delete-bin-line"></i>
+                                    </button>
+                                  ) : (
+                                    <span className="ti-btn ti-btn-danger ti-btn-sm opacity-50 cursor-not-allowed" title="No ID available">
+                                      <i className="ri-delete-bin-line"></i>
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
                       ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
 
             {/* Pagination and Results Info */}
