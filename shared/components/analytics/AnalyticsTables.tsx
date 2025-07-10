@@ -1,36 +1,63 @@
 import React from 'react';
+import Link from 'next/link';
 import { ProductPerformance, StorePerformance } from '@/shared/services/analyticsService';
 
-// Format number to show only 2 decimal places and hide trailing zeros
+// Format number using Indian number system (k for thousands, L for lakhs, Cr for crores)
 const formatNumber = (value: number): string => {
   if (value === 0) return '0';
   
-  // Round to 2 decimal places
-  const rounded = Math.round(value * 100) / 100;
+  const absValue = Math.abs(value);
   
-  // Convert to string and remove trailing zeros after decimal
-  const str = rounded.toString();
-  if (str.includes('.')) {
-    return str.replace(/\.?0+$/, '');
+  if (absValue >= 10000000) { // 1 Crore = 10,000,000
+    const crores = absValue / 10000000;
+    const formatted = crores >= 10 ? Math.round(crores) : Math.round(crores * 10) / 10;
+    return `${value < 0 ? '-' : ''}${formatted}Cr`;
+  } else if (absValue >= 100000) { // 1 Lakh = 100,000
+    const lakhs = absValue / 100000;
+    const formatted = lakhs >= 10 ? Math.round(lakhs) : Math.round(lakhs * 10) / 10;
+    return `${value < 0 ? '-' : ''}${formatted}L`;
+  } else if (absValue >= 1000) { // 1 Thousand = 1,000
+    const thousands = absValue / 1000;
+    const formatted = thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10;
+    return `${value < 0 ? '-' : ''}${formatted}k`;
+  } else {
+    // Round to 2 decimal places for smaller numbers
+    const rounded = Math.round(value * 100) / 100;
+    const str = rounded.toString();
+    if (str.includes('.')) {
+      return str.replace(/\.?0+$/, '');
+    }
+    return str;
   }
-  
-  return str;
 };
 
-// Format currency with proper decimal handling
+// Format currency using Indian number system (k for thousands, L for lakhs, Cr for crores)
 const formatCurrency = (value: number): string => {
   if (value === 0) return '₹0';
   
-  // Round to 2 decimal places
-  const rounded = Math.round(value * 100) / 100;
+  const absValue = Math.abs(value);
   
-  // Format with locale and remove trailing zeros
-  const formatted = rounded.toLocaleString('en-IN', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  });
-  
-  return `₹${formatted}`;
+  if (absValue >= 10000000) { // 1 Crore = 10,000,000
+    const crores = absValue / 10000000;
+    const formatted = crores >= 10 ? Math.round(crores) : Math.round(crores * 10) / 10;
+    return `₹${formatted}Cr`;
+  } else if (absValue >= 100000) { // 1 Lakh = 100,000
+    const lakhs = absValue / 100000;
+    const formatted = lakhs >= 10 ? Math.round(lakhs) : Math.round(lakhs * 10) / 10;
+    return `₹${formatted}L`;
+  } else if (absValue >= 1000) { // 1 Thousand = 1,000
+    const thousands = absValue / 1000;
+    const formatted = thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10;
+    return `₹${formatted}k`;
+  } else {
+    // Round to 2 decimal places for smaller numbers
+    const rounded = Math.round(value * 100) / 100;
+    const formatted = rounded.toLocaleString('en-IN', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+    return `₹${formatted}`;
+  }
 };
 
 interface AnalyticsTablesProps {
@@ -65,7 +92,7 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
   return (
     <div className="grid grid-cols-12 gap-6">
       {/* Product Performance Table */}
-      <div className="xl:col-span-6 col-span-12">
+      <div className="col-span-12">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
           {/* Table Header */}
           <div className="p-6 border-b border-gray-100">
@@ -117,7 +144,16 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                         </div>
                         <div className="ml-3">
                           <div className={`text-sm font-medium ${productPerformance.length === 0 ? 'text-gray-400' : 'text-gray-900'}`}>
-                            {product.productName}
+                            {productPerformance.length === 0 ? (
+                              product.productName
+                            ) : (
+                              <Link 
+                                href={`/analytics/product-analysis/${product._id}`}
+                                className="text-primary hover:text-primary/80 transition-colors duration-200"
+                              >
+                                {product.productName}
+                              </Link>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -140,7 +176,7 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
       </div>
 
       {/* Store Performance Table */}
-      <div className="xl:col-span-6 col-span-12">
+      <div className="col-span-12">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
           {/* Table Header */}
           <div className="p-6 border-b border-gray-100">
@@ -192,7 +228,16 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                         </div>
                         <div className="ml-3">
                           <div className={`text-sm font-medium ${storePerformance.length === 0 ? 'text-gray-400' : 'text-gray-900'}`}>
-                            {store.storeName}
+                            {storePerformance.length === 0 ? (
+                              store.storeName
+                            ) : (
+                              <Link 
+                                href={`/analytics/store-analysis/${store._id}`}
+                                className="text-primary hover:text-primary/80 transition-colors duration-200"
+                              >
+                                {store.storeName}
+                              </Link>
+                            )}
                           </div>
                         </div>
                       </div>

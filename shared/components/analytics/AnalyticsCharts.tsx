@@ -1,5 +1,6 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { TimeBasedTrend, ProductPerformance, StorePerformance, BrandPerformance, DiscountImpact, TaxMRPData } from '@/shared/services/analyticsService';
 import {
   getTimeBasedTrendsChart,
@@ -257,19 +258,21 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
       height: 350,
       data: timeBasedTrends,
       chartConfig: getTimeBasedTrendsChart,
-      span: 'xl:col-span-8 col-span-12',
-      color: 'blue'
+      span: 'xl:col-span-12 col-span-12',
+      color: 'blue',
+      exploreLink: '/analytics/sales-trends'
     },
     {
       title: 'Monthly Sales',
       subtitle: 'Monthly sales comparison',
       icon: 'ri-bar-chart-line',
       type: 'bar' as const,
-      height: 350,
+      height: 400,
       data: timeBasedTrends,
       chartConfig: getMonthlySalesChart,
-      span: 'xl:col-span-4 col-span-12',
-      color: 'green'
+      span: 'xl:col-span-6 col-span-12',
+      color: 'green',
+      exploreLink: '/analytics/monthly-sales'
     },
     {
       title: 'Product Performance (NSV)',
@@ -280,7 +283,8 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
       data: productPerformance,
       chartConfig: (data: any[]) => getProductPerformanceHorizontalChart(data, 'nsv'),
       span: 'xl:col-span-6 col-span-12',
-      color: 'purple'
+      color: 'purple',
+      exploreLink: '/analytics/product-performance'
     },
     {
       title: 'Product Performance (Quantity)',
@@ -291,18 +295,20 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
       data: productPerformance,
       chartConfig: (data: any[]) => getProductPerformanceHorizontalChart(data, 'quantity'),
       span: 'xl:col-span-6 col-span-12',
-      color: 'indigo'
+      color: 'indigo',
+      exploreLink: '/analytics/product-performance'
     },
     {
       title: 'Brand Performance',
       subtitle: 'Sales distribution by brand',
       icon: 'ri-award-line',
-      type: 'donut' as const,
+      type: 'bar' as const,
       height: 400,
       data: brandPerformance,
       chartConfig: getBrandPerformanceChart,
       span: 'xl:col-span-6 col-span-12',
-      color: 'amber'
+      color: 'amber',
+      exploreLink: '/analytics/brand-performance'
     },
     {
       title: 'Store Performance (NSV)',
@@ -313,7 +319,8 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
       data: storePerformance,
       chartConfig: (data: any[]) => getStorePerformanceHorizontalChart(data, 'nsv'),
       span: 'xl:col-span-6 col-span-12',
-      color: 'emerald'
+      color: 'emerald',
+      exploreLink: '/analytics/store-performance'
     },
     {
       title: 'Discount Impact Analysis',
@@ -324,7 +331,8 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
       data: discountImpact,
       chartConfig: getDiscountImpactChart,
       span: 'xl:col-span-6 col-span-12',
-      color: 'rose'
+      color: 'rose',
+      exploreLink: '/analytics/discount-impact'
     },
     {
       title: 'Tax Analytics',
@@ -335,7 +343,8 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
       data: taxMRPData?.dailyTaxData || [],
       chartConfig: getTaxAnalyticsChart,
       span: 'xl:col-span-6 col-span-12',
-      color: 'cyan'
+      color: 'cyan',
+      exploreLink: '/analytics/tax-analytics'
     },
     {
       title: 'MRP Distribution',
@@ -346,7 +355,8 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
       data: taxMRPData?.mrpDistribution || [],
       chartConfig: getMRPDistributionChart,
       span: 'xl:col-span-6 col-span-12',
-      color: 'violet'
+      color: 'violet',
+      exploreLink: '/analytics/mrp-distribution'
     }
   ];
 
@@ -440,8 +450,13 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <span className="text-xs text-gray-500">Live</span>
+                    <Link
+                      href={chart.exploreLink}
+                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors duration-200"
+                    >
+                      <i className="ri-external-link-line mr-1"></i>
+                      Explore
+                    </Link>
                   </div>
                 </div>
               </div>

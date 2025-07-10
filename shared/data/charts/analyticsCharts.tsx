@@ -53,36 +53,62 @@ const safeString = (value: any, defaultValue: string = 'Unknown'): string => {
   return str === '' ? defaultValue : str;
 };
 
-// Format number to show only 2 decimal places and hide trailing zeros
+// Format number using Indian number system (k for thousands, L for lakhs, Cr for crores)
 const formatNumber = (value: number): string => {
   if (value === 0) return '0';
   
-  // Round to 2 decimal places
-  const rounded = Math.round(value * 100) / 100;
+  const absValue = Math.abs(value);
   
-  // Convert to string and remove trailing zeros after decimal
-  const str = rounded.toString();
-  if (str.includes('.')) {
-    return str.replace(/\.?0+$/, '');
+  if (absValue >= 10000000) { // 1 Crore = 10,000,000
+    const crores = absValue / 10000000;
+    const formatted = crores >= 10 ? Math.round(crores) : Math.round(crores * 10) / 10;
+    return `${value < 0 ? '-' : ''}${formatted}Cr`;
+  } else if (absValue >= 100000) { // 1 Lakh = 100,000
+    const lakhs = absValue / 100000;
+    const formatted = lakhs >= 10 ? Math.round(lakhs) : Math.round(lakhs * 10) / 10;
+    return `${value < 0 ? '-' : ''}${formatted}L`;
+  } else if (absValue >= 1000) { // 1 Thousand = 1,000
+    const thousands = absValue / 1000;
+    const formatted = thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10;
+    return `${value < 0 ? '-' : ''}${formatted}k`;
+  } else {
+    // Round to 2 decimal places for smaller numbers
+    const rounded = Math.round(value * 100) / 100;
+    const str = rounded.toString();
+    if (str.includes('.')) {
+      return str.replace(/\.?0+$/, '');
+    }
+    return str;
   }
-  
-  return str;
 };
 
-// Format currency with proper decimal handling
+// Format currency using Indian number system (k for thousands, L for lakhs, Cr for crores)
 const formatCurrency = (value: number): string => {
   if (value === 0) return '₹0';
   
-  // Round to 2 decimal places
-  const rounded = Math.round(value * 100) / 100;
+  const absValue = Math.abs(value);
   
-  // Format with locale and remove trailing zeros
-  const formatted = rounded.toLocaleString('en-IN', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  });
-  
-  return `₹${formatted}`;
+  if (absValue >= 10000000) { // 1 Crore = 10,000,000
+    const crores = absValue / 10000000;
+    const formatted = crores >= 10 ? Math.round(crores) : Math.round(crores * 10) / 10;
+    return `₹${formatted}Cr`;
+  } else if (absValue >= 100000) { // 1 Lakh = 100,000
+    const lakhs = absValue / 100000;
+    const formatted = lakhs >= 10 ? Math.round(lakhs) : Math.round(lakhs * 10) / 10;
+    return `₹${formatted}L`;
+  } else if (absValue >= 1000) { // 1 Thousand = 1,000
+    const thousands = absValue / 1000;
+    const formatted = thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10;
+    return `₹${formatted}k`;
+  } else {
+    // Round to 2 decimal places for smaller numbers
+    const rounded = Math.round(value * 100) / 100;
+    const formatted = rounded.toLocaleString('en-IN', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+    return `₹${formatted}`;
+  }
 };
 
 // 1. Time-Based Sales Trends - Line Chart
@@ -639,7 +665,7 @@ export const getStorePerformanceHorizontalChart = (data: any[], metric: 'nsv' | 
   };
 };
 
-// 4. Brand Performance - Multiple Chart Types (Bar, Pie, Line)
+// 4. Brand Performance - Bar Chart (more reliable than donut)
 export const getBrandPerformanceChart = (data: any[]): ChartConfig => {
   // Debug logging for brand performance data
   console.log('=== BRAND PERFORMANCE DATA DEBUG ===');
@@ -686,78 +712,60 @@ export const getBrandPerformanceChart = (data: any[]): ChartConfig => {
     };
   }
 
-  // Sort data by NSV and take top 6 brands to avoid clutter
+  // Sort data by NSV and take top 8 brands to avoid clutter
   const sortedData = [...data].sort((a, b) => {
     const aValue = safeGet(a, 'totalNSV', 0);
     const bValue = safeGet(b, 'totalNSV', 0);
     return bValue - aValue; // Sort in descending order
-  }).slice(0, 6); // Limit to top 6 brands
+  }).slice(0, 8); // Limit to top 8 brands
 
-  console.log('Sorted data (top 6):', sortedData);
+  console.log('Sorted data (top 8):', sortedData);
   console.log('Sorted data length:', sortedData.length);
 
   const brands = sortedData.map(item => {
     const brandName = safeGet(item, 'brandName', 'Unknown');
     // Truncate long brand names
-    return brandName.length > 15 ? brandName.substring(0, 15) + '...' : brandName;
+    return brandName.length > 20 ? brandName.substring(0, 20) + '...' : brandName;
   });
   const nsvValues = sortedData.map(item => safeGet(item, 'totalNSV', 0));
 
   console.log('Brand names:', brands);
   console.log('NSV values:', nsvValues);
 
-  // Try different chart types based on data characteristics
-  const totalNSV = nsvValues.reduce((sum, val) => sum + val, 0);
+  // Check if we have valid data
   const hasValidData = nsvValues.some(val => val > 0);
 
   if (!hasValidData) {
-    // If no valid data, show pie chart with "No Data" message
+    // If no valid data, show bar chart with "No Data" message
     return {
-      series: [100],
+      series: [{ name: 'No Data', data: [0] }],
       options: {
         chart: {
-          type: 'pie',
+          type: 'bar',
           height: 350,
           toolbar: { show: false }
         },
-        labels: ['No Data Available'],
-        colors: ['#6b7280'],
-        plotOptions: {
-          pie: {
-            donut: {
-              size: '65%',
-              labels: {
-                show: true,
-                name: {
-                  show: true,
-                  fontSize: '18px',
-                  fontWeight: 600,
-                  color: '#374151'
-                },
-                value: {
-                  show: true,
-                  fontSize: '14px',
-                  fontWeight: 400,
-                  color: '#6b7280'
-                },
-                total: {
-                  show: true,
-                  label: 'No Data',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: '#374151'
-                }
-              }
-            }
-          }
-        },
+        xaxis: { categories: ['No Data Available'] },
+        yaxis: { title: { text: 'No Data Available' } },
+        tooltip: { enabled: false },
         dataLabels: { enabled: false },
-        legend: { position: 'bottom' }
+        noData: {
+          text: 'No brand performance data available',
+          align: 'center',
+          verticalAlign: 'middle',
+          offsetX: 0,
+          offsetY: 0,
+          style: {
+            color: '#6b7280',
+            fontSize: '16px',
+            fontFamily: 'Helvetica, Arial, sans-serif'
+          }
+        }
       }
     };
   }
 
-  // If we have valid data, use a vertical bar chart (more reliable than horizontal)
+  // Use a horizontal bar chart for better readability with brand names
   return {
     series: [
       {
@@ -775,8 +783,8 @@ export const getBrandPerformanceChart = (data: any[]): ChartConfig => {
       },
       plotOptions: {
         bar: {
-          horizontal: false,
-          columnWidth: '60%',
+          horizontal: true,
+          barHeight: '70%',
           dataLabels: {
             position: 'top'
           }
@@ -794,7 +802,7 @@ export const getBrandPerformanceChart = (data: any[]): ChartConfig => {
           fontWeight: 'bold',
           colors: ['#fff']
         },
-        offsetY: -5
+        offsetX: 0
       },
       stroke: {
         width: 0,
@@ -809,14 +817,12 @@ export const getBrandPerformanceChart = (data: any[]): ChartConfig => {
           style: {
             fontSize: '12px',
             fontFamily: 'Helvetica, Arial, sans-serif'
-          },
-          rotate: -45,
-          rotateAlways: false
+          }
         }
       },
       yaxis: {
         title: {
-          text: 'NSV (₹)',
+          text: 'Brands',
           style: {
             fontSize: '14px',
             fontFamily: 'Helvetica, Arial, sans-serif',
@@ -827,9 +833,6 @@ export const getBrandPerformanceChart = (data: any[]): ChartConfig => {
           style: {
             fontSize: '12px',
             fontFamily: 'Helvetica, Arial, sans-serif'
-          },
-          formatter: function (val: number) {
-            return formatCurrency(val);
           }
         }
       },
@@ -838,36 +841,18 @@ export const getBrandPerformanceChart = (data: any[]): ChartConfig => {
         theme: 'light',
         y: {
           formatter: function (val: number) {
+            const totalNSV = nsvValues.reduce((sum, v) => sum + v, 0);
             const percentage = totalNSV > 0 ? ((val / totalNSV) * 100).toFixed(1) : '0.0';
             return `${formatCurrency(val)} (${percentage}%)`;
           }
         }
       },
+      legend: {
+        show: false
+      },
       grid: {
         borderColor: '#f1f1f1',
-        strokeDashArray: 3,
-        xaxis: {
-          lines: {
-            show: false
-          }
-        },
-        yaxis: {
-          lines: {
-            show: true
-          }
-        }
-      },
-      noData: {
-        text: 'No brand performance data available',
-        align: 'center',
-        verticalAlign: 'middle',
-        offsetX: 0,
-        offsetY: 0,
-        style: {
-          color: '#6b7280',
-          fontSize: '16px',
-          fontFamily: 'Helvetica, Arial, sans-serif'
-        }
+        strokeDashArray: 3
       }
     }
   };

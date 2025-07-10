@@ -6,25 +6,29 @@ interface AnalyticsKPIsProps {
 }
 
 export const AnalyticsKPIs: React.FC<AnalyticsKPIsProps> = ({ summaryKPIs }) => {
-  // Helper function to safely format numbers
+  // Helper function to safely format numbers with rounding
   const safeNumberFormat = (value: any, prefix = '', suffix = '') => {
     if (value === null || value === undefined || isNaN(value)) {
       return `${prefix}0${suffix}`;
     }
     try {
-      return `${prefix}${Number(value).toLocaleString()}${suffix}`;
+      // Round to nearest whole number
+      const roundedValue = Math.round(Number(value));
+      return `${prefix}${roundedValue.toLocaleString()}${suffix}`;
     } catch (error) {
       return `${prefix}0${suffix}`;
     }
   };
 
-  // Helper function to safely format percentages
+  // Helper function to safely format percentages with rounding
   const safePercentageFormat = (value: any) => {
     if (value === null || value === undefined || isNaN(value)) {
       return '0%';
     }
     try {
-      return `${Number(value).toFixed(1)}%`;
+      // Round to nearest whole number
+      const roundedValue = Math.round(Number(value));
+      return `${roundedValue}%`;
     } catch (error) {
       return '0%';
     }

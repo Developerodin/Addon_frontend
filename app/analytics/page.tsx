@@ -6,6 +6,7 @@ import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import { useAnalytics } from '@/shared/hooks/useAnalytics';
 import { AnalyticsKPIs, AnalyticsCharts, AnalyticsTables } from '@/shared/components/analytics';
 import { useGlobalErrorHandler } from '@/shared/utils/errorBoundary';
+import Link from 'next/link';
 
 // Error boundary for the entire analytics page
 const AnalyticsErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -197,40 +198,43 @@ export default function AnalyticsPage() {
   return (
     <AnalyticsErrorBoundary>
       <Seo title="Analytics" />
-      <Pageheader currentpage="Analytics" activepage="Dashboards" mainpage="Analytics" />
       
-      {/* Modern Date Range Filter */}
+      {/* Custom Page Header with Date Filters */}
       <div className="mb-8">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
-                    value={dateRange.dateFrom}
-                    onChange={(e) => handleDateRangeChange('dateFrom', e.target.value)}
-                  />
-                  <i className="ri-calendar-line absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                </div>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+            <p className="text-gray-600 mt-1">Comprehensive sales and performance insights</p>
+          </div>
+          
+          {/* Date Range Filters */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <div className="relative">
+                <input
+                  type="date"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
+                  value={dateRange.dateFrom}
+                  onChange={(e) => handleDateRangeChange('dateFrom', e.target.value)}
+                />
+                <i className="ri-calendar-line absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
               </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
-                    value={dateRange.dateTo}
-                    onChange={(e) => handleDateRangeChange('dateTo', e.target.value)}
-                  />
-                  <i className="ri-calendar-line absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                </div>
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <div className="relative">
+                <input
+                  type="date"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
+                  value={dateRange.dateTo}
+                  onChange={(e) => handleDateRangeChange('dateTo', e.target.value)}
+                />
+                <i className="ri-calendar-line absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
               </div>
             </div>
             
-            <div className="flex items-center gap-3">
+            <div className="flex items-end gap-3">
               {sanitizedData?.usingMockData && (
                 <div className="flex items-center gap-2 px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-sm">
                   <i className="ri-information-line"></i>
@@ -242,7 +246,7 @@ export default function AnalyticsPage() {
                 className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200 shadow-sm"
               >
                 <i className="ri-refresh-line mr-2"></i>
-                Refresh Data
+                Refresh
               </button>
             </div>
           </div>
