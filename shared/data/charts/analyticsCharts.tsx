@@ -33,14 +33,38 @@ const safeGet = (obj: any, path: string, defaultValue: any = 0) => {
   return result;
 };
 
-// Enhanced safe number conversion
+// Enhanced safe number conversion with proper rounding
 const safeNumber = (value: any, defaultValue: number = 0): number => {
   if (value === null || value === undefined) {
     return defaultValue;
   }
   
   const num = typeof value === 'number' ? value : parseFloat(value);
-  return isNaN(num) || !isFinite(num) ? defaultValue : num;
+  if (isNaN(num) || !isFinite(num)) {
+    return defaultValue;
+  }
+  
+  // Round to 2 decimal places to avoid floating point precision issues
+  return Math.round(num * 100) / 100;
+};
+
+// Helper function to round all values in chart data arrays
+const roundChartData = (data: number[]): number[] => {
+  return data.map(value => Math.round(value * 100) / 100);
+};
+
+// Helper function to format date as MM/DD (month/day only)
+const formatDateShort = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Unknown';
+    
+    const month = date.getMonth() + 1; // getMonth() returns 0-11
+    const day = date.getDate();
+    return `${month}/${day}`;
+  } catch {
+    return 'Unknown';
+  }
 };
 
 // Enhanced safe string conversion
@@ -131,17 +155,11 @@ export const getTimeBasedTrendsChart = (data: any[]): ChartConfig => {
   const dates = data.map(item => {
     const date = safeGet(item, 'date');
     if (!date) return 'Unknown';
-    
-    try {
-      const dateObj = new Date(date);
-      return isNaN(dateObj.getTime()) ? 'Unknown' : dateObj.toLocaleDateString();
-    } catch {
-      return 'Unknown';
-    }
+    return formatDateShort(date);
   });
   
-  const quantities = data.map(item => safeNumber(safeGet(item, 'totalQuantity'), 0));
-  const nsvValues = data.map(item => safeNumber(safeGet(item, 'totalNSV'), 0));
+  const quantities = roundChartData(data.map(item => safeNumber(safeGet(item, 'totalQuantity'), 0)));
+  const nsvValues = roundChartData(data.map(item => safeNumber(safeGet(item, 'totalNSV'), 0)));
   
   // Check if all values are zero (empty data)
   const isEmptyData = quantities.every(q => q === 0) && nsvValues.every(n => n === 0);
@@ -151,12 +169,12 @@ export const getTimeBasedTrendsChart = (data: any[]): ChartConfig => {
     {
       name: 'Quantity',
       type: 'line' as const,
-      data: quantities.map(q => safeNumber(q, 0))
+      data: quantities
     },
     {
       name: 'NSV',
       type: 'line' as const,
-      data: nsvValues.map(n => safeNumber(n, 0))
+      data: nsvValues
     }
   ];
 
@@ -273,8 +291,8 @@ export const getProductPerformanceChart = (data: any[]): ChartConfig => {
   }
 
   const products = data.map(item => safeGet(item, 'productName', 'Unknown'));
-  const quantities = data.map(item => safeGet(item, 'totalQuantity', 0));
-  const nsvValues = data.map(item => safeGet(item, 'totalNSV', 0));
+  const quantities = roundChartData(data.map(item => safeNumber(safeGet(item, 'totalQuantity'), 0)));
+  const nsvValues = roundChartData(data.map(item => safeNumber(safeGet(item, 'totalNSV'), 0)));
 
   return {
     series: [
@@ -369,10 +387,10 @@ export const getProductPerformanceHorizontalChart = (data: any[], metric: 'quant
   }
 
   const products = data.map(item => safeGet(item, 'productName', 'Unknown'));
-  const values = data.map(item => {
-    const value = metric === 'quantity' ? safeGet(item, 'totalQuantity', 0) : safeGet(item, 'totalNSV', 0);
+  const values = roundChartData(data.map(item => {
+    const value = metric === 'quantity' ? safeNumber(safeGet(item, 'totalQuantity'), 0) : safeNumber(safeGet(item, 'totalNSV'), 0);
     return value || 0;
-  });
+  }));
 
   return {
     series: [
@@ -453,8 +471,8 @@ export const getStorePerformanceChart = (data: any[]): ChartConfig => {
   }
 
   const stores = data.map(item => safeGet(item, 'storeName', 'Unknown'));
-  const nsvValues = data.map(item => safeGet(item, 'totalNSV', 0));
-  const quantities = data.map(item => safeGet(item, 'totalQuantity', 0));
+  const nsvValues = roundChartData(data.map(item => safeNumber(safeGet(item, 'totalNSV'), 0)));
+  const quantities = roundChartData(data.map(item => safeNumber(safeGet(item, 'totalQuantity'), 0)));
 
   return {
     series: [
@@ -545,8 +563,8 @@ export const getStorePerformanceHorizontalChart = (data: any[], metric: 'nsv' | 
 
   // Sort data by NSV/Quantity and take top 8 stores to avoid clutter
   const sortedData = [...data].sort((a, b) => {
-    const aValue = metric === 'nsv' ? safeGet(a, 'totalNSV', 0) : safeGet(a, 'totalQuantity', 0);
-    const bValue = metric === 'nsv' ? safeGet(b, 'totalNSV', 0) : safeGet(b, 'totalQuantity', 0);
+    const aValue = metric === 'nsv' ? safeNumber(safeGet(a, 'totalNSV'), 0) : safeNumber(safeGet(a, 'totalQuantity'), 0);
+    const bValue = metric === 'nsv' ? safeNumber(safeGet(b, 'totalNSV'), 0) : safeNumber(safeGet(b, 'totalQuantity'), 0);
     return bValue - aValue; // Sort in descending order
   }).slice(0, 8); // Limit to top 8 stores
 
@@ -555,10 +573,10 @@ export const getStorePerformanceHorizontalChart = (data: any[], metric: 'nsv' | 
     // Truncate long store names to keep chart clean
     return storeName.length > 20 ? storeName.substring(0, 20) + '...' : storeName;
   });
-  const values = sortedData.map(item => {
-    const value = metric === 'nsv' ? safeGet(item, 'totalNSV', 0) : safeGet(item, 'totalQuantity', 0);
+  const values = roundChartData(sortedData.map(item => {
+    const value = metric === 'nsv' ? safeNumber(safeGet(item, 'totalNSV'), 0) : safeNumber(safeGet(item, 'totalQuantity'), 0);
     return value || 0;
-  });
+  }));
 
   return {
     series: [
@@ -714,8 +732,8 @@ export const getBrandPerformanceChart = (data: any[]): ChartConfig => {
 
   // Sort data by NSV and take top 8 brands to avoid clutter
   const sortedData = [...data].sort((a, b) => {
-    const aValue = safeGet(a, 'totalNSV', 0);
-    const bValue = safeGet(b, 'totalNSV', 0);
+    const aValue = safeNumber(safeGet(a, 'totalNSV'), 0);
+    const bValue = safeNumber(safeGet(b, 'totalNSV'), 0);
     return bValue - aValue; // Sort in descending order
   }).slice(0, 8); // Limit to top 8 brands
 
@@ -727,7 +745,7 @@ export const getBrandPerformanceChart = (data: any[]): ChartConfig => {
     // Truncate long brand names
     return brandName.length > 20 ? brandName.substring(0, 20) + '...' : brandName;
   });
-  const nsvValues = sortedData.map(item => safeGet(item, 'totalNSV', 0));
+  const nsvValues = roundChartData(sortedData.map(item => safeNumber(safeGet(item, 'totalNSV'), 0)));
 
   console.log('Brand names:', brands);
   console.log('NSV values:', nsvValues);
@@ -874,8 +892,8 @@ export const getDiscountImpactChart = (data: any[]): ChartConfig => {
   }
 
   const scatterData = data.map(item => ({
-    x: safeGet(item, 'avgDiscountPercentage', 0),
-    y: safeGet(item, 'totalNSV', 0)
+    x: safeNumber(safeGet(item, 'avgDiscountPercentage'), 0),
+    y: safeNumber(safeGet(item, 'totalNSV'), 0)
   })).filter(point => point.x !== 0 || point.y !== 0); // Filter out zero points
 
   return {
@@ -941,9 +959,10 @@ export const getTaxAnalyticsChart = (data: any[]): ChartConfig => {
 
   const dates = data.map(item => {
     const date = safeGet(item, 'date');
-    return date ? new Date(date).toLocaleDateString() : 'Unknown';
+    if (!date) return 'Unknown';
+    return formatDateShort(date);
   });
-  const taxValues = data.map(item => safeGet(item, 'totalTax', 0));
+  const taxValues = roundChartData(data.map(item => safeNumber(safeGet(item, 'totalTax'), 0)));
 
   return {
     series: [
@@ -1030,7 +1049,7 @@ export const getMRPDistributionChart = (data: any[]): ChartConfig => {
     const id = safeGet(item, '_id');
     return id ? id.toString() : 'Unknown';
   });
-  const counts = data.map(item => safeGet(item, 'count', 0));
+  const counts = roundChartData(data.map(item => safeNumber(safeGet(item, 'count'), 0)));
 
   return {
     series: [
@@ -1127,9 +1146,9 @@ export const getMonthlySalesChart = (data: any[]): ChartConfig => {
         };
       }
       
-      acc[monthKey].totalNSV += safeGet(item, 'totalNSV', 0);
-      acc[monthKey].totalGSV += safeGet(item, 'totalGSV', 0);
-      acc[monthKey].totalQuantity += safeGet(item, 'totalQuantity', 0);
+      acc[monthKey].totalNSV += safeNumber(safeGet(item, 'totalNSV'), 0);
+      acc[monthKey].totalGSV += safeNumber(safeGet(item, 'totalGSV'), 0);
+      acc[monthKey].totalQuantity += safeNumber(safeGet(item, 'totalQuantity'), 0);
     } catch (error) {
       console.error('Error processing date:', dateStr, error);
     }
@@ -1138,8 +1157,8 @@ export const getMonthlySalesChart = (data: any[]): ChartConfig => {
   }, {});
 
   const months = Object.keys(monthlyData).sort();
-  const nsvValues = months.map(month => monthlyData[month].totalNSV);
-  const gsvValues = months.map(month => monthlyData[month].totalGSV);
+  const nsvValues = roundChartData(months.map(month => monthlyData[month].totalNSV));
+  const gsvValues = roundChartData(months.map(month => monthlyData[month].totalGSV));
 
   return {
     series: [
@@ -1181,7 +1200,6 @@ export const getMonthlySalesChart = (data: any[]): ChartConfig => {
           try {
             const [year, monthNum] = month.split('-');
             return new Date(parseInt(year), parseInt(monthNum) - 1).toLocaleDateString('en-US', { 
-              year: 'numeric', 
               month: 'short' 
             });
           } catch (error) {
