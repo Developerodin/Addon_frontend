@@ -89,6 +89,10 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
   const displayProductData = productPerformance.length > 0 ? productPerformance : getSampleProductData();
   const displayStoreData = storePerformance.length > 0 ? storePerformance : getSampleStoreData();
 
+  // Check if we have real data (not sample data)
+  const hasRealProductData = productPerformance.length > 0;
+  const hasRealStoreData = storePerformance.length > 0;
+
   return (
     <div className="grid grid-cols-12 gap-6">
       {/* Product Performance Table */}
@@ -126,11 +130,11 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
                 {displayProductData.slice(0, 5).map((product, index) => (
-                  <tr key={product._id} className={`hover:bg-gray-50 transition-colors duration-200 ${productPerformance.length === 0 ? 'text-gray-400' : ''}`}>
+                  <tr key={product._id} className={`hover:bg-gray-50 transition-colors duration-200 ${!hasRealProductData ? 'text-gray-400' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium ${
-                          productPerformance.length === 0 
+                          !hasRealProductData 
                             ? 'bg-gray-100 text-gray-400' 
                             : index === 0 
                               ? 'bg-yellow-100 text-yellow-700' 
@@ -143,8 +147,8 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                           {index + 1}
                         </div>
                         <div className="ml-3">
-                          <div className={`text-sm font-medium ${productPerformance.length === 0 ? 'text-gray-400' : 'text-gray-900'}`}>
-                            {productPerformance.length === 0 ? (
+                          <div className={`text-sm font-medium ${!hasRealProductData ? 'text-gray-400' : 'text-gray-900'}`}>
+                            {!hasRealProductData ? (
                               product.productName
                             ) : (
                               <Link 
@@ -158,13 +162,13 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${productPerformance.length === 0 ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${!hasRealProductData ? 'text-gray-400' : 'text-gray-500'}`}>
                       {product.categoryName}
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${productPerformance.length === 0 ? 'text-gray-400' : 'text-gray-900'}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${!hasRealProductData ? 'text-gray-400' : 'text-gray-900'}`}>
                       {formatNumber(product.totalQuantity)}
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${productPerformance.length === 0 ? 'text-gray-400' : 'text-green-600'}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${!hasRealProductData ? 'text-gray-400' : 'text-green-600'}`}>
                       {formatCurrency(product.totalNSV)}
                     </td>
                   </tr>
@@ -210,11 +214,11 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
                 {displayStoreData.slice(0, 5).map((store, index) => (
-                  <tr key={store._id} className={`hover:bg-gray-50 transition-colors duration-200 ${storePerformance.length === 0 ? 'text-gray-400' : ''}`}>
+                  <tr key={store._id} className={`hover:bg-gray-50 transition-colors duration-200 ${!hasRealStoreData ? 'text-gray-400' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium ${
-                          storePerformance.length === 0 
+                          !hasRealStoreData 
                             ? 'bg-gray-100 text-gray-400' 
                             : index === 0 
                               ? 'bg-yellow-100 text-yellow-700' 
@@ -227,8 +231,8 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                           {index + 1}
                         </div>
                         <div className="ml-3">
-                          <div className={`text-sm font-medium ${storePerformance.length === 0 ? 'text-gray-400' : 'text-gray-900'}`}>
-                            {storePerformance.length === 0 ? (
+                          <div className={`text-sm font-medium ${!hasRealStoreData ? 'text-gray-400' : 'text-gray-900'}`}>
+                            {!hasRealStoreData ? (
                               store.storeName
                             ) : (
                               <Link 
@@ -242,13 +246,13 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${storePerformance.length === 0 ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${!hasRealStoreData ? 'text-gray-400' : 'text-gray-500'}`}>
                       {store.city}, {store.state}
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${storePerformance.length === 0 ? 'text-gray-400' : 'text-gray-900'}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${!hasRealStoreData ? 'text-gray-400' : 'text-gray-900'}`}>
                       {formatNumber(store.totalQuantity)}
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${storePerformance.length === 0 ? 'text-gray-400' : 'text-green-600'}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${!hasRealStoreData ? 'text-gray-400' : 'text-green-600'}`}>
                       {formatCurrency(store.totalNSV)}
                     </td>
                   </tr>
