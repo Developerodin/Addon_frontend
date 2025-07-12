@@ -208,9 +208,8 @@ export default function AnalyticsPage() {
           </div>
           
           {/* Date Range Filters */}
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-4 items-center">
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
               <div className="relative">
                 <input
                   type="date"
@@ -221,8 +220,10 @@ export default function AnalyticsPage() {
                 <i className="ri-calendar-line absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
               </div>
             </div>
+            <div className="flex items-center justify-center px-2">
+              <span className="text-sm font-medium text-gray-600">To</span>
+            </div>
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
               <div className="relative">
                 <input
                   type="date"

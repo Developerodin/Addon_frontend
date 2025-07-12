@@ -144,9 +144,62 @@ const Filemanager = () => {
         setUploadFiles(prev => prev.filter(f => f.name !== name));
     };
 
-    // Handle folder navigation
+    // Handle folder navigation with auto-expand
     const handleFolderClick = (folderId: string) => {
+        // Auto-expand parent folders to show the path to the selected folder
+        expandParentFolders(folderId, folderTree);
         loadFolderContents(folderId);
+    };
+
+    // Handle item clicks (both files and folders)
+    const handleItemClick = (item: Folder | FileItem) => {
+        if (item.type === 'folder') {
+            // If it's a folder, navigate to it
+            handleFolderClick(item.id);
+        } else if (item.type === 'file' && item.file) {
+            // If it's a file, open it
+            handleFileClick(item);
+        }
+    };
+
+    // Handle file clicks
+    const handleFileClick = (fileItem: FileItem) => {
+        if (fileItem.file) {
+            // Open file in new tab
+            window.open(fileItem.file.fileUrl, '_blank');
+        }
+    };
+
+    // Auto-expand parent folders when navigating to a child folder
+    const expandParentFolders = (folderId: string, folders: any[]): void => {
+        const findPath = (folders: any[], targetId: string, path: string[] = []): string[] | null => {
+            for (const folder of folders) {
+                const currentPath = [...path, folder.id];
+                if (folder.id === targetId) {
+                    return currentPath;
+                }
+                if (folder.children && folder.children.length > 0) {
+                    const result = findPath(folder.children, targetId, currentPath);
+                    if (result) return result;
+                }
+            }
+            return null;
+        };
+
+        const path = findPath(folders, folderId);
+        if (path) {
+            // Remove the target folder ID from the path (we don't want to expand the target itself)
+            const parentIds = path.slice(0, -1);
+            setExpandedFolders(prev => {
+                const newExpanded = [...prev];
+                parentIds.forEach(id => {
+                    if (!newExpanded.includes(id)) {
+                        newExpanded.push(id);
+                    }
+                });
+                return newExpanded;
+            });
+        }
     };
 
     // Handle folder expansion
@@ -160,51 +213,58 @@ const Filemanager = () => {
         return user.name || user.email || 'Unknown User';
     };
 
-    // Recursive folder tree component
+    // VS Code-like folder tree component with improved UI
     const FolderTree = ({ folders, level = 0 }: { folders: any[]; level?: number }) => (
-        <ul
-            className={`relative transition-all duration-200
-                ${level > 0 ? 'pl-5 ml-2 border-l-2 border-primary/40 dark:border-primary/60' : ''}
-            `}
-            style={{
-                borderColor: level > 0 ? 'rgba(59,130,246,0.4)' : undefined,
-            }}
-        >
+        <ul className="space-y-0.5">
             {folders.map(folder => {
                 const isActive = currentFolder?.id === folder.id;
                 const isExpanded = expandedFolders.includes(folder.id);
                 const hasChildren = folder.children && folder.children.length > 0;
+                
                 return (
-                    <li key={folder.id} className="relative group transition-all duration-200">
+                    <li key={folder.id} className="relative group">
                         <div
-                            className={`flex items-center gap-2 px-2 py-1 rounded-lg cursor-pointer transition-all duration-200
-                                ${isActive ? 'bg-primary/10 text-primary font-semibold shadow-sm' : 'hover:bg-primary/5 hover:text-primary'}
-                                ${level > 0 ? 'ml-2 bg-primary/5' : ''}`}
-                            style={{ minHeight: '2.25rem' }}
+                            className={`flex items-center gap-1 px-2 py-1.5 rounded cursor-pointer transition-colors duration-150
+                                ${isActive ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}
+                            `}
+                            style={{ paddingLeft: `${level * 16 + 8}px` }}
                             onClick={() => handleFolderClick(folder.id)}
                         >
+                            {/* Expand/Collapse Arrow */}
                             {hasChildren && (
-                                <span
-                                    className="flex items-center justify-center w-5 h-5 text-gray-400 hover:text-primary transition mr-1"
-                                    onClick={e => { e.stopPropagation(); toggleExpand(folder.id); }}
+                                <button
+                                    className="flex items-center justify-center w-4 h-4 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                                    onClick={e => { 
+                                        e.stopPropagation(); 
+                                        toggleExpand(folder.id); 
+                                    }}
+                                    title={isExpanded ? 'Collapse' : 'Expand'}
                                 >
-                                    <i className={`ri-arrow-${isExpanded ? 'down' : 'right'}-s-line`}></i>
-                                </span>
+                                    <i className={`ri-arrow-${isExpanded ? 'down' : 'right'}-s-line text-xs transition-transform duration-200`}></i>
+                                </button>
                             )}
-                            <span className={`flex items-center justify-center w-7 h-7 rounded-lg ${isActive ? 'bg-primary/20' : 'bg-gray-100 dark:bg-defaultbg'} mr-1`}>
-                                <i className={`ri-folder-2-line text-lg ${isActive ? 'text-primary' : 'text-gray-500'}`}></i>
-                            </span>
-                            <span className="truncate text-base flex-1">{folder.name}</span>
                             
-                            {/* Three-dot menu */}
+                            {/* Folder Icon */}
+                            <span className="flex items-center justify-center w-4 h-4 mr-2">
+                                <i className={`ri-folder-${isExpanded ? 'open' : '2'}-line text-sm ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'}`}></i>
+                            </span>
+                            
+                            {/* Folder Name */}
+                            <span className="truncate text-sm font-medium flex-1">
+                                {folder.name}
+                            </span>
+                            
+                            {/* Context Menu */}
                             <button
-                                className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
                                 onClick={(e) => handleItemContextMenu(e, { id: folder.id, type: 'folder', folder } as Folder)}
                                 title="Folder options"
                             >
-                                <i className="ri-more-2-fill text-gray-500 hover:text-primary"></i>
+                                <i className="ri-more-2-fill text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-xs"></i>
                             </button>
                         </div>
+                        
+                        {/* Nested Children */}
                         {hasChildren && isExpanded && (
                             <FolderTree folders={folder.children} level={level + 1} />
                         )}
@@ -437,6 +497,17 @@ const Filemanager = () => {
         });
     };
 
+    // Copy file URL to clipboard
+    const copyFileUrl = async (fileUrl: string) => {
+        try {
+            await navigator.clipboard.writeText(fileUrl);
+            // You can add a toast notification here if you have a toast system
+            console.log('File URL copied to clipboard');
+        } catch (err) {
+            console.error('Failed to copy URL:', err);
+        }
+    };
+
     // Auto-select first folder on mount or when folderTree changes
     useEffect(() => {
         if (!currentFolder && Array.isArray(folderTree) && folderTree.length > 0) {
@@ -620,8 +691,7 @@ const Filemanager = () => {
                                                     ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-all duration-200 cursor-pointer' 
                                                     : 'flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-all duration-200 cursor-pointer'
                                                 }`}
-                                                // REMOVE onDoubleClick handler
-                                                // REMOVE onContextMenu selection for now (optional, or keep for context menu only)
+                                                onClick={() => handleItemClick(item)}
                                             >
                                                 {/* Selection Checkbox */}
                                                 <input
@@ -634,7 +704,6 @@ const Filemanager = () => {
                                                             prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id]
                                                         );
                                                     }}
-                                                    // DEBUG: log the id and selectedIds
                                                     onClick={() => console.log('Checkbox for', item.id, 'selectedIds:', selectedIds)}
                                                 />
 
@@ -645,29 +714,29 @@ const Filemanager = () => {
                                                             ? 'bg-blue-100 dark:bg-blue-900/30' 
                                                             : 'bg-gray-100 dark:bg-gray-700'
                                                     }`}>
-                                                                                                                 <i className={`text-2xl ${
-                                                             item.type === 'folder' 
-                                                                 ? 'ri-folder-2-line text-blue-600 dark:text-blue-400' 
-                                                                 : getFileIcon(item.type === 'file' && item.file ? item.file.mimeType : '')
-                                                         }`}></i>
+                                                        <i className={`text-2xl ${
+                                                            item.type === 'folder' 
+                                                                ? 'ri-folder-2-line text-blue-600 dark:text-blue-400' 
+                                                                : getFileIcon(item.type === 'file' && item.file ? item.file.mimeType : '')
+                                                        }`}></i>
                                                     </div>
                                                 </div>
 
                                                 {/* Content */}
                                                 <div className={`flex-1 min-w-0 ${viewMode === 'grid' ? 'text-center' : ''}`}>
-                                                                                                         <div className="font-medium text-sm truncate">
-                                                         {item.type === 'file' ? ((item as FileItem).file?.fileName || 'Unknown File') : (item as Folder).folder.name}
-                                                     </div>
-                                                     {viewMode === 'grid' && (
-                                                         <div className="text-xs text-gray-500 mt-1">
-                                                             {item.type === 'folder' ? 'Folder' : formatFileSize((item as FileItem).file?.fileSize || 0)}
-                                                         </div>
-                                                     )}
-                                                     {viewMode === 'list' && (
-                                                         <div className="text-xs text-gray-500">
-                                                             {item.type === 'folder' ? 'Folder' : ((item as FileItem).file?.mimeType || 'Unknown')} • {formatFileSize((item as FileItem).file?.fileSize || 0)} • {new Date(item.updatedAt).toLocaleDateString()}
-                                                         </div>
-                                                     )}
+                                                    <div className="font-medium text-sm truncate">
+                                                        {item.type === 'file' ? ((item as FileItem).file?.fileName || 'Unknown File') : (item as Folder).folder.name}
+                                                    </div>
+                                                    {viewMode === 'grid' && (
+                                                        <div className="text-xs text-gray-500 mt-1">
+                                                            {item.type === 'folder' ? 'Folder' : formatFileSize((item as FileItem).file?.fileSize || 0)}
+                                                        </div>
+                                                    )}
+                                                    {viewMode === 'list' && (
+                                                        <div className="text-xs text-gray-500">
+                                                            {item.type === 'folder' ? 'Folder' : ((item as FileItem).file?.mimeType || 'Unknown')} • {formatFileSize((item as FileItem).file?.fileSize || 0)} • {new Date(item.updatedAt).toLocaleDateString()}
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Three-dot menu */}
@@ -951,6 +1020,18 @@ const Filemanager = () => {
                             >
                                 <i className="ri-download-2-line text-purple-600"></i>
                                 Download
+                            </button>
+                            <button
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                                onClick={() => {
+                                    if (contextMenu.item?.type === 'file' && contextMenu.item.file) {
+                                        copyFileUrl(contextMenu.item.file.fileUrl);
+                                    }
+                                    closeContextMenu();
+                                }}
+                            >
+                                <i className="ri-link text-orange-600"></i>
+                                Copy URL
                             </button>
                         </>
                     )}

@@ -587,6 +587,7 @@ const StoresPage = () => {
                                                         />
                                                     </td>
                                                     <td className="px-4 py-4">
+                                                        <Link href={`/analytics/store-analysis/${store.id}`} className="text-primary hover:text-primary/80 transition-colors duration-200">
                                                         <div className="space-y-1">
                                                             <div className="font-medium text-gray-900">{store.storeName}</div>
                                                             <div className="text-sm text-gray-500">
@@ -607,6 +608,7 @@ const StoresPage = () => {
                                                                 </div>
                                                             )}
                                                         </div>
+                                                        </Link>
                                                     </td>
                                                     <td className="px-4 py-4">
                                                         <div className="space-y-1">
