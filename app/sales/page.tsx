@@ -765,8 +765,30 @@ const SalesContent = () => {
                                 )}
                               </td>
                               <td>{new Date(sale.date).toLocaleDateString()}</td>
-                              <td>{(sale.plant as Plant)?.storeId || (sale.plant as string) || '-'}</td>
-                              <td>{(sale.materialCode as MaterialCode)?.styleCode || (sale.materialCode as string) || '-'}</td>
+                              <td>
+                                {sale.plant && typeof sale.plant === 'object' && sale.plant.storeId ? (
+                                  <Link 
+                                    href={`/analytics/store-analysis/${sale.plant.id}`}
+                                    className="text-primary hover:text-primary/80 transition-colors duration-200"
+                                  >
+                                    {sale.plant.storeId}
+                                  </Link>
+                                ) : (
+                                  (sale.plant as Plant)?.storeId || (sale.plant as string) || '-'
+                                )}
+                              </td>
+                              <td>
+                                {sale.materialCode && typeof sale.materialCode === 'object' && sale.materialCode.styleCode ? (
+                                  <Link 
+                                    href={`/analytics/product-analysis/${sale.materialCode.id}`}
+                                    className="text-primary hover:text-primary/80 transition-colors duration-200"
+                                  >
+                                    {sale.materialCode.styleCode}
+                                  </Link>
+                                ) : (
+                                  (sale.materialCode as MaterialCode)?.styleCode || (sale.materialCode as string) || '-'
+                                )}
+                              </td>
                               <td className="text-right">{sale.quantity}</td>
                               <td className="text-right">{sale.mrp.toFixed(2)}</td>
                               <td className="text-right">{(sale.discount || 0).toFixed(2)}</td>

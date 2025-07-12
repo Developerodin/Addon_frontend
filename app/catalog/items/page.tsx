@@ -1380,7 +1380,12 @@ const ProductListPage = () => {
                                 onChange={() => handleProductSelect(product.id)}
                               />
                             </td>
-                            <td>{product.name}</td>
+                            <td><Link 
+                                href={`/analytics/product-analysis/${product.id}`}
+                                className="text-primary hover:text-primary/80 transition-colors duration-200"
+                              >
+                                {product.name}
+                              </Link></td>
                             <td>{product.styleCode}</td>
                             <td>{product.internalCode}</td>
                             <td>{getCategoryName(product.category)}</td>

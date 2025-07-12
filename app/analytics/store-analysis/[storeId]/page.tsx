@@ -181,6 +181,7 @@ export default function StoreAnalysisPage() {
   const fetchStoreData = async () => {
     try {
       setLoading(true);
+      console.log('Fetching store data for storeId:', storeId);
       const response = await fetch(`${API_BASE_URL}/analytics/store-analysis?storeId=${storeId}`);
       if (!response.ok) throw new Error('Failed to fetch store data');
       const data = await response.json();
@@ -281,21 +282,34 @@ export default function StoreAnalysisPage() {
 
       {/* Store Info Cards */}
       <div className="grid grid-cols-12 gap-4 mb-8">
-        <div className="xl:col-span-4 lg:col-span-6 md:col-span-6 col-span-12">
+        {/* Address Card - Takes 2 rows height */}
+        <div className="xl:col-span-4 lg:col-span-6 md:col-span-6 col-span-12 row-span-2">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full">
-            <div className="flex items-start justify-between h-full">
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-gray-600 mb-1">Store Address</p>
-                <p className="text-sm font-semibold text-gray-900 leading-tight break-words">{storeInfo.address}</p>
+            <div className="flex flex-col h-full">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-600 mb-1">Store Name</p>
+                  <p className="text-sm font-semibold text-gray-900 leading-tight break-words">{storeInfo.storeName}</p>
+                </div>
+                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
+                  <i className="ri-store-line text-lg text-blue-600"></i>
+                </div>
               </div>
-              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
-                <i className="ri-map-pin-line text-lg text-blue-600"></i>
+              <div className="flex-1 flex items-start justify-between py-8">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-600 mb-1">Store Address</p>
+                  <p className="text-sm font-semibold text-gray-900 leading-tight break-words">{storeInfo.address}</p>
+                </div>
+                <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
+                  <i className="ri-map-pin-line text-lg text-green-600"></i>
+                </div>
               </div>
             </div>
           </div>
         </div>
         
-        <div className="xl:col-span-2 lg:col-span-6 md:col-span-6 col-span-12">
+        {/* Contact Person Card - Top right */}
+        <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full">
             <div className="flex items-start justify-between h-full">
               <div className="flex-1 min-w-0">
@@ -309,7 +323,8 @@ export default function StoreAnalysisPage() {
           </div>
         </div>
         
-        <div className="xl:col-span-2 lg:col-span-6 md:col-span-6 col-span-12">
+        {/* Gross LTV Card */}
+        <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full">
             <div className="flex items-start justify-between h-full">
               <div className="flex-1 min-w-0">
@@ -323,37 +338,23 @@ export default function StoreAnalysisPage() {
           </div>
         </div>
         
+        {/* Current Month Trend Card */}
         <div className="xl:col-span-2 lg:col-span-6 md:col-span-6 col-span-12">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full">
             <div className="flex items-start justify-between h-full">
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-gray-600 mb-1">Current Month Trend</p>
-                <p className={`text-lg font-bold leading-tight ${storeInfo.currentMonthTrend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatPercentage(storeInfo.currentMonthTrend)}
-                </p>
+                <p className={`text-lg font-bold leading-tight ${storeInfo.currentMonthTrend >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatPercentage(storeInfo.currentMonthTrend)}</p>
               </div>
               <div className="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
-                <i className="ri-trending-up-line text-lg text-amber-600"></i>
+                <i className={`text-lg ${storeInfo.currentMonthTrend >= 0 ? 'ri-arrow-up-s-line text-green-600' : 'ri-arrow-down-s-line text-red-600'}`}></i>
               </div>
             </div>
           </div>
         </div>
         
-        <div className="xl:col-span-2 lg:col-span-6 md:col-span-6 col-span-12">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full">
-            <div className="flex items-start justify-between h-full">
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-gray-600 mb-1">Norms</p>
-                <p className="text-lg font-bold text-gray-900 leading-tight">{formatCurrency(storeInfo.norms)}</p>
-              </div>
-              <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
-                <i className="ri-target-line text-lg text-indigo-600"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="xl:col-span-2 lg:col-span-6 md:col-span-6 col-span-12">
+        {/* Total Orders Card - Bottom right */}
+        <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full">
             <div className="flex items-start justify-between h-full">
               <div className="flex-1 min-w-0">
@@ -367,7 +368,8 @@ export default function StoreAnalysisPage() {
           </div>
         </div>
         
-        <div className="xl:col-span-2 lg:col-span-6 md:col-span-6 col-span-12">
+        {/* Total Quantity Card */}
+        <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full">
             <div className="flex items-start justify-between h-full">
               <div className="flex-1 min-w-0">
@@ -376,6 +378,21 @@ export default function StoreAnalysisPage() {
               </div>
               <div className="w-10 h-10 bg-cyan-50 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
                 <i className="ri-shopping-bag-3-line text-lg text-cyan-600"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Norms Card */}
+        <div className="xl:col-span-2 lg:col-span-6 md:col-span-6 col-span-12">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full">
+            <div className="flex items-start justify-between h-full">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-600 mb-1">Norms</p>
+                <p className="text-lg font-bold text-gray-900 leading-tight">{formatCurrency(storeInfo.norms)}</p>
+              </div>
+              <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
+                <i className="ri-flag-2-line text-lg text-indigo-600"></i>
               </div>
             </div>
           </div>
