@@ -123,6 +123,29 @@ export interface TopProducts {
   }>;
 }
 
+export interface SalesData {
+  _id: string;
+  date: string;
+  nsv: number;
+  gsv: number;
+  quantity: number;
+  storeName: string;
+  storeId: string;
+  storeCity: string;
+  productName: string;
+  productCode: string;
+  categoryName: string;
+}
+
+export interface AllSalesDataResponse {
+  sales: SalesData[];
+  totalCount: number;
+  dateRange: {
+    startDate: string;
+    endDate: string;
+  };
+}
+
 class DashboardService {
   private baseURL = `${API_BASE_URL}/dashboard`;
 
@@ -215,6 +238,30 @@ class DashboardService {
     period?: 'week' | 'month' | 'quarter';
   }): Promise<TopProducts> {
     return this.makeRequest<TopProducts>('/top-products', params);
+  }
+
+  // Get all stores performance (for view all page)
+  async getAllStoresPerformance(): Promise<StorePerformance[]> {
+    const response = await this.makeRequest<{data: {stores: StorePerformance[]}, pagination: any}>('/all-stores-performance');
+    // Handle nested structure: response.data.stores
+    return response.data?.stores || response.stores || response.data || response;
+  }
+
+  // Get all cities performance (for view all page)
+  async getAllCitiesPerformance(): Promise<CityPerformance[]> {
+    const response = await this.makeRequest<{data: {cities: CityPerformance[]}, pagination: any}>('/all-cities-performance');
+    // Handle nested structure: response.data.cities
+    return response.data?.cities || response.cities || response.data || response;
+  }
+
+  // Get all sales data (for view all page)
+  async getAllSalesData(params?: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<AllSalesDataResponse> {
+    const response = await this.makeRequest<{data: AllSalesDataResponse}>('/all-sales-data', params);
+    // Handle nested structure: response.data
+    return response.data || response;
   }
 }
 

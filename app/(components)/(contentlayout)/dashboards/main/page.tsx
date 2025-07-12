@@ -325,13 +325,13 @@ const Analytics = () => {
                 <div className="box-header justify-between">
                   <div className="box-title">Monthly NSV & Qty Trend</div>
                   <div>
-                    <button
-                      type="button"
+                    <Link
+                      href="/analytics/all-sales-data"
                       className="ti-btn ti-btn-primary ti-btn-wave !font-medium"
                     >
-                      <i className="ri-share-forward-line me-1 align-middle inline-block"></i>
-                      Export
-                    </button>
+                      <i className="ri-external-link-line me-1 align-middle inline-block"></i>
+                      View All
+                    </Link>
                   </div>
                 </div>
                 <div className="box-body">
@@ -518,17 +518,17 @@ const Analytics = () => {
 
       <div className="xl:col-span-6 xl:col-span-12 col-span-12">
         <div className="box h-full transition-all duration-300 hover:shadow-lg">
-          <div className="box-header justify-between">
-            <div className="box-title">Top 5 Stores</div>
-            <div>
-              <button
-                type="button"
-                className="ti-btn ti-btn-primary 1 !text-[0.85rem] !m-0 !font-medium"
-              >
-                View All
-              </button>
+                      <div className="box-header justify-between">
+              <div className="box-title">Top 5 Stores</div>
+              <div>
+                <Link
+                  href="/analytics/all-stores-performance"
+                  className="ti-btn ti-btn-primary 1 !text-[0.85rem] !m-0 !font-medium"
+                >
+                  View All
+                </Link>
+              </div>
             </div>
-          </div>
           <div className="box-body !p-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Pie Chart Section */}
@@ -638,24 +638,24 @@ const Analytics = () => {
               {/* Store Details Section */}
               <div className="flex flex-col justify-center">
                 <div className="table-responsive">
-                  <table className="table table-hover whitespace-nowrap min-w-full">
+                  <table className="table table-hover min-w-full">
                     <thead>
                       <tr>
                         <th
                           scope="col"
-                          className="text-start text-xs font-medium text-gray-500"
+                          className="text-start text-xs font-medium text-gray-500 w-2/3"
                         >
                           Store
                         </th>
                         <th
                           scope="col"
-                          className="text-start text-xs font-medium text-gray-500"
+                          className="text-start text-xs font-medium text-gray-500 w-1/6"
                         >
                           NSV
                         </th>
                         <th
                           scope="col"
-                          className="text-start text-xs font-medium text-gray-500"
+                          className="text-start text-xs font-medium text-gray-500 w-1/6"
                         >
                           %
                         </th>
@@ -680,11 +680,11 @@ const Analytics = () => {
                             >
                               <td>
                                 <div className="flex items-center">
-                                  <span className="avatar avatar-rounded avatar-sm p-1 bg-light me-2">
+                                  <span className="avatar avatar-rounded avatar-sm p-1 bg-light me-2 flex-shrink-0">
                                     <i className="ri-store-line text-xs text-primary"></i>
                                   </span>
                                   <div
-                                    className="font-medium text-xs truncate max-w-[60px]"
+                                    className="font-medium text-xs break-words min-w-0"
                                     title={store.storeName}
                                   >
                                     {store.storeName}
@@ -727,7 +727,7 @@ const Analytics = () => {
           <div className="box h-full transition-all duration-300 hover:shadow-lg">
             <div className="box-header justify-between">
               <div className="box-title">Demand Forecast vs Actual Demand</div>
-              <div className="hs-dropdown ti-dropdown">
+              {/* <div className="hs-dropdown ti-dropdown">
                 <Link
                   href="#!"
                   scroll={false}
@@ -769,7 +769,7 @@ const Analytics = () => {
                     </Link>
                   </li>
                 </ul>
-              </div>
+              </div> */}
             </div>
             <div className="box-body">
               <div id="country-sessions">
@@ -926,48 +926,14 @@ const Analytics = () => {
           <div className="box overflow-hidden h-full transition-all duration-300 hover:shadow-lg">
             <div className="box-header justify-between">
               <div className="box-title">City Performances</div>
-              <div className="hs-dropdown ti-dropdown">
+              <div>
                 <Link
-                  href="#!"
-                  scroll={false}
-                  className="px-2 font-normal text-[0.75rem] text-[#8c9097] dark:text-white/50"
-                  aria-expanded="false"
+                  href="/analytics/all-cities-performance"
+                  className="px-2 font-normal text-[0.75rem] text-[#8c9097] dark:text-white/50 hover:text-primary transition-colors"
                 >
                   View All
-                  <i className="ri-arrow-down-s-line align-middle ms-1 inline-block"></i>
+                  <i className="ri-arrow-right-line align-middle ms-1 inline-block"></i>
                 </Link>
-                <ul
-                  className="hs-dropdown-menu ti-dropdown-menu hidden"
-                  role="menu"
-                >
-                  <li>
-                    <Link
-                      className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium block"
-                      href="#!"
-                      scroll={false}
-                    >
-                      Today
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium block"
-                      href="#!"
-                      scroll={false}
-                    >
-                      This Week
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium block"
-                      href="#!"
-                      scroll={false}
-                    >
-                      Last Week
-                    </Link>
-                  </li>
-                </ul>
               </div>
             </div>
             <div className="box-body !p-0">
@@ -1054,51 +1020,8 @@ const Analytics = () => {
 
         <div className="xxl:col-span-6 xl:col-span-12 col-span-12">
           <div className="box h-full transition-all duration-300 hover:shadow-lg">
-            <div className="box-header justify-between">
+            <div className="box-header">
               <div className="box-title">Category-wise NSV & QTY</div>
-              <div className="hs-dropdown ti-dropdown">
-                <Link
-                  href="#!"
-                  scroll={false}
-                  className="px-2 font-normal text-[0.75rem] text-[#8c9097] dark:text-white/50"
-                  aria-expanded="false"
-                >
-                  View All
-                  <i className="ri-arrow-down-s-line align-middle ms-1 inline-block"></i>
-                </Link>
-                <ul
-                  className="hs-dropdown-menu ti-dropdown-menu hidden"
-                  role="menu"
-                >
-                  <li>
-                    <Link
-                      className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium block"
-                      href="#!"
-                      scroll={false}
-                    >
-                      Today
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium block"
-                      href="#!"
-                      scroll={false}
-                    >
-                      This Week
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium block"
-                      href="#!"
-                      scroll={false}
-                    >
-                      Last Week
-                    </Link>
-                  </li>
-                </ul>
-              </div>
             </div>
             <div className="box-body">
               <div id="session-users">
