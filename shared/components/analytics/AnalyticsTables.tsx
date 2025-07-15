@@ -111,8 +111,13 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <span className="text-xs text-gray-500">Updated</span>
+                <Link
+                  href="/analytics/product-performance"
+                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors duration-200"
+                >
+                  <i className="ri-external-link-line mr-1"></i>
+                  Explore
+                </Link>
               </div>
             </div>
           </div>
@@ -195,8 +200,13 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <span className="text-xs text-gray-500">Live</span>
+                <Link
+                  href="/analytics/store-performance"
+                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors duration-200"
+                >
+                  <i className="ri-external-link-line mr-1"></i>
+                  Explore
+                </Link>
               </div>
             </div>
           </div>

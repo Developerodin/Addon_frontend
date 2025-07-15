@@ -1,229 +1,259 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
-import Pageheader from '@/shared/layout-components/page-header/pageheader';
-import { useAnalytics } from '@/shared/hooks/useAnalytics';
+import { ExploreDataTable } from '@/shared/components/analytics/ExploreDataTable';
+import { analyticsCompleteService, CompleteTaxMRPData } from '@/shared/services/analyticsCompleteService';
+import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 
 export default function MRPDistributionPage() {
-  const { loading, error, data, loadAnalyticsData } = useAnalytics();
+  const [data, setData] = useState<CompleteTaxMRPData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalResults, setTotalResults] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [sortBy, setSortBy] = useState<string>('mrp');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [dateRange, setDateRange] = useState({
+    dateFrom: '',
+    dateTo: ''
+  });
+  const [exportLoading, setExportLoading] = useState(false);
 
-  // Format currency with rounding
-  const formatCurrency = (value: number) => {
-    return `₹${Math.round(value).toLocaleString()}`;
+  // Fetch data
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const params: any = {
+        page: currentPage,
+        limit: pageSize
+      };
+
+      // Only add date parameters if they are provided
+      if (dateRange.dateFrom) {
+        params.dateFrom = dateRange.dateFrom;
+      }
+      if (dateRange.dateTo) {
+        params.dateTo = dateRange.dateTo;
+      }
+
+      const response = await analyticsCompleteService.getCompleteTaxMRPAnalytics(params);
+
+      setData(response.results || []);
+      setTotalResults(response.totalResults || 0);
+      setTotalPages(response.totalPages || 0);
+    } catch (err) {
+      console.error('Error fetching MRP distribution data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch data');
+      setData([]);
+      setTotalResults(0);
+      setTotalPages(0);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Format number with rounding
-  const formatNumber = (value: number) => {
-    return Math.round(value).toLocaleString();
+  // Load data on component mount and when filters change
+  useEffect(() => {
+    fetchData();
+  }, [currentPage, pageSize, sortBy, sortOrder, dateRange]);
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
 
-  // Format percentage
-  const formatPercentage = (value: number, total: number) => {
-    if (total === 0) return '0%';
-    return `${Math.round((value / total) * 100)}%`;
+  // Handle page size change
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
   };
 
-  // Format MRP range
-  const formatMRPRange = (mrp: number | string) => {
-    if (typeof mrp === 'string') return mrp;
-    if (mrp === 100) return '₹0 - ₹100';
-    if (mrp === 200) return '₹101 - ₹200';
-    if (mrp === 500) return '₹201 - ₹500';
-    if (mrp === 1000) return '₹501 - ₹1,000';
-    if (mrp === 2000) return '₹1,001 - ₹2,000';
-    return `₹${mrp.toLocaleString()}`;
+  // Handle sorting
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('desc');
+    }
+    setCurrentPage(1);
   };
 
-  if (loading) {
-    return (
-      <>
-        <Seo title="MRP Distribution - Analytics" />
-        <Pageheader currentpage="MRP Distribution" activepage="Analytics" mainpage="MRP Distribution" />
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      </>
-    );
-  }
+  // Handle date range change
+  const handleDateRangeChange = (field: 'dateFrom' | 'dateTo', value: string) => {
+    setDateRange(prev => ({ ...prev, [field]: value }));
+    setCurrentPage(1);
+  };
 
-  if (error) {
-    return (
-      <>
-        <Seo title="MRP Distribution - Analytics" />
-        <Pageheader currentpage="MRP Distribution" activepage="Analytics" mainpage="MRP Distribution" />
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center max-w-md mx-auto">
-            <div className="bg-red-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <i className="ri-error-warning-line text-2xl text-red-500"></i>
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Data</h3>
-            <p className="text-gray-600 mb-6">{error}</p>
-            <button 
-              onClick={loadAnalyticsData}
-              className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200"
-            >
-              <i className="ri-refresh-line mr-2"></i>
-              Try Again
-            </button>
-          </div>
-        </div>
-      </>
-    );
-  }
+  // Handle export
+  const handleExport = async () => {
+    try {
+      setExportLoading(true);
+      
+      const params: any = {
+        limit: 10000 // Large limit to get all data
+      };
 
-  const mrpDistribution = data?.taxMRPData?.mrpDistribution || [];
-  const totalCount = mrpDistribution.reduce((sum, item) => sum + (item.count || 0), 0);
-  const avgNSV = mrpDistribution.length > 0 
-    ? mrpDistribution.reduce((sum, item) => sum + (item.avgNSV || 0), 0) / mrpDistribution.length 
-    : 0;
+      // Only add date parameters if they are provided
+      if (dateRange.dateFrom) {
+        params.dateFrom = dateRange.dateFrom;
+      }
+      if (dateRange.dateTo) {
+        params.dateTo = dateRange.dateTo;
+      }
+      
+      // Fetch all data for export
+      const response = await analyticsCompleteService.getCompleteTaxMRPAnalytics(params);
+      
+      const allData = response.results || [];
+      
+      if (allData.length === 0) {
+        toast.error('No data to export');
+        return;
+      }
+      
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const filename = `mrp_distribution_export_${dateStr}.csv`;
+      
+      analyticsCompleteService.downloadCSV(allData, filename);
+      toast.success(`Exported ${allData.length} MRP distribution records`);
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export data');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  // Table columns configuration
+  const columns = [
+    {
+      key: 'productName',
+      label: 'Product Name',
+      sortable: false,
+      className: 'w-36 text-left',
+      render: (value: string, row: CompleteTaxMRPData) => (
+        <Link 
+          href={`/analytics/product-analysis/${row._id.productId}`}
+          className="text-primary hover:text-primary/80 transition-colors duration-200 font-medium"
+        >
+          {value}
+        </Link>
+      )
+    },
+    {
+      key: 'productCode',
+      label: 'Product Code',
+      sortable: false,
+      className: 'w-24 text-left'
+    },
+    {
+      key: 'mrp',
+      label: 'MRP',
+      sortable: true,
+      className: 'w-24 text-right'
+    },
+    {
+      key: 'storeName',
+      label: 'Store Name',
+      sortable: false,
+      className: 'w-36 text-left',
+      render: (value: string, row: CompleteTaxMRPData) => (
+        <Link 
+          href={`/analytics/store-analysis/${row._id.storeId}`}
+          className="text-primary hover:text-primary/80 transition-colors duration-200 font-medium"
+        >
+          {value}
+        </Link>
+      )
+    },
+    {
+      key: 'storeId',
+      label: 'Store ID',
+      sortable: false,
+      className: 'w-24 text-left'
+    },
+    {
+      key: 'totalQuantity',
+      label: 'Total Quantity',
+      sortable: true,
+      className: 'w-24 text-right'
+    },
+    {
+      key: 'totalNSV',
+      label: 'Total NSV',
+      sortable: true,
+      className: 'w-24 text-right'
+    },
+    {
+      key: 'totalGSV',
+      label: 'Total GSV',
+      sortable: true,
+      className: 'w-24 text-right'
+    },
+    {
+      key: 'totalTax',
+      label: 'Total Tax',
+      sortable: true,
+      className: 'w-24 text-right'
+    },
+    {
+      key: 'totalMRP',
+      label: 'Total MRP',
+      sortable: true,
+      className: 'w-24 text-right'
+    },
+    {
+      key: 'taxPercentage',
+      label: 'Tax %',
+      sortable: true,
+      className: 'w-20 text-right',
+      render: (value: number) => `${Math.round(value)}%`
+    },
+    {
+      key: 'recordCount',
+      label: 'Records',
+      sortable: true,
+      className: 'w-20 text-right'
+    }
+  ];
 
   return (
     <>
-      <Seo title="MRP Distribution - Analytics" />
-      <Pageheader currentpage="MRP Distribution" activepage="Analytics" mainpage="MRP Distribution" />
+      <Seo title="MRP Distribution - Complete Data" />
       
-      {/* Back to Analytics */}
-      <div className="mb-6">
-        <Link 
-          href="/analytics"
-          className="inline-flex items-center text-sm text-primary hover:text-primary/80 transition-colors duration-200"
-        >
-          <i className="ri-arrow-left-line mr-2"></i>
-          Back to Analytics
-        </Link>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-12 gap-6 mb-8">
-        <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Price Ranges</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(mrpDistribution.length)}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
-                <i className="ri-price-tag-3-line text-xl text-blue-600"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Products</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(totalCount)}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center">
-                <i className="ri-shopping-bag-3-line text-xl text-green-600"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Avg NSV</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(avgNSV)}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center">
-                <i className="ri-money-dollar-circle-line text-xl text-amber-600"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Avg Products per Range</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {mrpDistribution.length > 0 ? formatNumber(totalCount / mrpDistribution.length) : '0'}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center">
-                <i className="ri-calculator-line text-xl text-purple-600"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Data Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900">MRP Distribution Details</h3>
-          <p className="text-sm text-gray-600 mt-1">Detailed breakdown of product price range analysis</p>
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Rank
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  MRP Range
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Product Count
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Avg NSV
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Distribution %
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {mrpDistribution.length > 0 ? (
-                mrpDistribution
-                  .sort((a, b) => (b.count || 0) - (a.count || 0))
-                  .map((item, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        #{index + 1}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {formatMRPRange(item._id)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatNumber(item.count || 0)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatCurrency(item.avgNSV || 0)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatPercentage(item.count || 0, totalCount)}
-                      </td>
-                    </tr>
-                  ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
-                    No MRP distribution data available
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <ExploreDataTable
+        title="MRP Distribution - Complete Data"
+        data={data}
+        loading={loading}
+        error={error}
+        totalResults={totalResults}
+        totalPages={totalPages}
+        currentPage={currentPage}
+        pageSize={pageSize}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+        onSort={handleSort}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        columns={columns}
+        onExport={handleExport}
+        exportLoading={exportLoading}
+        backLink="/analytics"
+        backLinkText="Back to Analytics"
+        dateRange={dateRange}
+        onDateRangeChange={handleDateRangeChange}
+        onRefresh={fetchData}
+      />
     </>
   );
 } 
