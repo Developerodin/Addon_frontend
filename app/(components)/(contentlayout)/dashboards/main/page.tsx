@@ -168,12 +168,6 @@ const Analytics = () => {
               {p.charAt(0).toUpperCase() + p.slice(1)}
             </button>
           ))}
-          {data.usingMockData && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-full text-sm animate-pulse whitespace-nowrap">
-              <i className="ri-information-line text-base"></i>
-              <span>Mock Data</span>
-            </div>
-          )}
           <button
             onClick={handleRefresh}
             style={{border: "1px solid red"}}

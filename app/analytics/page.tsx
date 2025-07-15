@@ -236,12 +236,6 @@ export default function AnalyticsPage() {
             </div>
             
             <div className="flex items-end gap-3">
-              {sanitizedData?.usingMockData && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-sm">
-                  <i className="ri-information-line"></i>
-                  <span>Mock Data</span>
-                </div>
-              )}
               <button 
                 onClick={loadAnalyticsData}
                 className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200 shadow-sm"

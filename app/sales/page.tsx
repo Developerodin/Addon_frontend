@@ -294,9 +294,35 @@ const SalesContent = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mock data for dropdowns (replace with actual API calls)
-  const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Kolkata', 'Hyderabad', 'Pune', 'Ahmedabad'];
-  const categories = ['All', 'Socks', 'Towel', 'Hanky'];
+  // State for dropdown data
+  const [cities, setCities] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+
+  // Fetch dropdown data
+  const fetchDropdownData = async () => {
+    try {
+      // Fetch cities and categories from API
+      const [citiesResponse, categoriesResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/stores/cities`),
+        fetch(`${API_BASE_URL}/catalog/categories`)
+      ]);
+
+      if (citiesResponse.ok) {
+        const citiesData = await citiesResponse.json();
+        setCities(citiesData.map((city: any) => city.name || city));
+      }
+
+      if (categoriesResponse.ok) {
+        const categoriesData = await categoriesResponse.json();
+        setCategories(['All', ...categoriesData.map((cat: any) => cat.name || cat)]);
+      }
+    } catch (error) {
+      console.error('Error fetching dropdown data:', error);
+      // Set default values if API fails
+      setCities(['Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Kolkata', 'Hyderabad', 'Pune', 'Ahmedabad']);
+      setCategories(['All', 'Socks', 'Towel', 'Hanky']);
+    }
+  };
 
   // Fetch sales data
   const fetchSales = async (filters: SalesFilters = {}) => {
@@ -339,6 +365,11 @@ const SalesContent = () => {
     }
     fetchSales(filters);
   }, [currentPage, pageSize, searchQuery, activeFilters, selectedCity, selectedCategory, sortBy, sortOrder]);
+
+  // Load dropdown data on component mount
+  useEffect(() => {
+    fetchDropdownData();
+  }, []);
 
   // Check for success message from URL params
   useEffect(() => {

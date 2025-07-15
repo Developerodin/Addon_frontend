@@ -9,7 +9,6 @@ interface DashboardState {
   cityPerformance: CityPerformance[];
   demandForecast: DemandForecast | null;
   topProducts: TopProducts | null;
-  usingMockData: boolean;
 }
 
 export const useDashboard = () => {
@@ -24,8 +23,7 @@ export const useDashboard = () => {
     categoryAnalytics: null,
     cityPerformance: [],
     demandForecast: null,
-    topProducts: null,
-    usingMockData: false
+    topProducts: null
   });
 
   const loadDashboardData = async () => {
@@ -33,8 +31,8 @@ export const useDashboard = () => {
       setLoading(true);
       setError(null);
 
-      // Load all dashboard data in parallel with individual error handling
-      const results = await Promise.allSettled([
+      // Load all dashboard data in parallel
+      const [overview, salesAnalytics, storePerformance, categoryAnalytics, cityPerformance, demandForecast, topProducts] = await Promise.all([
         dashboardService.getDashboardOverview({ period }),
         dashboardService.getSalesAnalytics({ period }),
         dashboardService.getStorePerformance({ limit: 5 }),
@@ -44,56 +42,14 @@ export const useDashboard = () => {
         dashboardService.getTopProducts({ limit: 5, period })
       ]);
 
-      // Extract results and handle individual failures
-      const [overviewResult, salesResult, storeResult, categoryResult, cityResult, forecastResult, topProductsResult] = results;
-
-      // Check if any requests failed
-      const failedRequests = results.filter(result => result.status === 'rejected');
-      const usingMockData = failedRequests.length > 0;
-      
-      if (failedRequests.length > 0) {
-        console.warn('Some dashboard data failed to load:', failedRequests);
-        if (failedRequests.length === results.length) {
-          console.warn('All dashboard requests failed, using default values');
-        } else {
-          console.warn(`${failedRequests.length} out of ${results.length} dashboard requests failed`);
-        }
-      }
-
-      // Set data with fallbacks for failed requests
       setData({
-        overview: overviewResult.status === 'fulfilled' ? overviewResult.value : {
-          overview: {
-            totalSales: { totalNSV: 0, totalGSV: 0 },
-            totalOrders: 0,
-            salesChange: 0,
-            period
-          },
-          topStores: [],
-          monthlyTrends: [],
-          categoryAnalytics: { period, categories: [] },
-          cityPerformance: []
-        },
-        salesAnalytics: salesResult.status === 'fulfilled' ? salesResult.value : {
-          period,
-          dateRange: { start: '', end: '' },
-          sales: []
-        },
-        storePerformance: storeResult.status === 'fulfilled' ? storeResult.value : [],
-        categoryAnalytics: categoryResult.status === 'fulfilled' ? categoryResult.value : {
-          period,
-          categories: []
-        },
-        cityPerformance: cityResult.status === 'fulfilled' ? cityResult.value : [],
-        demandForecast: forecastResult.status === 'fulfilled' ? forecastResult.value : {
-          period,
-          actualDemand: [],
-          forecast: []
-        },
-        topProducts: topProductsResult.status === 'fulfilled' ? topProductsResult.value : {
-          products: []
-        },
-        usingMockData
+        overview,
+        salesAnalytics,
+        storePerformance,
+        categoryAnalytics,
+        cityPerformance,
+        demandForecast,
+        topProducts
       });
     } catch (err) {
       console.error('Error loading dashboard data:', err);

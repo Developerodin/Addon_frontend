@@ -123,12 +123,15 @@ const SafeChart: React.FC<SafeChartProps> = ({
       sanitized.chart = { type, height, toolbar: { show: false } };
     }
 
-    if (!sanitized.xaxis) {
-      sanitized.xaxis = { categories: ['No Data'] };
-    }
+    // Don't add xaxis/yaxis for donut/pie charts
+    if (type !== 'donut' && type !== 'pie') {
+      if (!sanitized.xaxis) {
+        sanitized.xaxis = { categories: ['No Data'] };
+      }
 
-    if (!sanitized.yaxis) {
-      sanitized.yaxis = { title: { text: 'No Data Available' } };
+      if (!sanitized.yaxis) {
+        sanitized.yaxis = { title: { text: 'No Data Available' } };
+      }
     }
 
     // Remove problematic properties that can cause ApexCharts errors
@@ -156,11 +159,16 @@ const SafeChart: React.FC<SafeChartProps> = ({
       );
     }
 
-    // Sanitize labels if they exist
+    // Sanitize labels if they exist (important for donut/pie charts)
     if (sanitized.labels) {
       sanitized.labels = sanitized.labels.map((label: any) => 
         label === undefined || label === null ? 'Unknown' : String(label)
       );
+    }
+
+    // Ensure labels exist for donut/pie charts
+    if ((type === 'donut' || type === 'pie') && !sanitized.labels) {
+      sanitized.labels = ['No Data'];
     }
 
     // Remove any undefined or null values that might cause issues
@@ -183,9 +191,26 @@ const SafeChart: React.FC<SafeChartProps> = ({
   // Sanitize series data
   const sanitizeSeries = (seriesData: any): any => {
     if (!seriesData) {
-      return [{ name: 'No Data', data: [0] }];
+      return type === 'donut' || type === 'pie' ? [0] : [{ name: 'No Data', data: [0] }];
     }
 
+    // Handle donut/pie charts differently
+    if (type === 'donut' || type === 'pie') {
+      if (Array.isArray(seriesData)) {
+        // For donut/pie, series should be an array of numbers
+        const cleanData = seriesData.map((item: any) => {
+          if (Array.isArray(item)) {
+            // If it's an array of arrays, take the first array
+            return sanitizeData(item);
+          }
+          return sanitizeData(item);
+        });
+        return cleanData.length > 0 ? cleanData : [0];
+      }
+      return [0];
+    }
+
+    // Handle other chart types (line, bar, etc.)
     if (Array.isArray(seriesData)) {
       return seriesData.map(series => {
         if (!series || typeof series !== 'object') {
