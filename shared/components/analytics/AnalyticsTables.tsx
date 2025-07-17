@@ -69,27 +69,11 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
   productPerformance,
   storePerformance
 }) => {
-  // Generate sample data for empty tables
-  const getSampleProductData = () => [
-    { _id: '1', productName: 'No Data Available', categoryName: 'N/A', totalQuantity: 0, totalNSV: 0 },
-    { _id: '2', productName: 'Sample Product 1', categoryName: 'Sample', totalQuantity: 0, totalNSV: 0 },
-    { _id: '3', productName: 'Sample Product 2', categoryName: 'Sample', totalQuantity: 0, totalNSV: 0 },
-    { _id: '4', productName: 'Sample Product 3', categoryName: 'Sample', totalQuantity: 0, totalNSV: 0 },
-    { _id: '5', productName: 'Sample Product 4', categoryName: 'Sample', totalQuantity: 0, totalNSV: 0 }
-  ];
+  // Only show real data from API
+  const displayProductData = productPerformance;
+  const displayStoreData = storePerformance;
 
-  const getSampleStoreData = () => [
-    { _id: '1', storeName: 'No Data Available', city: 'N/A', state: 'N/A', totalQuantity: 0, totalNSV: 0 },
-    { _id: '2', storeName: 'Sample Store 1', city: 'Sample City', state: 'Sample State', totalQuantity: 0, totalNSV: 0 },
-    { _id: '3', storeName: 'Sample Store 2', city: 'Sample City', state: 'Sample State', totalQuantity: 0, totalNSV: 0 },
-    { _id: '4', storeName: 'Sample Store 3', city: 'Sample City', state: 'Sample State', totalQuantity: 0, totalNSV: 0 },
-    { _id: '5', storeName: 'Sample Store 4', city: 'Sample City', state: 'Sample State', totalQuantity: 0, totalNSV: 0 }
-  ];
-
-  const displayProductData = productPerformance.length > 0 ? productPerformance : getSampleProductData();
-  const displayStoreData = storePerformance.length > 0 ? storePerformance : getSampleStoreData();
-
-  // Check if we have real data (not sample data)
+  // Check if we have real data
   const hasRealProductData = productPerformance.length > 0;
   const hasRealStoreData = storePerformance.length > 0;
 
