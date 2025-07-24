@@ -4,8 +4,6 @@ import React, { useEffect } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import { useReplenishment } from '@/shared/hooks/useReplenishment';
 import {
-  ReplenishmentSummaryCards,
-  ReplenishmentFilters,
   ReplenishmentTable,
   ReplenishmentCharts,
   ReplenishmentActions,
@@ -140,23 +138,11 @@ export default function ReplenishmentPage() {
             </div>
           )}
 
-          {/* Summary Cards */}
-          <ReplenishmentSummaryCards
-            summary={summary}
-            accuracy={accuracy}
-            healthStatus={healthStatus}
-            loading={loading}
-          />
+
 
           {/* Action Buttons */}
           <ReplenishmentActions
             onGenerateForecast={handleGenerateForecast}
-            onCalculateReplenishment={handleCalculateReplenishment}
-            loading={loading}
-          />
-
-          {/* Filters */}
-          <ReplenishmentFilters
             filters={filters}
             onFiltersChange={handleFiltersChange}
             loading={loading}

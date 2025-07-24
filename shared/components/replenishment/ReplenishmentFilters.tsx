@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { ReplenishmentFilters } from '@/shared/services/replenishmentService';
+import type { ReplenishmentFilters as ReplenishmentFiltersType } from '@/shared/services/replenishmentService';
 
 interface ReplenishmentFiltersProps {
-  filters: ReplenishmentFilters;
-  onFiltersChange: (filters: Partial<ReplenishmentFilters>) => void;
+  filters: ReplenishmentFiltersType;
+  onFiltersChange: (filters: Partial<ReplenishmentFiltersType>) => void;
   loading: boolean;
 }
 
@@ -14,7 +14,7 @@ export const ReplenishmentFilters: React.FC<ReplenishmentFiltersProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const handleFilterChange = (key: keyof ReplenishmentFilters, value: any) => {
+  const handleFilterChange = (key: keyof ReplenishmentFiltersType, value: any) => {
     onFiltersChange({ [key]: value });
   };
 

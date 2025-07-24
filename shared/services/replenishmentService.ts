@@ -331,13 +331,30 @@ class ReplenishmentService {
 
   async getReplenishmentSummary(): Promise<ReplenishmentSummary> {
     const stats = await this.getAccuracyStatistics();
+    
+    // Get recent predictions to calculate unique stores and products
+    const predictions = await this.getRecentPredictions(1000); // Get more predictions for accurate counting
+    
+    // Calculate unique stores and products
+    const uniqueStores = new Set(predictions.map(p => p.store_id));
+    const uniqueProducts = new Set(predictions.map(p => p.product_id));
+    
+    // Get recent activity (last 10 predictions)
+    const recentActivity = predictions.slice(0, 10).map(p => ({
+      id: p.id,
+      type: 'forecast' as const,
+      store_id: p.store_id,
+      product_id: p.product_id,
+      created_at: p.created_at
+    }));
+    
     return {
       total_predictions: stats.total_predictions,
       total_replenishments: 0,
       avg_accuracy: stats.overall_accuracy,
-      total_stores: 0,
-      total_products: 0,
-      recent_activity: []
+      total_stores: uniqueStores.size,
+      total_products: uniqueProducts.size,
+      recent_activity
     };
   }
 

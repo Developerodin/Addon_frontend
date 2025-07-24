@@ -20,34 +20,32 @@ export const ReplenishmentSummaryCards: React.FC<ReplenishmentSummaryCardsProps>
       value: summary?.total_predictions || 0,
       icon: 'ri-bar-chart-line',
       color: 'bg-primary/10 text-primary border-primary/20',
-      trend: '+12.5%',
-      trendColor: 'text-success'
+      trend: summary?.total_predictions > 0 ? '+12.5%' : '0%',
+      trendColor: summary?.total_predictions > 0 ? 'text-success' : 'text-gray-500'
     },
     {
       title: 'Average Accuracy',
       value: `${(accuracy?.overall_accuracy || 0).toFixed(1)}%`,
       icon: 'ri-target-line',
       color: 'bg-success/10 text-success border-success/20',
-      trend: '+2.3%',
-      trendColor: 'text-success'
+      trend: accuracy?.overall_accuracy > 0 ? '+2.3%' : '0%',
+      trendColor: accuracy?.overall_accuracy > 0 ? 'text-success' : 'text-gray-500'
     },
     {
       title: 'Active Stores',
       value: summary?.total_stores || 0,
       icon: 'ri-store-line',
       color: 'bg-warning/10 text-warning border-warning/20',
-      trend: '+5.2%',
-      trendColor: 'text-success'
+      trend: summary?.total_stores > 0 ? `with predictions` : 'No predictions',
+      trendColor: summary?.total_stores > 0 ? 'text-success' : 'text-gray-500'
     },
     {
-      title: 'Service Status',
-      value: healthStatus?.status === 'healthy' ? 'Online' : 'Offline',
-      icon: healthStatus?.status === 'healthy' ? 'ri-checkbox-circle-line' : 'ri-error-warning-line',
-      color: healthStatus?.status === 'healthy' 
-        ? 'bg-success/10 text-success border-success/20' 
-        : 'bg-danger/10 text-danger border-danger/20',
-      trend: healthStatus?.status === 'healthy' ? 'Connected' : 'Disconnected',
-      trendColor: healthStatus?.status === 'healthy' ? 'text-success' : 'text-danger'
+      title: 'Total Products',
+      value: summary?.total_products || 0,
+      icon: 'ri-box-line',
+      color: 'bg-info/10 text-info border-info/20',
+      trend: summary?.total_products > 0 ? `with predictions` : 'No predictions',
+      trendColor: summary?.total_products > 0 ? 'text-success' : 'text-gray-500'
     }
   ];
 
