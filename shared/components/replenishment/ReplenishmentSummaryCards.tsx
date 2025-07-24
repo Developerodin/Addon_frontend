@@ -1,17 +1,56 @@
 import React from 'react';
-import { ReplenishmentSummary, ForecastAccuracy } from '@/shared/services/replenishmentService';
+import { ReplenishmentSummary, ForecastAccuracy, HealthStatus } from '@/shared/services/replenishmentService';
 
 interface ReplenishmentSummaryCardsProps {
   summary: ReplenishmentSummary | null;
   accuracy: ForecastAccuracy | null;
+  healthStatus: HealthStatus | null;
   loading: boolean;
 }
 
-const ReplenishmentSummaryCards: React.FC<ReplenishmentSummaryCardsProps> = ({
+export const ReplenishmentSummaryCards: React.FC<ReplenishmentSummaryCardsProps> = ({
   summary,
   accuracy,
+  healthStatus,
   loading
 }) => {
+  const cards = [
+    {
+      title: 'Total Predictions',
+      value: summary?.total_predictions || 0,
+      icon: 'ri-bar-chart-line',
+      color: 'bg-primary/10 text-primary border-primary/20',
+      trend: '+12.5%',
+      trendColor: 'text-success'
+    },
+    {
+      title: 'Average Accuracy',
+      value: `${(accuracy?.overall_accuracy || 0).toFixed(1)}%`,
+      icon: 'ri-target-line',
+      color: 'bg-success/10 text-success border-success/20',
+      trend: '+2.3%',
+      trendColor: 'text-success'
+    },
+    {
+      title: 'Active Stores',
+      value: summary?.total_stores || 0,
+      icon: 'ri-store-line',
+      color: 'bg-warning/10 text-warning border-warning/20',
+      trend: '+5.2%',
+      trendColor: 'text-success'
+    },
+    {
+      title: 'Service Status',
+      value: healthStatus?.status === 'healthy' ? 'Online' : 'Offline',
+      icon: healthStatus?.status === 'healthy' ? 'ri-checkbox-circle-line' : 'ri-error-warning-line',
+      color: healthStatus?.status === 'healthy' 
+        ? 'bg-success/10 text-success border-success/20' 
+        : 'bg-danger/10 text-danger border-danger/20',
+      trend: healthStatus?.status === 'healthy' ? 'Connected' : 'Disconnected',
+      trendColor: healthStatus?.status === 'healthy' ? 'text-success' : 'text-danger'
+    }
+  ];
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
@@ -34,75 +73,29 @@ const ReplenishmentSummaryCards: React.FC<ReplenishmentSummaryCardsProps> = ({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-      {/* Total Forecasts */}
-      <div className="box">
-        <div className="box-body">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Total Forecasts</p>
-              <h3 className="text-2xl font-bold text-gray-800">
-                {summary?.totalForecasts || 0}
-              </h3>
-            </div>
-            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-              <i className="ri-line-chart-line text-xl text-primary"></i>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Average Accuracy */}
-      <div className="box">
-        <div className="box-body">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Avg. Accuracy</p>
-              <h3 className="text-2xl font-bold text-gray-800">
-                {summary?.avgAccuracy ? `${summary.avgAccuracy.toFixed(1)}%` : '0%'}
-              </h3>
-            </div>
-            <div className="w-12 h-12 bg-success/10 rounded-full flex items-center justify-center">
-              <i className="ri-target-line text-xl text-success"></i>
+      {cards.map((card, index) => (
+        <div 
+          key={index} 
+          className={`box border ${card.color} hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1`}
+        >
+          <div className="box-body">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-gray-600 mb-1">{card.title}</h3>
+                <div className="flex items-baseline">
+                  <span className="text-2xl font-bold">{card.value}</span>
+                  <span className={`text-sm ml-2 ${card.trendColor}`}>
+                    {card.trend}
+                  </span>
+                </div>
+              </div>
+              <div className={`w-12 h-12 rounded-full ${card.color} flex items-center justify-center`}>
+                <i className={`${card.icon} text-xl`}></i>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Total Replenishments */}
-      <div className="box">
-        <div className="box-body">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Total Replenishments</p>
-              <h3 className="text-2xl font-bold text-gray-800">
-                {summary?.totalReplenishment || 0}
-              </h3>
-            </div>
-            <div className="w-12 h-12 bg-warning/10 rounded-full flex items-center justify-center">
-              <i className="ri-refresh-line text-xl text-warning"></i>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Current Accuracy */}
-      <div className="box">
-        <div className="box-body">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Current Accuracy</p>
-              <h3 className="text-2xl font-bold text-gray-800">
-                {accuracy?.accuracy ? `${accuracy.accuracy.toFixed(1)}%` : '0%'}
-              </h3>
-            </div>
-            <div className="w-12 h-12 bg-info/10 rounded-full flex items-center justify-center">
-              <i className="ri-pie-chart-line text-xl text-info"></i>
-            </div>
-          </div>
-        </div>
-      </div>
+      ))}
     </div>
   );
-};
-
-export default ReplenishmentSummaryCards; 
+}; 

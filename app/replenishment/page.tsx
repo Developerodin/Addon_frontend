@@ -19,6 +19,8 @@ export default function ReplenishmentPage() {
     accuracy,
     trends,
     summary,
+    healthStatus,
+    modelInfo,
     loading,
     error,
     pagination,
@@ -26,6 +28,7 @@ export default function ReplenishmentPage() {
     generateForecast,
     calculateReplenishment,
     updateForecast,
+    deleteForecast,
     updateFilters,
     clearError,
     calculateDeviation,
@@ -50,13 +53,14 @@ export default function ReplenishmentPage() {
 
   // Handle forecast generation
   const handleGenerateForecast = async (data: {
-    storeId: string;
-    productId: string;
-    month: string;
-    method: 'moving_average' | 'weighted_average';
+    store_id: string;
+    product_id: string;
+    forecast_month: string;
+    historical_months?: number;
   }) => {
     try {
-      await generateForecast(data);
+      const result = await generateForecast(data);
+      console.log('Forecast generated:', result);
     } catch (error) {
       console.error('Failed to generate forecast:', error);
     }
@@ -64,11 +68,11 @@ export default function ReplenishmentPage() {
 
   // Handle replenishment calculation
   const handleCalculateReplenishment = async (data: {
-    storeId: string;
-    productId: string;
-    month: string;
-    currentStock: number;
-    variability: 'standard' | 'high' | 'seasonal';
+    store_id: string;
+    product_id: string;
+    forecast_month: string;
+    current_stock: number;
+    safety_stock: number;
   }) => {
     try {
       await calculateReplenishment(data);
@@ -94,8 +98,22 @@ export default function ReplenishmentPage() {
               <div>
                 <h1 className="box-title text-2xl font-semibold">Replenishment Dashboard</h1>
                 <p className="text-gray-500 mt-1">
-                  Manage demand forecasting and inventory replenishment
+                  AI-powered demand forecasting and inventory replenishment management
                 </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {healthStatus && (
+                  <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
+                    healthStatus.status === 'healthy' 
+                      ? 'bg-success/10 text-success' 
+                      : 'bg-danger/10 text-danger'
+                  }`}>
+                    <div className={`w-2 h-2 rounded-full ${
+                      healthStatus.status === 'healthy' ? 'bg-success' : 'bg-danger'
+                    }`}></div>
+                    {healthStatus.status === 'healthy' ? 'Service Online' : 'Service Offline'}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -126,6 +144,7 @@ export default function ReplenishmentPage() {
           <ReplenishmentSummaryCards
             summary={summary}
             accuracy={accuracy}
+            healthStatus={healthStatus}
             loading={loading}
           />
 
@@ -147,7 +166,9 @@ export default function ReplenishmentPage() {
           <ReplenishmentCharts
             trends={trends}
             accuracy={accuracy}
+            modelInfo={modelInfo}
             loading={loading}
+            forecasts={forecasts}
           />
 
           {/* Data Table */}
@@ -158,6 +179,7 @@ export default function ReplenishmentPage() {
             pagination={pagination}
             onPageChange={handlePageChange}
             onUpdateForecast={handleUpdateForecast}
+            onDeleteForecast={deleteForecast}
             formatMonth={formatMonth}
             calculateDeviation={calculateDeviation}
             getAccuracyColor={getAccuracyColor}

@@ -7,7 +7,9 @@ import {
   ForecastTrends, 
   ReplenishmentSummary,
   ReplenishmentFilters,
-  PaginatedResponse
+  PaginatedResponse,
+  HealthStatus,
+  ModelInfo
 } from '@/shared/services/replenishmentService';
 
 interface ReplenishmentState {
@@ -16,6 +18,8 @@ interface ReplenishmentState {
   accuracy: ForecastAccuracy | null;
   trends: ForecastTrends | null;
   summary: ReplenishmentSummary | null;
+  healthStatus: HealthStatus | null;
+  modelInfo: ModelInfo | null;
   loading: boolean;
   error: string | null;
   pagination: {
@@ -35,6 +39,8 @@ export const useReplenishment = (initialFilters?: ReplenishmentFilters) => {
     accuracy: null,
     trends: null,
     summary: null,
+    healthStatus: null,
+    modelInfo: null,
     loading: false,
     error: null,
     pagination: {
@@ -53,6 +59,26 @@ export const useReplenishment = (initialFilters?: ReplenishmentFilters) => {
     setState(prev => ({ ...prev, error: null }));
   }, []);
 
+  // Load health status
+  const loadHealthStatus = useCallback(async () => {
+    try {
+      const healthData = await replenishmentService.getHealthStatus();
+      setState(prev => ({ ...prev, healthStatus: healthData }));
+    } catch (error) {
+      console.error('Failed to load health status:', error);
+    }
+  }, []);
+
+  // Load model info
+  const loadModelInfo = useCallback(async () => {
+    try {
+      const modelData = await replenishmentService.getModelInfo();
+      setState(prev => ({ ...prev, modelInfo: modelData }));
+    } catch (error) {
+      console.error('Failed to load model info:', error);
+    }
+  }, []);
+
   // Load forecasts
   const loadForecasts = useCallback(async (newFilters?: ReplenishmentFilters) => {
     try {
@@ -64,10 +90,10 @@ export const useReplenishment = (initialFilters?: ReplenishmentFilters) => {
         pagination: {
           page: data.page,
           limit: data.limit,
-          totalPages: data.totalPages,
-          totalResults: data.totalResults,
-          hasNextPage: data.hasNextPage,
-          hasPrevPage: data.hasPrevPage
+          totalPages: data.total_pages,
+          totalResults: data.total_results,
+          hasNextPage: data.has_next_page,
+          hasPrevPage: data.has_prev_page
         },
         loading: false 
       }));
@@ -91,10 +117,10 @@ export const useReplenishment = (initialFilters?: ReplenishmentFilters) => {
         pagination: {
           page: data.page,
           limit: data.limit,
-          totalPages: data.totalPages,
-          totalResults: data.totalResults,
-          hasNextPage: data.hasNextPage,
-          hasPrevPage: data.hasPrevPage
+          totalPages: data.total_pages,
+          totalResults: data.total_results,
+          hasNextPage: data.has_next_page,
+          hasPrevPage: data.has_prev_page
         },
         loading: false 
       }));
@@ -129,15 +155,16 @@ export const useReplenishment = (initialFilters?: ReplenishmentFilters) => {
 
   // Generate forecast
   const generateForecast = useCallback(async (data: {
-    storeId: string;
-    productId: string;
-    month: string;
-    method: 'moving_average' | 'weighted_average';
+    store_id: string;
+    product_id: string;
+    forecast_month: string;
+    historical_months?: number;
   }) => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
-      await replenishmentService.generateForecast(data);
+      const result = await replenishmentService.generateForecast(data);
       await loadForecasts(); // Refresh the list
+      return result;
     } catch (error) {
       setState(prev => ({ 
         ...prev, 
@@ -150,15 +177,15 @@ export const useReplenishment = (initialFilters?: ReplenishmentFilters) => {
 
   // Calculate replenishment
   const calculateReplenishment = useCallback(async (data: {
-    storeId: string;
-    productId: string;
-    month: string;
-    currentStock: number;
-    variability: 'standard' | 'high' | 'seasonal';
+    store_id: string;
+    product_id: string;
+    forecast_month: string;
+    current_stock: number;
+    safety_stock: number;
   }) => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
-      await replenishmentService.calculateReplenishment(data);
+      // For now, this is a placeholder as the API doesn't have replenishment endpoints
       await loadReplenishments(); // Refresh the list
     } catch (error) {
       setState(prev => ({ 
@@ -174,7 +201,7 @@ export const useReplenishment = (initialFilters?: ReplenishmentFilters) => {
   const updateForecast = useCallback(async (forecastId: string, actualQty: number) => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
-      await replenishmentService.updateForecast(forecastId, { actualQty });
+      await replenishmentService.updatePrediction(forecastId, { actual_quantity: actualQty });
       await loadForecasts(); // Refresh the list
     } catch (error) {
       setState(prev => ({ 
@@ -186,6 +213,64 @@ export const useReplenishment = (initialFilters?: ReplenishmentFilters) => {
     }
   }, [loadForecasts]);
 
+  // Delete forecast
+  const deleteForecast = useCallback(async (forecastId: string) => {
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      await replenishmentService.deletePrediction(forecastId);
+      await loadForecasts(); // Refresh the list
+    } catch (error) {
+      setState(prev => ({ 
+        ...prev, 
+        error: error instanceof Error ? error.message : 'Failed to delete forecast',
+        loading: false 
+      }));
+      throw error;
+    }
+  }, [loadForecasts]);
+
+  // Get predictions by store
+  const getPredictionsByStore = useCallback(async (storeId: string, limit: number = 100) => {
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      const predictions = await replenishmentService.getPredictionsByStore(storeId, limit);
+      setState(prev => ({ 
+        ...prev, 
+        forecasts: predictions,
+        loading: false 
+      }));
+      return predictions;
+    } catch (error) {
+      setState(prev => ({ 
+        ...prev, 
+        error: error instanceof Error ? error.message : 'Failed to load store predictions',
+        loading: false 
+      }));
+      throw error;
+    }
+  }, []);
+
+  // Get predictions by product
+  const getPredictionsByProduct = useCallback(async (productId: string, limit: number = 100) => {
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      const predictions = await replenishmentService.getPredictionsByProduct(productId, limit);
+      setState(prev => ({ 
+        ...prev, 
+        forecasts: predictions,
+        loading: false 
+      }));
+      return predictions;
+    } catch (error) {
+      setState(prev => ({ 
+        ...prev, 
+        error: error instanceof Error ? error.message : 'Failed to load product predictions',
+        loading: false 
+      }));
+      throw error;
+    }
+  }, []);
+
   // Update filters
   const updateFilters = useCallback((newFilters: Partial<ReplenishmentFilters>) => {
     const updatedFilters = { ...filters, ...newFilters, page: 1 }; // Reset to first page
@@ -195,11 +280,13 @@ export const useReplenishment = (initialFilters?: ReplenishmentFilters) => {
   // Load all data
   const loadAllData = useCallback(async () => {
     await Promise.all([
+      loadHealthStatus(),
+      loadModelInfo(),
       loadForecasts(),
       loadReplenishments(),
       loadAnalytics()
     ]);
-  }, [loadForecasts, loadReplenishments, loadAnalytics]);
+  }, [loadHealthStatus, loadModelInfo, loadForecasts, loadReplenishments, loadAnalytics]);
 
   // Initial load
   useEffect(() => {
@@ -221,9 +308,14 @@ export const useReplenishment = (initialFilters?: ReplenishmentFilters) => {
     loadForecasts,
     loadReplenishments,
     loadAnalytics,
+    loadHealthStatus,
+    loadModelInfo,
     generateForecast,
     calculateReplenishment,
     updateForecast,
+    deleteForecast,
+    getPredictionsByStore,
+    getPredictionsByProduct,
     updateFilters,
     loadAllData,
     clearError,

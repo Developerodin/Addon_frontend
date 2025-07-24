@@ -1,0 +1,259 @@
+{
+  "info": {
+    "name": "Replenishment Service API",
+    "description": "AI-powered replenishment forecasting service using XGBoost for retail inventory management",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "prediction_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "store_id",
+      "value": "20000",
+      "type": "string"
+    },
+    {
+      "key": "product_id",
+      "value": "ASC1SALBC00347",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check the health status of the service including database connection and model loading status"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Model Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/model/info",
+              "host": ["{{base_url}}"],
+              "path": ["model", "info"]
+            },
+            "description": "Get detailed information about the trained ML model including metrics and feature importance"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Predictions",
+      "item": [
+        {
+          "name": "Generate Forecast",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"store_id\": \"{{store_id}}\",\n  \"product_id\": \"{{product_id}}\",\n  \"forecast_month\": \"2025-08-01T00:00:00\",\n  \"historical_months\": 12\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict-forecast",
+              "host": ["{{base_url}}"],
+              "path": ["predict-forecast"]
+            },
+            "description": "Generate a forecast prediction for a specific store and product. Returns prediction ID that can be used for other operations."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Prediction by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions/{{prediction_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["predictions", "{{prediction_id}}"]
+            },
+            "description": "Get a specific prediction by its ID. Use the prediction_id from the forecast response."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Predictions by Store",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions/store/{{store_id}}?limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["predictions", "store", "{{store_id}}"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Maximum number of predictions to return (1-1000)"
+                }
+              ]
+            },
+            "description": "Get all predictions for a specific store. Use the store_id variable or replace with actual store ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Predictions by Product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions/product/{{product_id}}?limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["predictions", "product", "{{product_id}}"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Maximum number of predictions to return (1-1000)"
+                }
+              ]
+            },
+            "description": "Get all predictions for a specific product. Use the product_id variable or replace with actual product ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Predictions by Store and Product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions/store/{{store_id}}/product/{{product_id}}?limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["predictions", "store", "{{store_id}}", "product", "{{product_id}}"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Maximum number of predictions to return (1-1000)"
+                }
+              ]
+            },
+            "description": "Get predictions for a specific store and product combination."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Recent Predictions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions/recent?limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["predictions", "recent"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Maximum number of recent predictions to return (1-1000)"
+                }
+              ]
+            },
+            "description": "Get recent predictions across all stores and products, sorted by creation date."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Prediction Management",
+      "item": [
+        {
+          "name": "Update Prediction",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actual_quantity\": 150,\n  \"accuracy\": 0.85\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predictions/{{prediction_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["predictions", "{{prediction_id}}"]
+            },
+            "description": "Update a prediction with actual results and accuracy. Use this after the actual sales data is available to track prediction accuracy."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Prediction",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions/{{prediction_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["predictions", "{{prediction_id}}"]
+            },
+            "description": "Delete a specific prediction. This action cannot be undone."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Analytics & Statistics",
+      "item": [
+        {
+          "name": "Get Accuracy Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stats/accuracy?store_id={{store_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stats", "accuracy"],
+              "query": [
+                {
+                  "key": "store_id",
+                  "value": "{{store_id}}",
+                  "description": "Optional store ID filter. Remove this parameter to get global statistics."
+                }
+              ]
+            },
+            "description": "Get accuracy statistics for predictions. Can be filtered by store or get global statistics."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+} 

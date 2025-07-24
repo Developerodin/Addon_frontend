@@ -1,9 +1,18 @@
-import { API_BASE_URL } from '@/shared/data/utilities/api';
+import { RService_BASE_URL } from '@/shared/data/utilities/api';
 
 // TypeScript interfaces for replenishment data
 export interface Forecast {
   id: string;
-  store: {
+  store_id: string;
+  product_id: string;
+  forecast_month: string;
+  predicted_quantity: number;
+  actual_quantity?: number | null;
+  accuracy?: number | null;
+  confidence_score?: number;
+  created_at: string;
+  updated_at: string;
+  store?: {
     id: string;
     storeName: string;
     storeId: string;
@@ -11,7 +20,7 @@ export interface Forecast {
     contactPerson: string;
     isActive: boolean;
   };
-  product: {
+  product?: {
     id: string;
     name: string;
     styleCode: string;
@@ -19,18 +28,21 @@ export interface Forecast {
     description: string;
     category: string;
   };
-  month: string;
-  forecastQty: number;
-  actualQty?: number | null;
-  accuracy?: number | null;
-  method: 'moving_average' | 'weighted_average';
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface Replenishment {
   id: string;
-  store: {
+  store_id: string;
+  product_id: string;
+  forecast_month: string;
+  current_stock: number;
+  safety_stock: number;
+  reorder_point: number;
+  suggested_order_quantity: number;
+  lead_time_days: number;
+  created_at: string;
+  updated_at: string;
+  store?: {
     id: string;
     storeName: string;
     storeId: string;
@@ -38,7 +50,7 @@ export interface Replenishment {
     contactPerson: string;
     isActive: boolean;
   };
-  product: {
+  product?: {
     id: string;
     name: string;
     styleCode: string;
@@ -46,65 +58,115 @@ export interface Replenishment {
     description: string;
     category: string;
   };
-  month: string;
-  forecastQty: number;
-  currentStock: number;
-  safetyBuffer: number;
-  replenishmentQty: number;
-  method: 'moving_average' | 'weighted_average';
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface ForecastAccuracy {
-  accuracy: number;
-  details: Array<{
-    month: string;
+  overall_accuracy: number;
+  total_predictions: number;
+  accurate_predictions: number;
+  accuracy_by_store: Array<{
+    store_id: string;
+    store_name: string;
     accuracy: number;
-    forecastQty: number;
-    actualQty: number;
+    total_predictions: number;
+  }>;
+  accuracy_by_product: Array<{
+    product_id: string;
+    product_name: string;
+    accuracy: number;
+    total_predictions: number;
   }>;
 }
 
 export interface ForecastTrends {
-  trends: Array<{
+  monthly_trends: Array<{
     month: string;
-    avgForecastQty: number;
-    avgActualQty: number;
+    avg_predicted_quantity: number;
+    avg_actual_quantity: number;
     accuracy: number;
+    total_predictions: number;
+  }>;
+  top_performing_stores: Array<{
+    store_id: string;
+    store_name: string;
+    accuracy: number;
+    total_predictions: number;
+  }>;
+  top_performing_products: Array<{
+    product_id: string;
+    product_name: string;
+    accuracy: number;
+    total_predictions: number;
   }>;
 }
 
 export interface ReplenishmentSummary {
-  totalForecasts: number;
-  avgAccuracy: number;
-  totalReplenishment: number;
+  total_predictions: number;
+  total_replenishments: number;
+  avg_accuracy: number;
+  total_stores: number;
+  total_products: number;
+  recent_activity: Array<{
+    id: string;
+    type: 'forecast' | 'replenishment';
+    store_id: string;
+    product_id: string;
+    created_at: string;
+  }>;
 }
 
 export interface PaginatedResponse<T> {
   results: T[];
   page: number;
   limit: number;
-  totalPages: number;
-  totalResults: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
+  total_pages: number;
+  total_results: number;
+  has_next_page: boolean;
+  has_prev_page: boolean;
 }
 
 export interface ReplenishmentFilters {
-  store?: string;
-  product?: string;
+  store_id?: string;
+  product_id?: string;
   month?: string;
   page?: number;
   limit?: number;
 }
 
+export interface HealthStatus {
+  status: string;
+  database_connected: boolean;
+  model_loaded: boolean;
+  last_model_update: string;
+  service_uptime: string;
+}
+
+export interface ModelInfo {
+  model_version: string;
+  training_date: string;
+  features_count: number;
+  training_samples: number;
+  metrics: {
+    mae: number;
+    mape: number;
+    rmse: number;
+    r2_score: number;
+    training_date: string;
+    model_version: string;
+  };
+  feature_importance: Array<{
+    feature_name: string;
+    importance_score: number;
+    rank: number;
+  }>;
+}
+
 class ReplenishmentService {
-  private baseURL = `${API_BASE_URL}`;
+  private baseURL = RService_BASE_URL;
 
   private async makeRequest<T>(
     endpoint: string, 
-    method: 'GET' | 'POST' | 'PUT' = 'GET',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
     body?: any,
     params?: Record<string, any>
   ): Promise<T> {
@@ -123,7 +185,6 @@ class ReplenishmentService {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         },
       };
 
@@ -153,112 +214,141 @@ class ReplenishmentService {
     }
   }
 
-  // Forecasting APIs
-  async getForecasts(filters?: ReplenishmentFilters): Promise<PaginatedResponse<Forecast>> {
-    return this.makeRequest<PaginatedResponse<Forecast>>('/forecasts', 'GET', undefined, filters);
+  // Health & Status APIs
+  async getHealthStatus(): Promise<HealthStatus> {
+    return this.makeRequest<HealthStatus>('/health');
   }
 
+  async getModelInfo(): Promise<ModelInfo> {
+    return this.makeRequest<ModelInfo>('/model/info');
+  }
+
+  // Prediction APIs
   async generateForecast(data: {
-    storeId: string;
-    productId: string;
-    month: string;
-    method: 'moving_average' | 'weighted_average';
-  }): Promise<Forecast> {
-    return this.makeRequest<Forecast>('/forecasts/generate', 'POST', data);
+    store_id: string;
+    product_id: string;
+    forecast_month: string;
+    historical_months?: number;
+  }): Promise<{ prediction_id: string; message: string }> {
+    return this.makeRequest<{ prediction_id: string; message: string }>('/predict-forecast', 'POST', data);
   }
 
-  async getForecastByStoreProductMonth(
-    storeId: string, 
-    productId: string, 
-    month: string
-  ): Promise<Forecast> {
-    return this.makeRequest<Forecast>(`/forecasts/${storeId}/${productId}/${month}`);
+  async getPredictionById(predictionId: string): Promise<Forecast> {
+    return this.makeRequest<Forecast>(`/predictions/${predictionId}`);
   }
 
-  async updateForecast(forecastId: string, data: { actualQty: number }): Promise<Forecast> {
-    return this.makeRequest<Forecast>(`/forecasts/${forecastId}`, 'PUT', data);
+  async getPredictionsByStore(storeId: string, limit: number = 100): Promise<Forecast[]> {
+    return this.makeRequest<Forecast[]>(`/predictions/store/${storeId}`, 'GET', undefined, { limit });
   }
 
-  // Replenishment APIs
+  async getPredictionsByProduct(productId: string, limit: number = 100): Promise<Forecast[]> {
+    return this.makeRequest<Forecast[]>(`/predictions/product/${productId}`, 'GET', undefined, { limit });
+  }
+
+  async getPredictionsByStoreAndProduct(storeId: string, productId: string, limit: number = 100): Promise<Forecast[]> {
+    return this.makeRequest<Forecast[]>(`/predictions/store/${storeId}/product/${productId}`, 'GET', undefined, { limit });
+  }
+
+  async getRecentPredictions(limit: number = 50): Promise<Forecast[]> {
+    return this.makeRequest<Forecast[]>(`/predictions/recent`, 'GET', undefined, { limit });
+  }
+
+  // Prediction Management APIs
+  async updatePrediction(predictionId: string, data: { actual_quantity: number; accuracy?: number }): Promise<Forecast> {
+    return this.makeRequest<Forecast>(`/predictions/${predictionId}`, 'PUT', data);
+  }
+
+  async deletePrediction(predictionId: string): Promise<{ message: string }> {
+    return this.makeRequest<{ message: string }>(`/predictions/${predictionId}`, 'DELETE');
+  }
+
+  // Analytics & Statistics APIs
+  async getAccuracyStatistics(storeId?: string): Promise<{
+    overall_accuracy: number;
+    total_predictions: number;
+    accurate_predictions: number;
+    accuracy_by_month: Array<{
+      month: string;
+      accuracy: number;
+      total_predictions: number;
+    }>;
+  }> {
+    return this.makeRequest<any>('/stats/accuracy', 'GET', undefined, storeId ? { store_id: storeId } : undefined);
+  }
+
+  // Legacy compatibility methods
+  async getForecasts(filters?: ReplenishmentFilters): Promise<PaginatedResponse<Forecast>> {
+    const predictions = await this.getRecentPredictions(filters?.limit || 100);
+    return {
+      results: predictions,
+      page: filters?.page || 1,
+      limit: filters?.limit || 100,
+      total_pages: Math.ceil(predictions.length / (filters?.limit || 100)),
+      total_results: predictions.length,
+      has_next_page: false,
+      has_prev_page: false
+    };
+  }
+
   async getReplenishments(filters?: ReplenishmentFilters): Promise<PaginatedResponse<Replenishment>> {
-    return this.makeRequest<PaginatedResponse<Replenishment>>('/replenishment', 'GET', undefined, filters);
+    // For now, return empty replenishments as the API doesn't have dedicated replenishment endpoints
+    return {
+      results: [],
+      page: filters?.page || 1,
+      limit: filters?.limit || 100,
+      total_pages: 1,
+      total_results: 0,
+      has_next_page: false,
+      has_prev_page: false
+    };
   }
 
-  async calculateReplenishment(data: {
-    storeId: string;
-    productId: string;
-    month: string;
-    currentStock: number;
-    variability: 'standard' | 'high' | 'seasonal';
-  }): Promise<Replenishment> {
-    return this.makeRequest<Replenishment>('/replenishment/calculate', 'POST', data);
-  }
-
-  async getReplenishmentByStoreProductMonth(
-    storeId: string, 
-    productId: string, 
-    month: string
-  ): Promise<Replenishment> {
-    return this.makeRequest<Replenishment>(`/replenishment/${storeId}/${productId}/${month}`);
-  }
-
-  // Analytics APIs
   async getForecastAccuracy(): Promise<ForecastAccuracy> {
-    return this.makeRequest<ForecastAccuracy>('/analytics/accuracy');
+    const stats = await this.getAccuracyStatistics();
+    return {
+      overall_accuracy: stats.overall_accuracy,
+      total_predictions: stats.total_predictions,
+      accurate_predictions: stats.accurate_predictions,
+      accuracy_by_store: [],
+      accuracy_by_product: []
+    };
   }
 
   async getForecastTrends(): Promise<ForecastTrends> {
-    return this.makeRequest<ForecastTrends>('/analytics/trends');
+    const stats = await this.getAccuracyStatistics();
+    return {
+      monthly_trends: stats.accuracy_by_month.map(item => ({
+        month: item.month,
+        avg_predicted_quantity: 0,
+        avg_actual_quantity: 0,
+        accuracy: item.accuracy,
+        total_predictions: item.total_predictions
+      })),
+      top_performing_stores: [],
+      top_performing_products: []
+    };
   }
 
   async getReplenishmentSummary(): Promise<ReplenishmentSummary> {
-    return this.makeRequest<ReplenishmentSummary>('/analytics/summary');
-  }
-
-  // Enhanced Analytics APIs
-  async getEnhancedTrends(params?: {
-    startMonth?: string;
-    endMonth?: string;
-    store?: string;
-    product?: string;
-  }): Promise<any> {
-    return this.makeRequest<any>('/analytics/trends', 'GET', undefined, params);
-  }
-
-  async getAccuracyDistribution(params?: {
-    store?: string;
-    product?: string;
-    month?: string;
-  }): Promise<any> {
-    return this.makeRequest<any>('/analytics/accuracy-distribution', 'GET', undefined, params);
-  }
-
-  async getPerformanceAnalytics(params?: {
-    type?: 'store' | 'product';
-    limit?: number;
-    month?: string;
-  }): Promise<any> {
-    return this.makeRequest<any>('/analytics/performance', 'GET', undefined, params);
-  }
-
-  async getReplenishmentAnalytics(params?: {
-    store?: string;
-    product?: string;
-    month?: string;
-  }): Promise<any> {
-    return this.makeRequest<any>('/analytics/replenishment', 'GET', undefined, params);
+    const stats = await this.getAccuracyStatistics();
+    return {
+      total_predictions: stats.total_predictions,
+      total_replenishments: 0,
+      avg_accuracy: stats.overall_accuracy,
+      total_stores: 0,
+      total_products: 0,
+      recent_activity: []
+    };
   }
 
   // Utility methods
-  calculateDeviation(forecastQty: number, actualQty?: number): number | null {
+  calculateDeviation(predictedQty: number, actualQty?: number): number | null {
     if (actualQty === undefined || actualQty === null) return null;
-    if (forecastQty === 0) {
-      // If forecast is 0 and actual is 0, deviation is 0%
+    if (predictedQty === 0) {
       if (actualQty === 0) return 0;
-      // If forecast is 0 but actual > 0, deviation is 100% (or a large number)
       return actualQty > 0 ? 100 : 0;
     }
-    return ((actualQty - forecastQty) / forecastQty) * 100;
+    return ((actualQty - predictedQty) / predictedQty) * 100;
   }
 
   getAccuracyColor(accuracy: number): string {
@@ -268,7 +358,6 @@ class ReplenishmentService {
   }
 
   getDeviationColor(deviation: number): string {
-    // Handle edge case where deviation is 100% (forecast was 0, actual > 0)
     if (deviation === 100) return 'text-warning';
     if (Math.abs(deviation) <= 5) return 'text-success';
     if (Math.abs(deviation) <= 15) return 'text-warning';
