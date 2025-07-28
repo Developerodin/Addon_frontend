@@ -22,6 +22,7 @@ interface AttributeOption {
 
 interface RawMaterial {
   id: string;
+  name: string;
   itemName: string;
   printName: string;
   color: string;
@@ -209,9 +210,10 @@ const AddProductPage = () => {
   }, []);
 
   // Material search and pagination functions
-  const filteredMaterials = rawMaterials.filter(material =>
-    material.name.toLowerCase().includes(materialSearchQuery.toLowerCase())
-  );
+  const filteredMaterials = rawMaterials.filter(material => {
+    const materialName = material.name || material.itemName || '';
+    return materialName.toLowerCase().includes(materialSearchQuery.toLowerCase());
+  });
 
   const totalMaterialPages = Math.ceil(filteredMaterials.length / materialsPerPage);
   const paginatedMaterials = filteredMaterials.slice(
@@ -234,7 +236,7 @@ const AddProductPage = () => {
       newBomItems[selectedMaterialIndex] = {
         ...newBomItems[selectedMaterialIndex],
         materialId: material.id,
-        materialName: material?.name,
+        materialName: material?.name || material?.itemName || '',
         materialUnit: material?.unit
       };
       setBomItems(newBomItems);
@@ -261,7 +263,7 @@ const AddProductPage = () => {
       newBomItems[index] = {
         ...newBomItems[index],
         materialId: value.toString(),
-        materialName: selectedMaterial?.name || '',
+        materialName: selectedMaterial?.name || selectedMaterial?.itemName || '',
         materialUnit: selectedMaterial?.unit || ''
       };
     } else if (field === 'quantity') {
@@ -838,7 +840,7 @@ const AddProductPage = () => {
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <h2 className="font-medium text-lg text-gray-900">{material.name}</h2>
+                          <h2 className="font-medium text-lg text-gray-900">{material.name || material.itemName}</h2>
                           <p className="text-sm text-gray-700 mt-1">{material.printName}</p>
                           {material.description && (
                             <p className="text-sm text-gray-700 mt-1 line-clamp-2">{material.description}</p>
