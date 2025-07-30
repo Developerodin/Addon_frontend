@@ -8,6 +8,7 @@ import { useParams } from 'next/navigation';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import { ProductAnalysisCharts } from '@/shared/components/analytics/ProductAnalysisCharts';
 import { ProductAnalysisSummary } from '@/shared/components/analytics/ProductAnalysisSummary';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface ProductInfo {
   productId: string;
@@ -268,13 +269,66 @@ export default function ProductAnalysisPage() {
       
       {/* Back to Analytics */}
       <div className="mb-6">
-        <Link 
-          href="/analytics"
-          className="inline-flex items-center text-sm text-primary hover:text-primary/80 transition-colors duration-200"
-        >
-          <i className="ri-arrow-left-line mr-2"></i>
-          Back to Analytics
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link 
+            href="/analytics"
+            className="inline-flex items-center text-sm text-primary hover:text-primary/80 transition-colors duration-200"
+          >
+            <i className="ri-arrow-left-line mr-2"></i>
+            Back to Analytics
+          </Link>
+          <HelpIcon
+            title="Product Analysis"
+            content={
+              <div>
+                <p className="mb-4">
+                  This page provides detailed analysis for a specific product, including sales performance, trends, forecasts, and replenishment recommendations.
+                </p>
+                
+                <h4 className="font-semibold mb-2">What you can do:</h4>
+                <ul className="list-disc list-inside mb-4 space-y-1">
+                  <li><strong>View Product Overview:</strong> See key metrics like total quantity, units, and current trend</li>
+                  <li><strong>Monthly Analysis:</strong> View month-wise sales performance and trends</li>
+                  <li><strong>Store Analysis:</strong> See how the product performs across different stores</li>
+                  <li><strong>Sales Entries:</strong> View detailed sales records for the product</li>
+                  <li><strong>Demand Forecast:</strong> See predicted demand for the product</li>
+                  <li><strong>Replenishment:</strong> Get stock recommendations for different stores</li>
+                  <li><strong>Interactive Charts:</strong> Visualize data through various chart types</li>
+                  <li><strong>Export Data:</strong> Export analysis data for external use</li>
+                </ul>
+
+                <h4 className="font-semibold mb-2">Product Information:</h4>
+                <ul className="list-disc list-inside mb-4 space-y-1">
+                  <li><strong>Product Name:</strong> Name of the product being analyzed</li>
+                  <li><strong>Product Code:</strong> Unique identifier for the product</li>
+                  <li><strong>Description:</strong> Product description and details</li>
+                  <li><strong>Total Quantity:</strong> Total quantity sold</li>
+                  <li><strong>Total Units:</strong> Total units sold</li>
+                  <li><strong>Current Trend:</strong> Current performance trend (positive/negative)</li>
+                </ul>
+
+                <h4 className="font-semibold mb-2">Analysis Tabs:</h4>
+                <ul className="list-disc list-inside mb-4 space-y-1">
+                  <li><strong>Overview:</strong> Summary charts and key metrics</li>
+                  <li><strong>Monthly Analysis:</strong> Month-wise sales breakdown</li>
+                  <li><strong>Store Analysis:</strong> Store-wise performance comparison</li>
+                  <li><strong>Sales Entries:</strong> Detailed sales records</li>
+                  <li><strong>Demand Forecast:</strong> Future demand predictions</li>
+                  <li><strong>Replenishment:</strong> Stock recommendations</li>
+                </ul>
+
+                <h4 className="font-semibold mb-2">Tips:</h4>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Use different tabs to explore various aspects of product performance</li>
+                  <li>Check the forecast tab for future planning</li>
+                  <li>Review replenishment recommendations for inventory management</li>
+                  <li>Compare store performance to identify best and worst performing locations</li>
+                  <li>Use the monthly analysis to identify seasonal trends</li>
+                </ul>
+              </div>
+            }
+          />
+        </div>
       </div>
 
       {/* Product Info Cards */}

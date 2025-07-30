@@ -253,6 +253,51 @@ export default function TaxAnalyticsPage() {
         dateRange={dateRange}
         onDateRangeChange={handleDateRangeChange}
         onRefresh={fetchData}
+        helpTitle="Tax Analytics"
+        helpContent={
+          <div>
+            <p className="mb-4">
+              This page provides comprehensive analysis of tax distribution across products and stores, showing tax patterns and compliance information.
+            </p>
+            
+            <h4 className="font-semibold mb-2">What you can do:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>View Tax Distribution:</strong> See how tax amounts are distributed across products and stores</li>
+              <li><strong>Analyze Tax Patterns:</strong> Understand tax rates and compliance across different products</li>
+              <li><strong>Compare Tax Performance:</strong> Compare tax collection across different stores and products</li>
+              <li><strong>Filter by Date Range:</strong> Analyze tax data for specific time periods</li>
+              <li><strong>Sort Data:</strong> Sort by various metrics like tax amount, percentage, or NSV</li>
+              <li><strong>Export Data:</strong> Export tax analytics data for external analysis</li>
+              <li><strong>Navigate to Details:</strong> Click on product or store names for detailed analysis</li>
+              <li><strong>Pagination:</strong> Navigate through large datasets efficiently</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Key Metrics:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>Product Name:</strong> Name of the product with clickable link to detailed analysis</li>
+              <li><strong>Product Code:</strong> Unique identifier for the product</li>
+              <li><strong>MRP:</strong> Maximum Retail Price of the product</li>
+              <li><strong>Store Name:</strong> Name of the store with clickable link to detailed analysis</li>
+              <li><strong>Store ID:</strong> Unique identifier for the store</li>
+              <li><strong>Total Quantity:</strong> Total quantity sold</li>
+              <li><strong>Total NSV:</strong> Net Sales Value</li>
+              <li><strong>Total GSV:</strong> Gross Sales Value</li>
+              <li><strong>Total Tax:</strong> Total tax amount collected</li>
+              <li><strong>Total MRP:</strong> Total MRP value</li>
+              <li><strong>Tax %:</strong> Tax percentage applied</li>
+              <li><strong>Records:</strong> Number of sales records</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Tips:</h4>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Use date filters to analyze tax data for specific periods</li>
+              <li>Sort by tax percentage to identify products with different tax rates</li>
+              <li>Click on product or store names to view detailed analysis</li>
+              <li>Export data for compliance reporting and external analysis</li>
+              <li>Compare tax percentages across different product categories</li>
+            </ul>
+          </div>
+        }
       />
     </>
   );

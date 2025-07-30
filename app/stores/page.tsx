@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useStores } from '@/shared/hooks/useStores'
 import { toast } from 'react-hot-toast'
 import { exportStoresToExcel, generateSampleTemplate, processBulkImport, validateFileForImport, testExcelParsing, ImportProgress } from '@/shared/utils/storeUtils'
+import HelpIcon from '@/shared/components/HelpIcon'
 
 const StoresPage = () => {
     const [selectedStores, setSelectedStores] = useState<string[]>([]);
@@ -250,7 +251,68 @@ const StoresPage = () => {
                     {/* Page Header */}
                     <div className="box !bg-transparent border-0 shadow-none">
                         <div className="box-header flex justify-between items-center">
-                            <h1 className="box-title text-2xl font-semibold">Stores</h1>
+                            <div className="flex items-center space-x-3">
+                                <h1 className="box-title text-2xl font-semibold">Stores</h1>
+                                <HelpIcon
+                                    title="Stores Management"
+                                    content={
+                                        <div className="space-y-4">
+                                            <div>
+                                                <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                                                <p className="text-gray-700">
+                                                    This is the Stores Management page where you can view, manage, and organize all your retail stores, their locations, contact information, and operational status.
+                                                </p>
+                                            </div>
+                                            
+                                            <div>
+                                                <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                                                <ul className="list-disc list-inside space-y-1 text-gray-700">
+                                                    <li><strong>View Stores:</strong> Browse all stores with pagination and search functionality</li>
+                                                    <li><strong>Add New Store:</strong> Click "Add New Store" to create a new store entry</li>
+                                                    <li><strong>Edit Stores:</strong> Click the edit icon next to any store to modify its details</li>
+                                                    <li><strong>Delete Stores:</strong> Remove individual stores or bulk delete selected ones</li>
+                                                    <li><strong>Search & Filter:</strong> Use the search bar and filters to find specific stores</li>
+                                                    <li><strong>Export Data:</strong> Export all stores or selected stores to Excel format</li>
+                                                    <li><strong>Import Data:</strong> Import stores from Excel files using templates</li>
+                                                    <li><strong>Bulk Operations:</strong> Select multiple stores for bulk export or deletion</li>
+                                                </ul>
+                                            </div>
+                                            
+                                            <div>
+                                                <h4 className="font-semibold text-lg mb-2">Statistics Overview:</h4>
+                                                <ul className="list-disc list-inside space-y-1 text-gray-700">
+                                                    <li><strong>Total Stores:</strong> Complete count of all stores in the system</li>
+                                                    <li><strong>Active Stores:</strong> Number of currently operational stores</li>
+                                                    <li><strong>Premium Stores:</strong> Stores with high credit ratings (A-grade)</li>
+                                                    <li><strong>Unique Cities:</strong> Number of different cities where stores are located</li>
+                                                </ul>
+                                            </div>
+                                            
+                                            <div>
+                                                <h4 className="font-semibold text-lg mb-2">Filter Options:</h4>
+                                                <ul className="list-disc list-inside space-y-1 text-gray-700">
+                                                    <li><strong>City:</strong> Filter stores by specific city</li>
+                                                    <li><strong>Credit Rating:</strong> Filter by store credit rating</li>
+                                                    <li><strong>Active Status:</strong> Filter by active/inactive status</li>
+                                                    <li><strong>Contact Person:</strong> Search by contact person name</li>
+                                                    <li><strong>Brand:</strong> Filter by store brand</li>
+                                                    <li><strong>BP Code:</strong> Filter by business partner code</li>
+                                                </ul>
+                                            </div>
+                                            
+                                            <div>
+                                                <h4 className="font-semibold text-lg mb-2">Tips:</h4>
+                                                <ul className="list-disc list-inside space-y-1 text-gray-700">
+                                                    <li>Use the search bar to quickly find stores by name</li>
+                                                    <li>Download the template before importing to ensure correct data format</li>
+                                                    <li>Use filters to narrow down your store list</li>
+                                                    <li>Check the statistics cards for quick insights</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    }
+                                />
+                            </div>
                             <div className="box-tools flex items-center space-x-2">
                                 {selectedStores.length > 0 && (
                                     <button 

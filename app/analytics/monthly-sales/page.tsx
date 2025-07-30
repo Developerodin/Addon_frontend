@@ -214,6 +214,45 @@ export default function MonthlySalesPage() {
         dateRange={dateRange}
         onDateRangeChange={handleDateRangeChange}
         onRefresh={fetchData}
+        helpTitle="Monthly Sales Analysis"
+        helpContent={
+          <div>
+            <p className="mb-4">
+              This page provides comprehensive analysis of monthly sales trends, showing sales performance over time with detailed metrics for each month.
+            </p>
+            
+            <h4 className="font-semibold mb-2">What you can do:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>View Monthly Trends:</strong> See sales performance trends over time</li>
+              <li><strong>Analyze Seasonal Patterns:</strong> Identify seasonal variations in sales</li>
+              <li><strong>Compare Monthly Performance:</strong> Compare sales across different months</li>
+              <li><strong>Filter by Date Range:</strong> Analyze sales for specific time periods</li>
+              <li><strong>Sort Data:</strong> Sort by various metrics like quantity, NSV, or GSV</li>
+              <li><strong>Export Data:</strong> Export monthly sales data for external analysis</li>
+              <li><strong>Pagination:</strong> Navigate through large datasets efficiently</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Key Metrics:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>Month:</strong> Month and year of the sales data</li>
+              <li><strong>Total Quantity:</strong> Total quantity sold in the month</li>
+              <li><strong>Total NSV:</strong> Net Sales Value for the month</li>
+              <li><strong>Total GSV:</strong> Gross Sales Value for the month</li>
+              <li><strong>Total Discount:</strong> Total discount amount given in the month</li>
+              <li><strong>Total Tax:</strong> Total tax amount collected in the month</li>
+              <li><strong>Records:</strong> Number of sales records for the month</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Tips:</h4>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Use date filters to focus on specific time periods</li>
+              <li>Sort by different metrics to identify best and worst performing months</li>
+              <li>Export data for trend analysis and forecasting</li>
+              <li>Look for seasonal patterns in the data</li>
+              <li>Compare discount and tax trends over time</li>
+            </ul>
+          </div>
+        }
       />
     </>
   );

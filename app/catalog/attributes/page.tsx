@@ -5,6 +5,7 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { toast, Toaster } from 'react-hot-toast';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface AttributeValue {
   id: number;
@@ -355,7 +356,58 @@ const AttributesPage = () => {
           {/* Page Header */}
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
-              <h1 className="box-title text-2xl font-semibold">Attributes</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="box-title text-2xl font-semibold">Attributes</h1>
+                <HelpIcon
+                  title="Product Attributes Management"
+                  content={
+                    <div>
+                      <p className="mb-4">
+                        This page allows you to manage product attributes that define the characteristics and properties of your products.
+                      </p>
+                      
+                      <h4 className="font-semibold mb-2">What you can do:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>View Attributes:</strong> See all product attributes with their types and values</li>
+                        <li><strong>Add New Attribute:</strong> Create new product attributes with custom types and values</li>
+                        <li><strong>Edit Attribute:</strong> Modify existing attribute details, types, and option values</li>
+                        <li><strong>Delete Attribute:</strong> Remove attributes that are no longer needed</li>
+                        <li><strong>Bulk Operations:</strong> Select multiple attributes for bulk deletion</li>
+                        <li><strong>Import/Export:</strong> Import attributes from Excel files or export existing data</li>
+                        <li><strong>Search & Filter:</strong> Find specific attributes using the search functionality</li>
+                        <li><strong>Pagination:</strong> Navigate through large lists of attributes efficiently</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Attribute Information:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>Name:</strong> The name of the product attribute (e.g., Color, Size, Material)</li>
+                        <li><strong>Type:</strong> The type of attribute (e.g., select, radio, checkbox, text)</li>
+                        <li><strong>Option Values:</strong> Available options for the attribute (e.g., Red, Blue, Green for Color)</li>
+                        <li><strong>Sort Order:</strong> The order in which attributes should be displayed</li>
+                        <li><strong>Images:</strong> Associated images for attribute values (if applicable)</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Common Attribute Types:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>Select:</strong> Dropdown selection with predefined options</li>
+                        <li><strong>Radio:</strong> Single choice from multiple options</li>
+                        <li><strong>Checkbox:</strong> Multiple choice selection</li>
+                        <li><strong>Text:</strong> Free text input</li>
+                        <li><strong>Number:</strong> Numeric input</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Tips:</h4>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Use the import feature to bulk upload attributes from Excel files</li>
+                        <li>Organize attributes by type for better product organization</li>
+                        <li>Use descriptive names for attributes to make them easily identifiable</li>
+                        <li>Set appropriate sort orders to control display sequence</li>
+                        <li>Add images to attribute values for better visual representation</li>
+                      </ul>
+                    </div>
+                  }
+                />
+              </div>
               <div className="box-tools flex items-center space-x-2">
                 <input
                   type="file"

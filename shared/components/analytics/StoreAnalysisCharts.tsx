@@ -524,6 +524,18 @@ export const StoreAnalysisCharts: React.FC<StoreAnalysisChartsProps> = ({
     const mediumPercentage = total > 0 ? Math.round((mediumPriority / total) * 100) : 0;
     const lowPercentage = total > 0 ? Math.round((lowPriority / total) * 100) : 0;
 
+    // Debug logging to help identify issues
+    console.log('Replenishment Chart Data:', {
+      total,
+      highPriority,
+      mediumPriority,
+      lowPriority,
+      highPercentage,
+      mediumPercentage,
+      lowPercentage,
+      percentagesSum: highPercentage + mediumPercentage + lowPercentage
+    });
+
     return {
       series: [highPriority, mediumPriority, lowPriority],
       options: {
@@ -582,16 +594,18 @@ export const StoreAnalysisCharts: React.FC<StoreAnalysisChartsProps> = ({
         },
         tooltip: {
           y: {
-            formatter: function(value: number) {
-              const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+            formatter: function(value: number, opts: any) {
+              const percentages = [highPercentage, mediumPercentage, lowPercentage];
+              const percentage = percentages[opts.seriesIndex] || 0;
               return `${value} items (${percentage}%)`;
             }
           }
         },
         dataLabels: {
           enabled: true,
-          formatter: function(value: number) {
-            const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+          formatter: function(value: number, opts: any) {
+            const percentages = [highPercentage, mediumPercentage, lowPercentage];
+            const percentage = percentages[opts.seriesIndex] || 0;
             return `${percentage}%`;
           },
           style: {

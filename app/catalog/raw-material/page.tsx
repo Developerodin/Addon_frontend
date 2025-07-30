@@ -6,6 +6,7 @@ import Image from 'next/image';
 import * as XLSX from 'xlsx';
 import { toast, Toaster } from 'react-hot-toast';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface RawMaterial {
   id: string;
@@ -350,7 +351,55 @@ const RawMaterialPage = () => {
           {/* Page Header */}
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
-              <h1 className="box-title text-2xl font-semibold">Raw Material</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="box-title text-2xl font-semibold">Raw Material</h1>
+                <HelpIcon
+                  title="Raw Material Management"
+                  content={
+                    <div>
+                      <p className="mb-4">
+                        This page allows you to manage raw materials used in your manufacturing processes.
+                      </p>
+                      
+                      <h4 className="font-semibold mb-2">What you can do:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>View Materials:</strong> See all raw materials with their specifications and details</li>
+                        <li><strong>Add New Material:</strong> Create new raw material entries with complete specifications</li>
+                        <li><strong>Edit Material:</strong> Modify existing material details, pricing, and specifications</li>
+                        <li><strong>Delete Material:</strong> Remove materials that are no longer needed</li>
+                        <li><strong>Bulk Operations:</strong> Select multiple materials for bulk deletion</li>
+                        <li><strong>Import/Export:</strong> Import materials from Excel files or export existing data</li>
+                        <li><strong>Search & Filter:</strong> Find specific materials using the search functionality</li>
+                        <li><strong>Pagination:</strong> Navigate through large lists of materials efficiently</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Material Information:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>Name:</strong> The name of the raw material</li>
+                        <li><strong>Group Name:</strong> Category or group classification</li>
+                        <li><strong>Type:</strong> Type of material (fabric, thread, etc.)</li>
+                        <li><strong>Brand:</strong> Brand or manufacturer of the material</li>
+                        <li><strong>Count/Size:</strong> Material specifications like count or size</li>
+                        <li><strong>Material:</strong> Base material composition</li>
+                        <li><strong>Color & Shade:</strong> Color and shade specifications</li>
+                        <li><strong>Unit:</strong> Unit of measurement (meters, pieces, etc.)</li>
+                        <li><strong>MRP:</strong> Maximum Retail Price</li>
+                        <li><strong>HSN Code:</strong> Harmonized System of Nomenclature code</li>
+                        <li><strong>GST %:</strong> Goods and Services Tax percentage</li>
+                        <li><strong>Article No:</strong> Unique article number for identification</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Tips:</h4>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Use the import feature to bulk upload materials from Excel files</li>
+                        <li>Ensure all required fields (Name, Unit) are filled when adding materials</li>
+                        <li>Organize materials by groups for better inventory management</li>
+                        <li>Keep HSN codes and GST rates updated for accurate tax calculations</li>
+                      </ul>
+                    </div>
+                  }
+                />
+              </div>
               <div className="box-tools flex items-center space-x-2">
                 <div className="relative group">
                   <input

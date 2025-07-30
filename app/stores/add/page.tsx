@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useStores } from '@/shared/hooks/useStores';
 import { CreateStoreData } from '@/shared/services/storeService';
 import { toast } from 'react-hot-toast';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 const AddStorePage = () => {
     const router = useRouter();
@@ -734,7 +735,53 @@ const AddStorePage = () => {
                     {/* Page Header */}
                     <div className="box !bg-transparent border-0 shadow-none">
                         <div className="box-header flex justify-between items-center">
-                            <h1 className="box-title text-2xl font-semibold">Add New Store</h1>
+                            <div className="flex items-center gap-3">
+                                <h1 className="box-title text-2xl font-semibold">Add New Store</h1>
+                                <HelpIcon
+                                  title="Add New Store"
+                                  content={
+                                    <div>
+                                      <p className="mb-4">
+                                        This page allows you to create a new store by filling out comprehensive store information across multiple tabs.
+                                      </p>
+                                      
+                                      <h4 className="font-semibold mb-2">What you can do:</h4>
+                                      <ul className="list-disc list-inside mb-4 space-y-1">
+                                        <li><strong>Basic Info:</strong> Enter store ID, name, and business partner details</li>
+                                        <li><strong>Address:</strong> Provide complete address information including street, city, and pincode</li>
+                                        <li><strong>Contact:</strong> Add contact person details and communication information</li>
+                                        <li><strong>Internal:</strong> Set internal codes and software configurations</li>
+                                        <li><strong>Brand & Norms:</strong> Configure brand groupings and inventory norms</li>
+                                        <li><strong>Status:</strong> Set credit rating and active status</li>
+                                        <li><strong>Navigation:</strong> Use tabs to organize information entry</li>
+                                        <li><strong>Validation:</strong> Each tab validates required fields before proceeding</li>
+                                      </ul>
+
+                                      <h4 className="font-semibold mb-2">Required Fields:</h4>
+                                      <ul className="list-disc list-inside mb-4 space-y-1">
+                                        <li><strong>Store ID:</strong> Unique identifier (uppercase letters and numbers only)</li>
+                                        <li><strong>Store Name:</strong> Name of the store</li>
+                                        <li><strong>City:</strong> City where store is located</li>
+                                        <li><strong>Address:</strong> Complete address line</li>
+                                        <li><strong>Store Number:</strong> Store's unique number</li>
+                                        <li><strong>Pincode:</strong> 6-digit postal code</li>
+                                        <li><strong>Contact Person:</strong> Primary contact for the store</li>
+                                        <li><strong>Contact Email:</strong> Valid email address</li>
+                                      </ul>
+
+                                      <h4 className="font-semibold mb-2">Tips:</h4>
+                                      <ul className="list-disc list-inside space-y-1">
+                                        <li>Complete each tab before moving to the next</li>
+                                        <li>Store ID must be unique and contain only uppercase letters and numbers</li>
+                                        <li>Pincode must be exactly 6 digits</li>
+                                        <li>Email must be in valid format</li>
+                                        <li>Use the Previous/Next buttons to navigate between tabs</li>
+                                        <li>All required fields must be completed before submission</li>
+                                      </ul>
+                                    </div>
+                                  }
+                                />
+                              </div>
                             <div className="box-tools">
                                 <Link href="/stores" className="ti-btn ti-btn-secondary">
                                     <i className="ri-arrow-left-line me-2"></i> Back to Stores

@@ -207,6 +207,45 @@ export default function SalesTrendsExplorePage() {
         dateRange={dateRange}
         onDateRangeChange={handleDateRangeChange}
         onRefresh={fetchData}
+        helpTitle="Sales Trends Analysis"
+        helpContent={
+          <div>
+            <p className="mb-4">
+              This page provides comprehensive analysis of daily sales trends, showing sales performance over time with detailed metrics for each day.
+            </p>
+            
+            <h4 className="font-semibold mb-2">What you can do:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>View Daily Trends:</strong> See sales performance trends on a daily basis</li>
+              <li><strong>Analyze Daily Patterns:</strong> Identify daily variations in sales</li>
+              <li><strong>Compare Daily Performance:</strong> Compare sales across different days</li>
+              <li><strong>Filter by Date Range:</strong> Analyze sales trends for specific time periods</li>
+              <li><strong>Sort Data:</strong> Sort by various metrics like quantity, NSV, or GSV</li>
+              <li><strong>Export Data:</strong> Export sales trends data for external analysis</li>
+              <li><strong>Pagination:</strong> Navigate through large datasets efficiently</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Key Metrics:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>Date:</strong> Date of the sales data</li>
+              <li><strong>Total Quantity:</strong> Total quantity sold on the date</li>
+              <li><strong>Total NSV:</strong> Net Sales Value for the date</li>
+              <li><strong>Total GSV:</strong> Gross Sales Value for the date</li>
+              <li><strong>Total Discount:</strong> Total discount amount given on the date</li>
+              <li><strong>Total Tax:</strong> Total tax amount collected on the date</li>
+              <li><strong>Records:</strong> Number of sales records for the date</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Tips:</h4>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Use date filters to focus on specific time periods</li>
+              <li>Sort by different metrics to identify best and worst performing days</li>
+              <li>Export data for trend analysis and forecasting</li>
+              <li>Look for weekly patterns in the data</li>
+              <li>Compare discount and tax trends over time</li>
+            </ul>
+          </div>
+        }
       />
     </>
   );

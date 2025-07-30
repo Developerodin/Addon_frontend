@@ -234,6 +234,49 @@ export default function StorePerformancePage() {
         dateRange={dateRange}
         onDateRangeChange={handleDateRangeChange}
         onRefresh={fetchData}
+        helpTitle="Store Performance Analysis"
+        helpContent={
+          <div>
+            <p className="mb-4">
+              This page provides comprehensive analysis of store performance across all locations, showing sales metrics and performance indicators for each store.
+            </p>
+            
+            <h4 className="font-semibold mb-2">What you can do:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>View Store Performance:</strong> See performance metrics for each store</li>
+              <li><strong>Compare Store Performance:</strong> Compare performance across different stores</li>
+              <li><strong>Analyze Geographic Performance:</strong> Understand performance by city and state</li>
+              <li><strong>Filter by Date Range:</strong> Analyze store performance for specific time periods</li>
+              <li><strong>Sort Data:</strong> Sort by various metrics like NSV, quantity, or discount</li>
+              <li><strong>Export Data:</strong> Export store performance data for external analysis</li>
+              <li><strong>Navigate to Details:</strong> Click on store names for detailed analysis</li>
+              <li><strong>Pagination:</strong> Navigate through large datasets efficiently</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Key Metrics:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>Store Name:</strong> Name of the store with clickable link to detailed analysis</li>
+              <li><strong>Store ID:</strong> Unique identifier for the store</li>
+              <li><strong>City:</strong> City where the store is located</li>
+              <li><strong>State:</strong> State where the store is located</li>
+              <li><strong>Total Quantity:</strong> Total quantity sold by the store</li>
+              <li><strong>Total NSV:</strong> Net Sales Value for the store</li>
+              <li><strong>Total GSV:</strong> Gross Sales Value for the store</li>
+              <li><strong>Total Discount:</strong> Total discount amount given by the store</li>
+              <li><strong>Total Tax:</strong> Total tax amount collected by the store</li>
+              <li><strong>Records:</strong> Number of sales records for the store</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Tips:</h4>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Use date filters to analyze store performance for specific periods</li>
+              <li>Sort by different metrics to identify top and bottom performing stores</li>
+              <li>Click on store names to view detailed analysis</li>
+              <li>Export data for performance reporting and analysis</li>
+              <li>Compare stores within the same city or state for fair comparison</li>
+            </ul>
+          </div>
+        }
       />
     </>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface ExploreDataTableProps {
   title: string;
@@ -33,6 +34,8 @@ interface ExploreDataTableProps {
   };
   onDateRangeChange?: (field: 'dateFrom' | 'dateTo', value: string) => void;
   onRefresh?: () => void;
+  helpTitle?: string;
+  helpContent?: React.ReactNode;
 }
 
 export const ExploreDataTable: React.FC<ExploreDataTableProps> = ({
@@ -56,7 +59,9 @@ export const ExploreDataTable: React.FC<ExploreDataTableProps> = ({
   backLinkText = 'Back to Analytics',
   dateRange,
   onDateRangeChange,
-  onRefresh
+  onRefresh,
+  helpTitle,
+  helpContent
 }) => {
   // Calculate pagination range
   const getPaginationRange = () => {
@@ -166,7 +171,15 @@ export const ExploreDataTable: React.FC<ExploreDataTableProps> = ({
               </Link>
             </div>
           )}
-          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+            {helpTitle && helpContent && (
+              <HelpIcon
+                title={helpTitle}
+                content={helpContent}
+              />
+            )}
+          </div>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-4 items-center">

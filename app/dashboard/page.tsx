@@ -8,6 +8,7 @@ import * as Analyticsdata from "@/shared/data/dashboards/analyticsdata";
 import dynamic from "next/dynamic";
 import { useRouter } from 'next/navigation'
 import { useSelector } from 'react-redux'
+import HelpIcon from '@/shared/components/HelpIcon'
 
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
@@ -28,7 +29,53 @@ const Analytics = () => {
     return (
         <Fragment>
             <Seo title={"Dashboard"} />
-            <Pageheader currentpage="Dashboard" activepage="Overview" mainpage="Dashboard" />
+            <div className="flex justify-between items-center mb-6">
+                <Pageheader currentpage="Dashboard" activepage="Overview" mainpage="Dashboard" />
+                <HelpIcon
+                    title="Dashboard Overview"
+                    content={
+                        <div className="space-y-4">
+                            <div>
+                                <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                                <p className="text-gray-700">
+                                    This is the main Dashboard that provides an overview of your business metrics, key performance indicators (KPIs), and important alerts at a glance.
+                                </p>
+                            </div>
+                            
+                            <div>
+                                <h4 className="font-semibold text-lg mb-2">What can you see here?</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-700">
+                                    <li><strong>Total SKUs:</strong> Number of products in your catalog with growth trends</li>
+                                    <li><strong>Low Stock Alerts:</strong> Products that need replenishment attention</li>
+                                    <li><strong>Replenishment Rate:</strong> Efficiency of your inventory management</li>
+                                    <li><strong>Sales Trends:</strong> Weekly and monthly sales performance</li>
+                                    <li><strong>Inventory Status:</strong> Current stock levels and alerts</li>
+                                </ul>
+                            </div>
+                            
+                            <div>
+                                <h4 className="font-semibold text-lg mb-2">Key Features:</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-700">
+                                    <li><strong>Real-time Metrics:</strong> Live updates of business performance</li>
+                                    <li><strong>Interactive Charts:</strong> Visual representation of trends and patterns</li>
+                                    <li><strong>Quick Actions:</strong> Export data and access detailed reports</li>
+                                    <li><strong>Alert System:</strong> Notifications for critical inventory issues</li>
+                                </ul>
+                            </div>
+                            
+                            <div>
+                                <h4 className="font-semibold text-lg mb-2">Navigation Tips:</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-700">
+                                    <li>Click on any metric to view detailed breakdowns</li>
+                                    <li>Use the export buttons to download reports</li>
+                                    <li>Navigate to specific sections using the sidebar menu</li>
+                                    <li>Check alerts regularly to maintain optimal inventory levels</li>
+                                </ul>
+                            </div>
+                        </div>
+                    }
+                />
+            </div>
             <div className="grid grid-cols-12 gap-x-6">
                 <div className="xl:col-span-7 col-span-12">
                     <div className="grid grid-cols-12 gap-x-6">

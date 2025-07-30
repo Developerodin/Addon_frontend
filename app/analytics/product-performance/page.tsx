@@ -222,6 +222,47 @@ export default function ProductPerformancePage() {
         dateRange={dateRange}
         onDateRangeChange={handleDateRangeChange}
         onRefresh={fetchData}
+        helpTitle="Product Performance Analysis"
+        helpContent={
+          <div>
+            <p className="mb-4">
+              This page provides comprehensive analysis of product performance across all products, showing sales metrics and performance indicators for each product.
+            </p>
+            
+            <h4 className="font-semibold mb-2">What you can do:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>View Product Performance:</strong> See performance metrics for each product</li>
+              <li><strong>Compare Product Performance:</strong> Compare performance across different products</li>
+              <li><strong>Analyze Category Performance:</strong> Understand performance by product categories</li>
+              <li><strong>Filter by Date Range:</strong> Analyze product performance for specific time periods</li>
+              <li><strong>Sort Data:</strong> Sort by various metrics like NSV, quantity, or discount</li>
+              <li><strong>Export Data:</strong> Export product performance data for external analysis</li>
+              <li><strong>Navigate to Details:</strong> Click on product names for detailed analysis</li>
+              <li><strong>Pagination:</strong> Navigate through large datasets efficiently</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Key Metrics:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>Product Name:</strong> Name of the product with clickable link to detailed analysis</li>
+              <li><strong>Product Code:</strong> Unique identifier for the product</li>
+              <li><strong>Category:</strong> Product category classification</li>
+              <li><strong>Total Quantity:</strong> Total quantity sold of the product</li>
+              <li><strong>Total NSV:</strong> Net Sales Value for the product</li>
+              <li><strong>Total GSV:</strong> Gross Sales Value for the product</li>
+              <li><strong>Total Discount:</strong> Total discount amount given on the product</li>
+              <li><strong>Records:</strong> Number of sales records for the product</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Tips:</h4>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Use date filters to analyze product performance for specific periods</li>
+              <li>Sort by different metrics to identify top and bottom performing products</li>
+              <li>Click on product names to view detailed analysis</li>
+              <li>Export data for performance reporting and analysis</li>
+              <li>Compare products within the same category for fair comparison</li>
+            </ul>
+          </div>
+        }
       />
     </>
   );

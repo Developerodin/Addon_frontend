@@ -4,6 +4,7 @@ import Pageheader from "@/shared/layout-components/page-header/pageheader";
 import Seo from "@/shared/layout-components/seo/seo";
 import { dashboardService, SalesData, AllSalesDataResponse } from "@/shared/services/dashboardService";
 import { formatCurrency, formatNumber } from "@/shared/utils/dashboardUtils";
+import HelpIcon from '@/shared/components/HelpIcon';
 
 const AllSalesData = () => {
   const [salesData, setSalesData] = useState<SalesData[]>([]);
@@ -166,7 +167,71 @@ const AllSalesData = () => {
         <div className="xl:col-span-12 col-span-12">
           <div className="box transition-all duration-300 hover:shadow-lg">
             <div className="box-header justify-between">
-              <div className="box-title">All Sales Data</div>
+              <div className="flex items-center space-x-3">
+                <div className="box-title">All Sales Data</div>
+                <HelpIcon
+                  title="All Sales Data Analytics"
+                  content={
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                        <p className="text-gray-700">
+                          This is the All Sales Data Analytics page that provides comprehensive insights into your sales performance, allowing you to analyze trends, patterns, and key metrics across all your sales transactions.
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li><strong>View Sales Data:</strong> Browse all sales transactions with detailed information</li>
+                          <li><strong>Search & Filter:</strong> Find specific sales by store, product, category, or city</li>
+                          <li><strong>Sort Data:</strong> Sort by any column to organize data as needed</li>
+                          <li><strong>Date Filtering:</strong> Filter sales by specific date ranges</li>
+                          <li><strong>Quick Date Selection:</strong> Use preset date ranges (Today, Yesterday, Last 7 Days, etc.)</li>
+                          <li><strong>Pagination:</strong> Navigate through large datasets efficiently</li>
+                          <li><strong>Export Data:</strong> Download sales data for external analysis</li>
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">Data Columns:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li><strong>Date:</strong> Transaction date</li>
+                          <li><strong>Store Name:</strong> Name of the selling store</li>
+                          <li><strong>Store City:</strong> Location of the store</li>
+                          <li><strong>Product Name:</strong> Name of the sold product</li>
+                          <li><strong>Product Code:</strong> Unique product identifier</li>
+                          <li><strong>Category:</strong> Product category</li>
+                          <li><strong>Quantity:</strong> Number of units sold</li>
+                          <li><strong>Revenue:</strong> Total revenue from the sale</li>
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">Analytics Features:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li><strong>Performance Metrics:</strong> Track sales performance over time</li>
+                          <li><strong>Store Analysis:</strong> Compare performance across different stores</li>
+                          <li><strong>Product Insights:</strong> Identify top-performing products</li>
+                          <li><strong>Geographic Analysis:</strong> Analyze sales by location</li>
+                          <li><strong>Trend Identification:</strong> Spot sales patterns and trends</li>
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">Tips:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li>Use the search bar to quickly find specific transactions</li>
+                          <li>Click column headers to sort data</li>
+                          <li>Use date filters to focus on specific time periods</li>
+                          <li>Adjust the number of entries per page for better viewing</li>
+                          <li>Export data for detailed analysis in external tools</li>
+                        </ul>
+                      </div>
+                    </div>
+                  }
+                />
+              </div>
               <div className="flex flex-wrap items-center gap-3">
                 {/* Search Bar */}
                 <div className="flex items-center">

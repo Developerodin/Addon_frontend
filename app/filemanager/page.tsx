@@ -7,6 +7,7 @@ import 'react-perfect-scrollbar/dist/css/styles.css';
 import { useFileManager } from '@/shared/hooks/useFileManager';
 import { Folder, FileItem, User } from '@/shared/services/fileManagerService';
 import * as XLSX from 'xlsx';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 const Filemanager = () => {
     const {
@@ -552,7 +553,58 @@ const Filemanager = () => {
                 <div className="bg-white dark:bg-bodybg shadow-md p-2 w-full max-w-xs mr-4 h-[calc(100vh-5.5rem)] overflow-y-auto rounded-lg">
                     {/* Folder tree header */}
                     <div className="flex items-center justify-between border-b border-defaultborder dark:border-defaultborder/10 px-5 py-2 bg-light/60 rounded-t-lg mb-2">
-                        <h6 className="font-semibold text-[1rem] m-0">Folders</h6>
+                        <div className="flex items-center gap-3">
+                            <h6 className="font-semibold text-[1rem] m-0">Folders</h6>
+                            <HelpIcon
+                              title="File Manager"
+                              content={
+                                <div>
+                                  <p className="mb-4">
+                                    This page allows you to manage files and folders in your system, providing a comprehensive file management interface.
+                                  </p>
+                                  
+                                  <h4 className="font-semibold mb-2">What you can do:</h4>
+                                  <ul className="list-disc list-inside mb-4 space-y-1">
+                                    <li><strong>Browse Folders:</strong> Navigate through the folder structure using the sidebar tree</li>
+                                    <li><strong>View Files:</strong> See all files in the current folder with details like size, type, and creation date</li>
+                                    <li><strong>Upload Files:</strong> Upload single or multiple files to the current folder</li>
+                                    <li><strong>Create Folders:</strong> Create new folders to organize your files</li>
+                                    <li><strong>Rename Items:</strong> Rename files and folders for better organization</li>
+                                    <li><strong>Delete Items:</strong> Remove files and folders that are no longer needed</li>
+                                    <li><strong>Download Files:</strong> Download individual files or bulk download selected files</li>
+                                    <li><strong>Export Paths:</strong> Export file paths for selected items</li>
+                                    <li><strong>Search Files:</strong> Find specific files using the search functionality</li>
+                                    <li><strong>Preview Files:</strong> Preview file contents before downloading</li>
+                                  </ul>
+
+                                  <h4 className="font-semibold mb-2">View Modes:</h4>
+                                  <ul className="list-disc list-inside mb-4 space-y-1">
+                                    <li><strong>Grid View:</strong> Display files in a card-based grid layout</li>
+                                    <li><strong>List View:</strong> Display files in a detailed list format</li>
+                                  </ul>
+
+                                  <h4 className="font-semibold mb-2">File Information:</h4>
+                                  <ul className="list-disc list-inside mb-4 space-y-1">
+                                    <li><strong>Name:</strong> File or folder name</li>
+                                    <li><strong>Size:</strong> File size in bytes, KB, MB, or GB</li>
+                                    <li><strong>Type:</strong> File type or folder indicator</li>
+                                    <li><strong>Created:</strong> Creation date and time</li>
+                                    <li><strong>Modified:</strong> Last modification date and time</li>
+                                    <li><strong>Created By:</strong> User who created the file or folder</li>
+                                  </ul>
+
+                                  <h4 className="font-semibold mb-2">Tips:</h4>
+                                  <ul className="list-disc list-inside space-y-1">
+                                    <li>Use drag and drop to upload files directly to folders</li>
+                                    <li>Right-click on files for context menu options</li>
+                                    <li>Select multiple files for bulk operations</li>
+                                    <li>Use the search function to quickly find files</li>
+                                    <li>Organize files in folders for better management</li>
+                                  </ul>
+                                </div>
+                              }
+                            />
+                          </div>
                         <div className="flex gap-2">
                             <button
                                 className="ti-btn ti-btn-primary ti-btn-xs flex items-center gap-1 px-2 py-1 text-xs font-medium shadow-sm hover:bg-primary-dark transition"

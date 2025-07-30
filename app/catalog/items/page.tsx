@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import { toast, Toaster } from 'react-hot-toast';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface Product {
   id: string;
@@ -1119,7 +1120,56 @@ const ProductListPage = () => {
           {/* Page Header */}
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
-              <h1 className="box-title text-2xl font-semibold">Products</h1>
+              <div className="flex items-center space-x-3">
+                <h1 className="box-title text-2xl font-semibold">Products</h1>
+                <HelpIcon
+                  title="Products Management"
+                  content={
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                        <p className="text-gray-700">
+                          This is the Products Management page where you can view, manage, and organize all your products in the system.
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li><strong>View Products:</strong> Browse all products with pagination and search functionality</li>
+                          <li><strong>Add New Product:</strong> Click "Add Product" to create a new product</li>
+                          <li><strong>Edit Products:</strong> Click the edit icon next to any product to modify its details</li>
+                          <li><strong>Delete Products:</strong> Remove individual products or bulk delete selected ones</li>
+                          <li><strong>Search & Filter:</strong> Use the search bar to find specific products by name, style code, or category</li>
+                          <li><strong>Export Data:</strong> Export all products or selected products to Excel format</li>
+                          <li><strong>Import Data:</strong> Import products from Excel files using templates</li>
+                          <li><strong>Bulk Operations:</strong> Select multiple products for bulk export or deletion</li>
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">Advanced Features:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li><strong>Export by Attributes:</strong> Export product attributes for selected products</li>
+                          <li><strong>Export by BOM:</strong> Export Bill of Materials for selected products</li>
+                          <li><strong>Export by Processes:</strong> Export manufacturing processes for selected products</li>
+                          <li><strong>Import Templates:</strong> Download templates for different import types</li>
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">Tips:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li>Use the "Show More" button to access advanced export and import options</li>
+                          <li>Click on product names to view detailed analytics</li>
+                          <li>Use the pagination controls to navigate through large product lists</li>
+                          <li>Download templates before importing to ensure correct data format</li>
+                        </ul>
+                      </div>
+                    </div>
+                  }
+                />
+              </div>
               <div className="box-tools flex items-center space-x-2">
                 <button
                   type="button"

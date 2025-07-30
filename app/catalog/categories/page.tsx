@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface Category {
   id: string;
@@ -330,7 +331,68 @@ const CategoriesPage = () => {
           {/* Page Header */}
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
-              <h1 className="box-title text-2xl font-semibold">Categories</h1>
+              <div className="flex items-center space-x-3">
+                <h1 className="box-title text-2xl font-semibold">Categories</h1>
+                <HelpIcon
+                  title="Categories Management"
+                  content={
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                        <p className="text-gray-700">
+                          This is the Categories Management page where you can organize and manage your product categories, create hierarchical structures, and maintain a well-organized product catalog.
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li><strong>View Categories:</strong> Browse all product categories with pagination and search functionality</li>
+                          <li><strong>Add New Category:</strong> Click "Add New Category" to create a new category</li>
+                          <li><strong>Edit Categories:</strong> Click the edit icon next to any category to modify its details</li>
+                          <li><strong>Delete Categories:</strong> Remove individual categories or bulk delete selected ones</li>
+                          <li><strong>Search & Filter:</strong> Use the search bar to find specific categories</li>
+                          <li><strong>Export Data:</strong> Export all categories to Excel format</li>
+                          <li><strong>Import Data:</strong> Import categories from Excel files</li>
+                          <li><strong>Bulk Operations:</strong> Select multiple categories for bulk deletion</li>
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">Category Structure:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li><strong>Hierarchical Organization:</strong> Create parent-child relationships between categories</li>
+                          <li><strong>Sort Order:</strong> Control the display order of categories</li>
+                          <li><strong>Status Management:</strong> Set categories as active or inactive</li>
+                          <li><strong>Description:</strong> Add detailed descriptions for better organization</li>
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">Data Fields:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li><strong>Category Name:</strong> The name of the category (required)</li>
+                          <li><strong>Description:</strong> Optional description of the category</li>
+                          <li><strong>Parent Category:</strong> Parent category for hierarchical structure</li>
+                          <li><strong>Sort Order:</strong> Numeric value to control display order</li>
+                          <li><strong>Status:</strong> Active or inactive status</li>
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">Tips:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li>Use descriptive category names for better organization</li>
+                          <li>Create a logical hierarchy with parent-child relationships</li>
+                          <li>Use sort order to control how categories appear in lists</li>
+                          <li>Keep categories active only if they're currently in use</li>
+                          <li>Export categories before making bulk changes</li>
+                        </ul>
+                      </div>
+                    </div>
+                  }
+                />
+              </div>
               <div className="box-tools flex items-center space-x-2">
                 {selectedCategories.length > 0 && (
                   <button 

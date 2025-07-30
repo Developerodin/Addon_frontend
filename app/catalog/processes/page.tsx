@@ -7,6 +7,7 @@ import { toast, Toaster } from 'react-hot-toast';
 import Image from 'next/image';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface ProcessStep {
   stepTitle: string;
@@ -393,7 +394,49 @@ const ProcessesPage = () => {
           {/* Page Header */}
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
-              <h1 className="box-title text-2xl font-semibold">Processes</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="box-title text-2xl font-semibold">Processes</h1>
+                <HelpIcon
+                  title="Processes Management"
+                  content={
+                    <div>
+                      <p className="mb-4">
+                        This page allows you to manage manufacturing processes used in your production workflow.
+                      </p>
+                      
+                      <h4 className="font-semibold mb-2">What you can do:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>View Processes:</strong> See all manufacturing processes with their details, types, and status</li>
+                        <li><strong>Add New Process:</strong> Create new manufacturing processes with custom steps and descriptions</li>
+                        <li><strong>Edit Process:</strong> Modify existing process details, steps, and configurations</li>
+                        <li><strong>Delete Process:</strong> Remove processes that are no longer needed</li>
+                        <li><strong>Bulk Operations:</strong> Select multiple processes for bulk deletion</li>
+                        <li><strong>Import/Export:</strong> Import processes from Excel files or export existing data</li>
+                        <li><strong>Search & Filter:</strong> Find specific processes using the search functionality</li>
+                        <li><strong>Pagination:</strong> Navigate through large lists of processes efficiently</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Process Information:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>Name:</strong> The name of the manufacturing process</li>
+                        <li><strong>Type:</strong> Category or classification of the process</li>
+                        <li><strong>Description:</strong> Detailed explanation of what the process involves</li>
+                        <li><strong>Steps:</strong> Individual steps within the process with durations</li>
+                        <li><strong>Status:</strong> Whether the process is active or inactive</li>
+                        <li><strong>Sort Order:</strong> The order in which processes should be displayed</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Tips:</h4>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Use the import feature to bulk upload processes from Excel files</li>
+                        <li>Download the template to see the correct format for importing</li>
+                        <li>Processes can be organized by type for better management</li>
+                        <li>Inactive processes won't appear in production workflows</li>
+                      </ul>
+                    </div>
+                  }
+                />
+              </div>
               <div className="box-tools flex items-center space-x-2">
                 {selectedProcesses.length > 0 && (
                   <button 

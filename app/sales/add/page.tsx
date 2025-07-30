@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { salesService, SalesRecord } from '@/shared/services/salesService';
 import axios from 'axios';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface Store {
   id: string;
@@ -244,7 +245,53 @@ const AddSalePage = () => {
           {/* Page Header */}
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
-              <h1 className="box-title text-2xl font-semibold">Add New Sale</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="box-title text-2xl font-semibold">Add New Sale</h1>
+                <HelpIcon
+                  title="Add New Sale"
+                  content={
+                    <div>
+                      <p className="mb-4">
+                        This page allows you to create a new sales record by entering sale details and selecting the associated store and product.
+                      </p>
+                      
+                      <h4 className="font-semibold mb-2">What you can do:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>Select Date:</strong> Choose the date for the sale record</li>
+                        <li><strong>Select Store:</strong> Choose the store/plant where the sale occurred</li>
+                        <li><strong>Select Product:</strong> Choose the product that was sold</li>
+                        <li><strong>Enter Quantity:</strong> Specify the quantity of products sold</li>
+                        <li><strong>Set MRP:</strong> Enter the Maximum Retail Price of the product</li>
+                        <li><strong>Apply Discount:</strong> Add any discount applied to the sale</li>
+                        <li><strong>View Calculations:</strong> See automatically calculated GSV and NSV values</li>
+                        <li><strong>Submit Sale:</strong> Save the sale record to the system</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Form Fields:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>Date:</strong> The date when the sale occurred</li>
+                        <li><strong>Plant ID:</strong> The store or plant where the sale took place</li>
+                        <li><strong>Material Code:</strong> The product that was sold</li>
+                        <li><strong>Quantity:</strong> Number of units sold</li>
+                        <li><strong>MRP:</strong> Maximum Retail Price per unit</li>
+                        <li><strong>Discount:</strong> Discount amount applied (if any)</li>
+                        <li><strong>GSV:</strong> Gross Sales Value (calculated automatically)</li>
+                        <li><strong>NSV:</strong> Net Sales Value (calculated automatically)</li>
+                        <li><strong>Total Tax:</strong> Total tax amount (calculated automatically)</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Tips:</h4>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Click on the search icons to select stores and products from the database</li>
+                        <li>All required fields must be filled before submitting</li>
+                        <li>GSV and NSV are calculated automatically based on quantity, MRP, and discount</li>
+                        <li>Use the back button to return to the sales list without saving</li>
+                        <li>Ensure accurate data entry for proper sales tracking and reporting</li>
+                      </ul>
+                    </div>
+                  }
+                />
+              </div>
               <div className="box-tools">
                 <Link href="/sales" className="ti-btn ti-btn-primary">
                   <i className="ri-arrow-left-line me-2"></i> Back to Sales

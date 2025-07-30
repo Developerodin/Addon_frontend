@@ -7,6 +7,7 @@ import { useAnalytics } from '@/shared/hooks/useAnalytics';
 import { AnalyticsKPIs, AnalyticsCharts, AnalyticsTables } from '@/shared/components/analytics';
 import { useGlobalErrorHandler } from '@/shared/utils/errorBoundary';
 import Link from 'next/link';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 // Error boundary for the entire analytics page
 const AnalyticsErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -202,9 +203,53 @@ export default function AnalyticsPage() {
       {/* Custom Page Header with Date Filters */}
       <div className="mb-8">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-            <p className="text-gray-600 mt-1">Comprehensive sales and performance insights</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+              <p className="text-gray-600 mt-1">Comprehensive sales and performance insights</p>
+            </div>
+            <HelpIcon
+              title="Analytics Dashboard"
+              content={
+                <div>
+                  <p className="mb-4">
+                    This page provides comprehensive analytics and insights into your business performance, sales trends, and key metrics.
+                  </p>
+                  
+                  <h4 className="font-semibold mb-2">What you can do:</h4>
+                  <ul className="list-disc list-inside mb-4 space-y-1">
+                    <li><strong>View KPIs:</strong> Monitor key performance indicators like total sales, revenue, and growth metrics</li>
+                    <li><strong>Analyze Trends:</strong> View time-based trends and patterns in your sales data</li>
+                    <li><strong>Product Performance:</strong> Track how individual products are performing</li>
+                    <li><strong>Store Performance:</strong> Compare performance across different stores</li>
+                    <li><strong>Brand Analysis:</strong> Analyze performance by brand categories</li>
+                    <li><strong>Discount Impact:</strong> Understand the impact of discounts on sales</li>
+                    <li><strong>Tax & MRP Analysis:</strong> View tax distribution and MRP analysis</li>
+                    <li><strong>Date Filtering:</strong> Filter data by specific date ranges</li>
+                    <li><strong>Export Data:</strong> Export analytics data for further analysis</li>
+                  </ul>
+
+                  <h4 className="font-semibold mb-2">Available Metrics:</h4>
+                  <ul className="list-disc list-inside mb-4 space-y-1">
+                    <li><strong>Sales KPIs:</strong> Total sales, revenue, growth percentage</li>
+                    <li><strong>Product Metrics:</strong> Top-performing products, sales by category</li>
+                    <li><strong>Store Metrics:</strong> Store-wise performance, location analysis</li>
+                    <li><strong>Brand Metrics:</strong> Brand performance, market share</li>
+                    <li><strong>Financial Metrics:</strong> Tax analysis, MRP distribution, profit margins</li>
+                    <li><strong>Trend Analysis:</strong> Time-based trends, seasonal patterns</li>
+                  </ul>
+
+                  <h4 className="font-semibold mb-2">Tips:</h4>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Use date filters to analyze specific time periods</li>
+                    <li>Click on charts for detailed information</li>
+                    <li>Export data for external analysis</li>
+                    <li>Compare different time periods to identify trends</li>
+                    <li>Use the refresh button to get the latest data</li>
+                  </ul>
+                </div>
+              }
+            />
           </div>
           
           {/* Date Range Filters */}

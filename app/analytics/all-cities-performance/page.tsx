@@ -8,6 +8,7 @@ import {
   formatNumber,
   formatPercentage,
 } from "@/shared/utils/dashboardUtils";
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface CityPerformance {
   _id: string;
@@ -398,7 +399,60 @@ const AllCitiesPerformance = () => {
         <div className="col-span-12">
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
-              <h1 className="box-title text-2xl font-semibold">All Cities Performance</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="box-title text-2xl font-semibold">All Cities Performance</h1>
+                <HelpIcon
+                  title="All Cities Performance"
+                  content={
+                    <div>
+                      <p className="mb-4">
+                        This page provides comprehensive analytics on city-wise performance, showing how different cities are performing in terms of sales, orders, and store distribution.
+                      </p>
+                      
+                      <h4 className="font-semibold mb-2">What you can do:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>View City Performance:</strong> See performance metrics for each city including NSV, orders, and store count</li>
+                        <li><strong>Analyze Trends:</strong> Compare performance across different cities</li>
+                        <li><strong>Advanced Filtering:</strong> Filter cities by NSV range, order count, and store count</li>
+                        <li><strong>Sort Data:</strong> Sort by various metrics like total NSV, orders, average order value, or store count</li>
+                        <li><strong>Search Cities:</strong> Find specific cities using the search functionality</li>
+                        <li><strong>Export Data:</strong> Export all cities data or selected cities to CSV</li>
+                        <li><strong>Bulk Selection:</strong> Select multiple cities for bulk operations</li>
+                        <li><strong>Pagination:</strong> Navigate through large lists of cities efficiently</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Performance Metrics:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>Total NSV:</strong> Net Sales Value for each city</li>
+                        <li><strong>Total Quantity:</strong> Total quantity of products sold</li>
+                        <li><strong>Total Orders:</strong> Number of orders placed</li>
+                        <li><strong>Store Count:</strong> Number of stores in each city</li>
+                        <li><strong>Average Order Value:</strong> Average value per order</li>
+                        <li><strong>Stores List:</strong> List of stores operating in each city</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Summary Statistics:</h4>
+                      <ul className="list-disc list-inside mb-4 space-y-1">
+                        <li><strong>Total Cities:</strong> Overall count of cities</li>
+                        <li><strong>Total NSV:</strong> Combined NSV across all cities</li>
+                        <li><strong>Total Quantity:</strong> Combined quantity across all cities</li>
+                        <li><strong>Total Orders:</strong> Combined orders across all cities</li>
+                        <li><strong>Total Stores:</strong> Combined store count across all cities</li>
+                        <li><strong>Average Order Value:</strong> Overall average order value</li>
+                      </ul>
+
+                      <h4 className="font-semibold mb-2">Tips:</h4>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Use advanced filters to focus on specific performance ranges</li>
+                        <li>Sort by different metrics to identify top and bottom performers</li>
+                        <li>Export data for external analysis and reporting</li>
+                        <li>Use the search function to quickly find specific cities</li>
+                        <li>Compare cities with similar store counts for fair performance analysis</li>
+                      </ul>
+                    </div>
+                  }
+                />
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}

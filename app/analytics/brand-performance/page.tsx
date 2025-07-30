@@ -205,6 +205,45 @@ export default function BrandPerformancePage() {
         dateRange={dateRange}
         onDateRangeChange={handleDateRangeChange}
         onRefresh={fetchData}
+        helpTitle="Brand Performance Analysis"
+        helpContent={
+          <div>
+            <p className="mb-4">
+              This page provides comprehensive analysis of brand performance across all brands, showing sales metrics and performance indicators for each brand.
+            </p>
+            
+            <h4 className="font-semibold mb-2">What you can do:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>View Brand Performance:</strong> See performance metrics for each brand</li>
+              <li><strong>Compare Brand Performance:</strong> Compare performance across different brands</li>
+              <li><strong>Analyze Brand Trends:</strong> Understand which brands are performing best</li>
+              <li><strong>Filter by Date Range:</strong> Analyze brand performance for specific time periods</li>
+              <li><strong>Sort Data:</strong> Sort by various metrics like NSV, quantity, or discount</li>
+              <li><strong>Export Data:</strong> Export brand performance data for external analysis</li>
+              <li><strong>Pagination:</strong> Navigate through large datasets efficiently</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Key Metrics:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>Brand Name:</strong> Name of the brand</li>
+              <li><strong>Total Quantity:</strong> Total quantity sold of the brand</li>
+              <li><strong>Total NSV:</strong> Net Sales Value for the brand</li>
+              <li><strong>Total GSV:</strong> Gross Sales Value for the brand</li>
+              <li><strong>Total Discount:</strong> Total discount amount given on the brand</li>
+              <li><strong>Total Tax:</strong> Total tax amount collected for the brand</li>
+              <li><strong>Records:</strong> Number of sales records for the brand</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Tips:</h4>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Use date filters to analyze brand performance for specific periods</li>
+              <li>Sort by different metrics to identify top and bottom performing brands</li>
+              <li>Export data for brand strategy and marketing analysis</li>
+              <li>Compare brand performance to identify market leaders</li>
+              <li>Analyze discount patterns across different brands</li>
+            </ul>
+          </div>
+        }
       />
     </>
   );

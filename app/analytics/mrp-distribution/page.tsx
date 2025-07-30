@@ -253,6 +253,51 @@ export default function MRPDistributionPage() {
         dateRange={dateRange}
         onDateRangeChange={handleDateRangeChange}
         onRefresh={fetchData}
+        helpTitle="MRP Distribution Analysis"
+        helpContent={
+          <div>
+            <p className="mb-4">
+              This page provides comprehensive analysis of MRP (Maximum Retail Price) distribution across products and stores, showing pricing patterns and sales performance.
+            </p>
+            
+            <h4 className="font-semibold mb-2">What you can do:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>View MRP Distribution:</strong> See how MRP values are distributed across products and stores</li>
+              <li><strong>Analyze Pricing Patterns:</strong> Understand pricing strategies and variations</li>
+              <li><strong>Compare Performance:</strong> Compare sales performance across different MRP ranges</li>
+              <li><strong>Filter by Date Range:</strong> Analyze MRP distribution for specific time periods</li>
+              <li><strong>Sort Data:</strong> Sort by various metrics like MRP, NSV, GSV, or tax amounts</li>
+              <li><strong>Export Data:</strong> Export MRP distribution data for external analysis</li>
+              <li><strong>Navigate to Details:</strong> Click on product or store names for detailed analysis</li>
+              <li><strong>Pagination:</strong> Navigate through large datasets efficiently</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Key Metrics:</h4>
+            <ul className="list-disc list-inside mb-4 space-y-1">
+              <li><strong>Product Name:</strong> Name of the product with clickable link to detailed analysis</li>
+              <li><strong>Product Code:</strong> Unique identifier for the product</li>
+              <li><strong>MRP:</strong> Maximum Retail Price of the product</li>
+              <li><strong>Store Name:</strong> Name of the store with clickable link to detailed analysis</li>
+              <li><strong>Store ID:</strong> Unique identifier for the store</li>
+              <li><strong>Total Quantity:</strong> Total quantity sold</li>
+              <li><strong>Total NSV:</strong> Net Sales Value</li>
+              <li><strong>Total GSV:</strong> Gross Sales Value</li>
+              <li><strong>Total Tax:</strong> Total tax amount</li>
+              <li><strong>Total MRP:</strong> Total MRP value</li>
+              <li><strong>Tax %:</strong> Tax percentage</li>
+              <li><strong>Records:</strong> Number of sales records</li>
+            </ul>
+
+            <h4 className="font-semibold mb-2">Tips:</h4>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Use date filters to analyze MRP distribution for specific periods</li>
+              <li>Sort by different columns to identify patterns and trends</li>
+              <li>Click on product or store names to view detailed analysis</li>
+              <li>Export data for external analysis and reporting</li>
+              <li>Compare tax percentages across different MRP ranges</li>
+            </ul>
+          </div>
+        }
       />
     </>
   );

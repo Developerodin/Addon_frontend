@@ -257,7 +257,7 @@ export const StoreAnalysisSummary: React.FC<StoreAnalysisSummaryProps> = ({
               </div>
               <div className="flex items-center justify-between p-3 bg-cyan-50 rounded-lg">
                 <span className="text-sm font-medium text-gray-700">Store Norms</span>
-                <span className="text-sm font-semibold text-cyan-600">{formatCurrency(storeInfo.norms)}</span>
+                <span className="text-sm font-semibold text-cyan-600">{formatNumber(storeInfo.norms)}</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
                 <span className="text-sm font-medium text-gray-700">Total Orders</span>

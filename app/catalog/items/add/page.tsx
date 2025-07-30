@@ -4,6 +4,7 @@ import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import axios from 'axios';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface AttributeOptionValue {
   _id: string;
@@ -414,7 +415,62 @@ const AddProductPage = () => {
             {/* Page Header */}
             <div className="box !bg-transparent border-0 shadow-none">
               <div className="box-header flex justify-between items-center">
-                <h1 className="box-title text-2xl font-semibold">Add New Product</h1>
+                <div className="flex items-center space-x-3">
+                  <h1 className="box-title text-2xl font-semibold">Add New Product</h1>
+                  <HelpIcon
+                    title="Add New Product"
+                    content={
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                          <p className="text-gray-700">
+                            This is the Add New Product page where you can create and configure new products with detailed specifications, attributes, Bill of Materials (BOM), and manufacturing processes.
+                          </p>
+                        </div>
+                        
+                        <div>
+                          <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                          <ul className="list-disc list-inside space-y-1 text-gray-700">
+                            <li><strong>General Information:</strong> Set basic product details like name, codes, category, and description</li>
+                            <li><strong>Product Attributes:</strong> Define custom attributes and their values for the product</li>
+                            <li><strong>Bill of Materials (BOM):</strong> Specify raw materials and quantities required for production</li>
+                            <li><strong>Manufacturing Processes:</strong> Define the production processes and their sequence</li>
+                            <li><strong>Image Upload:</strong> Add product images for visual reference</li>
+                          </ul>
+                        </div>
+                        
+                        <div>
+                          <h4 className="font-semibold text-lg mb-2">Tab Details:</h4>
+                          <ul className="list-disc list-inside space-y-1 text-gray-700">
+                            <li><strong>General:</strong> Basic product information, codes, category, and description</li>
+                            <li><strong>Attributes:</strong> Custom product attributes with predefined values</li>
+                            <li><strong>BOM:</strong> Raw materials and quantities needed for production</li>
+                            <li><strong>Processes:</strong> Manufacturing processes and their sequence</li>
+                          </ul>
+                        </div>
+                        
+                        <div>
+                          <h4 className="font-semibold text-lg mb-2">Required Fields:</h4>
+                          <ul className="list-disc list-inside space-y-1 text-gray-700">
+                            <li><strong>Product Name:</strong> Must be unique and descriptive</li>
+                            <li><strong>Style Code:</strong> Required for product identification</li>
+                            <li><strong>Category:</strong> Must select a valid product category</li>
+                          </ul>
+                        </div>
+                        
+                        <div>
+                          <h4 className="font-semibold text-lg mb-2">Tips:</h4>
+                          <ul className="list-disc list-inside space-y-1 text-gray-700">
+                            <li>Software Code is auto-generated, but you can customize it</li>
+                            <li>Use the search functionality in BOM and Processes tabs to find materials and processes</li>
+                            <li>Attributes are optional but help in product categorization and filtering</li>
+                            <li>Save your work frequently to avoid losing data</li>
+                          </ul>
+                        </div>
+                      </div>
+                    }
+                  />
+                </div>
                 <div className="box-tools">
                   <Link href="/catalog/items" className="ti-btn ti-btn-outline-primary">
                     <i className="ri-arrow-left-line me-2"></i> Back to List

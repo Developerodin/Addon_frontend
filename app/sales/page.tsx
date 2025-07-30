@@ -7,6 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { salesService, SalesRecord, SalesFilters, Plant, MaterialCode, getSaleId } from '@/shared/services/salesService';
 import { toast, Toaster } from 'react-hot-toast';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import HelpIcon from '@/shared/components/HelpIcon';
 
 interface FilterModalProps {
   isOpen: boolean;
@@ -556,7 +557,69 @@ const SalesContent = () => {
         {/* Page Header */}
         <div className="box !bg-transparent border-0 shadow-none">
           <div className="box-header flex justify-between items-center">
-            <h1 className="box-title text-2xl font-semibold">Sales Records</h1>
+            <div className="flex items-center space-x-3">
+              <h1 className="box-title text-2xl font-semibold">Sales Records</h1>
+              <HelpIcon
+                title="Sales Records Management"
+                content={
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                      <p className="text-gray-700">
+                        This is the Sales Records Management page where you can view, manage, and analyze all your sales transactions, track performance, and export sales data for reporting.
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <li><strong>View Sales Records:</strong> Browse all sales transactions with pagination and search functionality</li>
+                        <li><strong>Add New Sale:</strong> Click "Add New Sale" to create a new sales record</li>
+                        <li><strong>Edit Sales:</strong> Click the edit icon next to any sale to modify its details</li>
+                        <li><strong>Delete Sales:</strong> Remove individual sales or bulk delete selected ones</li>
+                        <li><strong>Search & Filter:</strong> Use the search bar and advanced filters to find specific sales</li>
+                        <li><strong>Export Data:</strong> Export all sales or filtered sales to CSV format</li>
+                        <li><strong>Bulk Operations:</strong> Select multiple sales for bulk deletion</li>
+                        <li><strong>Date Grouping:</strong> Sales are automatically grouped by date for better organization</li>
+                      </ul>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">Filter Options:</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <li><strong>Date Range:</strong> Filter sales by specific date periods</li>
+                        <li><strong>Plant/Store ID:</strong> Filter by specific store or plant</li>
+                        <li><strong>Material/Style Code:</strong> Filter by product style code</li>
+                        <li><strong>Division:</strong> Filter by business division</li>
+                        <li><strong>Material Group:</strong> Filter by product category</li>
+                        <li><strong>City:</strong> Filter by store location city</li>
+                        <li><strong>Category:</strong> Filter by product category</li>
+                      </ul>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">Data Organization:</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <li><strong>Date Grouping:</strong> Sales are automatically grouped by date for easy viewing</li>
+                        <li><strong>Sorting:</strong> Click column headers to sort data</li>
+                        <li><strong>Pagination:</strong> Navigate through large datasets efficiently</li>
+                        <li><strong>Record Counts:</strong> See how many records are in each date group</li>
+                      </ul>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">Tips:</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Use the search bar to quickly find sales by style code</li>
+                        <li>Use advanced filters for complex queries</li>
+                        <li>Export data for external analysis and reporting</li>
+                        <li>Check the date grouping to understand sales patterns</li>
+                      </ul>
+                    </div>
+                  </div>
+                }
+              />
+            </div>
             <div className="box-tools flex items-center space-x-2">
               {selectedSales.length > 0 && (
                 <button 
