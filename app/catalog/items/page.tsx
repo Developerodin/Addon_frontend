@@ -349,6 +349,16 @@ const ProductListPage = () => {
       // Get only selected products
       const selectedProductsData = products.filter(product => selectedProducts.includes(product.id));
       
+      // Fetch all processes to create reverse mapping
+      const processesResponse = await axios.get(`${API_BASE_URL}/processes?page=1&limit=10000`);
+      const processes = processesResponse.data.results;
+      
+      // Create reverse mapping from process ID to process name
+      const processNameMapping: Record<string, string> = {};
+      processes.forEach((process: any) => {
+        processNameMapping[process.id] = process.name;
+      });
+      
       const wb = XLSX.utils.book_new();
 
       // Create Processes sheet for selected products only
@@ -356,7 +366,7 @@ const ProductListPage = () => {
         (product.processes || []).map(process => ({
           'Product ID': product.id,
           'Product Name': product.name,
-          'Process ID': process.processId || process.process || ''
+          'Process Name': processNameMapping[process.processId || process.process || ''] || (process.processId || process.process || '')
         }))
       );
       
@@ -644,17 +654,17 @@ const ProductListPage = () => {
         {
           'Product ID': '680c7a2bc30d1e00643b84e8',
           'Product Name': 'Example Product 1',
-          'Process ID': '680b3411fa35ca00651ff788'
+          'Process Name': 'Cutting Process'
         },
         {
           'Product ID': '680c7a2bc30d1e00643b84e8',
           'Product Name': 'Example Product 1',
-          'Process ID': '680b341dfa35ca00651ff792'
+          'Process Name': 'Sewing Process'
         },
         {
           'Product ID': '68246cc23d04e20065d3d60a',
           'Product Name': 'Example Product 2',
-          'Process ID': '680b3411fa35ca00651ff788'
+          'Process Name': 'Cutting Process'
         }
       ];
       
@@ -680,7 +690,7 @@ const ProductListPage = () => {
           '': ''
         },
         {
-          'Instructions': '4. Process ID must be a valid process ID from your system.',
+          'Instructions': '4. Process Name must be the exact name of a process from your system (not ID).',
           '': ''
         },
         {
@@ -1131,23 +1141,47 @@ const ProductListPage = () => {
 
           // Filter out rows without required fields
           const validProcesses = processesData.filter((row: any) => {
-            return row['Product ID'] && row['Process ID'];
+            return row['Product ID'] && row['Process Name'];
           });
 
           if (validProcesses.length === 0) {
-            toast.error('No valid processes found in the Excel file. Please ensure Product ID and Process ID are provided.');
+            toast.error('No valid processes found in the Excel file. Please ensure Product ID and Process Name are provided.');
             setImportProgress(null);
             toast.dismiss(loadingToast);
             return;
           }
 
+          setImportProgress(25);
+
+          // Fetch all processes to create mapping
+          const processesResponse = await axios.get(`${API_BASE_URL}/processes?page=1&limit=10000`);
+          const processes = processesResponse.data.results;
+          
+          // Create mapping from process name to process ID
+          const processMapping: Record<string, string> = {};
+          processes.forEach((process: any) => {
+            processMapping[process.name.toLowerCase()] = process.id;
+          });
+
+          console.log('Process mapping created:', processMapping);
+
           setImportProgress(50);
 
-          // Group processes by product ID
+          // Group processes by product ID and map process names to IDs
           const productProcesses: Record<string, Array<{processId: string}>> = {};
+          const mappingErrors: string[] = [];
+
           validProcesses.forEach((row: any) => {
             const productId = row['Product ID'].toString().trim();
-            const processId = row['Process ID'].toString().trim();
+            const processName = row['Process Name'].toString().trim();
+            
+            // Map process name to ID
+            const processId = processMapping[processName.toLowerCase()];
+            
+            if (!processId) {
+              mappingErrors.push(`Process name "${processName}" not found in the system`);
+              return;
+            }
             
             if (!productProcesses[productId]) {
               productProcesses[productId] = [];
@@ -1156,6 +1190,21 @@ const ProductListPage = () => {
               processId: processId
             });
           });
+
+          // Show mapping errors if any
+          if (mappingErrors.length > 0) {
+            const errorMessages = mappingErrors.slice(0, 5).join('\n');
+            if (mappingErrors.length > 5) {
+              toast.error(`Some processes not found:\n${errorMessages}\n...and ${mappingErrors.length - 5} more errors`);
+            } else {
+              toast.error(`Some processes not found:\n${errorMessages}`);
+            }
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+            return;
+          }
+
+          setImportProgress(75);
 
           // Update each product's processes
           let successCount = 0;
