@@ -287,6 +287,16 @@ const ProductListPage = () => {
       // Get only selected products
       const selectedProductsData = products.filter(product => selectedProducts.includes(product.id));
       
+      // Fetch all raw materials to create reverse mapping
+      const materialsResponse = await axios.get(`${API_BASE_URL}/raw-materials?page=1&limit=10000`);
+      const materials = materialsResponse.data.results;
+      
+      // Create reverse mapping from material ID to material name
+      const materialNameMapping: Record<string, string> = {};
+      materials.forEach((material: any) => {
+        materialNameMapping[material.id] = material.name;
+      });
+      
       const wb = XLSX.utils.book_new();
 
       // Create BOM sheet for selected products only
@@ -294,7 +304,7 @@ const ProductListPage = () => {
         (product.bom || []).map(bom => ({
           'Product ID': product.id,
           'Product Name': product.name,
-          'Material ID': bom.materialId,
+          'Material Name': materialNameMapping[bom.materialId] || bom.materialId,
           'Quantity': bom.quantity
         }))
       );
@@ -556,19 +566,19 @@ const ProductListPage = () => {
         {
           'Product ID': '680c7a2bc30d1e00643b84e8',
           'Product Name': 'Example Product 1',
-          'Material ID': '680b3411fa35ca00651ff788',
+          'Material Name': 'Cotton Fabric',
           'Quantity': 2.5
         },
         {
           'Product ID': '680c7a2bc30d1e00643b84e8',
           'Product Name': 'Example Product 1',
-          'Material ID': '680b341dfa35ca00651ff792',
+          'Material Name': 'Elastic Band',
           'Quantity': 1.0
         },
         {
           'Product ID': '68246cc23d04e20065d3d60a',
           'Product Name': 'Example Product 2',
-          'Material ID': '680b3411fa35ca00651ff788',
+          'Material Name': 'Cotton Fabric',
           'Quantity': 3.0
         }
       ];
@@ -595,7 +605,7 @@ const ProductListPage = () => {
           '': ''
         },
         {
-          'Instructions': '4. Material ID must be a valid raw material ID from your system.',
+          'Instructions': '4. Material Name must be the exact name of a raw material from your system (not ID).',
           '': ''
         },
         {
@@ -971,24 +981,48 @@ const ProductListPage = () => {
 
           // Filter out rows without required fields
           const validBOM = bomData.filter((row: any) => {
-            return row['Product ID'] && row['Material ID'] && row['Quantity'] !== undefined;
+            return row['Product ID'] && row['Material Name'] && row['Quantity'] !== undefined;
           });
 
           if (validBOM.length === 0) {
-            toast.error('No valid BOM entries found in the Excel file. Please ensure Product ID, Material ID, and Quantity are provided.');
+            toast.error('No valid BOM entries found in the Excel file. Please ensure Product ID, Material Name, and Quantity are provided.');
             setImportProgress(null);
             toast.dismiss(loadingToast);
             return;
           }
 
+          setImportProgress(25);
+
+          // Fetch all raw materials to create mapping
+          const materialsResponse = await axios.get(`${API_BASE_URL}/raw-materials?page=1&limit=10000`);
+          const materials = materialsResponse.data.results;
+          
+          // Create mapping from material name to material ID
+          const materialMapping: Record<string, string> = {};
+          materials.forEach((material: any) => {
+            materialMapping[material.name.toLowerCase()] = material.id;
+          });
+
+          console.log('Material mapping created:', materialMapping);
+
           setImportProgress(50);
 
-          // Group BOM by product ID
+          // Group BOM by product ID and map material names to IDs
           const productBOM: Record<string, Array<{materialId: string, quantity: number}>> = {};
+          const mappingErrors: string[] = [];
+
           validBOM.forEach((row: any) => {
             const productId = row['Product ID'].toString().trim();
-            const materialId = row['Material ID'].toString().trim();
+            const materialName = row['Material Name'].toString().trim();
             const quantity = parseFloat(row['Quantity']);
+            
+            // Map material name to ID
+            const materialId = materialMapping[materialName.toLowerCase()];
+            
+            if (!materialId) {
+              mappingErrors.push(`Material name "${materialName}" not found in the system`);
+              return;
+            }
             
             if (!productBOM[productId]) {
               productBOM[productId] = [];
@@ -998,6 +1032,21 @@ const ProductListPage = () => {
               quantity: quantity
             });
           });
+
+          // Show mapping errors if any
+          if (mappingErrors.length > 0) {
+            const errorMessages = mappingErrors.slice(0, 5).join('\n');
+            if (mappingErrors.length > 5) {
+              toast.error(`Some materials not found:\n${errorMessages}\n...and ${mappingErrors.length - 5} more errors`);
+            } else {
+              toast.error(`Some materials not found:\n${errorMessages}`);
+            }
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+            return;
+          }
+
+          setImportProgress(75);
 
           // Update each product's BOM
           let successCount = 0;
