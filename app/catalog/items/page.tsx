@@ -1257,7 +1257,7 @@ const ProductListPage = () => {
           {/* Show More Button Section - Right Aligned */}
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="flex justify-end mr-5">
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-col items-end space-y-2">
                 <button
                   type="button"
                   onClick={() => setShowMoreExports(!showMoreExports)}
@@ -1268,89 +1268,100 @@ const ProductListPage = () => {
                   {showMoreExports ? 'Show Less' : 'Show More'}
                 </button>
                 {showMoreExports && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleExportByAttributes}
-                      className="ti-btn ti-btn-info"
-                      disabled={isLoading}
-                    >
-                      <i className="ri-download-2-line me-2"></i>
-                      Export by Attributes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExportByBOM}
-                      className="ti-btn ti-btn-info"
-                      disabled={isLoading}
-                    >
-                      <i className="ri-download-2-line me-2"></i>
-                      Export by BOM
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExportByProcesses}
-                      className="ti-btn ti-btn-info"
-                      disabled={isLoading}
-                    >
-                      <i className="ri-download-2-line me-2"></i>
-                      Export by Processes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => attributesFileInputRef.current?.click()}
-                      className="ti-btn ti-btn-success"
-                      disabled={isLoading}
-                    >
-                      <i className="ri-file-excel-2-line me-2"></i>
-                      Import by Attributes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => bomFileInputRef.current?.click()}
-                      className="ti-btn ti-btn-success"
-                      disabled={isLoading}
-                    >
-                      <i className="ri-file-excel-2-line me-2"></i>
-                      Import by BOM
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => processesFileInputRef.current?.click()}
-                      className="ti-btn ti-btn-success"
-                      disabled={isLoading}
-                    >
-                      <i className="ri-file-excel-2-line me-2"></i>
-                      Import by Processes
-                    </button>
-                    {/* <button
-                      type="button"
-                      onClick={handleDownloadAttributesTemplate}
-                      className="ti-btn ti-btn-outline-secondary"
-                      disabled={isLoading}
-                    >
-                      <i className="ri-file-download-line me-2"></i>
-                      Attributes Template
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDownloadBOMTemplate}
-                      className="ti-btn ti-btn-outline-secondary"
-                      disabled={isLoading}
-                    >
-                      <i className="ri-file-download-line me-2"></i>
-                      BOM Template
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDownloadProcessesTemplate}
-                      className="ti-btn ti-btn-outline-secondary"
-                      disabled={isLoading}
-                    >
-                      <i className="ri-file-download-line me-2"></i>
-                      Processes Template
-                    </button> */}
-                  </>
+                  <div className="flex flex-wrap gap-2 max-w-4xl justify-end">
+                    {/* Export Buttons - First Row */}
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={handleExportByAttributes}
+                        className="ti-btn ti-btn-info"
+                        disabled={isLoading}
+                      >
+                        <i className="ri-download-2-line me-2"></i>
+                        Export by Attributes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportByBOM}
+                        className="ti-btn ti-btn-info"
+                        disabled={isLoading}
+                      >
+                        <i className="ri-download-2-line me-2"></i>
+                        Export by BOM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportByProcesses}
+                        className="ti-btn ti-btn-info"
+                        disabled={isLoading}
+                      >
+                        <i className="ri-download-2-line me-2"></i>
+                        Export by Processes
+                      </button>
+                    </div>
+                    
+                    {/* Import Buttons - Second Row */}
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={() => attributesFileInputRef.current?.click()}
+                        className="ti-btn ti-btn-success"
+                        disabled={isLoading}
+                      >
+                        <i className="ri-file-excel-2-line me-2"></i>
+                        Import by Attributes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => bomFileInputRef.current?.click()}
+                        className="ti-btn ti-btn-success"
+                        disabled={isLoading}
+                      >
+                        <i className="ri-file-excel-2-line me-2"></i>
+                        Import by BOM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => processesFileInputRef.current?.click()}
+                        className="ti-btn ti-btn-success"
+                        disabled={isLoading}
+                      >
+                        <i className="ri-file-excel-2-line me-2"></i>
+                        Import by Processes
+                      </button>
+                    </div>
+                    
+                    {/* Template Buttons - Third Row */}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadAttributesTemplate}
+                        className="ti-btn ti-btn-outline-secondary"
+                        disabled={isLoading}
+                      >
+                        <i className="ri-file-download-line me-2"></i>
+                        Attributes Template
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadBOMTemplate}
+                        className="ti-btn ti-btn-outline-secondary"
+                        disabled={isLoading}
+                      >
+                        <i className="ri-file-download-line me-2"></i>
+                        BOM Template
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadProcessesTemplate}
+                        className="ti-btn ti-btn-outline-secondary"
+                        disabled={isLoading}
+                      >
+                        <i className="ri-file-download-line me-2"></i>
+                        Processes Template
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

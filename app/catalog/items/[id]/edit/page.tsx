@@ -15,7 +15,7 @@ interface Product {
   styleCode: string;
   eanCode: string;
   description: string;
-  category: {
+  category?: {
     id: string;
     name: string;
   };
@@ -153,10 +153,17 @@ const EditProductPage = () => {
         let product = productResponse.data;
         // Debug: log backend BOM
         console.log('Backend BOM:', productResponse.data);
-        // If category is a string, convert to { id, name }
-        if (typeof product.category === 'string') {
-          const catObj = categories.find((c: any) => c.id === product.category) || { id: product.category, name: '' };
-          product.category = catObj;
+        
+        // Ensure category is properly initialized
+        if (!product.category) {
+          product.category = { id: '', name: '' };
+        } else if (typeof product.category === 'string') {
+          const catObj = categories.find((c: Category) => c.id === product.category);
+          if (catObj) {
+            product.category = catObj;
+          } else {
+            product.category = { id: product.category, name: 'Unknown Category' };
+          }
         }
         
         // Defensive: ensure attributes, bom, processes are arrays/objects
@@ -603,7 +610,7 @@ const EditProductPage = () => {
                       <select
                         name="category"
                         className="form-control"
-                        value={formData.category.id}
+                        value={formData.category?.id || ''}
                         onChange={handleInputChange}
                         required
                       >
