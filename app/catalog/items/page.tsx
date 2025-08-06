@@ -783,9 +783,9 @@ const ProductListPage = () => {
             const categoryName = row['Category'] || '';
             let categoryId = '';
             
-            if (categoryName && categoryName.trim() !== '') {
+            if (categoryName && categoryName.toString().trim() !== '') {
               // Map category name to ID
-              const mappedCategoryId = categoryMapping[categoryName.toLowerCase()];
+              const mappedCategoryId = categoryMapping[categoryName.toString().toLowerCase()];
               if (mappedCategoryId) {
                 categoryId = mappedCategoryId;
               } else {
@@ -796,16 +796,16 @@ const ProductListPage = () => {
             }
 
             return {
-              id: row['ID'] && row['ID'].trim() !== '' ? row['ID'] : undefined, // For updates
-              name: row['Name'],
-              styleCode: row['Style Code'],
-              internalCode: row['Internal Code'] || '',
-              vendorCode: row['Vendor Code'] || '',
-              factoryCode: row['Factory Code'] || '',
-              eanCode: row['EAN Code'] || '',
-              description: row['Description'] || '',
+              id: row['ID'] && row['ID'].toString().trim() !== '' ? row['ID'].toString() : undefined, // For updates
+              name: row['Name']?.toString() || '',
+              styleCode: row['Style Code']?.toString() || '',
+              internalCode: row['Internal Code']?.toString() || '',
+              vendorCode: row['Vendor Code']?.toString() || '',
+              factoryCode: row['Factory Code']?.toString() || '',
+              eanCode: row['EAN Code']?.toString() || '',
+              description: row['Description']?.toString() || '',
               category: categoryId, // Use mapped category ID
-              softwareCode: row['Software Code'] || undefined, // Will be auto-generated if not provided
+              softwareCode: row['Software Code']?.toString() || undefined, // Will be auto-generated if not provided
             };
           });
 
