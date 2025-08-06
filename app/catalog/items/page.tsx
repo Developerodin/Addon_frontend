@@ -211,17 +211,38 @@ const ProductListPage = () => {
       // Get only selected products
       const selectedProductsData = products.filter(product => selectedProducts.includes(product.id));
       
+      // Fetch all attributes to create reverse mapping
+      const attributesResponse = await axios.get(`${API_BASE_URL}/product-attributes?page=1&limit=10000`);
+      const allAttributes = attributesResponse.data.results || [];
+      
+      // Create reverse mapping: attribute value ID -> { attribute name, attribute value name }
+      const reverseMapping: Record<string, { attributeName: string, attributeValueName: string }> = {};
+      allAttributes.forEach((attr: any) => {
+        attr.optionValues.forEach((value: any) => {
+          const valueId = value.id || value._id || value.valueId;
+          if (valueId) {
+            reverseMapping[valueId.toString()] = {
+              attributeName: attr.name,
+              attributeValueName: value.name
+            };
+          }
+        });
+      });
+      
       const wb = XLSX.utils.book_new();
 
       // Create Attributes sheet for selected products only
       const attributesData = selectedProductsData.flatMap(product => {
         if (product.attributes && Object.keys(product.attributes).length > 0) {
-          return Object.entries(product.attributes).map(([attrName, attrValue]) => ({
-            'Product ID': product.id,
-            'Product Name': product.name,
-            'Attribute Name': attrName,
-            'Attribute Value': attrValue
-          }));
+          return Object.entries(product.attributes).map(([attrName, attrValueId]) => {
+            const mapping = reverseMapping[attrValueId];
+            return {
+              'Product ID': product.id,
+              'Product Name': product.name,
+              'Attribute Name': attrName,
+              'Attribute Value': mapping ? mapping.attributeValueName : attrValueId
+            };
+          });
         }
         return [];
       });
@@ -488,11 +509,11 @@ const ProductListPage = () => {
           '': ''
         },
         {
-          'Instructions': '4. Attribute Name must match an existing attribute category name.',
+          'Instructions': '4. Attribute Name must match an existing attribute category name exactly.',
           '': ''
         },
         {
-          'Instructions': '5. Attribute Value must be a valid option value for that attribute.',
+          'Instructions': '5. Attribute Value must be a valid option value for that attribute exactly.',
           '': ''
         },
         {
@@ -501,6 +522,14 @@ const ProductListPage = () => {
         },
         {
           'Instructions': '7. Multiple attributes for the same product should be on separate rows.',
+          '': ''
+        },
+        {
+          'Instructions': '8. The system will automatically map attribute names and values to their IDs.',
+          '': ''
+        },
+        {
+          'Instructions': '9. Make sure attribute names and values exist in your Attributes section.',
           '': ''
         }
       ];
@@ -800,10 +829,31 @@ const ProductListPage = () => {
             return;
           }
 
+          setImportProgress(25);
+
+          // Fetch all attributes to create mapping
+          const attributesResponse = await axios.get(`${API_BASE_URL}/product-attributes?page=1&limit=10000`);
+          const allAttributes = attributesResponse.data.results || [];
+          
+          // Create mapping: attribute name -> attribute value name -> attribute value ID
+          const attributeMapping: Record<string, Record<string, number>> = {};
+          allAttributes.forEach((attr: any) => {
+            attributeMapping[attr.name.toLowerCase()] = {};
+            attr.optionValues.forEach((value: any) => {
+              // Handle different possible ID field names
+              const valueId = value.id || value._id || value.valueId;
+              if (valueId) {
+                attributeMapping[attr.name.toLowerCase()][value.name.toLowerCase()] = valueId;
+              }
+            });
+          });
+
           setImportProgress(50);
 
-          // Group attributes by product ID
+          // Group attributes by product ID and map to IDs
           const productAttributes: Record<string, Record<string, string>> = {};
+          const mappingErrors: string[] = [];
+
           validAttributes.forEach((row: any) => {
             const productId = row['Product ID'].toString().trim();
             const attributeName = row['Attribute Name'].toString().trim();
@@ -812,8 +862,31 @@ const ProductListPage = () => {
             if (!productAttributes[productId]) {
               productAttributes[productId] = {};
             }
-            productAttributes[productId][attributeName] = attributeValue;
+
+            // Map attribute name and value to ID
+            const attributeNameLower = attributeName.toLowerCase();
+            const attributeValueLower = attributeValue.toLowerCase();
+            
+            if (attributeMapping[attributeNameLower] && attributeMapping[attributeNameLower][attributeValueLower]) {
+              const attributeValueId = attributeMapping[attributeNameLower][attributeValueLower];
+              // Use attribute name as key and attribute value ID as value
+              productAttributes[productId][attributeName] = attributeValueId.toString();
+            } else {
+              mappingErrors.push(`Product ${productId}: Attribute "${attributeName}" with value "${attributeValue}" not found in system`);
+            }
           });
+
+          // Show mapping errors if any
+          if (mappingErrors.length > 0) {
+            const errorMessages = mappingErrors.slice(0, 5).join('\n');
+            if (mappingErrors.length > 5) {
+              toast.error(`Some attribute mappings failed:\n${errorMessages}\n...and ${mappingErrors.length - 5} more errors`);
+            } else {
+              toast.error(`Some attribute mappings failed:\n${errorMessages}`);
+            }
+          }
+
+          setImportProgress(75);
 
           // Update each product's attributes
           let successCount = 0;
@@ -838,7 +911,7 @@ const ProductListPage = () => {
             setImportProgress(null);
             toast.dismiss(loadingToast);
 
-            if (errorCount === 0) {
+            if (errorCount === 0 && mappingErrors.length === 0) {
               toast.success(`Attributes imported successfully for ${successCount} product(s)!`);
             } else if (successCount === 0) {
               toast.error(`Failed to import attributes for all ${errorCount} products.`);
