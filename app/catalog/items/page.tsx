@@ -166,13 +166,23 @@ const ProductListPage = () => {
       const response = await axios.get(`${API_ENDPOINTS.products}?limit=100000`);
       const data = response.data as ProductsResponse;
       
+      // Fetch all categories to create reverse mapping
+      const categoriesResponse = await axios.get(`${API_BASE_URL}/categories?page=1&limit=10000`);
+      const allCategories = categoriesResponse.data.results || [];
+      
+      // Create reverse mapping from category ID to category name
+      const categoryNameMapping: Record<string, string> = {};
+      allCategories.forEach((category: any) => {
+        categoryNameMapping[category.id] = category.name;
+      });
+      
       const wb = XLSX.utils.book_new();
 
       // Create Products sheet with only basic product data
       const exportData = data.results.map(product => ({
         'ID': product.id,
         'Name': product.name,
-        'Category': product.category, // This is the category ID
+        'Category': categoryNameMapping[product.category] || product.category, // Show category name instead of ID
         'Software Code': product.softwareCode,
         'Internal Code': product.internalCode,
         'Vendor Code': product.vendorCode,
@@ -406,7 +416,7 @@ const ProductListPage = () => {
         {
           'ID': '680c7a2bc30d1e00643b84e8',
           'Name': 'Example Product 1',
-          'Category': '680b3411fa35ca00651ff788',
+          'Category': 'Electronics',
           'Software Code': 'PRD-M9XTTW8I-85T1C',
           'Internal Code': '123',
           'Vendor Code': '456',
@@ -418,7 +428,7 @@ const ProductListPage = () => {
         {
           'ID': '68246cc23d04e20065d3d60a',
           'Name': 'Example Product 2',
-          'Category': '680b341dfa35ca00651ff792',
+          'Category': 'Clothing',
           'Software Code': 'PRD-MANS85IE-BW0YJ',
           'Internal Code': 'INT-67890',
           'Vendor Code': 'VEN-67890',
@@ -447,11 +457,11 @@ const ProductListPage = () => {
           '': ''
         },
         {
-          'Instructions': '3. Category must be a valid category ID from your system.',
+          'Instructions': '3. Category must be the exact name of a category from your system (not ID).',
           '': ''
         },
         {
-          'Instructions': '4. To find category IDs, check the Categories section in your system.',
+          'Instructions': '4. The system will automatically map category names to their IDs.',
           '': ''
         },
         {
@@ -464,6 +474,10 @@ const ProductListPage = () => {
         },
         {
           'Instructions': '7. All other fields are optional but recommended.',
+          '': ''
+        },
+        {
+          'Instructions': '8. If a category name is not found, the product will be created without a category.',
           '': ''
         }
       ];
@@ -748,21 +762,54 @@ const ProductListPage = () => {
             return;
           }
 
+          setImportProgress(25);
+
+          // Fetch all categories to create mapping
+          const categoriesResponse = await axios.get(`${API_BASE_URL}/categories?page=1&limit=10000`);
+          const allCategories = categoriesResponse.data.results || [];
+          
+          // Create mapping from category name to category ID
+          const categoryMapping: Record<string, string> = {};
+          allCategories.forEach((category: any) => {
+            categoryMapping[category.name.toLowerCase()] = category.id;
+          });
+
+          console.log('Category mapping created:', categoryMapping);
+
           setImportProgress(50);
 
-          // Transform data for bulk import
-          const transformedProducts = validProducts.map((row: any) => ({
-            id: row['ID'] && row['ID'].trim() !== '' ? row['ID'] : undefined, // For updates
-            name: row['Name'],
-            styleCode: row['Style Code'],
-            internalCode: row['Internal Code'] || '',
-            vendorCode: row['Vendor Code'] || '',
-            factoryCode: row['Factory Code'] || '',
-            eanCode: row['EAN Code'] || '',
-            description: row['Description'] || '',
-            category: row['Category'] || '', // This should be a category ID
-            softwareCode: row['Software Code'] || undefined, // Will be auto-generated if not provided
-          }));
+          // Transform data for bulk import with category name mapping
+          const transformedProducts = validProducts.map((row: any) => {
+            const categoryName = row['Category'] || '';
+            let categoryId = '';
+            
+            if (categoryName && categoryName.trim() !== '') {
+              // Map category name to ID
+              const mappedCategoryId = categoryMapping[categoryName.toLowerCase()];
+              if (mappedCategoryId) {
+                categoryId = mappedCategoryId;
+              } else {
+                console.warn(`Category "${categoryName}" not found in the system`);
+                // You can choose to skip this product or continue with empty category
+                // For now, we'll continue with empty category
+              }
+            }
+
+            return {
+              id: row['ID'] && row['ID'].trim() !== '' ? row['ID'] : undefined, // For updates
+              name: row['Name'],
+              styleCode: row['Style Code'],
+              internalCode: row['Internal Code'] || '',
+              vendorCode: row['Vendor Code'] || '',
+              factoryCode: row['Factory Code'] || '',
+              eanCode: row['EAN Code'] || '',
+              description: row['Description'] || '',
+              category: categoryId, // Use mapped category ID
+              softwareCode: row['Software Code'] || undefined, // Will be auto-generated if not provided
+            };
+          });
+
+          setImportProgress(75);
 
           // Send bulk import request
           const response = await axios.post(`${API_ENDPOINTS.products}/bulk-import`, {
