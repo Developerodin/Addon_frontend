@@ -10,30 +10,567 @@ interface Message {
 }
 
 const AgentChat: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      type: 'ai',
-      content: `Hello! I'm your Replenishment AI Agent. I can help you with:
-
-• Demand forecasting analysis
-• Inventory optimization recommendations  
-• Replenishment planning strategies
-• Supply chain insights
-• Performance analytics
-
-What would you like to know about your replenishment operations?`,
-      timestamp: new Date()
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   
   const [inputValue, setInputValue] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(false);
-  const [isRecovering, setIsRecovering] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  // Dark mode effect when Agent tab is active
+  useEffect(() => {
+    // Store current theme
+    const currentTheme = document.documentElement.getAttribute('data-bs-theme') || 'light';
+    
+    // Add smooth transition for theme change
+    document.documentElement.style.transition = 'all 0.3s ease-in-out';
+    
+    // Apply dark mode for Agent tab
+    document.documentElement.setAttribute('data-bs-theme', 'dark');
+    document.documentElement.classList.add('dark-mode-active');
+    document.body.classList.add('dark-mode-active');
+    
+    // Force dark mode on all parent containers
+    let parent = document.body.parentElement;
+    while (parent) {
+      parent.classList.add('dark-mode-active');
+      parent = parent.parentElement;
+    }
+    
+    // Store original theme for restoration
+    (window as any).__originalTheme = currentTheme;
+    
+    // Add custom dark mode styles
+    const style = document.createElement('style');
+    style.id = 'agent-dark-mode-styles';
+    style.textContent = `
+      /* Global dark mode */
+      .dark-mode-active {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+        color: #e2e8f0 !important;
+      }
+      
+      /* Header and navigation dark mode */
+      .dark-mode-active header,
+      .dark-mode-active .header,
+      .dark-mode-active .main-header,
+      .dark-mode-active .top-header {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
+      }
+      
+      .dark-mode-active .header *,
+      .dark-mode-active .main-header *,
+      .dark-mode-active .top-header * {
+        color: #f1f5f9 !important;
+      }
+      
+      /* Sidebar dark mode */
+      .dark-mode-active .sidebar,
+      .dark-mode-active .main-sidebar,
+      .dark-mode-active .left-sidebar {
+        background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%) !important;
+        border-right: 1px solid rgba(148, 163, 184, 0.2) !important;
+      }
+      
+      .dark-mode-active .sidebar *,
+      .dark-mode-active .main-sidebar *,
+      .dark-mode-active .left-sidebar * {
+        color: #e2e8f0 !important;
+      }
+      
+      /* Main content area */
+      .dark-mode-active .main-content,
+      .dark-mode-active .content-area,
+      .dark-mode-active .dashboard-content {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+      }
+      
+      /* Boxes and cards */
+      .dark-mode-active .box {
+        background: rgba(30, 41, 59, 0.9) !important;
+        border-color: rgba(148, 163, 184, 0.2) !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
+      }
+      
+      .dark-mode-active .box-title,
+      .dark-mode-active .card-title,
+      .dark-mode-active h1, .dark-mode-active h2, 
+      .dark-mode-active h3, .dark-mode-active h4,
+      .dark-mode-active h5, .dark-mode-active h6 {
+        color: #f1f5f9 !important;
+      }
+      
+      /* Text colors */
+      .dark-mode-active .text-gray-500,
+      .dark-mode-active .text-gray-600,
+      .dark-mode-active .text-gray-700 {
+        color: #94a3b8 !important;
+      }
+      
+      .dark-mode-active .text-gray-800,
+      .dark-mode-active .text-gray-900 {
+        color: #e2e8f0 !important;
+      }
+      
+      /* Backgrounds */
+      .dark-mode-active .bg-gray-100\/50,
+      .dark-mode-active .bg-gray-100,
+      .dark-mode-active .bg-gray-50 {
+        background: rgba(51, 65, 85, 0.5) !important;
+      }
+      
+      .dark-mode-active .bg-white {
+        background: rgba(30, 41, 59, 0.8) !important;
+      }
+      
+      /* Hover effects */
+      .dark-mode-active .hover\\:bg-white\\/60:hover,
+      .dark-mode-active .hover\\:bg-gray-50:hover {
+        background: rgba(148, 163, 184, 0.2) !important;
+      }
+      
+      /* Tables */
+      .dark-mode-active table {
+        background: rgba(30, 41, 59, 0.9) !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+        border: 1px solid rgba(148, 163, 184, 0.2) !important;
+      }
+      
+      .dark-mode-active th {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        color: #f1f5f9 !important;
+        border-color: rgba(148, 163, 184, 0.3) !important;
+        padding: 16px 20px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        font-size: 13px !important;
+        border-bottom: 2px solid rgba(148, 163, 184, 0.3) !important;
+      }
+      
+      .dark-mode-active td {
+        border-color: rgba(148, 163, 184, 0.15) !important;
+        color: #e2e8f0 !important;
+        padding: 16px 20px !important;
+        font-size: 14px !important;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.1) !important;
+        transition: all 0.2s ease !important;
+      }
+      
+      .dark-mode-active tr {
+        transition: all 0.2s ease !important;
+      }
+      
+      .dark-mode-active tr:hover {
+        background: rgba(148, 163, 184, 0.08) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+      }
+      
+      .dark-mode-active tr:nth-child(even) {
+        background: rgba(51, 65, 85, 0.3) !important;
+      }
+      
+      .dark-mode-active tr:nth-child(even):hover {
+        background: rgba(148, 163, 184, 0.12) !important;
+      }
+      
+      /* Table container */
+      .dark-mode-active .table-container,
+      .dark-mode-active .data-table {
+        background: rgba(30, 41, 59, 0.8) !important;
+        border-radius: 16px !important;
+        padding: 24px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+        border: 1px solid rgba(148, 163, 184, 0.2) !important;
+      }
+      
+      /* Form elements */
+      .dark-mode-active input,
+      .dark-mode-active select,
+      .dark-mode-active textarea {
+        background: rgba(30, 41, 59, 0.9) !important;
+        border: 2px solid rgba(148, 163, 184, 0.3) !important;
+        color: #f1f5f9 !important;
+        border-radius: 8px !important;
+        padding: 12px 16px !important;
+        font-size: 14px !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+      }
+      
+      .dark-mode-active input:focus,
+      .dark-mode-active select:focus,
+      .dark-mode-active textarea:focus {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+        background: rgba(30, 41, 59, 1) !important;
+        transform: translateY(-1px) !important;
+      }
+      
+      .dark-mode-active input::placeholder,
+      .dark-mode-active textarea::placeholder {
+        color: #94a3b8 !important;
+        opacity: 0.8 !important;
+      }
+      
+      /* Chat input specific styling */
+      .dark-mode-active .chat-input,
+      .dark-mode-active .message-input {
+        background: rgba(51, 65, 85, 0.9) !important;
+        border: 2px solid rgba(148, 163, 184, 0.4) !important;
+        color: #f1f5f9 !important;
+        border-radius: 25px !important;
+        padding: 16px 20px !important;
+        font-size: 16px !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+      }
+      
+      .dark-mode-active .chat-input:focus,
+      .dark-mode-active .message-input:focus {
+        border-color: #10b981 !important;
+        box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2) !important;
+        background: rgba(51, 65, 85, 1) !important;
+      }
+      
+      /* Buttons */
+      .dark-mode-active .ti-btn,
+      .dark-mode-active button,
+      .dark-mode-active .btn {
+        background: rgba(51, 65, 85, 0.9) !important;
+        border-color: rgba(148, 163, 184, 0.4) !important;
+        color: #f1f5f9 !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+      }
+      
+      .dark-mode-active .ti-btn:hover,
+      .dark-mode-active button:hover,
+      .dark-mode-active .btn:hover {
+        background: rgba(71, 85, 105, 1) !important;
+        border-color: rgba(148, 163, 184, 0.6) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+      }
+      
+      /* Primary buttons */
+      .dark-mode-active .ti-btn-primary,
+      .dark-mode-active .btn-primary {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+        border-color: #3b82f6 !important;
+        color: #ffffff !important;
+      }
+      
+      .dark-mode-active .ti-btn-primary:hover,
+      .dark-mode-active .btn-primary:hover {
+        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%) !important;
+        border-color: #2563eb !important;
+      }
+      
+      /* Send button specific styling */
+      .dark-mode-active .send-button,
+      .dark-mode-active .voice-button {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+        border-color: #10b981 !important;
+        color: #ffffff !important;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+      }
+      
+      .dark-mode-active .send-button:hover,
+      .dark-mode-active .voice-button:hover {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+        border-color: #059669 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
+      }
+      
+      /* Charts and graphs */
+      .dark-mode-active .chart-container,
+      .dark-mode-active .apexcharts-canvas {
+        background: rgba(30, 41, 59, 0.8) !important;
+      }
+      
+      /* Status indicators */
+      .dark-mode-active .status-indicator,
+      .dark-mode-active .health-status {
+        background: rgba(51, 65, 85, 0.8) !important;
+        border-color: rgba(148, 163, 184, 0.3) !important;
+      }
+      
+      /* Scrollbars */
+      .dark-mode-active ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      
+      .dark-mode-active ::-webkit-scrollbar-track {
+        background: rgba(30, 41, 59, 0.8) !important;
+      }
+      
+      .dark-mode-active ::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.5) !important;
+        border-radius: 4px;
+      }
+      
+      .dark-mode-active ::-webkit-scrollbar-thumb:hover {
+        background: rgba(148, 163, 184, 0.7) !important;
+      }
+      
+      /* Override any remaining white backgrounds */
+      .dark-mode-active *[style*="background: white"],
+      .dark-mode-active *[style*="background: #fff"],
+      .dark-mode-active *[style*="background-color: white"],
+      .dark-mode-active *[style*="background-color: #fff"] {
+        background: rgba(30, 41, 59, 0.8) !important;
+      }
+      
+      /* Additional header targeting for different layouts */
+      .dark-mode-active .navbar,
+      .dark-mode-active .nav-header,
+      .dark-mode-active .app-header,
+      .dark-mode-active .top-navbar,
+      .dark-mode-active .main-navbar {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+      }
+      
+      .dark-mode-active .navbar-brand,
+      .dark-mode-active .logo,
+      .dark-mode-active .brand-logo {
+        color: #f1f5f9 !important;
+      }
+      
+      .dark-mode-active .nav-link,
+      .dark-mode-active .nav-item,
+      .dark-mode-active .navbar-nav a {
+        color: #e2e8f0 !important;
+      }
+      
+      .dark-mode-active .nav-link:hover,
+      .dark-mode-active .nav-item:hover,
+      .dark-mode-active .navbar-nav a:hover {
+        color: #f1f5f9 !important;
+        background: rgba(148, 163, 184, 0.1) !important;
+      }
+      
+      /* Force dark mode on body and html */
+      .dark-mode-active body,
+      .dark-mode-active html {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+        color: #e2e8f0 !important;
+      }
+      
+      /* Target any element with white background */
+      .dark-mode-active [class*="bg-white"],
+      .dark-mode-active [class*="bg-light"],
+      .dark-mode-active [class*="bg-gray-50"] {
+        background: rgba(30, 41, 59, 0.8) !important;
+      }
+      
+      /* Chat messages styling - Only target actual message content divs */
+      .dark-mode-active .message,
+      .dark-mode-active .chat-message,
+      .dark-mode-active div[class*="message"],
+      .dark-mode-active div[class*="chat"] {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        border: 1px solid rgba(148, 163, 184, 0.3) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+        transition: all 0.3s ease !important;
+        color: #f1f5f9 !important;
+      }
+      
+      .dark-mode-active .message:hover,
+      .dark-mode-active .chat-message:hover,
+      .dark-mode-active div[class*="message"]:hover,
+      .dark-mode-active div[class*="chat"]:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+        background: linear-gradient(135deg, #334155 0%, #475569 100%) !important;
+      }
+      
+      /* AI message specific styling */
+      .dark-mode-active .message.ai,
+      .dark-mode-active .chat-message.ai,
+      .dark-mode-active div[class*="ai"],
+      .dark-mode-active .bg-gray-100.rounded-2xl {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        border-color: rgba(59, 130, 246, 0.4) !important;
+        color: #f1f5f9 !important;
+        box-shadow: 0 4px 16px rgba(59, 130, 246, 0.2) !important;
+      }
+      
+      /* User message specific styling */
+      .dark-mode-active .message.user,
+      .dark-mode-active .chat-message.user,
+      .dark-mode-active div[class*="user"],
+      .dark-mode-active .bg-gradient-to-r.from-primary {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+        border-color: rgba(59, 130, 246, 0.5) !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3) !important;
+      }
+      
+      /* Override any remaining white/gray backgrounds in messages */
+      .dark-mode-active .bg-gray-100,
+      .dark-mode-active .bg-white,
+      .dark-mode-active [class*="bg-gray"],
+      .dark-mode-active [class*="bg-white"] {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        color: #f1f5f9 !important;
+      }
+      
+      /* Force text color in messages */
+      .dark-mode-active .message *,
+      .dark-mode-active .chat-message *,
+      .dark-mode-active div[class*="message"] *,
+      .dark-mode-active div[class*="chat"] *,
+      .dark-mode-active .bg-gray-100 *,
+      .dark-mode-active .bg-white * {
+        color: #f1f5f9 !important;
+      }
+      
+      /* Override specific text colors */
+      .dark-mode-active .text-gray-800,
+      .dark-mode-active .text-gray-600,
+      .dark-mode-active .text-gray-500 {
+        color: #f1f5f9 !important;
+      }
+      
+      /* Ultra-specific overrides for chat elements */
+      .dark-mode-active .bg-gray-100.rounded-2xl.rounded-tl-md,
+      .dark-mode-active .bg-gray-100.rounded-2xl.rounded-tr-md,
+      .dark-mode-active .bg-gradient-to-r.from-primary.from-primary\/80,
+      .dark-mode-active .bg-gradient-to-r.from-primary.to-primary\/80 {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        color: #f1f5f9 !important;
+        border: 1px solid rgba(148, 163, 184, 0.3) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+      }
+      
+      /* Force override for message content only - not outer containers */
+      .dark-mode-active .bg-gray-100.rounded-2xl,
+      .dark-mode-active .bg-white.rounded-2xl,
+      .dark-mode-active .bg-gray-50.rounded-2xl {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        color: #f1f5f9 !important;
+      }
+      
+      /* Target specific chat message containers - only the actual message bubbles */
+      .dark-mode-active .space-y-4 > div > div:last-child,
+      .dark-mode-active .messages-container > div > div:last-child,
+      .dark-mode-active .chat-messages > div > div:last-child {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        color: #f1f5f9 !important;
+        border: 1px solid rgba(148, 163, 184, 0.3) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+      }
+      
+      /* Override any inline styles */
+      .dark-mode-active [style*="background-color: rgb(243, 244, 246)"],
+      .dark-mode-active [style*="background-color: white"],
+      .dark-mode-active [style*="background: rgb(243, 244, 246)"],
+      .dark-mode-active [style*="background: white"] {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        color: #f1f5f9 !important;
+      }
+      
+      /* Chat container */
+      .dark-mode-active .chat-container,
+      .dark-mode-active .messages-container {
+        background: rgba(30, 41, 59, 0.6) !important;
+        border-radius: 20px !important;
+        border: 1px solid rgba(148, 163, 184, 0.2) !important;
+        backdrop-filter: blur(10px) !important;
+      }
+      
+      /* Input area */
+      .dark-mode-active .input-area,
+      .dark-mode-active .chat-input-area {
+        background: rgba(51, 65, 85, 0.9) !important;
+        border-top: 1px solid rgba(148, 163, 184, 0.2) !important;
+        backdrop-filter: blur(10px) !important;
+      }
+      
+      /* Ensure all text is visible in dark mode */
+      .dark-mode-active * {
+        color: inherit !important;
+      }
+      
+      .dark-mode-active .text-dark,
+      .dark-mode-active .text-black {
+        color: #f1f5f9 !important;
+      }
+      
+      /* Status and health indicators */
+      .dark-mode-active .status-badge,
+      .dark-mode-active .health-indicator {
+        background: rgba(51, 65, 85, 0.9) !important;
+        border: 1px solid rgba(148, 163, 184, 0.3) !important;
+        color: #f1f5f9 !important;
+        border-radius: 20px !important;
+        padding: 8px 16px !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+      }
+      
+      /* Loading states */
+      .dark-mode-active .loading,
+      .dark-mode-active .spinner {
+        color: #3b82f6 !important;
+      }
+      
+      /* Error states */
+      .dark-mode-active .error,
+      .dark-mode-active .error-message {
+        background: rgba(239, 68, 68, 0.1) !important;
+        border: 1px solid rgba(239, 68, 68, 0.3) !important;
+        color: #fca5a5 !important;
+        border-radius: 8px !important;
+        padding: 12px 16px !important;
+      }
+      
+      /* Success states */
+      .dark-mode-active .success,
+      .dark-mode-active .success-message {
+        background: rgba(16, 185, 129, 0.1) !important;
+        border: 1px solid rgba(16, 185, 129, 0.3) !important;
+        color: #6ee7b7 !important;
+        border-radius: 8px !important;
+        padding: 12px 16px !important;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Cleanup function to restore original theme
+    return () => {
+      document.documentElement.setAttribute('data-bs-theme', currentTheme);
+      document.documentElement.classList.remove('dark-mode-active');
+      document.body.classList.remove('dark-mode-active');
+      document.documentElement.style.transition = '';
+      
+      // Remove dark mode from all parent containers
+      let parent = document.body.parentElement;
+      while (parent) {
+        parent.classList.remove('dark-mode-active');
+        parent = parent.parentElement;
+      }
+      
+      // Remove custom styles
+      const customStyle = document.getElementById('agent-dark-mode-styles');
+      if (customStyle) {
+        customStyle.remove();
+      }
+    };
+  }, []);
 
   // Predefined responses
   const predefinedResponses: { [key: string]: string } = {
@@ -172,163 +709,195 @@ Would you like me to analyze your current replenishment strategy or help optimiz
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Initialize speech recognition
+  // Initialize speech recognition with multiple fallbacks
   const initializeSpeechRecognition = () => {
-    console.log('Initializing speech recognition...');
+    console.log('Initializing speech recognition with multiple fallbacks...');
     
-    if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
-      console.log('webkitSpeechRecognition is available');
+    // Try multiple approaches for better macOS compatibility
+    const approaches = [
+      // Approach 1: Standard webkitSpeechRecognition
+      () => {
+        if ("webkitSpeechRecognition" in window) {
+          const recognition = new (window as any).webkitSpeechRecognition();
+          recognition.continuous = false; // More reliable on macOS
+          recognition.interimResults = false; // More reliable on macOS
+          recognition.lang = "en-US";
+          recognition.maxAlternatives = 1;
+          return recognition;
+        }
+        return null;
+      },
       
-      try {
-        const SpeechRecognition = (window as any).webkitSpeechRecognition;
-        recognitionRef.current = new SpeechRecognition();
-        
-        // Configure speech recognition
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
-        recognitionRef.current.lang = 'en-US';
-        recognitionRef.current.maxAlternatives = 1;
-        
-        console.log('Speech recognition instance created:', recognitionRef.current);
-
-        recognitionRef.current.onstart = () => {
-          console.log('Speech recognition started');
-        };
-
-        recognitionRef.current.onresult = (event: any) => {
-          console.log('Speech recognition result:', event);
-          let finalTranscript = '';
-          let interimTranscript = '';
-          
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              finalTranscript += transcript;
-            } else {
-              interimTranscript += transcript;
-            }
-          }
-          
-          if (finalTranscript) {
-            setInputValue(prev => prev + finalTranscript);
-          } else if (interimTranscript) {
-            setInputValue(prev => prev + interimTranscript);
-          }
-        };
-
-        recognitionRef.current.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error, event);
-          
-          // Handle specific error types
-          switch (event.error) {
-            case 'network':
-              console.log('Network error detected - this is common on macOS. Attempting automatic recovery...');
-              
-              // On macOS, network errors often resolve with a retry
-              const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-              if (isMac) {
-                // Try automatic recovery for macOS using enhanced retry
-                console.log('Using enhanced retry mechanism for macOS network error');
-                retryWithDelay();
-              } else {
-                const retry = confirm('Network error detected. This usually means the speech service needs to be restarted. Click OK to retry.');
-                if (retry) {
-                  restartSpeechRecognition();
-                }
-              }
-              break;
-            case 'not-allowed':
-              const enableMic = confirm('Microphone access denied. Please allow microphone access in your browser settings and click OK to try again.');
-              if (enableMic) {
-                restartSpeechRecognition();
-              }
-              break;
-            case 'no-speech':
-              alert('No speech detected. Please try speaking again.');
-              break;
-            case 'audio-capture':
-              alert('Audio capture error. Please check your microphone connection.');
-              break;
-            default:
-              alert(`Speech recognition error: ${event.error}. Please try again.`);
-          }
-          
-          setIsListening(false);
-        };
-
-        recognitionRef.current.onend = () => {
-          console.log('Speech recognition ended');
-          setIsListening(false);
-        };
-
-        console.log('Speech recognition initialized successfully');
-        
-      } catch (error) {
-        console.error('Error creating speech recognition instance:', error);
-        alert('Failed to initialize speech recognition. Please refresh the page and try again.');
+      // Approach 2: Alternative macOS settings
+      () => {
+        if ("webkitSpeechRecognition" in window) {
+          const recognition = new (window as any).webkitSpeechRecognition();
+          recognition.continuous = false;
+          recognition.interimResults = false;
+          recognition.maxAlternatives = 1;
+          recognition.lang = "en-US";
+          return recognition;
+        }
+        return null;
+      },
+      
+      // Approach 3: Try standard SpeechRecognition
+      () => {
+        if ("SpeechRecognition" in window) {
+          const recognition = new (window as any).SpeechRecognition();
+          recognition.continuous = false;
+          recognition.interimResults = false;
+          recognition.lang = "en-US";
+          recognition.maxAlternatives = 1;
+          return recognition;
+        }
+        return null;
       }
+    ];
+    
+    let recognition = null;
+    let approachIndex = 0;
+    
+    for (let i = 0; i < approaches.length; i++) {
+      try {
+        recognition = approaches[i]();
+        if (recognition) {
+          approachIndex = i;
+          console.log(`Speech recognition approach ${i + 1} successful`);
+          break;
+        }
+      } catch (error) {
+        console.log(`Approach ${i + 1} failed:`, error);
+      }
+    }
+    
+    if (recognition) {
+      recognition.onstart = () => {
+        console.log('Speech recognition started');
+        setIsListening(true);
+      };
+
+      recognition.onend = () => {
+        console.log('Speech recognition ended');
+        setIsListening(false);
+      };
+
+      recognition.onerror = (e: any) => {
+        console.error('Speech recognition error:', e);
+        setIsListening(false);
+        
+        // Try next approach on error
+        if (e.error === 'network' || e.error === 'audio-capture' || e.error === 'not-allowed') {
+          console.log(`Approach ${approachIndex + 1} failed, trying next approach...`);
+          setTimeout(() => {
+            tryNextApproach(approachIndex + 1);
+          }, 1000);
+        }
+      };
+
+      recognition.onresult = (event: any) => {
+        console.log('Speech recognition result:', event);
+        let text = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          text += event.results[i][0].transcript;
+        }
+        setInputValue(prev => prev + text);
+      };
+
+      // Store the recognition instance
+      recognitionRef.current = recognition;
+      
+      // Expose start/stop functions globally for debugging
+      (window as any).startRecognition = () => recognition.start();
+      (window as any).stopRecognition = () => recognition.stop();
+      
+      console.log('Speech recognition initialized successfully');
+      setIsSpeechSupported(true);
+      
     } else {
-      console.error('webkitSpeechRecognition not available');
-      console.log('Available speech recognition APIs:', {
-        'webkitSpeechRecognition': 'webkitSpeechRecognition' in window,
-        'SpeechRecognition': 'SpeechRecognition' in window,
-        'mozSpeechRecognition': 'mozSpeechRecognition' in window,
-        'msSpeechRecognition': 'msSpeechRecognition' in window
-      });
+      console.error('All speech recognition approaches failed');
+      setIsSpeechSupported(false);
     }
   };
 
-  // Restart speech recognition
-  const restartSpeechRecognition = () => {
-    console.log('Restarting speech recognition...');
-    
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (error) {
-        console.log('Speech recognition already stopped');
+  // Try next approach when current one fails
+  const tryNextApproach = (currentIndex: number) => {
+    if (currentIndex >= 3) {
+      console.log('All approaches exhausted, trying macOS-specific workaround...');
+      
+      // On macOS, try a different approach that mimics ChatGPT
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      if (isMac) {
+        tryMacOSWorkaround();
+      } else {
+        setIsSpeechSupported(false);
       }
-    }
-    
-    // Clear the reference
-    recognitionRef.current = null;
-    
-    // Wait a bit then reinitialize
-    setTimeout(() => {
-      console.log('Reinitializing speech recognition...');
-      initializeSpeechRecognition();
-    }, 1000); // Increased delay for macOS
-  };
-
-  // Enhanced retry mechanism for macOS network errors
-  const retryWithDelay = (attempts = 0, maxAttempts = 3) => {
-    if (attempts >= maxAttempts) {
-      console.log('Max retry attempts reached');
-      setIsRecovering(false);
-      alert('Unable to start speech recognition after multiple attempts. Please refresh the page and try again.');
       return;
     }
     
-    console.log(`Retry attempt ${attempts + 1}/${maxAttempts}`);
-    setIsRecovering(true);
-    
-    setTimeout(() => {
-      try {
-        if (recognitionRef.current && !isListening) {
-          recognitionRef.current.start();
-          setIsListening(true);
-          setIsRecovering(false);
-          console.log('Retry successful');
-        } else {
-          console.log('Recognition not available, retrying...');
-          retryWithDelay(attempts + 1, maxAttempts);
-        }
-      } catch (error) {
-        console.log('Retry failed:', error);
-        retryWithDelay(attempts + 1, maxAttempts);
-      }
-    }, 1000 * (attempts + 1)); // Exponential backoff
+    console.log(`Trying approach ${currentIndex + 1}...`);
+    initializeSpeechRecognition();
   };
+
+  // macOS-specific workaround that mimics ChatGPT's approach
+  const tryMacOSWorkaround = () => {
+    console.log('Trying macOS-specific workaround...');
+    
+    // Create a new recognition instance with minimal settings
+    try {
+      const recognition = new (window as any).webkitSpeechRecognition();
+      
+      // Use the most basic settings possible
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.lang = "en-US";
+      
+      // Remove all event listeners and add minimal ones
+      recognition.onstart = () => {
+        console.log('macOS workaround: Speech recognition started');
+        setIsListening(true);
+      };
+      
+      recognition.onend = () => {
+        console.log('macOS workaround: Speech recognition ended');
+        setIsListening(false);
+      };
+      
+      recognition.onerror = (e: any) => {
+        console.error('macOS workaround: Speech recognition error:', e);
+        setIsListening(false);
+        
+        // On macOS, just show a helpful message instead of retrying
+        if (e.error === 'network') {
+          alert('Speech recognition network error on macOS. This is a known issue. Please try:\n\n1. Using Chrome instead of Safari\n2. Refreshing the page\n3. Typing your message instead');
+        }
+      };
+      
+      recognition.onresult = (event: any) => {
+        console.log('macOS workaround: Speech recognition result:', event);
+        let text = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          text += event.results[i][0].transcript;
+        }
+        setInputValue(prev => prev + text);
+      };
+      
+      recognitionRef.current = recognition;
+      (window as any).startRecognition = () => recognition.start();
+      (window as any).stopRecognition = () => recognition.stop();
+      
+      console.log('macOS workaround successful');
+      setIsSpeechSupported(true);
+      
+    } catch (error) {
+      console.error('macOS workaround failed:', error);
+      setIsSpeechSupported(false);
+      alert('Speech recognition not available on this macOS system. Please type your messages instead.');
+    }
+  };
+
+
 
   // Initialize speech recognition on mount
   useEffect(() => {
@@ -341,7 +910,7 @@ Would you like me to analyze your current replenishment strategy or help optimiz
     }
   }, []);
 
-  // Check microphone permissions
+  // Check microphone permissions with macOS-specific handling
   const checkMicrophonePermission = async (): Promise<boolean> => {
     try {
       console.log('Checking microphone permissions...');
@@ -379,7 +948,7 @@ Would you like me to analyze your current replenishment strategy or help optimiz
         let message = 'Microphone access is required. ';
         
         if (isMac) {
-          message += 'On macOS, please:\n1. Check System Preferences > Security & Privacy > Microphone\n2. Make sure your browser is allowed\n3. Refresh the page and try again';
+          message += 'On macOS, please:\n1. Check System Preferences > Security & Privacy > Microphone\n2. Make sure your browser is allowed\n3. Refresh the page and try again\n\nNote: If speech recognition still fails, try using Chrome instead of Safari';
         } else {
           message += 'Please allow microphone access in your browser settings.';
         }
@@ -398,24 +967,7 @@ Would you like me to analyze your current replenishment strategy or help optimiz
     }
   };
 
-  // Test microphone function
-  const testMicrophone = async () => {
-    console.log('Testing microphone...');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('Microphone test successful:', stream);
-      
-      // Show success message
-      alert('Microphone test successful! Your microphone is working correctly.');
-      
-      stream.getTracks().forEach(track => track.stop());
-      return true;
-    } catch (error: any) {
-      console.error('Microphone test failed:', error);
-      alert(`Microphone test failed: ${error.message}`);
-      return false;
-    }
-  };
+
 
   // Handle voice input
   const handleVoiceInput = async () => {
@@ -427,7 +979,6 @@ Would you like me to analyze your current replenishment strategy or help optimiz
     
     if (!recognitionRef.current) {
       console.log('No speech recognition instance, reinitializing...');
-      // Try to reinitialize if not available
       initializeSpeechRecognition();
       if (!recognitionRef.current) {
         alert('Speech recognition is not supported in this browser. Please use Chrome or Safari.');
@@ -440,10 +991,8 @@ Would you like me to analyze your current replenishment strategy or help optimiz
       console.log('Stopping speech recognition...');
       try {
         recognitionRef.current.stop();
-        setIsListening(false);
       } catch (error) {
         console.log('Speech recognition already stopped');
-        setIsListening(false);
       }
     } else {
       // Check microphone permission first
@@ -451,26 +1000,22 @@ Would you like me to analyze your current replenishment strategy or help optimiz
       const hasPermission = await checkMicrophonePermission();
       if (!hasPermission) {
         console.log('Microphone permission denied or cancelled');
-        return; // User cancelled or permission denied
+        return;
       }
       
       // Start listening - clear input and start fresh
       console.log('Starting speech recognition...');
       setInputValue('');
+      
       try {
         recognitionRef.current.start();
-        setIsListening(true);
         console.log('Speech recognition started successfully');
       } catch (error) {
         console.error('Failed to start speech recognition:', error);
-        
-        // Try to restart if there's an error
-        const retry = confirm('Failed to start voice recognition. Click OK to restart the speech service and try again.');
-        if (retry) {
-          restartSpeechRecognition();
-        }
-        
-        setIsListening(false);
+        // Simple restart on error
+        setTimeout(() => {
+          initializeSpeechRecognition();
+        }, 1000);
       }
     }
   };
@@ -545,138 +1090,249 @@ Could you rephrase your question or ask about one of these areas? I'm here to he
   };
 
   return (
-    <div className="h-[calc(100vh-300px)] flex flex-col">
-      {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <div key={message.id} className={`flex items-start space-x-3 ${
-            message.type === 'user' ? 'justify-end' : ''
-          }`}>
-            {message.type === 'ai' && (
-              <div className="w-8 h-8 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center flex-shrink-0">
-                <i className="ri-robot-line text-white text-sm"></i>
-              </div>
-            )}
-            
-            <div className={`rounded-2xl px-4 py-3 max-w-[80%] ${
-              message.type === 'user' 
-                ? 'bg-gradient-to-r from-primary to-primary/80 text-white rounded-tr-md' 
-                : 'bg-gray-100 text-gray-800 rounded-tl-md'
-            }`}>
-              <p className="whitespace-pre-line">{message.content}</p>
-              <div className={`text-xs mt-2 ${
-                message.type === 'user' ? 'text-white/70' : 'text-gray-500'
-              }`}>
-                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            </div>
-            
-            {message.type === 'user' && (
-              <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
-                <i className="ri-user-line text-gray-600 text-sm"></i>
-              </div>
-            )}
+    <div className="h-[calc(100vh-240px)] flex flex-col" >
+      {/* Welcome State - Show when no messages */}
+      {messages.length === 0 && (
+        <div className="flex-1 flex flex-col items-center justify-center px-4">
+          {/* Welcome Title */}
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Replenishment AI Agent</h1>
+            <p className="text-gray-600 text-lg">AI-powered demand forecasting and inventory optimization</p>
           </div>
-        ))}
-        
-        {/* Typing indicator */}
-        {isTyping && (
-          <div className="flex items-start space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center flex-shrink-0">
-              <i className="ri-robot-line text-white text-sm"></i>
-            </div>
-            <div className="bg-gray-100 rounded-2xl rounded-tl-md px-4 py-3">
-              <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Chat Input */}
-      <div className="mt-auto border-t border-gray-200 bg-white/80 backdrop-blur-sm p-4">
-        <div className="flex items-center space-x-3">
-          <div className="flex-1 relative">
-                            <input
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  onKeyDown={handleKeyDown}
-                  placeholder={isSpeechSupported ? "Ask your AI agent anything... (Ctrl+Shift+M for voice)" : "Ask your AI agent anything..."}
-                  className={`w-full px-4 py-3 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-white/90 ${
-                    isSpeechSupported ? 'pr-24' : 'pr-12'
+          
+          {/* Main Input Box */}
+          <div className="w-full max-w-2xl mb-8">
+            <div className="relative">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything about replenishment..."
+                className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all bg-white/90 shadow-lg"
+              />
+              
+              {/* Voice Button */}
+              {isSpeechSupported && (
+                <button
+                  onClick={handleVoiceInput}
+                  className={`absolute right-4 top-1 w-10 h-10 rounded-full flex items-center justify-center ${
+                    isListening 
+                      ? 'bg-red-500 text-white a shadow-lg' 
+                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                   }`}
-                />
-            
-            {/* Voice Input Button - Only show if speech recognition is supported */}
-            {isSpeechSupported && (
+                  title={isListening ? 'Click to stop listening' : 'Click to start voice input'}
+                >
+                  <i className={`ri-${isListening ? 'stop-line' : 'mic-line'} text-lg`}></i>
+                </button>
+              )}
+              
+              {/* Send Button */}
               <button
-                onClick={handleVoiceInput}
-                className={`absolute right-16 top-1/2 transform -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                  isListening 
-                    ? 'bg-red-500 text-white animate-pulse shadow-lg' 
-                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                }`}
-                title={isListening ? 'Click to stop listening' : 'Click to start voice input'}
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim()}
+                className="absolute right-16 top-1 w-10 h-10 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <i className={`ri-${isListening ? 'stop-line' : 'mic-line'} text-sm`}></i>
+                <i className="ri-send-plane-fill text-lg"></i>
               </button>
-            )}
-            
-            {/* Send Button */}
-            <button
-              onClick={handleSendMessage}
-              disabled={!inputValue.trim()}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center text-white hover:shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <i className="ri-send-plane-fill text-sm"></i>
-            </button>
+            </div>
+          </div>
+          
+          {/* Suggestion Buttons */}
+          <div className="w-full max-w-2xl">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <button
+                onClick={() => {
+                  setInputValue("Help me optimize my inventory levels");
+                  handleSendMessage();
+                }}
+                className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
+              >
+                <i className="ri-bar-chart-line text-primary text-lg"></i>
+                <span className="text-gray-700 font-medium">Optimize Inventory</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setInputValue("Generate demand forecast for next quarter");
+                  handleSendMessage();
+                }}
+                className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
+              >
+                <i className="ri-trending-up-line text-primary text-lg"></i>
+                <span className="text-gray-700 font-medium">Demand Forecast</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setInputValue("Analyze my replenishment performance");
+                  handleSendMessage();
+                }}
+                className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
+              >
+                <i className="ri-analytics-line text-primary text-lg"></i>
+                <span className="text-gray-700 font-medium">Performance Analysis</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setInputValue("What can you help me with?");
+                  handleSendMessage();
+                }}
+                className="flex items-center space-x-3 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
+              >
+                <i className="ri-lightbulb-line text-primary text-lg"></i>
+                <span className="text-gray-700 font-medium">Get Advice</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setInputValue("Create a replenishment plan");
+                  handleSendMessage();
+                }}
+                className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
+              >
+                <i className="ri-file-list-line text-primary text-lg"></i>
+                <span className="text-gray-700 font-medium">Create Plan</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setInputValue("Surprise me with insights");
+                  handleSendMessage();
+                }}
+                className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
+              >
+                <i className="ri-gift-line text-primary text-lg"></i>
+                <span className="text-gray-700 font-medium">Surprise Me</span>
+              </button>
+            </div>
           </div>
         </div>
-                    <div className="mt-3 text-xs text-gray-500 text-center">
-              {isListening ? (
-                <div className="flex items-center justify-center space-x-2 text-red-500">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  <span>Listening... Speak now</span>
+      )}
+      
+      {/* Chat Messages - Show when conversation starts */}
+      {messages.length > 0 && (
+        <div className="flex-1 overflow-y-auto p-4 pb-0 space-y-4" >
+          {messages.map((message) => (
+            <div key={message.id} className={`flex items-start space-x-3  ${
+              message.type === 'user' ? 'justify-end' : ''
+            }` } >
+              {message.type === 'ai' && (
+                <div className="w-8 h-8 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center flex-shrink-0">
+                  <i className="ri-robot-line text-white text-sm"></i>
                 </div>
-              ) : isRecovering ? (
-                <div className="flex items-center justify-center space-x-2 text-blue-500">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                  <span>Recovering from network error... Please wait</span>
+              )}
+              
+              <div className={`rounded-2xl px-4 py-3 max-w-[80%] ${
+                message.type === 'user' 
+                  ? 'bg-gradient-to-r from-primary to-primary/80 text-white rounded-tr-md' 
+                  : 'bg-gray-100 text-gray-800 rounded-tl-md'
+              }`}>
+                <p className="whitespace-pre-line">{message.content}</p>
+                <div className={`text-xs mt-2 ${
+                  message.type === 'user' ? 'text-white/70' : 'text-gray-500'
+                }`}>
+                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
-              ) : (
-                <div className="flex flex-col items-center space-y-2">
-                  <span>AI Agent is powered by advanced machine learning models for accurate replenishment insights</span>
-                  {isSpeechSupported && (
-                    <div className="flex items-center justify-center space-x-4">
-                      <button
-                        onClick={testMicrophone}
-                        className="text-blue-600 hover:text-blue-800 underline text-xs"
-                        title="Test microphone access"
-                      >
-                        Test Microphone
-                      </button>
-                      <button
-                        onClick={restartSpeechRecognition}
-                        className="text-primary hover:text-primary/80 underline text-xs"
-                        title="Restart speech recognition service"
-                      >
-                        Having voice issues? Click here to restart
-                      </button>
-                    </div>
-                  )}
+              </div>
+              
+              {message.type === 'user' && (
+                <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                  <i className="ri-user-line text-gray-600 text-sm"></i>
                 </div>
               )}
             </div>
+          ))}
+          
+          {/* Typing indicator */}
+          {isTyping && (
+            <div className="flex items-start space-x-3">
+              <div className="w-8 h-8 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center flex-shrink-0">
+                <i className="ri-robot-line text-white text-sm"></i>
+              </div>
+              <div className="bg-gray-100 rounded-2xl rounded-tl-md px-4 py-3">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} />
+        </div>
+      )}
+
+            {/* Chat Input - Only show when conversation has started */}
+      {messages.length > 0 && (
+        <div className="border-t border-gray-200 bg-white/80 backdrop-blur-sm p-4 pt-3">
+          <div className="flex items-center space-x-3">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
+                placeholder={isSpeechSupported ? "Ask your AI agent anything... (Ctrl+Shift+M for voice)" : "Ask your AI agent anything..."}
+                className={`w-full px-4 py-3 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-white/90 ${
+                  isSpeechSupported ? 'pr-24' : 'pr-12'
+                }`}
+              />
+              
+              {/* Voice Input Button - Only show if speech recognition is supported */}
+              {isSpeechSupported && (
+                <button
+                  onClick={handleVoiceInput}
+                  className={`absolute right-16 top-2 w-8 h-8 rounded-full flex items-center justify-center ${
+                    isListening 
+                      ? 'bg-red-500 text-white animate-pulse shadow-lg' 
+                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                  }`}
+                  title={isListening ? 'Click to start voice input' : 'Click to start voice input'}
+                >
+                  <i className={`ri-${isListening ? 'stop-line' : 'mic-line'} text-sm`}></i>
+                </button>
+              )}
+              
+              {/* Fallback button when speech recognition fails */}
+              {!isSpeechSupported && (
+                <button
+                  onClick={() => {
+                    alert('Speech recognition is not available. Please type your message instead.');
+                  }}
+                  className="absolute right-16 top-2 w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-gray-600"
+                  title="Speech recognition not available"
+                >
+                  <i className="ri-mic-off-line text-sm"></i>
+                </button>
+              )}
+              
+              {/* Send Button */}
+              <button
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim()}
+                className="absolute right-2 top-2 w-8 h-8 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="ri-send-plane-fill text-sm"></i>
+              </button>
+            </div>
+          </div>
+          {isListening && (
+            <div className="mt-2 text-xs text-center">
+              <div className="flex items-center justify-center space-x-2 text-red-500">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                <span>Listening... Speak now</span>
+              </div>
+            </div>
+                     )}
+         </div>
+       )}
       </div>
-    </div>
-  );
-};
+    );
+  };
 
 export default AgentChat;

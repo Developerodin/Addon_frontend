@@ -24,6 +24,19 @@ export default function ReplenishmentPage() {
     return null;
   };
 
+  // Handle tab change and theme restoration
+  const handleTabChange = (newTab: string) => {
+    // If switching away from Agent tab, restore original theme
+    if (activeTab === 'agent' && newTab !== 'agent') {
+      const originalTheme = (window as any).__originalTheme || 'light';
+      document.documentElement.setAttribute('data-bs-theme', originalTheme);
+      document.body.classList.remove('dark-mode-active');
+      console.log('Restored theme to:', originalTheme);
+    }
+    
+    setActiveTab(newTab);
+  };
+
   return (
     <ReplenishmentErrorBoundary>
       <Seo title="Replenishment Dashboard" />
@@ -117,10 +130,10 @@ export default function ReplenishmentPage() {
 
           {/* Tabs */}
           <div className="mb-6 !bg-transparent border-0 shadow-none mt-6">
-            <div className="flex bg-gray-100/50 rounded-xl p-1">
+            <div className="flex bg-gray-100/50 rounded-xl p-2 gap-2">
               <button
-                onClick={() => setActiveTab('replenishment')}
-                className={`px-6 py-3 text-sm font-medium rounded-lg transition-all duration-300 flex items-center ${
+                onClick={() => handleTabChange('replenishment')}
+                className={`px-8 py-3 text-sm font-medium rounded-lg transition-all duration-300 flex items-center ${
                   activeTab === 'replenishment'
                     ? 'bg-gradient-to-r from-primary to-primary/80 text-white shadow-lg shadow-primary/25'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-white/60'
@@ -130,8 +143,8 @@ export default function ReplenishmentPage() {
                 Replenishment
               </button>
               <button
-                onClick={() => setActiveTab('agent')}
-                className={`px-6 py-3 text-sm font-medium rounded-lg transition-all duration-300 flex items-center ${
+                onClick={() => handleTabChange('agent')}
+                className={`px-8 py-3 text-sm font-medium rounded-lg transition-all duration-300 flex items-center ${
                   activeTab === 'agent'
                     ? 'bg-gradient-to-r from-primary to-primary/80 text-white shadow-lg shadow-primary/25'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-white/60'
