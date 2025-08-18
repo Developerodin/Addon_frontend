@@ -1090,7 +1090,7 @@ Could you rephrase your question or ask about one of these areas? I'm here to he
   };
 
   return (
-    <div className="h-[calc(100vh-240px)] flex flex-col" >
+    <div className="h-[calc(100vh-170px)] flex flex-col" >
       {/* Welcome State - Show when no messages */}
       {messages.length === 0 && (
         <div className="flex-1 flex flex-col items-center justify-center px-4">

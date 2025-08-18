@@ -44,7 +44,7 @@ export default function ReplenishmentPage() {
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
           {/* Page Header */}
-          <div className="!bg-transparent border-0 shadow-none mt-3">
+          {/* <div className="!bg-transparent border-0 shadow-none mt-3">
             <div className="flex justify-between items-center">
               <div className="flex items-center space-x-3">
                 <div>
@@ -126,7 +126,7 @@ export default function ReplenishmentPage() {
                 )}
               </div>
             </div>
-          </div>
+          </div> */}
 
           {/* Tabs */}
           <div className="mb-6 !bg-transparent border-0 shadow-none mt-6">
