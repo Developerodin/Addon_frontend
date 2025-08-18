@@ -123,7 +123,7 @@ export const MenuItems: any = [
   },
   {
     icon: ReplenishmentIcon,
-    title: "Replenishment",
+    title: "Replenishment Agent",
     type: "link",
     active: false,
     selected: false,

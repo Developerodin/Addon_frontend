@@ -1,88 +1,27 @@
 "use client";
 
-import React, { useEffect } from 'react';
+import React, { useState } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import { useReplenishment } from '@/shared/hooks/useReplenishment';
-import {
-  ReplenishmentTable,
-  ReplenishmentCharts,
-  ReplenishmentActions,
-  ReplenishmentErrorBoundary
-} from '@/shared/components/replenishment';
+import { ReplenishmentErrorBoundary } from '@/shared/components/replenishment';
+import { AgentChat, ReplenishmentDashboard } from './components';
 import HelpIcon from '@/shared/components/HelpIcon';
 
 export default function ReplenishmentPage() {
-  const {
-    forecasts,
-    replenishments,
-    accuracy,
-    trends,
-    summary,
-    healthStatus,
-    modelInfo,
-    loading,
-    error,
-    pagination,
-    filters,
-    generateForecast,
-    calculateReplenishment,
-    updateForecast,
-    deleteForecast,
-    updateFilters,
-    clearError,
-    calculateDeviation,
-    getAccuracyColor,
-    getDeviationColor,
-    formatMonth
-  } = useReplenishment();
+  const [activeTab, setActiveTab] = useState('replenishment');
+  const { healthStatus } = useReplenishment();
 
-  // Handle page changes
-  const handlePageChange = (page: number) => {
-    updateFilters({ page });
-  };
-
-  // Handle forecast updates
-  const handleUpdateForecast = async (forecastId: string, actualQty: number) => {
-    try {
-      await updateForecast(forecastId, actualQty);
-    } catch (error) {
-      console.error('Failed to update forecast:', error);
+  // Tab content component
+  const TabContent = () => {
+    if (activeTab === 'replenishment') {
+      return <ReplenishmentDashboard />;
     }
-  };
 
-  // Handle forecast generation
-  const handleGenerateForecast = async (data: {
-    store_id: string;
-    product_id: string;
-    forecast_month: string;
-    historical_months?: number;
-  }) => {
-    try {
-      const result = await generateForecast(data);
-      console.log('Forecast generated:', result);
-    } catch (error) {
-      console.error('Failed to generate forecast:', error);
+    if (activeTab === 'agent') {
+      return <AgentChat />;
     }
-  };
 
-  // Handle replenishment calculation
-  const handleCalculateReplenishment = async (data: {
-    store_id: string;
-    product_id: string;
-    forecast_month: string;
-    current_stock: number;
-    safety_stock: number;
-  }) => {
-    try {
-      await calculateReplenishment(data);
-    } catch (error) {
-      console.error('Failed to calculate replenishment:', error);
-    }
-  };
-
-  // Handle filter changes
-  const handleFiltersChange = (newFilters: any) => {
-    updateFilters(newFilters);
+    return null;
   };
 
   return (
@@ -92,8 +31,8 @@ export default function ReplenishmentPage() {
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
           {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
+          <div className="!bg-transparent border-0 shadow-none mt-3">
+            <div className="flex justify-between items-center">
               <div className="flex items-center space-x-3">
                 <div>
                   <h1 className="box-title text-2xl font-semibold">Replenishment Dashboard</h1>
@@ -176,61 +115,36 @@ export default function ReplenishmentPage() {
             </div>
           </div>
 
-          {/* Error Alert */}
-          {error && (
-            <div className="box border-danger/20 bg-danger/5 mb-6">
-              <div className="box-body">
-                <div className="flex items-center">
-                  <i className="ri-error-warning-line text-danger text-xl me-3"></i>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-danger">Error</h4>
-                    <p className="text-danger/80">{error}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="ti-btn ti-btn-sm ti-btn-outline-danger"
-                    onClick={clearError}
-                  >
-                    <i className="ri-close-line"></i>
-                  </button>
-                </div>
-              </div>
+          {/* Tabs */}
+          <div className="mb-6 !bg-transparent border-0 shadow-none mt-6">
+            <div className="flex bg-gray-100/50 rounded-xl p-1">
+              <button
+                onClick={() => setActiveTab('replenishment')}
+                className={`px-6 py-3 text-sm font-medium rounded-lg transition-all duration-300 flex items-center ${
+                  activeTab === 'replenishment'
+                    ? 'bg-gradient-to-r from-primary to-primary/80 text-white shadow-lg shadow-primary/25'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-white/60'
+                }`}
+              >
+                <i className="ri-refresh-line me-2"></i>
+                Replenishment
+              </button>
+              <button
+                onClick={() => setActiveTab('agent')}
+                className={`px-6 py-3 text-sm font-medium rounded-lg transition-all duration-300 flex items-center ${
+                  activeTab === 'agent'
+                    ? 'bg-gradient-to-r from-primary to-primary/80 text-white shadow-lg shadow-primary/25'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-white/60'
+                }`}
+              >
+                <i className="ri-robot-line me-2"></i>
+                Agent
+              </button>
             </div>
-          )}
+          </div>
 
-
-
-          {/* Action Buttons */}
-          <ReplenishmentActions
-            onGenerateForecast={handleGenerateForecast}
-            filters={filters}
-            onFiltersChange={handleFiltersChange}
-            loading={loading}
-          />
-
-          {/* Charts */}
-          <ReplenishmentCharts
-            trends={trends}
-            accuracy={accuracy}
-            modelInfo={modelInfo}
-            loading={loading}
-            forecasts={forecasts}
-          />
-
-          {/* Data Table */}
-          <ReplenishmentTable
-            forecasts={forecasts}
-            replenishments={replenishments}
-            loading={loading}
-            pagination={pagination}
-            onPageChange={handlePageChange}
-            onUpdateForecast={handleUpdateForecast}
-            onDeleteForecast={deleteForecast}
-            formatMonth={formatMonth}
-            calculateDeviation={calculateDeviation}
-            getAccuracyColor={getAccuracyColor}
-            getDeviationColor={getDeviationColor}
-          />
+          {/* Tab Content */}
+          <TabContent />
         </div>
       </div>
     </ReplenishmentErrorBoundary>
