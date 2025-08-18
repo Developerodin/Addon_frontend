@@ -1,21 +1,86 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
+import { API_BASE_URL } from '../../../shared/data/utilities/api';
 
 interface Message {
   id: string;
   type: 'user' | 'ai';
   content: string;
   timestamp: Date;
+  data?: any; // For API response data
+  html?: string; // For HTML responses
 }
+
+// API service functions
+const chatbotAPI = {
+  async sendMessage(message: string) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chatbot/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Chatbot API error:', error);
+      throw error;
+    }
+  },
+
+  async getQuestions() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chatbot/questions`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Get questions error:', error);
+      return { data: [] };
+    }
+  },
+
+  async getSuggestions(category?: string) {
+    try {
+      const url = category 
+        ? `${API_BASE_URL}/chatbot/suggestions?category=${category}`
+        : `${API_BASE_URL}/chatbot/suggestions`;
+      console.log('Fetching suggestions from:', url);
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      console.log('Raw suggestions response:', data);
+      return data;
+    } catch (error) {
+      console.error('Get suggestions error:', error);
+      return { data: [] };
+    }
+  }
+};
 
 const AgentChat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([
+    "Help me optimize my inventory levels",
+    "Generate demand forecast for next quarter",
+    "Analyze my replenishment performance",
+    "What can you help me with?",
+    "Create a replenishment plan",
+    "Surprise me with insights"
+  ]);
   
   const [inputValue, setInputValue] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
@@ -547,6 +612,129 @@ const AgentChat: React.FC = () => {
         border-radius: 8px !important;
         padding: 12px 16px !important;
       }
+      
+      /* API Response Dark Mode Overrides */
+      .dark-mode-active .prose,
+      .dark-mode-active .prose *,
+      .dark-mode-active [class*="prose"] * {
+        color: #e2e8f0 !important;
+      }
+      
+      .dark-mode-active .prose h1,
+      .dark-mode-active .prose h2,
+      .dark-mode-active .prose h3,
+      .dark-mode-active .prose h4,
+      .dark-mode-active .prose h5,
+      .dark-mode-active .prose h6 {
+        color: #f1f5f9 !important;
+      }
+      
+      .dark-mode-active .prose p,
+      .dark-mode-active .prose span,
+      .dark-mode-active .prose div {
+        color: #e2e8f0 !important;
+      }
+      
+      .dark-mode-active .prose strong,
+      .dark-mode-active .prose b {
+        color: #f1f5f9 !important;
+      }
+      
+      .dark-mode-active .prose a {
+        color: #3b82f6 !important;
+      }
+      
+      .dark-mode-active .prose a:hover {
+        color: #60a5fa !important;
+      }
+      
+      /* Force dark mode on any white/light backgrounds in API responses */
+      .dark-mode-active .bg-white,
+      .dark-mode-active .bg-gray-50,
+      .dark-mode-active .bg-gray-100,
+      .dark-mode-active .bg-gray-200,
+      .dark-mode-active [class*="bg-white"],
+      .dark-mode-active [class*="bg-gray-50"],
+      .dark-mode-active [class*="bg-gray-100"],
+      .dark-mode-active [class*="bg-gray-200"] {
+        background: rgba(30, 41, 59, 0.9) !important;
+        color: #e2e8f0 !important;
+        border-color: rgba(148, 163, 184, 0.3) !important;
+      }
+      
+      /* Override any remaining light text colors */
+      .dark-mode-active .text-gray-900,
+      .dark-mode-active .text-gray-800,
+      .dark-mode-active .text-gray-700,
+      .dark-mode-active .text-gray-600,
+      .dark-mode-active .text-gray-500,
+      .dark-mode-active .text-black,
+      .dark-mode-active .text-dark {
+        color: #e2e8f0 !important;
+      }
+      
+      /* Force dark mode on buttons and interactive elements */
+      .dark-mode-active button,
+      .dark-mode-active .btn,
+      .dark-mode-active [class*="btn"] {
+        background: rgba(51, 65, 85, 0.9) !important;
+        border-color: rgba(148, 163, 184, 0.4) !important;
+        color: #e2e8f0 !important;
+      }
+      
+      .dark-mode-active button:hover,
+      .dark-mode-active .btn:hover,
+      .dark-mode-active [class*="btn"]:hover {
+        background: rgba(71, 85, 105, 1) !important;
+        border-color: rgba(148, 163, 184, 0.6) !important;
+      }
+      
+      /* Additional comprehensive overrides for API responses */
+      .dark-mode-active .bg-light,
+      .dark-mode-active .bg-lighter,
+      .dark-mode-active [class*="bg-light"],
+      .dark-mode-active [class*="bg-lighter"] {
+        background: rgba(30, 41, 59, 0.9) !important;
+        color: #e2e8f0 !important;
+      }
+      
+      /* Override any remaining color classes */
+      .dark-mode-active .text-muted,
+      .dark-mode-active .text-secondary,
+      .dark-mode-active [class*="text-muted"],
+      .dark-mode-active [class*="text-secondary"] {
+        color: #94a3b8 !important;
+      }
+      
+      /* Force dark mode on any remaining light elements */
+      .dark-mode-active *[style*="background: white"],
+      .dark-mode-active *[style*="background: #fff"],
+      .dark-mode-active *[style*="background: #ffffff"],
+      .dark-mode-active *[style*="background-color: white"],
+      .dark-mode-active *[style*="background-color: #fff"],
+      .dark-mode-active *[style*="background-color: #ffffff"] {
+        background: rgba(30, 41, 59, 0.9) !important;
+        color: #e2e8f0 !important;
+      }
+      
+      /* Override any remaining light text */
+      .dark-mode-active *[style*="color: black"],
+      .dark-mode-active *[style*="color: #000"],
+      .dark-mode-active *[style*="color: #000000"],
+      .dark-mode-active *[style*="color: #333"],
+      .dark-mode-active *[style*="color: #666"] {
+        color: #e2e8f0 !important;
+      }
+      
+      /* Ensure all elements in dark mode have proper contrast */
+      .dark-mode-active .prose *,
+      .dark-mode-active [class*="prose"] * {
+        color: #e2e8f0 !important;
+      }
+      
+      .dark-mode-active .prose *:not(button):not(.btn):not([class*="btn"]) {
+        background: transparent !important;
+      }
     `;
     document.head.appendChild(style);
     
@@ -899,7 +1087,7 @@ Would you like me to analyze your current replenishment strategy or help optimiz
 
 
 
-  // Initialize speech recognition on mount
+  // Initialize speech recognition and load suggestions on mount
   useEffect(() => {
     if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
       setIsSpeechSupported(true);
@@ -908,7 +1096,367 @@ Would you like me to analyze your current replenishment strategy or help optimiz
       console.warn('Speech recognition not supported in this browser');
       setIsSpeechSupported(false);
     }
+    
+    // Load suggestions from API
+    const loadSuggestions = async () => {
+      try {
+        setIsLoadingSuggestions(true);
+        setApiError(null);
+        
+        const response = await chatbotAPI.getSuggestions();
+        console.log('Suggestions API response:', response);
+        
+        // Handle different possible response structures
+        let suggestionData: any[] = [];
+        
+        if (response.data && Array.isArray(response.data)) {
+          suggestionData = response.data;
+        } else if (response.suggestions && Array.isArray(response.suggestions)) {
+          suggestionData = response.suggestions;
+        } else if (response.questions && Array.isArray(response.questions)) {
+          suggestionData = response.questions;
+        } else if (Array.isArray(response)) {
+          suggestionData = response;
+        }
+        
+        // Ensure all suggestions are strings and filter out invalid ones
+        const validSuggestions = suggestionData
+          .filter(item => item && typeof item === 'string')
+          .slice(0, 6);
+        
+        if (validSuggestions.length > 0) {
+          setSuggestions(validSuggestions);
+        } else {
+          // Use default suggestions if API returns empty or invalid data
+          setSuggestions([
+            "Help me optimize my inventory levels",
+            "Generate demand forecast for next quarter",
+            "Analyze my replenishment performance",
+            "What can you help me with?",
+            "Create a replenishment plan",
+            "Surprise me with insights"
+          ]);
+        }
+      } catch (error) {
+        console.error('Failed to load suggestions:', error);
+        setApiError('Failed to load suggestions from API');
+        // Use default suggestions if API fails
+        setSuggestions([
+          "Help me optimize my inventory levels",
+          "Generate demand forecast for next quarter",
+          "Analyze my replenishment performance",
+          "What can you help me with?",
+          "Create a replenishment plan",
+          "Surprise me with insights"
+        ]);
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    };
+    
+    loadSuggestions();
   }, []);
+
+  // Helper function to apply dark mode styles to API response content
+  const applyDarkModeToAPIResponse = (container: HTMLElement) => {
+    if (!container) return;
+    
+    // Apply dark mode classes to the container
+    container.classList.add('dark-mode-active');
+    
+    // Find and style all elements that might have light backgrounds
+    const lightElements = container.querySelectorAll('.bg-white, .bg-gray-50, .bg-gray-100, .bg-gray-200, [class*="bg-white"], [class*="bg-gray-50"], [class*="bg-gray-100"], [class*="bg-gray-200"]');
+    
+    lightElements.forEach((el: Element) => {
+      if (el instanceof HTMLElement) {
+        el.style.backgroundColor = 'rgba(30, 41, 59, 0.9)';
+        el.style.color = '#e2e8f0';
+        el.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+      }
+    });
+    
+    // Find and style all text elements
+    const textElements = container.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6, strong, b');
+    textElements.forEach((el: Element) => {
+      if (el instanceof HTMLElement) {
+        if (el.tagName.match(/^H[1-6]$/)) {
+          el.style.color = '#f1f5f9';
+        } else {
+          el.style.color = '#e2e8f0';
+        }
+      }
+    });
+    
+    // Style buttons
+    const buttons = container.querySelectorAll('button, .btn, [class*="btn"]');
+    buttons.forEach((el: Element) => {
+      if (el instanceof HTMLElement) {
+        el.style.backgroundColor = 'rgba(51, 65, 85, 0.9)';
+        el.style.borderColor = 'rgba(148, 163, 184, 0.4)';
+        el.style.color = '#e2e8f0';
+      }
+    });
+    
+    // Set up a MutationObserver to watch for dynamically added content
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach((node) => {
+            if (node instanceof HTMLElement) {
+              // Apply dark mode to newly added elements
+              applyDarkModeToAPIResponse(node);
+            }
+          });
+        }
+      });
+    });
+    
+    // Start observing
+    observer.observe(container, {
+      childList: true,
+      subtree: true
+    });
+    
+    // Return the observer so it can be disconnected if needed
+    return observer;
+  };
+
+  // Helper function to render tables properly from API data
+  const renderTableFromData = (data: any): string => {
+    if (!data || !data.results || !Array.isArray(data.results)) {
+      return '<p style="color: #e2e8f0; text-align: center; padding: 20px;">No data available</p>';
+    }
+
+    const results = data.results;
+    if (results.length === 0) {
+      return '<p style="color: #e2e8f0; text-align: center; padding: 20px;">No records found</p>';
+    }
+
+    // Get all unique keys from the first few objects
+    const allKeys = new Set<string>();
+    results.slice(0, 5).forEach((item: any) => {
+      if (item && typeof item === 'object') {
+        Object.keys(item).forEach(key => allKeys.add(key));
+      }
+    });
+
+    // Filter out MongoDB internal fields and common unwanted fields
+    const filteredKeys = Array.from(allKeys).filter(key => 
+      !key.startsWith('$') && 
+      !key.startsWith('_') && 
+      key !== 'isNew' && 
+      key !== 'errors' && 
+      key !== '$locals' && 
+      key !== '$op' && 
+      key !== '$init' &&
+      key !== 'id' // Remove the MongoDB _id field
+    );
+
+    // Create table HTML with better styling
+    let tableHTML = `
+      <div style="margin: 0; padding: 0; background: transparent; border: none; box-shadow: none;">
+        <h4 style="color: #f1f5f9; margin: 0 0 20px 0; font-size: 18px; font-weight: 600; text-align: center;">Data Results (${results.length} records)</h4>
+        <div style="overflow-x: auto; border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(30, 41, 59, 0.8);">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin: 0;">
+            <thead>
+              <tr style="background: rgba(51, 65, 85, 0.9);">
+                ${filteredKeys.map(key => 
+                  `<th style="padding: 16px 12px; text-align: left; border-bottom: 2px solid rgba(148, 163, 184, 0.3); color: #f1f5f9; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</th>`
+                ).join('')}
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    // Add table rows with better styling
+    results.forEach((item: any, index: number) => {
+      const rowBg = index % 2 === 0 ? 'rgba(30, 41, 59, 0.6)' : 'rgba(51, 65, 85, 0.4)';
+      tableHTML += `<tr style="background: ${rowBg}; border-bottom: 1px solid rgba(148, 163, 184, 0.1);">`;
+      
+      filteredKeys.forEach(key => {
+        const value = item[key];
+        let displayValue = '-';
+        
+        if (value !== null && value !== undefined) {
+          if (typeof value === 'object') {
+            // Handle nested objects (like product/store IDs)
+            if (value._id) {
+              // Try to extract meaningful info from the ID
+              const idStr = value._id.toString();
+              if (idStr.length > 8) {
+                displayValue = idStr.substring(0, 8) + '...';
+              } else {
+                displayValue = idStr;
+              }
+            } else if (value.name) {
+              displayValue = value.name;
+            } else if (value.title) {
+              displayValue = value.title;
+            } else {
+              // Try to find any string property
+              const stringProps = Object.values(value).filter((v: any) => typeof v === 'string' && v.length < 50) as string[];
+              if (stringProps.length > 0) {
+                displayValue = stringProps[0];
+              } else {
+                displayValue = 'Object';
+              }
+            }
+          } else if (typeof value === 'boolean') {
+            displayValue = value ? '✓ Yes' : '✗ No';
+          } else if (typeof value === 'number') {
+            // Format numbers based on the field type
+            if (key.toLowerCase().includes('qty') || key.toLowerCase().includes('stock') || key.toLowerCase().includes('buffer')) {
+              displayValue = Math.round(value).toString();
+            } else if (key.toLowerCase().includes('forecast')) {
+              displayValue = value.toFixed(1);
+            } else {
+              displayValue = value.toString();
+            }
+          } else if (typeof value === 'string') {
+            // Handle date strings
+            if (key.toLowerCase().includes('month') || key.toLowerCase().includes('date')) {
+              try {
+                const date = new Date(value);
+                if (!isNaN(date.getTime())) {
+                  displayValue = date.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short' 
+                  });
+                } else {
+                  displayValue = value;
+                }
+              } catch {
+                displayValue = value;
+              }
+            } else {
+              displayValue = value;
+            }
+          } else {
+            displayValue = String(value);
+          }
+        }
+        
+        tableHTML += `<td style="padding: 16px 12px; color: #e2e8f0; font-size: 14px; border-bottom: 1px solid rgba(148, 163, 184, 0.1);">${displayValue}</td>`;
+      });
+      tableHTML += '</tr>';
+    });
+
+    tableHTML += `
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    return tableHTML;
+  };
+
+  // Helper function to check and load Chart.js if needed
+  const ensureChartJSLoaded = async (): Promise<boolean> => {
+    if (typeof (window as any).Chart !== 'undefined') {
+      return true; // Chart.js is already loaded
+    }
+    
+    try {
+      console.log('Chart.js not found, attempting to load...');
+      
+      // Try to load Chart.js from CDN
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js';
+      script.async = true;
+      
+      return new Promise((resolve) => {
+        script.onload = () => {
+          console.log('Chart.js loaded successfully');
+          resolve(true);
+        };
+        script.onerror = () => {
+          console.warn('Failed to load Chart.js from CDN');
+          resolve(false);
+        };
+        document.head.appendChild(script);
+      });
+    } catch (error) {
+      console.error('Error loading Chart.js:', error);
+      return false;
+    }
+  };
+
+  // Helper function to execute scripts in HTML responses (for charts, etc.)
+  const executeScriptsInHTML = async (htmlContent: string) => {
+    try {
+      // Create a temporary div to parse HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = htmlContent;
+      
+      // Find and execute all script tags
+      const scripts = tempDiv.querySelectorAll('script');
+      
+      for (const script of Array.from(scripts)) {
+        if (script.textContent) {
+          try {
+            // Check if Chart.js is needed
+            if (script.textContent.includes('Chart') || script.textContent.includes('chart')) {
+              const chartLoaded = await ensureChartJSLoaded();
+              if (!chartLoaded) {
+                console.warn('Chart.js could not be loaded, skipping chart script');
+                continue;
+              }
+            }
+            
+            // Execute the script in a safer way
+            try {
+              // Try to execute directly first
+              const scriptFunction = new Function(script.textContent);
+              scriptFunction();
+            } catch (directError) {
+              console.warn('Direct script execution failed, trying DOM injection:', directError);
+              
+              // Fallback to DOM injection with error handling
+              const newScript = document.createElement('script');
+              newScript.textContent = script.textContent;
+              
+              // Set up error handling for the script
+              newScript.onerror = (error) => {
+                console.error('Script execution error:', error);
+              };
+              
+              document.head.appendChild(newScript);
+              setTimeout(() => {
+                try {
+                  document.head.removeChild(newScript);
+                } catch (removeError) {
+                  console.warn('Could not remove script element:', removeError);
+                }
+              }, 100);
+            }
+          } catch (error) {
+            console.error('Error executing script:', error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in executeScriptsInHTML:', error);
+    }
+  };
+
+  // Helper function to get icon for suggestions
+  const getSuggestionIcon = (suggestion: any): string => {
+    // Ensure suggestion is a string
+    if (typeof suggestion !== 'string') {
+      console.warn('Non-string suggestion received:', suggestion);
+      return 'chat-1-line';
+    }
+    
+    const lowerSuggestion = suggestion.toLowerCase();
+    if (lowerSuggestion.includes('inventory') || lowerSuggestion.includes('optimize')) return 'bar-chart-line';
+    if (lowerSuggestion.includes('forecast') || lowerSuggestion.includes('trend')) return 'trending-up-line';
+    if (lowerSuggestion.includes('performance') || lowerSuggestion.includes('analyze')) return 'analytics-line';
+    if (lowerSuggestion.includes('help') || lowerSuggestion.includes('advice')) return 'lightbulb-line';
+    if (lowerSuggestion.includes('plan') || lowerSuggestion.includes('create')) return 'file-list-line';
+    if (lowerSuggestion.includes('surprise') || lowerSuggestion.includes('insights')) return 'gift-line';
+    return 'chat-1-line';
+  };
 
   // Check microphone permissions with macOS-specific handling
   const checkMicrophonePermission = async (): Promise<boolean> => {
@@ -1020,26 +1568,61 @@ Would you like me to analyze your current replenishment strategy or help optimiz
     }
   };
 
-  // Generate AI response
-  const generateResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase();
-    
-    // Check for predefined responses
-    for (const [key, response] of Object.entries(predefinedResponses)) {
-      if (lowerMessage.includes(key)) {
-        return response;
-      }
-    }
-
-    // Default response for unknown queries
-    return `I understand you're asking about "${userMessage}". While I'm still learning about this specific topic, I can help you with:
+  // Generate AI response using API
+  const generateResponse = async (userMessage: string): Promise<{ content: string; data?: any; html?: string }> => {
+    try {
+      console.log('Sending message to chatbot API:', userMessage);
+      const response = await chatbotAPI.sendMessage(userMessage);
+      console.log('Chatbot API response:', response);
+      
+      if (response.success) {
+        return {
+          content: response.message || 'I processed your request successfully.',
+          data: response.data,
+          html: response.html
+        };
+      } else {
+        // Fallback to predefined responses if API fails
+        const lowerMessage = userMessage.toLowerCase();
+        for (const [key, response] of Object.entries(predefinedResponses)) {
+          if (lowerMessage.includes(key)) {
+            return { content: response };
+          }
+        }
+        
+        return {
+          content: response.message || `I understand you're asking about "${userMessage}". While I'm still learning about this specific topic, I can help you with:
 
 • Demand forecasting and analysis
 • Inventory optimization strategies
 • Replenishment planning
 • Supply chain performance metrics
 
-Could you rephrase your question or ask about one of these areas? I'm here to help optimize your replenishment operations!`;
+Could you rephrase your question or ask about one of these areas? I'm here to help optimize your replenishment operations!`
+        };
+      }
+    } catch (error) {
+      console.error('Error calling chatbot API:', error);
+      
+      // Fallback to predefined responses on API error
+      const lowerMessage = userMessage.toLowerCase();
+      for (const [key, response] of Object.entries(predefinedResponses)) {
+        if (lowerMessage.includes(key)) {
+          return { content: response };
+        }
+      }
+      
+      return {
+        content: `I'm having trouble connecting to my backend services right now. Let me help you with what I know:
+
+• Demand forecasting and analysis
+• Inventory optimization strategies
+• Replenishment planning
+• Supply chain performance metrics
+
+Please try again in a moment, or ask about one of these areas. I'm here to help optimize your replenishment operations!`
+      };
+    }
   };
 
   // Handle message send
@@ -1057,19 +1640,34 @@ Could you rephrase your question or ask about one of these areas? I'm here to he
     setInputValue('');
     setIsTyping(true);
 
-    // Simulate AI response delay
-    setTimeout(() => {
-      const aiResponse = generateResponse(userMessage.content);
+    try {
+      // Get AI response from API
+      const aiResponse = await generateResponse(userMessage.content);
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: aiResponse,
+        content: aiResponse.content,
+        data: aiResponse.data,
+        html: aiResponse.html,
         timestamp: new Date()
       };
       
       setMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('Error generating response:', error);
+      
+      // Fallback response on error
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: 'I encountered an error processing your request. Please try again or ask something else.',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, aiMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1000);
+    }
   };
 
   // Handle keyboard shortcuts
@@ -1141,73 +1739,102 @@ Could you rephrase your question or ask about one of these areas? I'm here to he
           
           {/* Suggestion Buttons */}
           <div className="w-full max-w-2xl">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <button
-                onClick={() => {
-                  setInputValue("Help me optimize my inventory levels");
-                  handleSendMessage();
-                }}
-                className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
-              >
-                <i className="ri-bar-chart-line text-primary text-lg"></i>
-                <span className="text-gray-700 font-medium">Optimize Inventory</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  setInputValue("Generate demand forecast for next quarter");
-                  handleSendMessage();
-                }}
-                className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
-              >
-                <i className="ri-trending-up-line text-primary text-lg"></i>
-                <span className="text-gray-700 font-medium">Demand Forecast</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  setInputValue("Analyze my replenishment performance");
-                  handleSendMessage();
-                }}
-                className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
-              >
-                <i className="ri-analytics-line text-primary text-lg"></i>
-                <span className="text-gray-700 font-medium">Performance Analysis</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  setInputValue("What can you help me with?");
-                  handleSendMessage();
-                }}
-                className="flex items-center space-x-3 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
-              >
-                <i className="ri-lightbulb-line text-primary text-lg"></i>
-                <span className="text-gray-700 font-medium">Get Advice</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  setInputValue("Create a replenishment plan");
-                  handleSendMessage();
-                }}
-                className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
-              >
-                <i className="ri-file-list-line text-primary text-lg"></i>
-                <span className="text-gray-700 font-medium">Create Plan</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  setInputValue("Surprise me with insights");
-                  handleSendMessage();
-                }}
-                className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
-              >
-                <i className="ri-gift-line text-primary text-lg"></i>
-                <span className="text-gray-700 font-medium">Surprise Me</span>
-              </button>
-            </div>
+            {isLoadingSuggestions ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="flex space-x-2">
+                  <div className="w-3 h-3 bg-primary rounded-full animate-bounce"></div>
+                  <div className="w-3 h-3 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-3 h-3 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                </div>
+                <span className="ml-3 text-gray-600">Loading suggestions...</span>
+              </div>
+            ) : apiError ? (
+              <div className="text-center py-4">
+                <div className="text-red-500 text-sm mb-2">{apiError}</div>
+                <button
+                  onClick={() => {
+                    const loadSuggestions = async () => {
+                      try {
+                        setIsLoadingSuggestions(true);
+                        setApiError(null);
+                        
+                        const response = await chatbotAPI.getSuggestions();
+                        console.log('Suggestions API response:', response);
+                        
+                        // Handle different possible response structures
+                        let suggestionData: any[] = [];
+                        
+                        if (response.data && Array.isArray(response.data)) {
+                          suggestionData = response.data;
+                        } else if (response.suggestions && Array.isArray(response.suggestions)) {
+                          suggestionData = response.suggestions;
+                        } else if (response.questions && Array.isArray(response.questions)) {
+                          suggestionData = response.questions;
+                        } else if (Array.isArray(response)) {
+                          suggestionData = response;
+                        }
+                        
+                        // Ensure all suggestions are strings and filter out invalid ones
+                        const validSuggestions = suggestionData
+                          .filter(item => item && typeof item === 'string')
+                          .slice(0, 6);
+                        
+                        if (validSuggestions.length > 0) {
+                          setSuggestions(validSuggestions);
+                        } else {
+                          setSuggestions([
+                            "Help me optimize my inventory levels",
+                            "Generate demand forecast for next quarter",
+                            "Analyze my replenishment performance",
+                            "What can you help me with?",
+                            "Create a replenishment plan",
+                            "Surprise me with insights"
+                          ]);
+                        }
+                      } catch (error) {
+                        console.error('Failed to load suggestions:', error);
+                        setApiError('Failed to load suggestions from API');
+                        setSuggestions([
+                          "Help me optimize my inventory levels",
+                          "Generate demand forecast for next quarter",
+                          "Analyze my replenishment performance",
+                          "What can you help me with?",
+                          "Create a replenishment plan",
+                          "Surprise me with insights"
+                        ]);
+                      } finally {
+                        setIsLoadingSuggestions(false);
+                      }
+                    };
+                    loadSuggestions();
+                  }}
+                  className="text-primary hover:text-primary/80 text-sm underline"
+                >
+                  Retry loading suggestions
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {suggestions
+                  .filter(suggestion => suggestion && typeof suggestion === 'string')
+                  .slice(0, 6)
+                  .map((suggestion, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setInputValue(suggestion);
+                      handleSendMessage();
+                    }}
+                    className="flex items-center space-x-2 px-4 py-3 bg-white/80 hover:bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
+                  >
+                    <i className={`ri-${getSuggestionIcon(suggestion)} text-primary text-lg`}></i>
+                    <span className="text-gray-700 font-medium text-sm">
+                      {suggestion.length > 30 ? suggestion.substring(0, 30) + '...' : suggestion}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1231,6 +1858,70 @@ Could you rephrase your question or ask about one of these areas? I'm here to he
                   : 'bg-gray-100 text-gray-800 rounded-tl-md'
               }`}>
                 <p className="whitespace-pre-line">{message.content}</p>
+                
+                {/* Render HTML response if available */}
+                {message.html && (
+                  <div style={{ margin: '16px 0 0 0', padding: 0 }}>
+                    {/* Check if HTML contains malformed table data and render properly */}
+                    {message.html.includes('[object Object]') && message.data ? (
+                      <div 
+                        dangerouslySetInnerHTML={{ __html: renderTableFromData(message.data) }}
+                        ref={(el) => {
+                          if (el) {
+                            // Apply dark mode to the rendered table
+                            setTimeout(() => {
+                              applyDarkModeToAPIResponse(el);
+                            }, 100);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div 
+                        className="prose prose-sm max-w-none dark-mode-active"
+                        dangerouslySetInnerHTML={{ __html: message.html }}
+                        ref={(el) => {
+                          if (el && message.html) {
+                            // Execute scripts after HTML is rendered
+                            setTimeout(async () => {
+                              await executeScriptsInHTML(message.html!);
+                              applyDarkModeToAPIResponse(el);
+                            }, 100);
+                          }
+                        }}
+                        style={{
+                          // Force dark mode styles on API responses
+                          color: '#e2e8f0',
+                          backgroundColor: 'transparent'
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+                
+                {/* Render data if available */}
+                {message.data && !message.html && (
+                  <div style={{ margin: '16px 0 0 0', padding: 0 }}>
+                    <div style={{ 
+                      background: 'rgba(30, 41, 59, 0.8)', 
+                      border: '1px solid rgba(148, 163, 184, 0.2)', 
+                      borderRadius: '12px', 
+                      padding: '16px',
+                      overflow: 'auto'
+                    }}>
+                      <pre style={{ 
+                        margin: 0, 
+                        fontSize: '12px', 
+                        color: '#e2e8f0',
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word'
+                      }}>
+                        {JSON.stringify(message.data, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+                
                 <div className={`text-xs mt-2 ${
                   message.type === 'user' ? 'text-white/70' : 'text-gray-500'
                 }`}>
