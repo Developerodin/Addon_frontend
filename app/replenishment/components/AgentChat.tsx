@@ -1412,7 +1412,7 @@ Would you like me to analyze your current replenishment strategy or help optimiz
   };
 
   // Helper function to execute scripts in HTML responses (for charts, etc.)
-  const executeScriptsInHTML = async (htmlContent: string) => {
+  const executeScriptsInHTML = async (htmlContent: string, context?: string, messageData?: any) => {
     try {
       // Create a temporary div to parse HTML
       const tempDiv = document.createElement('div');
@@ -1464,6 +1464,35 @@ Would you like me to analyze your current replenishment strategy or help optimiz
           }
         }
       }
+      
+      // Handle follow-up buttons by replacing onclick handlers
+      const yesButtons = tempDiv.querySelectorAll('.btn-yes');
+      const noButtons = tempDiv.querySelectorAll('.btn-no');
+      
+      yesButtons.forEach(button => {
+        if (button instanceof HTMLButtonElement) {
+          // Remove the old onclick attribute and add new event listener
+          button.removeAttribute('onclick');
+          button.addEventListener('click', () => {
+            if ((window as any).handleFollowUp) {
+              (window as any).handleFollowUp('yes', context || '', messageData);
+            }
+          });
+        }
+      });
+      
+      noButtons.forEach(button => {
+        if (button instanceof HTMLButtonElement) {
+          // Remove the old onclick attribute and add new event listener
+          button.removeAttribute('onclick');
+          button.addEventListener('click', () => {
+            if ((window as any).handleFollowUp) {
+              (window as any).handleFollowUp('no', context || '', messageData);
+            }
+          });
+        }
+      });
+      
     } catch (error) {
       console.error('Error in executeScriptsInHTML:', error);
     }
@@ -1487,9 +1516,163 @@ Would you like me to analyze your current replenishment strategy or help optimiz
     return 'chat-1-line';
   };
 
+  // Handle follow-up interactions from API responses
+  const handleFollowUp = async (response: string, mainQuestion?: string, messageData?: any) => {
+    if (response === 'yes' && mainQuestion) {
+      // Send the main question again to get detailed report
+      console.log('User wants detailed report for:', mainQuestion);
+      
+      // Create detailed follow-up request structure
+      const followUpRequest = {
+        originalQuestion: {
+          action: messageData?.question?.action || 'getTopPerformingItem',
+          parameters: messageData?.question?.parameters || {},
+          description: messageData?.question?.description || 'Get detailed information',
+          type: messageData?.question?.type || 'storeSales'
+        },
+        followUpResponse: 'yes',
+        requestType: 'detailed_report',
+        context: {
+          location: messageData?.data?.location || '',
+          topItem: messageData?.data?.topItem || {},
+          storeCount: messageData?.data?.storeCount || 0,
+          totalProducts: messageData?.data?.totalProducts || 0,
+          dataType: messageData?.data ? Object.keys(messageData.data)[0] : 'unknown'
+        },
+        preferences: {
+          chartType: 'bar',
+          exportFormat: 'pdf',
+          detailLevel: 'high',
+          includeCharts: true,
+          includeTables: true,
+          includeExport: true
+        }
+      };
+      
+      console.log('Sending detailed follow-up request:', followUpRequest);
+      
+      // Add user's follow-up response to chat
+      const followUpMessage: Message = {
+        id: Date.now().toString(),
+        type: 'user',
+        content: `Yes, please show me a detailed report for: ${mainQuestion}`,
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, followUpMessage]);
+      setIsTyping(true);
+      setThinkingPhase(0);
+
+      try {
+        // Start thinking phases
+        const thinkingInterval = cycleThinkingPhases();
+        
+        // Send follow-up request to backend with detailed structure
+        const aiResponse = await generateDetailedFollowUpResponse(followUpRequest);
+        
+        // Ensure minimum response time for realistic AI behavior
+        const startTime = Date.now();
+        const minResponseTime = 8400;
+        
+        const elapsed = Date.now() - startTime;
+        if (elapsed < minResponseTime) {
+          await new Promise(resolve => setTimeout(resolve, minResponseTime - elapsed));
+        }
+        
+        clearInterval(thinkingInterval);
+        
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          type: 'ai',
+          content: aiResponse.content,
+          data: aiResponse.data,
+          html: aiResponse.html,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+      } catch (error) {
+        console.error('Error generating follow-up response:', error);
+        
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          type: 'ai',
+          content: 'I encountered an error processing your follow-up request. Please try asking your question again.',
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+      } finally {
+        setIsTyping(false);
+        setThinkingPhase(0);
+      }
+    } else {
+      console.log('User declined detailed report');
+      // Add a simple acknowledgment message
+      const followUpMessage: Message = {
+        id: Date.now().toString(),
+        type: 'user',
+        content: 'No, thanks. That\'s all I need for now.',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, followUpMessage]);
+    }
+  };
+
+  // Generate detailed follow-up response with enhanced backend communication
+  const generateDetailedFollowUpResponse = async (followUpRequest: any): Promise<{ content: string; data?: any; html?: string }> => {
+    try {
+      console.log('Sending detailed follow-up request to chatbot API:', followUpRequest);
+      
+      // Send follow-up request to backend
+      const response = await fetch(`${API_BASE_URL}/chatbot/follow-up`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(followUpRequest)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('Follow-up API response:', result);
+      
+      if (result.success) {
+        return {
+          content: result.message || 'Here\'s your detailed report with enhanced insights and visualizations.',
+          data: result.data,
+          html: result.html
+        };
+      } else {
+        // Fallback to regular response if follow-up API fails
+        return await generateResponse(followUpRequest.originalQuestion.description);
+      }
+    } catch (error) {
+      console.error('Error calling follow-up API:', error);
+      
+      // Fallback to regular response on error
+      return await generateResponse(followUpRequest.originalQuestion.description);
+    }
+  };
+
+  // Make handleFollowUp available globally for HTML responses
+  useEffect(() => {
+    (window as any).handleFollowUp = (response: string, mainQuestion?: string, messageData?: any) => {
+      handleFollowUp(response, mainQuestion, messageData);
+    };
+    
+    return () => {
+      delete (window as any).handleFollowUp;
+    };
+  }, [handleFollowUp]);
+
   // Memoized ChatMessage component to prevent unnecessary re-renders
-  const ChatMessage = React.memo<{ message: Message; onApplyDarkMode: (el: HTMLElement) => void }>(
-    ({ message, onApplyDarkMode }) => {
+  const ChatMessage = React.memo<{ message: Message; onApplyDarkMode: (el: HTMLElement) => void; onFollowUp: (response: string, mainQuestion?: string, messageData?: any) => void }>(
+    ({ message, onApplyDarkMode, onFollowUp }) => {
       const messageRef = useRef<HTMLDivElement>(null);
 
       // Apply dark mode and execute scripts only once when message is first rendered
@@ -1497,11 +1680,38 @@ Would you like me to analyze your current replenishment strategy or help optimiz
         if (messageRef.current && message.html) {
           // Execute scripts after HTML is rendered
           setTimeout(async () => {
-            await executeScriptsInHTML(message.html!);
+            // Extract the main question from the message content for context
+            const mainQuestion = message.content || '';
+            await executeScriptsInHTML(message.html!, mainQuestion, message);
             onApplyDarkMode(messageRef.current!);
+            
+            // Handle follow-up buttons by replacing onclick handlers
+            if (messageRef.current) {
+              const yesButtons = messageRef.current.querySelectorAll('.btn-yes');
+              const noButtons = messageRef.current.querySelectorAll('.btn-no');
+              
+              // Extract the main question from the message content
+              const mainQuestion = message.content || '';
+              
+              yesButtons.forEach(button => {
+                if (button instanceof HTMLButtonElement) {
+                  // Remove the old onclick attribute and add new event listener
+                  button.removeAttribute('onclick');
+                  button.addEventListener('click', () => onFollowUp('yes', mainQuestion, message));
+                }
+              });
+              
+              noButtons.forEach(button => {
+                if (button instanceof HTMLButtonElement) {
+                  // Remove the old onclick attribute and add new event listener
+                  button.removeAttribute('onclick');
+                  button.addEventListener('click', () => onFollowUp('no', mainQuestion, message));
+                }
+              });
+            }
           }, 100);
         }
-      }, [message.id]); // Only run when message ID changes, not on every render
+      }, [message.id, message.html, message.content, onFollowUp]); // Include onFollowUp in dependencies
 
       return (
         <div className={`flex items-start space-x-3 ${
@@ -2002,6 +2212,7 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
               key={message.id}
               message={message}
               onApplyDarkMode={applyDarkModeToAPIResponse}
+              onFollowUp={handleFollowUp}
             />
           ))}
           
