@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { API_BASE_URL } from '../../../shared/data/utilities/api';
 
 interface Message {
@@ -63,6 +63,8 @@ const chatbotAPI = {
     }
   }
 };
+
+
 
 const AgentChat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1485,6 +1487,113 @@ Would you like me to analyze your current replenishment strategy or help optimiz
     return 'chat-1-line';
   };
 
+  // Memoized ChatMessage component to prevent unnecessary re-renders
+  const ChatMessage = React.memo<{ message: Message; onApplyDarkMode: (el: HTMLElement) => void }>(
+    ({ message, onApplyDarkMode }) => {
+      const messageRef = useRef<HTMLDivElement>(null);
+
+      // Apply dark mode and execute scripts only once when message is first rendered
+      useEffect(() => {
+        if (messageRef.current && message.html) {
+          // Execute scripts after HTML is rendered
+          setTimeout(async () => {
+            await executeScriptsInHTML(message.html!);
+            onApplyDarkMode(messageRef.current!);
+          }, 100);
+        }
+      }, [message.id]); // Only run when message ID changes, not on every render
+
+      return (
+        <div className={`flex items-start space-x-3 ${
+          message.type === 'user' ? 'justify-end' : ''
+        }`}>
+          {message.type === 'ai' && (
+            <div className="w-8 h-8 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center flex-shrink-0">
+              <i className="ri-robot-line text-white text-sm"></i>
+            </div>
+          )}
+          
+          <div className={`rounded-2xl px-4 py-3 max-w-[80%] ${
+            message.type === 'user' 
+              ? 'bg-gradient-to-r from-primary to-primary/80 text-white rounded-tr-md' 
+              : 'bg-gray-100 text-gray-800 rounded-tl-md'
+          }`}>
+            <p className="whitespace-pre-line">{message.content}</p>
+            
+            {/* Render HTML response if available */}
+            {message.html && (
+              <div style={{ margin: '16px 0 0 0', padding: 0 }}>
+                {/* Check if HTML contains malformed table data and render properly */}
+                {message.html.includes('[object Object]') && message.data ? (
+                  <div 
+                    dangerouslySetInnerHTML={{ __html: renderTableFromData(message.data) }}
+                    ref={(el) => {
+                      if (el) {
+                        // Apply dark mode to the rendered table
+                        setTimeout(() => {
+                          onApplyDarkMode(el);
+                        }, 100);
+                      }
+                    }}
+                  />
+                ) : (
+                  <div 
+                    className="prose prose-sm max-w-none dark-mode-active"
+                    dangerouslySetInnerHTML={{ __html: message.html }}
+                    ref={messageRef}
+                    style={{
+                      // Force dark mode styles on API responses
+                      color: '#e2e8f0',
+                      backgroundColor: 'transparent'
+                    }}
+                  />
+                )}
+              </div>
+            )}
+            
+            {/* Render data if available */}
+            {message.data && !message.html && (
+              <div style={{ margin: '16px 0 0 0', padding: 0 }}>
+                <div style={{ 
+                  background: 'rgba(30, 41, 59, 0.8)', 
+                  border: '1px solid rgba(148, 163, 184, 0.2)', 
+                  borderRadius: '12px', 
+                  padding: '16px',
+                  overflow: 'auto'
+                }}>
+                  <pre style={{ 
+                    margin: 0, 
+                    fontSize: '12px', 
+                    color: '#e2e8f0',
+                    fontFamily: 'monospace',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word'
+                  }}>
+                    {JSON.stringify(message.data, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+            
+            <div className={`text-xs mt-2 ${
+              message.type === 'user' ? 'text-white/70' : 'text-gray-500'
+            }`}>
+              {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+          
+          {message.type === 'user' && (
+            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+              <i className="ri-user-line text-gray-600 text-sm"></i>
+            </div>
+          )}
+        </div>
+      );
+    }
+  );
+
+  ChatMessage.displayName = 'ChatMessage';
+
   // Check microphone permissions with macOS-specific handling
   const checkMicrophonePermission = async (): Promise<boolean> => {
     try {
@@ -1889,98 +1998,11 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
       {messages.length > 0 && (
         <div className="flex-1 overflow-y-auto p-4 pb-0 space-y-4" >
           {messages.map((message) => (
-            <div key={message.id} className={`flex items-start space-x-3  ${
-              message.type === 'user' ? 'justify-end' : ''
-            }` } >
-              {message.type === 'ai' && (
-                <div className="w-8 h-8 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center flex-shrink-0">
-                  <i className="ri-robot-line text-white text-sm"></i>
-                </div>
-              )}
-              
-              <div className={`rounded-2xl px-4 py-3 max-w-[80%] ${
-                message.type === 'user' 
-                  ? 'bg-gradient-to-r from-primary to-primary/80 text-white rounded-tr-md' 
-                  : 'bg-gray-100 text-gray-800 rounded-tl-md'
-              }`}>
-                <p className="whitespace-pre-line">{message.content}</p>
-                
-                {/* Render HTML response if available */}
-                {message.html && (
-                  <div style={{ margin: '16px 0 0 0', padding: 0 }}>
-                    {/* Check if HTML contains malformed table data and render properly */}
-                    {message.html.includes('[object Object]') && message.data ? (
-                      <div 
-                        dangerouslySetInnerHTML={{ __html: renderTableFromData(message.data) }}
-                        ref={(el) => {
-                          if (el) {
-                            // Apply dark mode to the rendered table
-                            setTimeout(() => {
-                              applyDarkModeToAPIResponse(el);
-                            }, 100);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <div 
-                        className="prose prose-sm max-w-none dark-mode-active"
-                        dangerouslySetInnerHTML={{ __html: message.html }}
-                        ref={(el) => {
-                          if (el && message.html) {
-                            // Execute scripts after HTML is rendered
-                            setTimeout(async () => {
-                              await executeScriptsInHTML(message.html!);
-                              applyDarkModeToAPIResponse(el);
-                            }, 100);
-                          }
-                        }}
-                        style={{
-                          // Force dark mode styles on API responses
-                          color: '#e2e8f0',
-                          backgroundColor: 'transparent'
-                        }}
-                      />
-                    )}
-                  </div>
-                )}
-                
-                {/* Render data if available */}
-                {message.data && !message.html && (
-                  <div style={{ margin: '16px 0 0 0', padding: 0 }}>
-                    <div style={{ 
-                      background: 'rgba(30, 41, 59, 0.8)', 
-                      border: '1px solid rgba(148, 163, 184, 0.2)', 
-                      borderRadius: '12px', 
-                      padding: '16px',
-                      overflow: 'auto'
-                    }}>
-                      <pre style={{ 
-                        margin: 0, 
-                        fontSize: '12px', 
-                        color: '#e2e8f0',
-                        fontFamily: 'monospace',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word'
-                      }}>
-                        {JSON.stringify(message.data, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-                
-                <div className={`text-xs mt-2 ${
-                  message.type === 'user' ? 'text-white/70' : 'text-gray-500'
-                }`}>
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              </div>
-              
-              {message.type === 'user' && (
-                <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
-                  <i className="ri-user-line text-gray-600 text-sm"></i>
-                </div>
-              )}
-            </div>
+            <ChatMessage
+              key={message.id}
+              message={message}
+              onApplyDarkMode={applyDarkModeToAPIResponse}
+            />
           ))}
           
           {/* Typing indicator */}
