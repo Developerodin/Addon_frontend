@@ -67,12 +67,14 @@ const chatbotAPI = {
 const AgentChat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([
-    "Help me optimize my inventory levels",
-    "Generate demand forecast for next quarter",
-    "Analyze my replenishment performance",
-    "What can you help me with?",
-    "Create a replenishment plan",
-    "Surprise me with insights"
+    
+    "Show me replenishment recommendations",
+    "Show me store performance",
+    "Show me all replenishments",
+    "How many products do we have?",
+    "Show me active products",
+    "Show me the analytics dashboard"
+    
   ]);
   
   const [inputValue, setInputValue] = useState('');
@@ -81,8 +83,19 @@ const AgentChat: React.FC = () => {
   const [isSpeechSupported, setIsSpeechSupported] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [thinkingPhase, setThinkingPhase] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  // Thinking phases for realistic AI behavior
+  const thinkingPhases = [
+    "🚀 Initializing neural networks...",
+    "🔮 Scanning data repositories...",
+    "⚡ Processing algorithms...",
+    "🌐 Connecting to knowledge base...",
+    "🎯 Synthesizing insights...",
+    "✨ Crafting response..."
+  ];
 
   // Dark mode effect when Agent tab is active
   useEffect(() => {
@@ -1129,12 +1142,12 @@ Would you like me to analyze your current replenishment strategy or help optimiz
         } else {
           // Use default suggestions if API returns empty or invalid data
           setSuggestions([
-            "Help me optimize my inventory levels",
-            "Generate demand forecast for next quarter",
-            "Analyze my replenishment performance",
-            "What can you help me with?",
-            "Create a replenishment plan",
-            "Surprise me with insights"
+            "Show me replenishment recommendations",
+            "Show me store performance",
+            "Show me all replenishments",
+            "How many products do we have?",
+            "Show me active products",
+            "Show me the analytics dashboard"
           ]);
         }
       } catch (error) {
@@ -1142,12 +1155,12 @@ Would you like me to analyze your current replenishment strategy or help optimiz
         setApiError('Failed to load suggestions from API');
         // Use default suggestions if API fails
         setSuggestions([
-          "Help me optimize my inventory levels",
-          "Generate demand forecast for next quarter",
-          "Analyze my replenishment performance",
-          "What can you help me with?",
-          "Create a replenishment plan",
-          "Surprise me with insights"
+          "Show me replenishment recommendations",
+          "Show me store performance",
+          "Show me all replenishments",
+          "How many products do we have?",
+          "Show me active products",
+          "Show me the analytics dashboard"
         ]);
       } finally {
         setIsLoadingSuggestions(false);
@@ -1156,6 +1169,20 @@ Would you like me to analyze your current replenishment strategy or help optimiz
     
     loadSuggestions();
   }, []);
+
+  // Helper function to cycle through thinking phases
+  const cycleThinkingPhases = () => {
+    let phase = 0;
+    const interval = setInterval(() => {
+      setThinkingPhase(phase);
+      phase++;
+      if (phase >= thinkingPhases.length) {
+        clearInterval(interval);
+      }
+    }, 1400); // Change phase every 1.4 seconds for smoother transitions
+    
+    return interval;
+  };
 
   // Helper function to apply dark mode styles to API response content
   const applyDarkModeToAPIResponse = (container: HTMLElement) => {
@@ -1639,10 +1666,28 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setIsTyping(true);
+    setThinkingPhase(0);
 
     try {
+      // Start thinking phases
+      const thinkingInterval = cycleThinkingPhases();
+      
       // Get AI response from API
       const aiResponse = await generateResponse(userMessage.content);
+      
+      // Ensure minimum response time of 8 seconds for realistic AI behavior
+      const startTime = Date.now();
+      const minResponseTime = 8400; // 8.4 seconds (6 phases × 1.4 seconds)
+      
+      // Wait if response came too quickly
+      const elapsed = Date.now() - startTime;
+      if (elapsed < minResponseTime) {
+        await new Promise(resolve => setTimeout(resolve, minResponseTime - elapsed));
+      }
+      
+      // Clear thinking interval
+      clearInterval(thinkingInterval);
+      
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
@@ -1667,6 +1712,7 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
       setMessages(prev => [...prev, aiMessage]);
     } finally {
       setIsTyping(false);
+      setThinkingPhase(0);
     }
   };
 
@@ -1783,24 +1829,24 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
                           setSuggestions(validSuggestions);
                         } else {
                           setSuggestions([
-                            "Help me optimize my inventory levels",
-                            "Generate demand forecast for next quarter",
-                            "Analyze my replenishment performance",
-                            "What can you help me with?",
-                            "Create a replenishment plan",
-                            "Surprise me with insights"
+                            "Show me replenishment recommendations",
+                            "Show me store performance",
+                            "Show me all replenishments",
+                            "How many products do we have?",
+                            "Show me active products",
+                            "Show me the analytics dashboard"
                           ]);
                         }
                       } catch (error) {
                         console.error('Failed to load suggestions:', error);
                         setApiError('Failed to load suggestions from API');
                         setSuggestions([
-                          "Help me optimize my inventory levels",
-                          "Generate demand forecast for next quarter",
-                          "Analyze my replenishment performance",
-                          "What can you help me with?",
-                          "Create a replenishment plan",
-                          "Surprise me with insights"
+                          "Show me replenishment recommendations",
+                          "Show me store performance",
+                          "Show me all replenishments",
+                          "How many products do we have?",
+                          "Show me active products",
+                          "Show me the analytics dashboard"
                         ]);
                       } finally {
                         setIsLoadingSuggestions(false);
@@ -1940,14 +1986,30 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
           {/* Typing indicator */}
           {isTyping && (
             <div className="flex items-start space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 bg-gradient-to-r from-primary to-primary/80 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
                 <i className="ri-robot-line text-white text-sm"></i>
               </div>
-              <div className="bg-gray-100 rounded-2xl rounded-tl-md px-4 py-3">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl rounded-tl-md px-6 py-4 border border-gray-200 shadow-sm">
+                <div className="flex items-center space-x-4">
+                  {/* Futuristic animated loader */}
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-gradient-to-r from-primary to-blue-500 rounded-full animate-pulse" style={{ animationDuration: '1s' }}></div>
+                    <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full animate-pulse" style={{ animationDuration: '1s', animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-gradient-to-r from-purple-500 to-primary rounded-full animate-pulse" style={{ animationDuration: '1s', animationDelay: '0.4s' }}></div>
+                  </div>
+                  
+                  {/* Thinking phase text with smooth transitions */}
+                  <div className="flex-1">
+                    <span className="text-sm text-gray-700 font-medium transition-all duration-500 ease-in-out">
+                      {thinkingPhases[thinkingPhase] || thinkingPhases[0]}
+                    </span>
+                  </div>
+                  
+                  {/* Futuristic status indicator */}
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
+                    <span className="text-xs text-green-600 font-medium">AI ACTIVE</span>
+                  </div>
                 </div>
               </div>
             </div>

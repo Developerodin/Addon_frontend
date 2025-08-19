@@ -12,7 +12,7 @@ const StoresPage = () => {
     const [selectAll, setSelectAll] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const [itemsPerPage, setItemsPerPage] = useState(10);
     const [showFilters, setShowFilters] = useState(false);
     const [filters, setFilters] = useState({
         city: '',
@@ -109,6 +109,13 @@ const StoresPage = () => {
 
     const handlePageChange = (page: number) => {
         setCurrentPage(page);
+        setSelectedStores([]);
+        setSelectAll(false);
+    };
+
+    const handleItemsPerPageChange = (newItemsPerPage: number) => {
+        setItemsPerPage(newItemsPerPage);
+        setCurrentPage(1); // Reset to first page when changing items per page
         setSelectedStores([]);
         setSelectAll(false);
     };
@@ -490,6 +497,25 @@ const StoresPage = () => {
                                             />
                                             <i className="ri-search-line text-lg absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
                                         </div>
+                                    </div>
+
+                                    {/* Rows per page selector */}
+                                    <div className="flex items-center gap-2 order-3">
+                                        <label className="text-sm text-gray-600 whitespace-nowrap">Show:</label>
+                                        <select
+                                            className="form-select form-select-sm w-20"
+                                            value={itemsPerPage}
+                                            onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                                        >
+                                            <option value={10}>10</option>
+                                            <option value={25}>25</option>
+                                            <option value={50}>50</option>
+                                            <option value={100}>100</option>
+                                            <option value={250}>250</option>
+                                            <option value={500}>500</option>
+                                            <option value={1000}>1000</option>
+                                        </select>
+                                        <span className="text-sm text-gray-600 whitespace-nowrap">per page</span>
                                     </div>
                                 </div>
 
