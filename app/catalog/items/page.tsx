@@ -19,7 +19,7 @@ interface Product {
   styleCode: string;
   eanCode: string;
   description: string;
-  category: string;
+  category: string | { id: string; name: string; parent?: string; sortOrder?: number; status?: string; description?: string };
   status: string;
   createdAt?: string;
   updatedAt?: string;
@@ -82,6 +82,14 @@ const ProductListPage = () => {
     try {
       const response = await axios.get(`${API_ENDPOINTS.products}?page=${currentPage}&limit=${itemsPerPage}&search=${encodeURIComponent(searchQuery)}`);
       const data = response.data as ProductsResponse;
+      
+      // Debug: Log the first product to see its structure
+      if (data.results && data.results.length > 0) {
+        console.log('First product structure:', data.results[0]);
+        console.log('Category type:', typeof data.results[0].category);
+        console.log('Category value:', data.results[0].category);
+      }
+      
       setProducts(data.results);
       setTotalPages(data.totalPages);
       setTotalResults(data.totalResults);
@@ -103,9 +111,19 @@ const ProductListPage = () => {
     }
   };
 
-  const getCategoryName = (categoryId: string) => {
-    const category = categories.find(cat => cat.id === categoryId);
-    return category ? category.name : categoryId;
+  const getCategoryName = (categoryId: string | any) => {
+    // Handle case where categoryId might be an object
+    if (typeof categoryId === 'object' && categoryId !== null) {
+      return categoryId.name || 'Unknown Category';
+    }
+    
+    // Handle string case
+    if (typeof categoryId === 'string') {
+      const category = categories.find(cat => cat.id === categoryId);
+      return category ? category.name : categoryId;
+    }
+    
+    return 'Unknown Category';
   };
 
   const handlePageChange = (page: number) => {
@@ -1665,8 +1683,8 @@ const ProductListPage = () => {
                               >
                                 {product.name}
                               </Link></td>
-                            <td>{product.styleCode}</td>
-                            <td>{product.internalCode}</td>
+                            <td>{product.styleCode || ''}</td>
+                            <td>{product.internalCode || ''}</td>
                             <td>{getCategoryName(product.category)}</td>
                             <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>
                             <td>
