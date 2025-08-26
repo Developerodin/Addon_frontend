@@ -92,6 +92,23 @@ export default function AnalyticsPage() {
   // Use global error handler for ApexCharts errors
   useGlobalErrorHandler();
 
+  // Set initial date range to last 8 months
+  React.useEffect(() => {
+    const today = new Date();
+    const eightMonthsAgo = new Date();
+    eightMonthsAgo.setMonth(today.getMonth() - 8);
+    
+    // Format dates as YYYY-MM-DD
+    const dateFrom = eightMonthsAgo.toISOString().split('T')[0];
+    const dateTo = today.toISOString().split('T')[0];
+    
+    // Only update if the current date range is different
+    if (dateRange.dateFrom !== dateFrom || dateRange.dateTo !== dateTo) {
+      updateDateRange('dateFrom', dateFrom);
+      updateDateRange('dateTo', dateTo);
+    }
+  }, []); // Run only once on component mount
+
   // Handle date range change
   const handleDateRangeChange = (field: 'dateFrom' | 'dateTo', value: string) => {
     updateDateRange(field, value);
@@ -205,7 +222,15 @@ export default function AnalyticsPage() {
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+                {loading && (
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent"></div>
+                    <span className="text-sm text-primary font-medium">Loading...</span>
+                  </div>
+                )}
+              </div>
               <p className="text-gray-600 mt-1">Comprehensive sales and performance insights</p>
             </div>
             <HelpIcon

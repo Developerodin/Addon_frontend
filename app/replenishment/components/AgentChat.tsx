@@ -75,7 +75,11 @@ const AgentChat: React.FC = () => {
     "Show me all replenishments",
     "How many products do we have?",
     "Show me active products",
-    "Show me the analytics dashboard"
+    "Show me the analytics dashboard",
+    "Which was the top performing item in Surat?",
+    "Which was the top performing item in Pune?",
+    "Which was the top performing item in Hyderabad?",
+    "Which was the top performing item in Delhi?"
     
   ]);
   
@@ -1137,7 +1141,7 @@ Would you like me to analyze your current replenishment strategy or help optimiz
         // Ensure all suggestions are strings and filter out invalid ones
         const validSuggestions = suggestionData
           .filter(item => item && typeof item === 'string')
-          .slice(0, 6);
+          .slice(0, 10);
         
         if (validSuggestions.length > 0) {
           setSuggestions(validSuggestions);
@@ -1149,7 +1153,11 @@ Would you like me to analyze your current replenishment strategy or help optimiz
             "Show me all replenishments",
             "How many products do we have?",
             "Show me active products",
-            "Show me the analytics dashboard"
+            "Show me the analytics dashboard",
+            "Which was the top performing item in Surat?",
+            "Which was the top performing item in Pune?",
+            "Which was the top performing item in Hyderabad?",
+            "Which was the top performing item in Delhi?"
           ]);
         }
       } catch (error) {
@@ -2165,7 +2173,11 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
                           "Show me all replenishments",
                           "How many products do we have?",
                           "Show me active products",
-                          "Show me the analytics dashboard"
+                          "Show me the analytics dashboard",
+                          "Which was the top performing item in Surat?",
+                          "Which was the top performing item in Pune?",
+                          "Which was the top performing item in Hyderabad?",
+                          "Which was the top performing item in Delhi?"
                         ]);
                       } finally {
                         setIsLoadingSuggestions(false);
@@ -2179,10 +2191,10 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {suggestions
                   .filter(suggestion => suggestion && typeof suggestion === 'string')
-                  .slice(0, 6)
+                  .slice(0, 10)
                   .map((suggestion, index) => (
                   <button
                     key={index}
@@ -2194,7 +2206,7 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
                   >
                     <i className={`ri-${getSuggestionIcon(suggestion)} text-primary text-lg`}></i>
                     <span className="text-gray-700 font-medium text-sm">
-                      {suggestion.length > 30 ? suggestion.substring(0, 30) + '...' : suggestion}
+                      {suggestion}
                     </span>
                   </button>
                 ))}
