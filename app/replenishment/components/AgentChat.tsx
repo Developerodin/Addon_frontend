@@ -77,14 +77,14 @@ const AgentChat: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Thinking phases for realistic AI behavior
+  // Thinking phases for realistic AI behavior - removed text, just show loader
   const thinkingPhases = [
-    "🚀 Initializing neural networks...",
-    "🔮 Scanning data repositories...",
-    "⚡ Processing algorithms...",
-    "🌐 Connecting to knowledge base...",
-    "🎯 Synthesizing insights...",
-    "✨ Crafting response..."
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
   ];
 
   // Dark mode effect when Agent tab is active
@@ -1199,7 +1199,7 @@ Would you like me to analyze your current replenishment strategy or help optimiz
       if (phase >= thinkingPhases.length) {
         clearInterval(interval);
       }
-    }, 1400); // Change phase every 1.4 seconds for smoother transitions
+    }, 800); // Change phase every 0.8 seconds for faster transitions
     
     return interval;
   };
@@ -1862,9 +1862,9 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
       // Get AI response from API
       const aiResponse = await generateResponse(userMessage.content);
       
-      // Ensure minimum response time of 8 seconds for realistic AI behavior
+      // Ensure minimum response time of 3-5 seconds for realistic AI behavior
       const startTime = Date.now();
-      const minResponseTime = 8400; // 8.4 seconds (6 phases × 1.4 seconds)
+      const minResponseTime = 4000; // 4 seconds (6 phases × 0.8 seconds)
       
       // Wait if response came too quickly
       const elapsed = Date.now() - startTime;
@@ -2084,10 +2084,10 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
                     <div className="w-2 h-2 bg-gradient-to-r from-purple-500 to-primary rounded-full animate-pulse" style={{ animationDuration: '1s', animationDelay: '0.4s' }}></div>
                   </div>
                   
-                  {/* Thinking phase text with smooth transitions */}
+                  {/* Thinking phase text removed - just show loader */}
                   <div className="flex-1">
                     <span className="text-sm text-gray-700 font-medium transition-all duration-500 ease-in-out">
-                      {thinkingPhases[thinkingPhase] || thinkingPhases[0]}
+                      {/* Text removed - just show animated loader */}
                     </span>
                   </div>
                   
