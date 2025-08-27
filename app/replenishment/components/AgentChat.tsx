@@ -59,7 +59,11 @@ const AgentChat: React.FC = () => {
     "How many products do we have?",
     "What are the top products in Mumbai?",
     "Show me top products in Delhi",
-    "Show me brand performance data"
+    "Show me brand performance data",
+    "Next months sales forecast for PE Mens Full Rib Navy FL in Mumbai?",
+    "Give me AS Mens Pique Black FL analysis",
+    "Show me top products",
+    "Give me analytics for Mumbai store?"
     
   ]);
   
@@ -1152,7 +1156,11 @@ Would you like me to analyze your current replenishment strategy or help optimiz
           "How many products do we have?",
           "What are the top products in Mumbai?",
           "Show me top products in Delhi",
-          "Show me brand performance data"
+          "Show me brand performance data",
+          "Next months sales forecast for PE Mens Full Rib Navy FL in Mumbai?",
+          "Give me AS Mens Pique Black FL analysis",
+          "Show me top products",
+          "Give me analytics for Mumbai store?"
         ];
         
         setSuggestions(defaultSuggestions);
@@ -1168,7 +1176,11 @@ Would you like me to analyze your current replenishment strategy or help optimiz
           "How many products do we have?",
           "What are the top products in Mumbai?",
           "Show me top products in Delhi",
-          "Show me brand performance data"
+          "Show me brand performance data",
+          "Next months sales forecast for PE Mens Full Rib Navy FL in Mumbai?",
+          "Give me AS Mens Pique Black FL analysis",
+          "Show me top products",
+          "Give me analytics for Mumbai store?"
         ]);
       } finally {
         setIsLoadingSuggestions(false);
