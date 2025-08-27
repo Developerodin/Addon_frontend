@@ -52,16 +52,14 @@ const AgentChat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([
     
-    "Show me replenishment recommendations",
-    "Show me store performance",
-    "Show me all replenishments",
-    "How many products do we have?",
-    "Show me active products",
+    "What are your capabilities?",
     "Show me the analytics dashboard",
-    "Which was the top performing item in Surat?",
-    "Which was the top performing item in Pune?",
-    "Which was the top performing item in Hyderabad?",
-    "Which was the top performing item in Delhi?"
+    "How can you help me avoid stockouts?",
+    "How accurate are your forecasts?",
+    "How many products do we have?",
+    "What are the top products in Mumbai?",
+    "Show me top products in Delhi",
+    "Show me brand performance data"
     
   ]);
   
@@ -1147,16 +1145,14 @@ Would you like me to analyze your current replenishment strategy or help optimiz
         
         // Use default suggestions since FAQ API doesn't provide suggestion endpoints
         const defaultSuggestions = [
-          "Show me replenishment recommendations",
-          "Show me store performance",
-          "Show me all replenishments",
-          "How many products do we have?",
-          "Show me active products",
+          "What are your capabilities?",
           "Show me the analytics dashboard",
-          "Which was the top performing item in Surat?",
-          "Which was the top performing item in Pune?",
-          "Which was the top performing item in Hyderabad?",
-          "Which was the top performing item in Delhi?"
+          "How can you help me avoid stockouts?",
+          "How accurate are your forecasts?",
+          "How many products do we have?",
+          "What are the top products in Mumbai?",
+          "Show me top products in Delhi",
+          "Show me brand performance data"
         ];
         
         setSuggestions(defaultSuggestions);
@@ -1165,12 +1161,14 @@ Would you like me to analyze your current replenishment strategy or help optimiz
         setApiError('Failed to load suggestions');
         // Use fallback suggestions if something goes wrong
         setSuggestions([
-          "Show me replenishment recommendations",
-          "Show me store performance",
-          "Show me all replenishments",
+          "What are your capabilities?",
+          "Show me the analytics dashboard",
+          "How can you help me avoid stockouts?",
+          "How accurate are your forecasts?",
           "How many products do we have?",
-          "Show me active products",
-          "Show me the analytics dashboard"
+          "What are the top products in Mumbai?",
+          "Show me top products in Delhi",
+          "Show me brand performance data"
         ]);
       } finally {
         setIsLoadingSuggestions(false);
