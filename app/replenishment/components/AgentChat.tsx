@@ -16,12 +16,12 @@ interface Message {
 const chatbotAPI = {
   async sendMessage(message: string) {
     try {
-      const response = await fetch(`${API_BASE_URL}/chatbot/chat`, {
+      const response = await fetch(`${API_BASE_URL}/faq/ask`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ question: message })
       });
       
       if (!response.ok) {
@@ -30,37 +30,19 @@ const chatbotAPI = {
       
       return await response.json();
     } catch (error) {
-      console.error('Chatbot API error:', error);
+      console.error('FAQ API error:', error);
       throw error;
     }
   },
 
   async getQuestions() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/chatbot/questions`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Get questions error:', error);
-      return { data: [] };
-    }
+    // No longer needed with FAQ API
+    return { data: [] };
   },
 
   async getSuggestions(category?: string) {
-    try {
-      const url = category 
-        ? `${API_BASE_URL}/chatbot/suggestions?category=${category}`
-        : `${API_BASE_URL}/chatbot/suggestions`;
-      console.log('Fetching suggestions from:', url);
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      console.log('Raw suggestions response:', data);
-      return data;
-    } catch (error) {
-      console.error('Get suggestions error:', error);
-      return { data: [] };
-    }
+    // No longer needed with FAQ API
+    return { data: [] };
   }
 };
 
@@ -681,6 +663,47 @@ const AgentChat: React.FC = () => {
         border-color: rgba(148, 163, 184, 0.3) !important;
       }
       
+      /* Ensure text is always visible in dark mode */
+      .dark-mode-active .text-gray-900,
+      .dark-mode-active .text-gray-800,
+      .dark-mode-active .text-gray-700,
+      .dark-mode-active .text-gray-600,
+      .dark-mode-active .text-gray-500,
+      .dark-mode-active .text-black,
+      .dark-mode-active .text-dark,
+      .dark-mode-active .text-muted,
+      .dark-mode-active .text-secondary {
+        color: #e2e8f0 !important;
+      }
+      
+      /* Override any remaining white backgrounds that might cause overlay issues */
+      .dark-mode-active *[style*="background: white"],
+      .dark-mode-active *[style*="background: #fff"],
+      .dark-mode-active *[style*="background: #ffffff"],
+      .dark-mode-active *[style*="background-color: white"],
+      .dark-mode-active *[style*="background-color: #fff"],
+      .dark-mode-active *[style*="background-color: #ffffff"] {
+        background: rgba(30, 41, 59, 0.9) !important;
+        color: #e2e8f0 !important;
+      }
+      
+      /* Force all text elements to be visible */
+      .dark-mode-active p,
+      .dark-mode-active span,
+      .dark-mode-active div,
+      .dark-mode-active h1,
+      .dark-mode-active h2,
+      .dark-mode-active h3,
+      .dark-mode-active h4,
+      .dark-mode-active h5,
+      .dark-mode-active h6,
+      .dark-mode-active strong,
+      .dark-mode-active b,
+      .dark-mode-active em,
+      .dark-mode-active i {
+        color: #e2e8f0 !important;
+      }
+      
       /* Override any remaining light text colors */
       .dark-mode-active .text-gray-900,
       .dark-mode-active .text-gray-800,
@@ -1116,54 +1139,31 @@ Would you like me to analyze your current replenishment strategy or help optimiz
       setIsSpeechSupported(false);
     }
     
-    // Load suggestions from API
+    // Load default suggestions since FAQ API doesn't provide them
     const loadSuggestions = async () => {
       try {
         setIsLoadingSuggestions(true);
         setApiError(null);
         
-        const response = await chatbotAPI.getSuggestions();
-        console.log('Suggestions API response:', response);
+        // Use default suggestions since FAQ API doesn't provide suggestion endpoints
+        const defaultSuggestions = [
+          "Show me replenishment recommendations",
+          "Show me store performance",
+          "Show me all replenishments",
+          "How many products do we have?",
+          "Show me active products",
+          "Show me the analytics dashboard",
+          "Which was the top performing item in Surat?",
+          "Which was the top performing item in Pune?",
+          "Which was the top performing item in Hyderabad?",
+          "Which was the top performing item in Delhi?"
+        ];
         
-        // Handle different possible response structures
-        let suggestionData: any[] = [];
-        
-        if (response.data && Array.isArray(response.data)) {
-          suggestionData = response.data;
-        } else if (response.suggestions && Array.isArray(response.suggestions)) {
-          suggestionData = response.suggestions;
-        } else if (response.questions && Array.isArray(response.questions)) {
-          suggestionData = response.questions;
-        } else if (Array.isArray(response)) {
-          suggestionData = response;
-        }
-        
-        // Ensure all suggestions are strings and filter out invalid ones
-        const validSuggestions = suggestionData
-          .filter(item => item && typeof item === 'string')
-          .slice(0, 10);
-        
-        if (validSuggestions.length > 0) {
-          setSuggestions(validSuggestions);
-        } else {
-          // Use default suggestions if API returns empty or invalid data
-          setSuggestions([
-            "Show me replenishment recommendations",
-            "Show me store performance",
-            "Show me all replenishments",
-            "How many products do we have?",
-            "Show me active products",
-            "Show me the analytics dashboard",
-            "Which was the top performing item in Surat?",
-            "Which was the top performing item in Pune?",
-            "Which was the top performing item in Hyderabad?",
-            "Which was the top performing item in Delhi?"
-          ]);
-        }
+        setSuggestions(defaultSuggestions);
       } catch (error) {
         console.error('Failed to load suggestions:', error);
-        setApiError('Failed to load suggestions from API');
-        // Use default suggestions if API fails
+        setApiError('Failed to load suggestions');
+        // Use fallback suggestions if something goes wrong
         setSuggestions([
           "Show me replenishment recommendations",
           "Show me store performance",
@@ -1212,14 +1212,24 @@ Would you like me to analyze your current replenishment strategy or help optimiz
       }
     });
     
-    // Find and style all text elements
-    const textElements = container.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6, strong, b');
+    // Find and style all text elements - be more aggressive about text visibility
+    const textElements = container.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6, strong, b, em, i, a, li, td, th');
     textElements.forEach((el: Element) => {
       if (el instanceof HTMLElement) {
         if (el.tagName.match(/^H[1-6]$/)) {
           el.style.color = '#f1f5f9';
+        } else if (el.tagName === 'A') {
+          el.style.color = '#3b82f6';
         } else {
           el.style.color = '#e2e8f0';
+        }
+        
+        // Force remove any white backgrounds that might be causing overlay issues
+        if (el.style.backgroundColor === 'white' || 
+            el.style.backgroundColor === '#fff' || 
+            el.style.backgroundColor === '#ffffff' ||
+            el.style.backgroundColor === 'rgb(255, 255, 255)') {
+          el.style.backgroundColor = 'transparent';
         }
       }
     });
@@ -1231,6 +1241,26 @@ Would you like me to analyze your current replenishment strategy or help optimiz
         el.style.backgroundColor = 'rgba(51, 65, 85, 0.9)';
         el.style.borderColor = 'rgba(148, 163, 184, 0.4)';
         el.style.color = '#e2e8f0';
+      }
+    });
+    
+    // Force override any remaining white backgrounds that might cause overlay issues
+    const allElements = container.querySelectorAll('*');
+    allElements.forEach((el: Element) => {
+      if (el instanceof HTMLElement) {
+        const computedStyle = window.getComputedStyle(el);
+        if (computedStyle.backgroundColor === 'rgb(255, 255, 255)' || 
+            computedStyle.backgroundColor === 'white' ||
+            computedStyle.backgroundColor === '#fff') {
+          el.style.backgroundColor = 'rgba(30, 41, 59, 0.9)';
+        }
+        
+        // Ensure text is visible
+        if (computedStyle.color === 'rgb(0, 0, 0)' || 
+            computedStyle.color === 'black' ||
+            computedStyle.color === '#000') {
+          el.style.color = '#e2e8f0';
+        }
       }
     });
     
@@ -1473,33 +1503,7 @@ Would you like me to analyze your current replenishment strategy or help optimiz
         }
       }
       
-      // Handle follow-up buttons by replacing onclick handlers
-      const yesButtons = tempDiv.querySelectorAll('.btn-yes');
-      const noButtons = tempDiv.querySelectorAll('.btn-no');
-      
-      yesButtons.forEach(button => {
-        if (button instanceof HTMLButtonElement) {
-          // Remove the old onclick attribute and add new event listener
-          button.removeAttribute('onclick');
-          button.addEventListener('click', () => {
-            if ((window as any).handleFollowUp) {
-              (window as any).handleFollowUp('yes', context || '', messageData);
-            }
-          });
-        }
-      });
-      
-      noButtons.forEach(button => {
-        if (button instanceof HTMLButtonElement) {
-          // Remove the old onclick attribute and add new event listener
-          button.removeAttribute('onclick');
-          button.addEventListener('click', () => {
-            if ((window as any).handleFollowUp) {
-              (window as any).handleFollowUp('no', context || '', messageData);
-            }
-          });
-        }
-      });
+      // Follow-up functionality removed - not needed with FAQ API
       
     } catch (error) {
       console.error('Error in executeScriptsInHTML:', error);
@@ -1524,163 +1528,13 @@ Would you like me to analyze your current replenishment strategy or help optimiz
     return 'chat-1-line';
   };
 
-  // Handle follow-up interactions from API responses
-  const handleFollowUp = async (response: string, mainQuestion?: string, messageData?: any) => {
-    if (response === 'yes' && mainQuestion) {
-      // Send the main question again to get detailed report
-      console.log('User wants detailed report for:', mainQuestion);
-      
-      // Create detailed follow-up request structure
-      const followUpRequest = {
-        originalQuestion: {
-          action: messageData?.question?.action || 'getTopPerformingItem',
-          parameters: messageData?.question?.parameters || {},
-          description: messageData?.question?.description || 'Get detailed information',
-          type: messageData?.question?.type || 'storeSales'
-        },
-        followUpResponse: 'yes',
-        requestType: 'detailed_report',
-        context: {
-          location: messageData?.data?.location || '',
-          topItem: messageData?.data?.topItem || {},
-          storeCount: messageData?.data?.storeCount || 0,
-          totalProducts: messageData?.data?.totalProducts || 0,
-          dataType: messageData?.data ? Object.keys(messageData.data)[0] : 'unknown'
-        },
-        preferences: {
-          chartType: 'bar',
-          exportFormat: 'pdf',
-          detailLevel: 'high',
-          includeCharts: true,
-          includeTables: true,
-          includeExport: true
-        }
-      };
-      
-      console.log('Sending detailed follow-up request:', followUpRequest);
-      
-      // Add user's follow-up response to chat
-      const followUpMessage: Message = {
-        id: Date.now().toString(),
-        type: 'user',
-        content: `Yes, please show me a detailed report for: ${mainQuestion}`,
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, followUpMessage]);
-      setIsTyping(true);
-      setThinkingPhase(0);
+  // Follow-up functionality removed - not needed with FAQ API
 
-      try {
-        // Start thinking phases
-        const thinkingInterval = cycleThinkingPhases();
-        
-        // Send follow-up request to backend with detailed structure
-        const aiResponse = await generateDetailedFollowUpResponse(followUpRequest);
-        
-        // Ensure minimum response time for realistic AI behavior
-        const startTime = Date.now();
-        const minResponseTime = 8400;
-        
-        const elapsed = Date.now() - startTime;
-        if (elapsed < minResponseTime) {
-          await new Promise(resolve => setTimeout(resolve, minResponseTime - elapsed));
-        }
-        
-        clearInterval(thinkingInterval);
-        
-        const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          type: 'ai',
-          content: aiResponse.content,
-          data: aiResponse.data,
-          html: aiResponse.html,
-          timestamp: new Date()
-        };
-        
-        setMessages(prev => [...prev, aiMessage]);
-      } catch (error) {
-        console.error('Error generating follow-up response:', error);
-        
-        const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          type: 'ai',
-          content: 'I encountered an error processing your follow-up request. Please try asking your question again.',
-          timestamp: new Date()
-        };
-        
-        setMessages(prev => [...prev, aiMessage]);
-      } finally {
-        setIsTyping(false);
-        setThinkingPhase(0);
-      }
-    } else {
-      console.log('User declined detailed report');
-      // Add a simple acknowledgment message
-      const followUpMessage: Message = {
-        id: Date.now().toString(),
-        type: 'user',
-        content: 'No, thanks. That\'s all I need for now.',
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, followUpMessage]);
-    }
-  };
-
-  // Generate detailed follow-up response with enhanced backend communication
-  const generateDetailedFollowUpResponse = async (followUpRequest: any): Promise<{ content: string; data?: any; html?: string }> => {
-    try {
-      console.log('Sending detailed follow-up request to chatbot API:', followUpRequest);
-      
-      // Send follow-up request to backend
-      const response = await fetch(`${API_BASE_URL}/chatbot/follow-up`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(followUpRequest)
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const result = await response.json();
-      console.log('Follow-up API response:', result);
-      
-      if (result.success) {
-        return {
-          content: result.message || 'Here\'s your detailed report with enhanced insights and visualizations.',
-          data: result.data,
-          html: result.html
-        };
-      } else {
-        // Fallback to regular response if follow-up API fails
-        return await generateResponse(followUpRequest.originalQuestion.description);
-      }
-    } catch (error) {
-      console.error('Error calling follow-up API:', error);
-      
-      // Fallback to regular response on error
-      return await generateResponse(followUpRequest.originalQuestion.description);
-    }
-  };
-
-  // Make handleFollowUp available globally for HTML responses
-  useEffect(() => {
-    (window as any).handleFollowUp = (response: string, mainQuestion?: string, messageData?: any) => {
-      handleFollowUp(response, mainQuestion, messageData);
-    };
-    
-    return () => {
-      delete (window as any).handleFollowUp;
-    };
-  }, [handleFollowUp]);
+  // Follow-up functionality removed - not needed with FAQ API
 
   // Memoized ChatMessage component to prevent unnecessary re-renders
-  const ChatMessage = React.memo<{ message: Message; onApplyDarkMode: (el: HTMLElement) => void; onFollowUp: (response: string, mainQuestion?: string, messageData?: any) => void }>(
-    ({ message, onApplyDarkMode, onFollowUp }) => {
+  const ChatMessage = React.memo<{ message: Message; onApplyDarkMode: (el: HTMLElement) => void }>(
+    ({ message, onApplyDarkMode }) => {
       const messageRef = useRef<HTMLDivElement>(null);
 
       // Apply dark mode and execute scripts only once when message is first rendered
@@ -1693,33 +1547,10 @@ Would you like me to analyze your current replenishment strategy or help optimiz
             await executeScriptsInHTML(message.html!, mainQuestion, message);
             onApplyDarkMode(messageRef.current!);
             
-            // Handle follow-up buttons by replacing onclick handlers
-            if (messageRef.current) {
-              const yesButtons = messageRef.current.querySelectorAll('.btn-yes');
-              const noButtons = messageRef.current.querySelectorAll('.btn-no');
-              
-              // Extract the main question from the message content
-              const mainQuestion = message.content || '';
-              
-              yesButtons.forEach(button => {
-                if (button instanceof HTMLButtonElement) {
-                  // Remove the old onclick attribute and add new event listener
-                  button.removeAttribute('onclick');
-                  button.addEventListener('click', () => onFollowUp('yes', mainQuestion, message));
-                }
-              });
-              
-              noButtons.forEach(button => {
-                if (button instanceof HTMLButtonElement) {
-                  // Remove the old onclick attribute and add new event listener
-                  button.removeAttribute('onclick');
-                  button.addEventListener('click', () => onFollowUp('no', mainQuestion, message));
-                }
-              });
-            }
+            // Follow-up functionality removed - not needed with FAQ API
           }, 100);
         }
-      }, [message.id, message.html, message.content, onFollowUp]); // Include onFollowUp in dependencies
+      }, [message.id, message.html, message.content]); // Dependencies for message rendering
 
       return (
         <div className={`flex items-start space-x-3 ${
@@ -1769,8 +1600,8 @@ Would you like me to analyze your current replenishment strategy or help optimiz
               </div>
             )}
             
-            {/* Render data if available */}
-            {message.data && !message.html && (
+            {/* Render data if available - only for AI tool responses, not FAQ responses */}
+            {message.data && !message.html && message.data.type === 'ai_tool' && (
               <div style={{ margin: '16px 0 0 0', padding: 0 }}>
                 <div style={{ 
                   background: 'rgba(30, 41, 59, 0.8)', 
@@ -1925,16 +1756,35 @@ Would you like me to analyze your current replenishment strategy or help optimiz
   // Generate AI response using API
   const generateResponse = async (userMessage: string): Promise<{ content: string; data?: any; html?: string }> => {
     try {
-      console.log('Sending message to chatbot API:', userMessage);
+      console.log('Sending message to FAQ API:', userMessage);
       const response = await chatbotAPI.sendMessage(userMessage);
-      console.log('Chatbot API response:', response);
+      console.log('FAQ API response:', response);
       
-      if (response.success) {
-        return {
-          content: response.message || 'I processed your request successfully.',
-          data: response.data,
-          html: response.html
-        };
+      if (response.status === 'success' && response.data) {
+        const responseData = response.data;
+        
+        // Handle different response types from FAQ API
+        if (responseData.type === 'ai_tool') {
+          // AI Tool Response - contains HTML content
+          return {
+            content: responseData.intent?.description || 'Here\'s your requested information:',
+            data: responseData,
+            html: responseData.response
+          };
+        } else if (responseData.type === 'faq') {
+          // FAQ Response - text-based answer - ONLY show the clean response text
+          return {
+            content: responseData.response || 'Here\'s what I found:',
+            // Don't pass the raw data to avoid showing JSON to users
+            data: undefined
+          };
+        } else {
+          // Fallback for unknown response types
+          return {
+            content: responseData.response || 'I found some information for you:',
+            data: undefined
+          };
+        }
       } else {
         // Fallback to predefined responses if API fails
         const lowerMessage = userMessage.toLowerCase();
@@ -1956,7 +1806,7 @@ Could you rephrase your question or ask about one of these areas? I'm here to he
         };
       }
     } catch (error) {
-      console.error('Error calling chatbot API:', error);
+      console.error('Error calling FAQ API:', error);
       
       // Fallback to predefined responses on API error
       const lowerMessage = userMessage.toLowerCase();
@@ -2131,42 +1981,24 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
                         setIsLoadingSuggestions(true);
                         setApiError(null);
                         
-                        const response = await chatbotAPI.getSuggestions();
-                        console.log('Suggestions API response:', response);
+                        // Use default suggestions since FAQ API doesn't provide suggestion endpoints
+                        const defaultSuggestions = [
+                          "Show me replenishment recommendations",
+                          "Show me store performance",
+                          "Show me all replenishments",
+                          "How many products do we have?",
+                          "Show me active products",
+                          "Show me the analytics dashboard",
+                          "Which was the top performing item in Surat?",
+                          "Which was the top performing item in Pune?",
+                          "Which was the top performing item in Hyderabad?",
+                          "Which was the top performing item in Delhi?"
+                        ];
                         
-                        // Handle different possible response structures
-                        let suggestionData: any[] = [];
-                        
-                        if (response.data && Array.isArray(response.data)) {
-                          suggestionData = response.data;
-                        } else if (response.suggestions && Array.isArray(response.suggestions)) {
-                          suggestionData = response.suggestions;
-                        } else if (response.questions && Array.isArray(response.questions)) {
-                          suggestionData = response.questions;
-                        } else if (Array.isArray(response)) {
-                          suggestionData = response;
-                        }
-                        
-                        // Ensure all suggestions are strings and filter out invalid ones
-                        const validSuggestions = suggestionData
-                          .filter(item => item && typeof item === 'string')
-                          .slice(0, 6);
-                        
-                        if (validSuggestions.length > 0) {
-                          setSuggestions(validSuggestions);
-                        } else {
-                          setSuggestions([
-                            "Show me replenishment recommendations",
-                            "Show me store performance",
-                            "Show me all replenishments",
-                            "How many products do we have?",
-                            "Show me active products",
-                            "Show me the analytics dashboard"
-                          ]);
-                        }
+                        setSuggestions(defaultSuggestions);
                       } catch (error) {
                         console.error('Failed to load suggestions:', error);
-                        setApiError('Failed to load suggestions from API');
+                        setApiError('Failed to load suggestions');
                         setSuggestions([
                           "Show me replenishment recommendations",
                           "Show me store performance",
@@ -2224,7 +2056,6 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
               key={message.id}
               message={message}
               onApplyDarkMode={applyDarkModeToAPIResponse}
-              onFollowUp={handleFollowUp}
             />
           ))}
           
