@@ -12,6 +12,9 @@ const StoresIcon = <i className="bx bx-store side-menu__icon"></i>;
 const AnalyticsIcon = <i className="bx bx-bar-chart side-menu__icon"></i>;
 const ReplenishmentIcon = <i className="bx bx-refresh side-menu__icon"></i>;
 const FilemanagerIcon = <i className="ri ri-file-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const SupervisorIcon = <i className="bx bx-user-check side-menu__icon"></i>;
+const ProductionIcon = <i className="bx bx-cog side-menu__icon"></i>;
+const FloorIcon = <i className="bx bx-building side-menu__icon"></i>;
 // Badges if needed
 const badge = (
   <span className="badge !bg-warning/10 !text-warning !py-[0.25rem] !px-[0.45rem] !text-[0.75em] ms-1">
@@ -136,5 +139,86 @@ export const MenuItems: any = [
     active: false,
     selected: false,
     path: "/filemanager",
+  },
+  {
+    icon: SupervisorIcon,
+    title: "Supervisors",
+    type: "sub",
+    active: false,
+    selected: false,
+    children: [
+      {
+        icon: ProductionIcon,
+        path: "/production/supervisor",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Production Supervisor",
+      },
+      {
+        icon: FloorIcon,
+        path: "/production/floor-supervisor/knitting",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Knitting Floor Supervisor",
+      },
+      {
+        icon: FloorIcon,
+        path: "/production/floor-supervisor/linking",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Linking Floor Supervisor",
+      },
+      {
+        icon: FloorIcon,
+        path: "/production/floor-supervisor/checking",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Checking Floor Supervisor",
+      },
+      {
+        icon: FloorIcon,
+        path: "/production/floor-supervisor/washing",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Washing Floor Supervisor",
+      },
+      {
+        icon: FloorIcon,
+        path: "/production/floor-supervisor/boarding",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Boarding Floor Supervisor",
+      },
+      {
+        icon: FloorIcon,
+        path: "/production/floor-supervisor/final-checking",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Final Checking Floor Supervisor",
+      },
+      {
+        icon: FloorIcon,
+        path: "/production/floor-supervisor/branding",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Branding Floor Supervisor",
+      },
+      {
+        icon: FloorIcon,
+        path: "/production/floor-supervisor/warehouse",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Warehouse Floor Supervisor",
+      },
+    ],
   },
 ];

@@ -1,7 +1,7 @@
 "use client"
 import React, { Fragment } from 'react'
 
-const Pageheader = (props:any) => {
+const PageHeader = (props:any) => {
   return (
     <Fragment>
          <div className="block justify-between page-header md:flex">
@@ -24,4 +24,5 @@ const Pageheader = (props:any) => {
   )
 }
 
-export default Pageheader;
+export { PageHeader };
+export default PageHeader;

@@ -1,0 +1,867 @@
+"use client";
+import React, { useState, useEffect } from "react";
+import Seo from "@/shared/layout-components/seo/seo";
+import Link from "next/link";
+import { toast } from "react-hot-toast";
+import HelpIcon from "@/shared/components/HelpIcon";
+import OrderViewModal from "../../../shared/components/production/OrderViewModal";
+
+interface FloorQuantity {
+  floor: string;
+  completed: number;
+  pending: number;
+  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
+}
+
+interface Article {
+  id: string;
+  articleNumber: string;
+  plannedQuantity: number;
+  completedQuantity: number;
+  linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
+  priority: 'High' | 'Medium' | 'Low' | 'Urgent';
+  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
+  progress: number;
+  currentFloor: string;
+  floorQuantities: FloorQuantity[];
+}
+
+interface ProductionOrder {
+  id: string;
+  priority: 'High' | 'Medium' | 'Low' | 'Urgent';
+  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
+  articles: Article[];
+  floor: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
+const ProductionSupervisorPage = () => {
+  const [orders, setOrders] = useState<ProductionOrder[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
+  const [filters, setFilters] = useState({
+    status: '',
+    priority: '',
+    linkingType: '',
+    floor: ''
+  });
+
+  // Static data for demonstration
+  const staticOrders: ProductionOrder[] = [
+    {
+      id: 'ORD-001',
+      priority: 'High',
+      status: 'In Progress',
+      floor: 'Knitting',
+      createdAt: '2025-09-01',
+      updatedAt: '2025-09-01',
+      articles: [
+        {
+          id: 'ART001',
+          articleNumber: 'ART001',
+          plannedQuantity: 1000,
+          completedQuantity: 750,
+          linkingType: 'Auto Linking',
+          priority: 'High',
+          status: 'In Progress',
+          progress: 75,
+          currentFloor: 'Knitting',
+          floorQuantities: [
+            { floor: 'Knitting', completed: 750, pending: 250, status: 'In Progress' },
+            { floor: 'Linking', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Checking', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Washing', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
+          ]
+        },
+        {
+          id: 'ART002',
+          articleNumber: 'ART002',
+          plannedQuantity: 500,
+          completedQuantity: 200,
+          linkingType: 'Rosso Linking',
+          priority: 'Medium',
+          status: 'In Progress',
+          progress: 40,
+          currentFloor: 'Linking',
+          floorQuantities: [
+            { floor: 'Knitting', completed: 500, pending: 0, status: 'Completed' },
+            { floor: 'Linking', completed: 200, pending: 300, status: 'In Progress' },
+            { floor: 'Checking', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Washing', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'ORD-002',
+      priority: 'Medium',
+      status: 'In Progress',
+      floor: 'Linking',
+      createdAt: '2025-09-02',
+      updatedAt: '2025-09-02',
+      articles: [
+        {
+          id: 'ART003',
+          articleNumber: 'ART003',
+          plannedQuantity: 500,
+          completedQuantity: 300,
+          linkingType: 'Rosso Linking',
+          priority: 'Medium',
+          status: 'In Progress',
+          progress: 60,
+          currentFloor: 'Linking',
+          floorQuantities: [
+            { floor: 'Knitting', completed: 500, pending: 0, status: 'Completed' },
+            { floor: 'Linking', completed: 300, pending: 200, status: 'In Progress' },
+            { floor: 'Checking', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Washing', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'ORD-003',
+      priority: 'Urgent',
+      status: 'In Progress',
+      floor: 'Checking',
+      createdAt: '2025-09-03',
+      updatedAt: '2025-09-03',
+      articles: [
+        {
+          id: 'ART004',
+          articleNumber: 'ART004',
+          plannedQuantity: 750,
+          completedQuantity: 600,
+          linkingType: 'Hand Linking',
+          priority: 'Urgent',
+          status: 'In Progress',
+          progress: 80,
+          currentFloor: 'Checking',
+          floorQuantities: [
+            { floor: 'Knitting', completed: 750, pending: 0, status: 'Completed' },
+            { floor: 'Linking', completed: 750, pending: 0, status: 'Completed' },
+            { floor: 'Checking', completed: 600, pending: 150, status: 'In Progress' },
+            { floor: 'Washing', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
+          ]
+        },
+        {
+          id: 'ART005',
+          articleNumber: 'ART005',
+          plannedQuantity: 300,
+          completedQuantity: 150,
+          linkingType: 'Auto Linking',
+          priority: 'High',
+          status: 'In Progress',
+          progress: 50,
+          currentFloor: 'Checking',
+          floorQuantities: [
+            { floor: 'Knitting', completed: 300, pending: 0, status: 'Completed' },
+            { floor: 'Linking', completed: 300, pending: 0, status: 'Completed' },
+            { floor: 'Checking', completed: 150, pending: 150, status: 'In Progress' },
+            { floor: 'Washing', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'ORD-004',
+      priority: 'Low',
+      status: 'In Progress',
+      floor: 'Washing',
+      createdAt: '2025-09-04',
+      updatedAt: '2025-09-04',
+      articles: [
+        {
+          id: 'ART006',
+          articleNumber: 'ART006',
+          plannedQuantity: 1200,
+          completedQuantity: 600,
+          linkingType: 'Auto Linking',
+          priority: 'Low',
+          status: 'In Progress',
+          progress: 50,
+          currentFloor: 'Washing',
+          floorQuantities: [
+            { floor: 'Knitting', completed: 1200, pending: 0, status: 'Completed' },
+            { floor: 'Linking', completed: 1200, pending: 0, status: 'Completed' },
+            { floor: 'Checking', completed: 1200, pending: 0, status: 'Completed' },
+            { floor: 'Washing', completed: 600, pending: 600, status: 'In Progress' },
+            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'ORD-005',
+      priority: 'High',
+      status: 'In Progress',
+      floor: 'Final Checking',
+      createdAt: '2025-09-05',
+      updatedAt: '2025-09-05',
+      articles: [
+        {
+          id: 'ART007',
+          articleNumber: 'ART007',
+          plannedQuantity: 800,
+          completedQuantity: 720,
+          linkingType: 'Rosso Linking',
+          priority: 'High',
+          status: 'In Progress',
+          progress: 90,
+          currentFloor: 'Final Checking',
+          floorQuantities: [
+            { floor: 'Knitting', completed: 800, pending: 0, status: 'Completed' },
+            { floor: 'Linking', completed: 800, pending: 0, status: 'Completed' },
+            { floor: 'Checking', completed: 800, pending: 0, status: 'Completed' },
+            { floor: 'Washing', completed: 800, pending: 0, status: 'Completed' },
+            { floor: 'Boarding', completed: 800, pending: 0, status: 'Completed' },
+            { floor: 'Final Checking', completed: 720, pending: 80, status: 'In Progress' },
+            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
+          ]
+        },
+        {
+          id: 'ART008',
+          articleNumber: 'ART008',
+          plannedQuantity: 400,
+          completedQuantity: 100,
+          linkingType: 'Hand Linking',
+          priority: 'Medium',
+          status: 'In Progress',
+          progress: 25,
+          currentFloor: 'Boarding',
+          floorQuantities: [
+            { floor: 'Knitting', completed: 400, pending: 0, status: 'Completed' },
+            { floor: 'Linking', completed: 400, pending: 0, status: 'Completed' },
+            { floor: 'Checking', completed: 400, pending: 0, status: 'Completed' },
+            { floor: 'Washing', completed: 400, pending: 0, status: 'Completed' },
+            { floor: 'Boarding', completed: 100, pending: 300, status: 'In Progress' },
+            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
+            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
+          ]
+        }
+      ]
+    }
+  ];
+
+
+  useEffect(() => {
+    // Simulate loading
+    setIsLoading(true);
+    setTimeout(() => {
+      setOrders(staticOrders);
+      setIsLoading(false);
+    }, 500);
+  }, []);
+
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = order.articles.some(article => 
+      article.articleNumber.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || order.id.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = !filters.status || order.status === filters.status;
+    const matchesPriority = !filters.priority || order.priority === filters.priority;
+    const matchesLinkingType = !filters.linkingType || order.articles.some(article => article.linkingType === filters.linkingType);
+    const matchesFloor = !filters.floor || order.floor.toLowerCase().includes(filters.floor.toLowerCase());
+
+    return matchesSearch && matchesStatus && matchesPriority && matchesLinkingType && matchesFloor;
+  });
+
+  const paginatedOrders = filteredOrders.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(paginatedOrders.map(order => order.id));
+    }
+    setSelectAll(!selectAll);
+  };
+
+  const handleOrderSelect = (orderId: string) => {
+    if (selectedOrders.includes(orderId)) {
+      setSelectedOrders(selectedOrders.filter(id => id !== orderId));
+    } else {
+      setSelectedOrders([...selectedOrders, orderId]);
+    }
+  };
+
+  const handleDeleteOrder = (orderId: string) => {
+    if (window.confirm('Are you sure you want to delete this order?')) {
+      setOrders(orders.filter(order => order.id !== orderId));
+      toast.success('Order deleted successfully');
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedOrders.length === 0) {
+      toast.error('Please select orders to delete');
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to delete ${selectedOrders.length} orders?`)) {
+      setOrders(orders.filter(order => !selectedOrders.includes(order.id)));
+      setSelectedOrders([]);
+      setSelectAll(false);
+      toast.success(`${selectedOrders.length} orders deleted successfully`);
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    setSelectedOrders([]);
+    setSelectAll(false);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+    setSelectedOrders([]);
+    setSelectAll(false);
+  };
+
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setCurrentPage(1);
+    setSelectedOrders([]);
+    setSelectAll(false);
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      status: '',
+      priority: '',
+      linkingType: '',
+      floor: ''
+    });
+    setSearchQuery('');
+    setCurrentPage(1);
+    setSelectedOrders([]);
+    setSelectAll(false);
+  };
+
+  const hasActiveFilters = searchQuery || Object.values(filters).some(value => value !== '');
+
+  const handleViewOrder = (order: ProductionOrder) => {
+    setSelectedOrder(order);
+    setShowViewModal(true);
+  };
+
+  const closeViewModal = () => {
+    setShowViewModal(false);
+    setSelectedOrder(null);
+  };
+
+
+  const getStatusBadge = (status: string) => {
+    const statusClasses = {
+      'Pending': 'bg-yellow-100 text-yellow-800',
+      'In Progress': 'bg-blue-100 text-blue-800',
+      'Completed': 'bg-green-100 text-green-800',
+      'On Hold': 'bg-red-100 text-red-800'
+    };
+    return statusClasses[status as keyof typeof statusClasses] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getPriorityBadge = (priority: string) => {
+    const priorityClasses = {
+      'Urgent': 'bg-red-100 text-red-800',
+      'High': 'bg-orange-100 text-orange-800',
+      'Medium': 'bg-yellow-100 text-yellow-800',
+      'Low': 'bg-green-100 text-green-800'
+    };
+    return priorityClasses[priority as keyof typeof priorityClasses] || 'bg-gray-100 text-gray-800';
+  };
+
+  return (
+    <div className="main-content">
+      <Seo title="Production Supervisor Dashboard"/>
+      
+      <div className="grid grid-cols-12 gap-6">
+        <div className="col-span-12">
+          {/* Page Header */}
+          <div className="box !bg-transparent border-0 shadow-none">
+            <div className="box-header flex justify-between items-center">
+              <div className="flex items-center space-x-3">
+                <h1 className="box-title text-2xl font-semibold">Production Supervisor Dashboard</h1>
+                <HelpIcon
+                  title="Production Supervisor Dashboard"
+                  content={
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                        <p className="text-gray-700">
+                          This is the Production Supervisor Dashboard where you can manage production orders, track progress, and oversee manufacturing operations.
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          <li><strong>View Orders:</strong> Browse all production orders with real-time status</li>
+                          <li><strong>Add New Order:</strong> Click "Add New Order" to create a new production order</li>
+                          <li><strong>Track Progress:</strong> Monitor order progress and completion status</li>
+                          <li><strong>Manage Priorities:</strong> Set and update order priorities (Urgent, High, Medium, Low)</li>
+                          <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
+                          <li><strong>Bulk Operations:</strong> Select multiple orders for bulk actions</li>
+                        </ul>
+                      </div>
+                    </div>
+                  }
+                />
+              </div>
+              <div className="box-tools flex items-center space-x-2">
+                {selectedOrders.length > 0 && (
+                  <button 
+                    type="button" 
+                    className="ti-btn ti-btn-danger"
+                    onClick={handleBulkDelete}
+                  >
+                    <i className="ri-delete-bin-line me-2"></i> Delete Selected ({selectedOrders.length})
+                  </button>
+                )}
+                <Link 
+                  href="/production/supervisor/add"
+                  className="ti-btn ti-btn-primary"
+                >
+                  <i className="ri-add-line me-2"></i> Add New Order
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <div className="box bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+              <div className="box-body p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-blue-100 text-sm font-medium">Active Orders</p>
+                    <p className="text-2xl font-bold text-white">
+                      {orders.filter(order => order.status === 'In Progress').length}
+                    </p>
+                  </div>
+                  <div className="text-blue-200">
+                    <i className="ri-cog-line text-3xl"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="box bg-gradient-to-r from-green-500 to-green-600 text-white">
+              <div className="box-body p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-green-100 text-sm font-medium">Completed Today</p>
+                    <p className="text-2xl font-bold text-white">
+                      {orders.filter(order => order.status === 'Completed').length}
+                    </p>
+                  </div>
+                  <div className="text-green-200">
+                    <i className="ri-check-line text-3xl"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="box bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
+              <div className="box-body p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-yellow-100 text-sm font-medium">Pending Orders</p>
+                    <p className="text-2xl font-bold text-white">
+                      {orders.filter(order => order.status === 'Pending').length}
+                    </p>
+                  </div>
+                  <div className="text-yellow-200">
+                    <i className="ri-time-line text-3xl"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="box bg-gradient-to-r from-red-500 to-red-600 text-white">
+              <div className="box-body p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-red-100 text-sm font-medium">On Hold</p>
+                    <p className="text-2xl font-bold text-white">
+                      {orders.filter(order => order.status === 'On Hold').length}
+                    </p>
+                  </div>
+                  <div className="text-red-200">
+                    <i className="ri-error-warning-line text-3xl"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Content Box */}
+          <div className="box">
+            <div className="box-body">
+              {/* Search and Filters Header */}
+              <div className="mb-6">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                  {/* Filter Toggle and Actions */}
+                  <div className="flex items-center gap-3 flex-shrink-0 order-2 sm:order-1">
+                    <button
+                      type="button"
+                      className={`ti-btn ${showFilters ? 'ti-btn-primary' : 'ti-btn-secondary'}`}
+                      onClick={() => setShowFilters(!showFilters)}
+                    >
+                      <i className="ri-filter-3-line me-2"></i>
+                      Filters {hasActiveFilters && <span className="badge bg-white text-primary ml-1">●</span>}
+                    </button>
+                    
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        className="ti-btn ti-btn-light"
+                        onClick={clearFilters}
+                      >
+                        <i className="ri-close-line me-1"></i>
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Search Bar */}
+                  <div className="w-full sm:w-80 lg:w-96 order-1 sm:order-2">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        className="form-control py-3 pl-10 pr-4 w-full"
+                        placeholder="Search orders by article number or ID..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                      <i className="ri-search-line text-lg absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    </div>
+                  </div>
+
+                  {/* Rows per page selector */}
+                  <div className="flex items-center gap-2 order-3">
+                    <label className="text-sm text-gray-600 whitespace-nowrap">Show:</label>
+                    <select
+                      className="form-select form-select-sm w-20"
+                      value={itemsPerPage}
+                      onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                    <span className="text-sm text-gray-600 whitespace-nowrap">per page</span>
+                  </div>
+                </div>
+
+                {/* Filters Panel */}
+                {showFilters && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Status Filter */}
+                      <div>
+                        <label className="form-label text-sm font-medium">Status</label>
+                        <select
+                          className="form-select"
+                          value={filters.status}
+                          onChange={(e) => handleFilterChange('status', e.target.value)}
+                        >
+                          <option value="">All Status</option>
+                          <option value="Pending">Pending</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Completed">Completed</option>
+                          <option value="On Hold">On Hold</option>
+                        </select>
+                      </div>
+
+                      {/* Priority Filter */}
+                      <div>
+                        <label className="form-label text-sm font-medium">Priority</label>
+                        <select
+                          className="form-select"
+                          value={filters.priority}
+                          onChange={(e) => handleFilterChange('priority', e.target.value)}
+                        >
+                          <option value="">All Priorities</option>
+                          <option value="Urgent">Urgent</option>
+                          <option value="High">High</option>
+                          <option value="Medium">Medium</option>
+                          <option value="Low">Low</option>
+                        </select>
+                      </div>
+
+                      {/* Linking Type Filter */}
+                      <div>
+                        <label className="form-label text-sm font-medium">Linking Type</label>
+                        <select
+                          className="form-select"
+                          value={filters.linkingType}
+                          onChange={(e) => handleFilterChange('linkingType', e.target.value)}
+                        >
+                          <option value="">All Types</option>
+                          <option value="Auto Linking">Auto Linking</option>
+                          <option value="Rosso Linking">Rosso Linking</option>
+                          <option value="Hand Linking">Hand Linking</option>
+                        </select>
+                      </div>
+
+                      {/* Floor Filter */}
+                      <div>
+                        <label className="form-label text-sm font-medium">Floor</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Filter by floor..."
+                          value={filters.floor}
+                          onChange={(e) => handleFilterChange('floor', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {isLoading ? (
+                <div className="flex justify-center items-center py-12">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading orders...</p>
+                  </div>
+                </div>
+              ) : filteredOrders.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-gray-400 mb-4">
+                    <i className="ri-file-list-line text-6xl"></i>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No orders found</h3>
+                  <p className="text-gray-500 mb-4">
+                    {hasActiveFilters 
+                      ? 'Try adjusting your filters or search terms' 
+                      : 'Get started by adding your first order'
+                    }
+                  </p>
+                  {!hasActiveFilters && (
+                    <Link 
+                      href="/production/supervisor/add"
+                      className="ti-btn ti-btn-primary"
+                    >
+                      <i className="ri-add-line me-2"></i>
+                      Add First Order
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table whitespace-nowrap min-w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">
+                          <input 
+                            type="checkbox" 
+                            className="form-check-input" 
+                            checked={selectAll}
+                            onChange={handleSelectAll}
+                          />
+                        </th>
+                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Order Info</th>
+                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Articles</th>
+                        
+                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Status</th>
+                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {paginatedOrders.map((order) => (
+                        <tr 
+                          key={order.id}
+                          className="hover:bg-gray-50 transition-colors duration-150"
+                        >
+                          <td className="px-4 py-4">
+                            <input 
+                              type="checkbox" 
+                              className="form-check-input" 
+                              checked={selectedOrders.includes(order.id)}
+                              onChange={() => handleOrderSelect(order.id)}
+                            />
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="space-y-1">
+                              <div className="font-medium text-gray-900">{order.id}</div>
+                              <div className="text-sm text-gray-500">
+                                Created: {order.createdAt}
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                Updated: {order.updatedAt}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="space-y-1">
+                              <div className="font-medium text-gray-900">
+                                {order.articles.length} Article{order.articles.length > 1 ? 's' : ''}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                Total Qty: {order.articles.reduce((sum, article) => sum + article.plannedQuantity, 0).toLocaleString()}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Completed: {order.articles.reduce((sum, article) => sum + article.completedQuantity, 0).toLocaleString()}
+                              </div>
+                            </div>
+                          </td>
+                          
+                          <td className="px-4 py-4">
+                            <div className="space-y-2">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
+                                {order.status}
+                              </span>
+                              <div>
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(order.priority)}`}>
+                                  {order.priority}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center space-x-2">
+                              <button 
+                                className="ti-btn ti-btn-info ti-btn-sm"
+                                onClick={() => handleViewOrder(order)}
+                                title="View Articles"
+                              >
+                                <i className="ri-eye-line"></i>
+                              </button>
+                              <button 
+                                className="ti-btn ti-btn-primary ti-btn-sm"
+                                title="Edit Order"
+                              >
+                                <i className="ri-edit-line"></i>
+                              </button>
+                              <button 
+                                className="ti-btn ti-btn-danger ti-btn-sm"
+                                onClick={() => handleDeleteOrder(order.id)}
+                                title="Delete Order"
+                              >
+                                <i className="ri-delete-bin-line"></i>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {!isLoading && filteredOrders.length > 0 && (
+                <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-6 border-t border-gray-200">
+                  <div className="text-sm text-gray-700 mb-4 sm:mb-0">
+                    <span className="font-medium">
+                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredOrders.length)} 
+                    </span>
+                    <span className="text-gray-500"> of {filteredOrders.length.toLocaleString()} orders</span>
+                  </div>
+                  
+                  <nav aria-label="Page navigation" className="flex items-center space-x-1">
+                    <button
+                      className={`px-3 py-2 text-sm font-medium rounded-md ${
+                        currentPage > 1
+                          ? 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
+                          : 'text-gray-300 bg-gray-100 border border-gray-200 cursor-not-allowed'
+                      }`}
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage <= 1}
+                    >
+                      <i className="ri-arrow-left-s-line"></i>
+                    </button>
+                    
+                    {/* Page Numbers */}
+                    {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 7) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 4) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 3) {
+                        pageNum = totalPages - 6 + i;
+                      } else {
+                        pageNum = currentPage - 3 + i;
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          className={`px-3 py-2 text-sm font-medium rounded-md ${
+                            currentPage === pageNum
+                              ? 'bg-primary text-white border border-primary'
+                              : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
+                          }`}
+                          onClick={() => handlePageChange(pageNum)}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    
+                    <button
+                      className={`px-3 py-2 text-sm font-medium rounded-md ${
+                        currentPage < totalPages
+                          ? 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
+                          : 'text-gray-300 bg-gray-100 border border-gray-200 cursor-not-allowed'
+                      }`}
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage >= totalPages}
+                    >
+                      <i className="ri-arrow-right-s-line"></i>
+                    </button>
+                  </nav>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* View Articles Modal */}
+      {showViewModal && selectedOrder && (
+        <OrderViewModal order={selectedOrder} onClose={closeViewModal} />
+      )}
+
+    </div>
+  );
+};
+
+export default ProductionSupervisorPage;
