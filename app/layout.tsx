@@ -5,6 +5,7 @@ import store from "@/shared/redux/store";
 import PrelineScript from "./PrelineScript";
 import { useState } from "react";
 import { Initialload } from "@/shared/contextapi";
+import { NavigationProvider } from "@/shared/contextapi/navigationContext";
 import '../public/assets/css/dashboard-styles.css';
 
 const RootLayout = ({children}:any) => {
@@ -18,9 +19,11 @@ const RootLayout = ({children}:any) => {
       </head>
       <body>
         <Provider store={store}>
-          <Initialload.Provider value={{ pageloading, setpageloading }}>
-            {children}
-          </Initialload.Provider>
+          <NavigationProvider>
+            <Initialload.Provider value={{ pageloading, setpageloading }}>
+              {children}
+            </Initialload.Provider>
+          </NavigationProvider>
         </Provider>
         <PrelineScript />
       </body>
