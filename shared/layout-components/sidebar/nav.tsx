@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigationMenu } from "@/shared/hooks/useNavigationMenu";
 
 const DashboardIcon = <i className="bx bx-home side-menu__icon"></i>;
 const CatalogIcon = <i className="bx bx-package side-menu__icon"></i>;
@@ -12,6 +13,7 @@ const StoresIcon = <i className="bx bx-store side-menu__icon"></i>;
 const AnalyticsIcon = <i className="bx bx-bar-chart side-menu__icon"></i>;
 const ReplenishmentIcon = <i className="bx bx-refresh side-menu__icon"></i>;
 const FilemanagerIcon = <i className="ri ri-file-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const UsersIcon = <i className="ri ri-user-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const SupervisorIcon = <i className="bx bx-user-check side-menu__icon"></i>;
 const ProductionIcon = <i className="bx bx-cog side-menu__icon"></i>;
 const FloorIcon = <i className="bx bx-building side-menu__icon"></i>;
@@ -22,7 +24,7 @@ const badge = (
   </span>
 );
 
-export const MenuItems: any = [
+const BaseMenuItems: any = [
   {
     menutitle: "MAIN",
   },
@@ -141,8 +143,16 @@ export const MenuItems: any = [
     path: "/filemanager",
   },
   {
+    icon: UsersIcon,
+    title: "Users",
+    type: "link",
+    active: false,
+    selected: false,
+    path: "/users",
+  },
+  {
     icon: SupervisorIcon,
-    title: "Supervisors",
+    title: "Production",
     type: "sub",
     active: false,
     selected: false,
@@ -222,3 +232,14 @@ export const MenuItems: any = [
     ],
   },
 ];
+
+// Hook to get filtered menu items based on navigation permissions
+export const useMenuItems = () => {
+  const filteredItems = useNavigationMenu(BaseMenuItems);
+  console.log('useMenuItems - BaseMenuItems length:', BaseMenuItems.length);
+  console.log('useMenuItems - filteredItems length:', filteredItems?.length);
+  return filteredItems || BaseMenuItems; // Fallback to base items if filtered is empty
+};
+
+// Export the base menu items for backward compatibility
+export const MenuItems = BaseMenuItems;

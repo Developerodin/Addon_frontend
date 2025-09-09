@@ -8,10 +8,11 @@ import store from "@/shared/redux/store";
 import SimpleBar from 'simplebar-react';
 import Menuloop from "./menuloop";
 import { usePathname, useRouter } from "next/navigation";
-import { MenuItems } from "./nav";
+import { useMenuItems } from "./nav";
 
 const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
-	const [menuitems, setMenuitems] = useState(MenuItems);
+	const filteredMenuItems = useMenuItems();
+	const [menuitems, setMenuitems] = useState(filteredMenuItems || []);
 
 	const path = usePathname()	
 
@@ -22,9 +23,15 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 				closeMenudata(item.children);
 			});
 		};
-		closeMenudata(MenuItems);
+		closeMenudata(filteredMenuItems);
 		setMenuitems((arr: any) => [...arr]);
 	}
+
+	useEffect(() => {
+		console.log('Sidebar - filteredMenuItems:', filteredMenuItems);
+		console.log('Sidebar - filteredMenuItems length:', filteredMenuItems?.length);
+		setMenuitems(filteredMenuItems || []);
+	}, [filteredMenuItems]);
 
 	useEffect(() => {
 
@@ -332,11 +339,11 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	let hasParent = false;
 	let hasParentLevel = 0;
 
-	function setSubmenu(event: any, targetObject: any, MenuItems = menuitems) {
+	function setSubmenu(event: any, targetObject: any, menuItems = menuitems) {
 		const theme = store.getState();
 		if ((window.screen.availWidth <= 992 || theme.dataNavStyle != "icon-hover") && (window.screen.availWidth <= 992 || theme.dataNavStyle != "menu-hover")) {
 		if (!event?.ctrlKey) {
-			for (const item of MenuItems) {
+			for (const item of menuItems) {
 				if (item === targetObject) {
 					item.active = true;
 					item.selected = true;
@@ -426,7 +433,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 				setSubmenuRecursively(item.children);
 			});
 		};
-		setSubmenuRecursively(MenuItems);
+		setSubmenuRecursively(menuitems);
 	}
 	const [previousUrl, setPreviousUrl] = useState("/");
 
@@ -450,24 +457,24 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		}
 	}, [pathname]);
 
-	function toggleSidemenu(event: any, targetObject: any, MenuItems = menuitems) {
+	function toggleSidemenu(event: any, targetObject: any, menuItems = menuitems) {
 		const theme = store.getState();
 		let element = event.target;
 		if ((theme.dataNavStyle != "icon-hover" && theme.dataNavStyle != "menu-hover") || (window.innerWidth < 992) || (theme.dataNavLayout != "horizontal") && (theme.dataToggled != "icon-hover-closed" && theme.dataToggled != "menu-hover-closed")) {
 			// {
-			for (const item of MenuItems) {
+			for (const item of menuItems) {
 				if (item === targetObject) {
 					if (theme.dataVerticalStyle == 'doublemenu' && item.active) { return; }
 					item.active = !item.active;
 
 					if (item.active) {
-						closeOtherMenus(MenuItems, item);
+						closeOtherMenus(menuItems, item);
 					} else {
 						if (theme.dataVerticalStyle == 'doublemenu') {
 							ThemeChanger({ ...theme, dataToggled: "double-menu-close" });
 						}
 					}
-					setAncestorsActive(MenuItems, item);
+						setAncestorsActive(menuItems, item);
 
 				}
 				else if (!item.active) {
@@ -520,16 +527,16 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		setMenuitems((arr: any) => [...arr]);
 	}
 
-	function setAncestorsActive(MenuItems: any, targetObject: any) {
+	function setAncestorsActive(menuItems: any, targetObject: any) {
 		const theme = store.getState();
-		const parent = findParent(MenuItems, targetObject);
+		const parent = findParent(menuItems, targetObject);
 		if (parent) {
 			parent.active = true;
 			if (parent.active) {
 				ThemeChanger({ ...theme, dataToggled: "double-menu-open" });
 			}
 
-			setAncestorsActive(MenuItems, parent);
+			setAncestorsActive(menuItems, parent);
 		} else {
 			if (theme.dataVerticalStyle == "doublemenu") {
 				ThemeChanger({ ...theme, dataToggled: "double-menu-close" });
@@ -537,8 +544,8 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 
 		}
 	}
-	function closeOtherMenus(MenuItems: any, targetObject: any) {
-		for (const item of MenuItems) {
+	function closeOtherMenus(menuItems: any, targetObject: any) {
+		for (const item of menuItems) {
 			if (item !== targetObject) {
 				item.active = false;
 				if (item.children && item.children.length > 0) {
@@ -547,13 +554,13 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 			}
 		}
 	}
-	function findParent(MenuItems: any, targetObject: any) {
-		for (const item of MenuItems) {
+	function findParent(menuItems: any, targetObject: any) {
+		for (const item of menuItems) {
 			if (item.children && item.children.includes(targetObject)) {
 				return item;
 			}
 			if (item.children && item.children.length > 0) {
-				const parent: any = findParent(MenuItems = item.children, targetObject);
+				const parent: any = findParent(item.children, targetObject);
 				if (parent) {
 					return parent;
 				}
@@ -651,7 +658,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 							</svg></div>
 
 							<ul className="main-menu" onClick={() => Sideclick()}>
-								{MenuItems.map((levelone: any, index:any) => (
+								{menuitems.map((levelone: any, index:any) => (
 									<Fragment key={index}>
 										<li className={`${levelone.menutitle ? 'slide__category' : ''} ${levelone.type === 'link' ? 'slide' : ''}
                                                ${levelone.type === 'sub' ? 'slide has-sub' : ''} ${levelone?.active ? 'open' : ''} ${levelone?.selected ? 'active' : ''}`}>

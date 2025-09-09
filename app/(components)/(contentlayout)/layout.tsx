@@ -9,6 +9,7 @@ import { ThemeChanger } from "@/shared/redux/action"
 import store from "@/shared/redux/store"
 import { Fragment,  useState } from "react"
 import {  connect } from "react-redux"
+import { NavigationProvider } from "@/shared/contextapi/navigationContext"
 
 const Layout = ({children,}:any) => {
 
@@ -33,15 +34,17 @@ const Layout = ({children,}:any) => {
     <Fragment>
         <Switcher/>
       <div className='page'>
-        <Header/>
-        <Sidebar/>
-        <div className='content'>
-          <div className='main-content'  
-          onClick={Bodyclickk}
-          >
-            {children}
+        <NavigationProvider>
+          <Header/>
+          <Sidebar/>
+          <div className='content'>
+            <div className='main-content'  
+            onClick={Bodyclickk}
+            >
+              {children}
+            </div>
           </div>
-        </div>
+        </NavigationProvider>
         <Footer/>
       </div>
       <Backtotop/>
