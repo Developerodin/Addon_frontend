@@ -5,35 +5,13 @@ import Link from "next/link";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import OrderViewModal from "../../../shared/components/production/OrderViewModal";
+import { productionService, ProductionOrder, OrderFilters } from "@/shared/services/productionService";
 
 interface FloorQuantity {
   floor: string;
   completed: number;
   pending: number;
   status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
-}
-
-interface Article {
-  id: string;
-  articleNumber: string;
-  plannedQuantity: number;
-  completedQuantity: number;
-  linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
-  priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
-  progress: number;
-  currentFloor: string;
-  floorQuantities: FloorQuantity[];
-}
-
-interface ProductionOrder {
-  id: string;
-  priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
-  articles: Article[];
-  floor: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 
@@ -54,250 +32,54 @@ const ProductionSupervisorPage = () => {
     linkingType: '',
     floor: ''
   });
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
 
-  // Static data for demonstration
-  const staticOrders: ProductionOrder[] = [
-    {
-      id: 'ORD-001',
-      priority: 'High',
-      status: 'In Progress',
-      floor: 'Knitting',
-      createdAt: '2025-09-01',
-      updatedAt: '2025-09-01',
-      articles: [
-        {
-          id: 'ART001',
-          articleNumber: 'ART001',
-          plannedQuantity: 1000,
-          completedQuantity: 750,
-          linkingType: 'Auto Linking',
-          priority: 'High',
-          status: 'In Progress',
-          progress: 75,
-          currentFloor: 'Knitting',
-          floorQuantities: [
-            { floor: 'Knitting', completed: 750, pending: 250, status: 'In Progress' },
-            { floor: 'Linking', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Checking', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Washing', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
-          ]
-        },
-        {
-          id: 'ART002',
-          articleNumber: 'ART002',
-          plannedQuantity: 500,
-          completedQuantity: 200,
-          linkingType: 'Rosso Linking',
-          priority: 'Medium',
-          status: 'In Progress',
-          progress: 40,
-          currentFloor: 'Linking',
-          floorQuantities: [
-            { floor: 'Knitting', completed: 500, pending: 0, status: 'Completed' },
-            { floor: 'Linking', completed: 200, pending: 300, status: 'In Progress' },
-            { floor: 'Checking', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Washing', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
-          ]
-        }
-      ]
-    },
-    {
-      id: 'ORD-002',
-      priority: 'Medium',
-      status: 'In Progress',
-      floor: 'Linking',
-      createdAt: '2025-09-02',
-      updatedAt: '2025-09-02',
-      articles: [
-        {
-          id: 'ART003',
-          articleNumber: 'ART003',
-          plannedQuantity: 500,
-          completedQuantity: 300,
-          linkingType: 'Rosso Linking',
-          priority: 'Medium',
-          status: 'In Progress',
-          progress: 60,
-          currentFloor: 'Linking',
-          floorQuantities: [
-            { floor: 'Knitting', completed: 500, pending: 0, status: 'Completed' },
-            { floor: 'Linking', completed: 300, pending: 200, status: 'In Progress' },
-            { floor: 'Checking', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Washing', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
-          ]
-        }
-      ]
-    },
-    {
-      id: 'ORD-003',
-      priority: 'Urgent',
-      status: 'In Progress',
-      floor: 'Checking',
-      createdAt: '2025-09-03',
-      updatedAt: '2025-09-03',
-      articles: [
-        {
-          id: 'ART004',
-          articleNumber: 'ART004',
-          plannedQuantity: 750,
-          completedQuantity: 600,
-          linkingType: 'Hand Linking',
-          priority: 'Urgent',
-          status: 'In Progress',
-          progress: 80,
-          currentFloor: 'Checking',
-          floorQuantities: [
-            { floor: 'Knitting', completed: 750, pending: 0, status: 'Completed' },
-            { floor: 'Linking', completed: 750, pending: 0, status: 'Completed' },
-            { floor: 'Checking', completed: 600, pending: 150, status: 'In Progress' },
-            { floor: 'Washing', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
-          ]
-        },
-        {
-          id: 'ART005',
-          articleNumber: 'ART005',
-          plannedQuantity: 300,
-          completedQuantity: 150,
-          linkingType: 'Auto Linking',
-          priority: 'High',
-          status: 'In Progress',
-          progress: 50,
-          currentFloor: 'Checking',
-          floorQuantities: [
-            { floor: 'Knitting', completed: 300, pending: 0, status: 'Completed' },
-            { floor: 'Linking', completed: 300, pending: 0, status: 'Completed' },
-            { floor: 'Checking', completed: 150, pending: 150, status: 'In Progress' },
-            { floor: 'Washing', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
-          ]
-        }
-      ]
-    },
-    {
-      id: 'ORD-004',
-      priority: 'Low',
-      status: 'In Progress',
-      floor: 'Washing',
-      createdAt: '2025-09-04',
-      updatedAt: '2025-09-04',
-      articles: [
-        {
-          id: 'ART006',
-          articleNumber: 'ART006',
-          plannedQuantity: 1200,
-          completedQuantity: 600,
-          linkingType: 'Auto Linking',
-          priority: 'Low',
-          status: 'In Progress',
-          progress: 50,
-          currentFloor: 'Washing',
-          floorQuantities: [
-            { floor: 'Knitting', completed: 1200, pending: 0, status: 'Completed' },
-            { floor: 'Linking', completed: 1200, pending: 0, status: 'Completed' },
-            { floor: 'Checking', completed: 1200, pending: 0, status: 'Completed' },
-            { floor: 'Washing', completed: 600, pending: 600, status: 'In Progress' },
-            { floor: 'Boarding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
-          ]
-        }
-      ]
-    },
-    {
-      id: 'ORD-005',
-      priority: 'High',
-      status: 'In Progress',
-      floor: 'Final Checking',
-      createdAt: '2025-09-05',
-      updatedAt: '2025-09-05',
-      articles: [
-        {
-          id: 'ART007',
-          articleNumber: 'ART007',
-          plannedQuantity: 800,
-          completedQuantity: 720,
-          linkingType: 'Rosso Linking',
-          priority: 'High',
-          status: 'In Progress',
-          progress: 90,
-          currentFloor: 'Final Checking',
-          floorQuantities: [
-            { floor: 'Knitting', completed: 800, pending: 0, status: 'Completed' },
-            { floor: 'Linking', completed: 800, pending: 0, status: 'Completed' },
-            { floor: 'Checking', completed: 800, pending: 0, status: 'Completed' },
-            { floor: 'Washing', completed: 800, pending: 0, status: 'Completed' },
-            { floor: 'Boarding', completed: 800, pending: 0, status: 'Completed' },
-            { floor: 'Final Checking', completed: 720, pending: 80, status: 'In Progress' },
-            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
-          ]
-        },
-        {
-          id: 'ART008',
-          articleNumber: 'ART008',
-          plannedQuantity: 400,
-          completedQuantity: 100,
-          linkingType: 'Hand Linking',
-          priority: 'Medium',
-          status: 'In Progress',
-          progress: 25,
-          currentFloor: 'Boarding',
-          floorQuantities: [
-            { floor: 'Knitting', completed: 400, pending: 0, status: 'Completed' },
-            { floor: 'Linking', completed: 400, pending: 0, status: 'Completed' },
-            { floor: 'Checking', completed: 400, pending: 0, status: 'Completed' },
-            { floor: 'Washing', completed: 400, pending: 0, status: 'Completed' },
-            { floor: 'Boarding', completed: 100, pending: 300, status: 'In Progress' },
-            { floor: 'Branding', completed: 0, pending: 0, status: 'Pending' },
-            { floor: 'Warehouse', completed: 0, pending: 0, status: 'Pending' }
-          ]
-        }
-      ]
-    }
-  ];
-
-
-  useEffect(() => {
-    // Simulate loading
+  // Load orders from API
+  const loadOrders = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setOrders(staticOrders);
+    try {
+      const apiFilters: OrderFilters = {
+        page: currentPage,
+        limit: itemsPerPage,
+        ...(filters.status && { status: filters.status }),
+        ...(filters.priority && { priority: filters.priority }),
+        ...(filters.floor && { currentFloor: filters.floor }),
+        ...(searchQuery && { search: searchQuery }),
+        sortBy: 'createdAt',
+        populate: 'articles'
+      };
+
+      const response = await productionService.getOrders(apiFilters);
+      
+      if (response.success) {
+        console.log('Orders loaded:', response.data.results);
+        setOrders(response.data.results);
+        setTotalPages(response.data.totalPages);
+        setTotalResults(response.data.totalResults);
+      } else {
+        console.error('Failed to load orders:', response.error);
+        toast.error('Failed to load orders');
+      }
+    } catch (error: any) {
+      console.error('Error loading orders:', error);
+      toast.error(error.message || 'Failed to load orders');
+    } finally {
       setIsLoading(false);
-    }, 500);
-  }, []);
+    }
+  };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.articles.some(article => 
-      article.articleNumber.toLowerCase().includes(searchQuery.toLowerCase())
-    ) || order.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = !filters.status || order.status === filters.status;
-    const matchesPriority = !filters.priority || order.priority === filters.priority;
-    const matchesLinkingType = !filters.linkingType || order.articles.some(article => article.linkingType === filters.linkingType);
-    const matchesFloor = !filters.floor || order.floor.toLowerCase().includes(filters.floor.toLowerCase());
+  // Debounced search effect
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadOrders();
+    }, 500); // 500ms delay
 
-    return matchesSearch && matchesStatus && matchesPriority && matchesLinkingType && matchesFloor;
-  });
+    return () => clearTimeout(timeoutId);
+  }, [currentPage, itemsPerPage, filters, searchQuery]);
 
-  const paginatedOrders = filteredOrders.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  // No client-side filtering needed since we're using API filtering
+  const paginatedOrders = orders;
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -316,24 +98,37 @@ const ProductionSupervisorPage = () => {
     }
   };
 
-  const handleDeleteOrder = (orderId: string) => {
+  const handleDeleteOrder = async (orderId: string) => {
     if (window.confirm('Are you sure you want to delete this order?')) {
-      setOrders(orders.filter(order => order.id !== orderId));
-      toast.success('Order deleted successfully');
+      try {
+        await productionService.deleteOrder(orderId);
+        toast.success('Order deleted successfully');
+        loadOrders(); // Reload orders
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to delete order');
+      }
     }
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedOrders.length === 0) {
       toast.error('Please select orders to delete');
       return;
     }
 
     if (window.confirm(`Are you sure you want to delete ${selectedOrders.length} orders?`)) {
-      setOrders(orders.filter(order => !selectedOrders.includes(order.id)));
-      setSelectedOrders([]);
-      setSelectAll(false);
-      toast.success(`${selectedOrders.length} orders deleted successfully`);
+      try {
+        // Delete orders one by one
+        const deletePromises = selectedOrders.map(orderId => productionService.deleteOrder(orderId));
+        await Promise.all(deletePromises);
+        
+        setSelectedOrders([]);
+        setSelectAll(false);
+        toast.success(`${selectedOrders.length} orders deleted successfully`);
+        loadOrders(); // Reload orders
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to delete some orders');
+      }
     }
   };
 
@@ -441,6 +236,15 @@ const ProductionSupervisorPage = () => {
                 />
               </div>
               <div className="box-tools flex items-center space-x-2">
+                <button 
+                  type="button" 
+                  className="ti-btn ti-btn-light"
+                  onClick={loadOrders}
+                  disabled={isLoading}
+                  title="Refresh Orders"
+                >
+                  <i className={`ri-refresh-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+                </button>
                 {selectedOrders.length > 0 && (
                   <button 
                     type="button" 
@@ -661,7 +465,7 @@ const ProductionSupervisorPage = () => {
                     <p className="text-gray-600">Loading orders...</p>
                   </div>
                 </div>
-              ) : filteredOrders.length === 0 ? (
+              ) : orders.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-gray-400 mb-4">
                     <i className="ri-file-list-line text-6xl"></i>
@@ -719,12 +523,12 @@ const ProductionSupervisorPage = () => {
                           </td>
                           <td className="px-4 py-4">
                             <div className="space-y-1">
-                              <div className="font-medium text-gray-900">{order.id}</div>
+                              <div className="font-medium text-gray-900">{order.orderNumber}</div>
                               <div className="text-sm text-gray-500">
-                                Created: {order.createdAt}
+                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                               </div>
                               <div className="text-xs text-gray-400">
-                                Updated: {order.updatedAt}
+                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : 'N/A'}
                               </div>
                             </div>
                           </td>
@@ -738,6 +542,9 @@ const ProductionSupervisorPage = () => {
                               </div>
                               <div className="text-xs text-gray-500">
                                 Completed: {order.articles.reduce((sum, article) => sum + article.completedQuantity, 0).toLocaleString()}
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                Floor: {order.currentFloor}
                               </div>
                             </div>
                           </td>
@@ -763,12 +570,13 @@ const ProductionSupervisorPage = () => {
                               >
                                 <i className="ri-eye-line"></i>
                               </button>
-                              <button 
+                              <Link 
+                                href={`/production/supervisor/edit?id=${order.id}`}
                                 className="ti-btn ti-btn-primary ti-btn-sm"
                                 title="Edit Order"
                               >
                                 <i className="ri-edit-line"></i>
-                              </button>
+                              </Link>
                               <button 
                                 className="ti-btn ti-btn-danger ti-btn-sm"
                                 onClick={() => handleDeleteOrder(order.id)}
@@ -786,13 +594,13 @@ const ProductionSupervisorPage = () => {
               )}
 
               {/* Pagination */}
-              {!isLoading && filteredOrders.length > 0 && (
+              {!isLoading && orders.length > 0 && (
                 <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-6 border-t border-gray-200">
                   <div className="text-sm text-gray-700 mb-4 sm:mb-0">
                     <span className="font-medium">
-                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredOrders.length)} 
+                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} 
                     </span>
-                    <span className="text-gray-500"> of {filteredOrders.length.toLocaleString()} orders</span>
+                    <span className="text-gray-500"> of {totalResults.toLocaleString()} orders</span>
                   </div>
                   
                   <nav aria-label="Page navigation" className="flex items-center space-x-1">

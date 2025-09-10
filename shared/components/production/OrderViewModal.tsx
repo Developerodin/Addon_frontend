@@ -1,309 +1,352 @@
 "use client";
-import React, { useState } from "react";
-
-interface FloorQuantity {
-  floor: string;
-  completed: number;
-  pending: number;
-  status: "Pending" | "In Progress" | "Completed" | "On Hold";
-}
-
-interface Article {
-  id: string;
-  articleNumber: string;
-  plannedQuantity: number;
-  completedQuantity: number;
-  linkingType: "Auto Linking" | "Rosso Linking" | "Hand Linking";
-  priority: "High" | "Medium" | "Low" | "Urgent";
-  status: "Pending" | "In Progress" | "Completed" | "On Hold";
-  progress: number;
-  currentFloor: string;
-  floorQuantities: FloorQuantity[];
-}
-
-interface ProductionOrder {
-  id: string;
-  priority: "High" | "Medium" | "Low" | "Urgent";
-  status: "Pending" | "In Progress" | "Completed" | "On Hold";
-  articles: Article[];
-  floor: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import React, { useState, useEffect } from "react";
+import { toast } from "react-hot-toast";
+import { productionService, ProductionOrder, Article } from "@/shared/services/productionService";
 
 interface OrderViewModalProps {
   order: ProductionOrder;
   onClose: () => void;
 }
 
-const getStatusBadge = (status: string) => {
-  const statusClasses = {
-    Pending: "bg-yellow-100 text-yellow-800",
-    "In Progress": "bg-blue-100 text-blue-800",
-    Completed: "bg-green-100 text-green-800",
-    "On Hold": "bg-red-100 text-red-800",
-  } as const;
-  return statusClasses[status as keyof typeof statusClasses] || "bg-gray-100 text-gray-800";
-};
-
-const getPriorityBadge = (priority: string) => {
-  const priorityClasses = {
-    Urgent: "bg-red-100 text-red-800",
-    High: "bg-orange-100 text-orange-800",
-    Medium: "bg-yellow-100 text-yellow-800",
-    Low: "bg-green-100 text-green-800",
-  } as const;
-  return priorityClasses[priority as keyof typeof priorityClasses] || "bg-gray-100 text-gray-800";
-};
+interface ArticleLog {
+  id: string;
+  action: string;
+  details: any;
+  timestamp: string;
+  userId: string;
+}
 
 const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
-  const [activeTabIndex, setActiveTabIndex] = useState(0);
-  const [showLogs, setShowLogs] = useState(false);
+  const [activeTab, setActiveTab] = useState<'articles' | 'logs' | 'timeline'>('articles');
+  const [articleLogs, setArticleLogs] = useState<ArticleLog[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
 
-  const articles = order.articles;
-  const activeArticle = articles[activeTabIndex];
-
-  // Fixed "today" as requested: 1-Sep-2025
-  const BASE_TODAY = new Date('2025-09-01T00:00:00');
-
-  const formatDate = (base: Date, offsetDays: number) => {
-    const d = new Date(base.getTime());
-    d.setDate(d.getDate() + offsetDays);
-    const day = d.getDate();
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const mon = months[d.getMonth()];
-    const yr = d.getFullYear();
-    return `${day}-${mon}-${yr}`; // e.g., 1-Sep-2025
+  const loadArticleLogs = async (articleId: string) => {
+    setIsLoadingLogs(true);
+    try {
+      const response = await productionService.getArticleLogs(articleId, {
+        limit: 50,
+        offset: 0
+      });
+      
+      if (response.success) {
+        setArticleLogs(response.data.logs || []);
+      }
+    } catch (error: any) {
+      console.error('Error loading article logs:', error);
+      toast.error('Failed to load article logs');
+    } finally {
+      setIsLoadingLogs(false);
+    }
   };
 
-  const buildArticleLogs = (article?: Article): string[] => {
-    if (!article) return [];
-    const logs: string[] = [];
-    // Initial allocation to first floor (if present)
-    if (article.floorQuantities && article.floorQuantities.length > 0) {
-      const firstFloor = article.floorQuantities[0]?.floor || 'Knitting';
-      logs.push(`Production allocated ${article.plannedQuantity} to ${firstFloor} on ${formatDate(BASE_TODAY, 0)}`);
-    }
-    // Transfers between consecutive floors (based on next floor's completed qty)
-    for (let i = 0; i < (article.floorQuantities?.length || 0) - 1; i++) {
-      const cur = article.floorQuantities[i];
-      const nxt = article.floorQuantities[i + 1];
-      if (!cur || !nxt) continue;
-      const transferred = Math.max(0, nxt.completed);
-      if (transferred > 0) {
-        logs.push(`${cur.floor} transferred ${transferred} to ${nxt.floor} on ${formatDate(BASE_TODAY, i + 1)}`);
-      }
-    }
-    return logs;
+  const handleArticleClick = (article: Article) => {
+    setSelectedArticle(article);
+    loadArticleLogs(article.id);
+  };
+
+  const getStatusBadge = (status: string) => {
+    const statusClasses = {
+      'Pending': 'bg-yellow-100 text-yellow-800',
+      'In Progress': 'bg-blue-100 text-blue-800',
+      'Completed': 'bg-green-100 text-green-800',
+      'On Hold': 'bg-red-100 text-red-800',
+      'Cancelled': 'bg-gray-100 text-gray-800'
+    };
+    return statusClasses[status as keyof typeof statusClasses] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getPriorityBadge = (priority: string) => {
+    const priorityClasses = {
+      'Urgent': 'bg-red-100 text-red-800',
+      'High': 'bg-orange-100 text-orange-800',
+      'Medium': 'bg-yellow-100 text-yellow-800',
+      'Low': 'bg-green-100 text-green-800'
+    };
+    return priorityClasses[priority as keyof typeof priorityClasses] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getFloorBadge = (floor: string) => {
+    const floorClasses = {
+      'Knitting': 'bg-blue-100 text-blue-800',
+      'Linking': 'bg-purple-100 text-purple-800',
+      'Checking': 'bg-yellow-100 text-yellow-800',
+      'Washing': 'bg-cyan-100 text-cyan-800',
+      'Boarding': 'bg-orange-100 text-orange-800',
+      'Branding': 'bg-pink-100 text-pink-800',
+      'Final Checking': 'bg-indigo-100 text-indigo-800',
+      'Warehouse': 'bg-green-100 text-green-800'
+    };
+    return floorClasses[floor as keyof typeof floorClasses] || 'bg-gray-100 text-gray-800';
+  };
+
+  const formatDate = (dateString?: string) => {
+    return dateString ? new Date(dateString).toLocaleString() : 'N/A';
+  };
+
+  const calculateProgress = (article: Article) => {
+    if (article.plannedQuantity === 0) return 0;
+    return Math.round((article.completedQuantity / article.plannedQuantity) * 100);
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-5xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-semibold">Order Details - {order.id}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <i className="ri-close-line text-xl"></i>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex justify-between items-center p-6 border-b border-gray-200">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Order Details</h2>
+            <p className="text-gray-600">Order Number: {order.orderNumber}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <i className="ri-close-line text-2xl"></i>
           </button>
         </div>
 
-        {/* Order Summary (removed Main Floor) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-          <div>
-            <label className="text-sm font-medium text-gray-600">Priority</label>
-            <div className="mt-1">
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(order.priority)}`}>
-                {order.priority}
-              </span>
-            </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-600">Status</label>
-            <div className="mt-1">
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
-                {order.status}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Articles Tabs as blue buttons */}
-        <div className="mb-4">
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            {articles.map((article, idx) => (
-              <button
-                key={article.id}
-                className={`px-3 py-2 text-sm font-medium rounded-md whitespace-nowrap focus:outline-none ${
-                  idx === activeTabIndex
-                    ? "bg-blue-600 text-white"
-                    : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                }`}
-                onClick={() => setActiveTabIndex(idx)}
-                title={article.articleNumber}
-              >
-                {article.articleNumber || `Article ${idx + 1}`}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Active Article Content */}
-        {activeArticle && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <h5 className="text-md font-medium text-gray-900">
-                  {activeArticle.articleNumber}
-                </h5>
-                <div className="text-sm text-gray-600 mt-1">
-                  <span className="font-medium">Linking Type:</span> {activeArticle.linkingType}
-                </div>
-              </div>
-              <div className="text-right">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(activeArticle.priority)}`}>
-                  {activeArticle.priority}
+        {/* Order Info */}
+        <div className="p-6 border-b border-gray-200 bg-gray-50">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-500">Priority</label>
+              <div className="mt-1">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(order.priority)}`}>
+                  {order.priority}
                 </span>
               </div>
             </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">Status</label>
+              <div className="mt-1">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
+                  {order.status}
+                </span>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">Current Floor</label>
+              <div className="mt-1">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFloorBadge(order.currentFloor)}`}>
+                  {order.currentFloor}
+                </span>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">Articles</label>
+              <div className="mt-1 text-lg font-semibold text-gray-900">
+                {order.articles.length}
+              </div>
+            </div>
+          </div>
+          
+          {order.orderNote && (
+            <div className="mt-4">
+              <label className="text-sm font-medium text-gray-500">Order Note</label>
+              <p className="mt-1 text-gray-900">{order.orderNote}</p>
+            </div>
+          )}
+        </div>
 
-            <div className="mb-4">
-              <label className="text-sm font-medium text-gray-600 mb-3 block">Floor Progression</label>
-              <div className="space-y-3">
-                {activeArticle.floorQuantities.map((floorData) => (
-                  <div key={floorData.floor} className="flex items-center space-x-4">
-                    <div className="w-24 flex-shrink-0">
-                      <div
-                        className={`text-sm font-medium px-2 py-1 rounded ${
-                          floorData.status === "Completed"
-                            ? "bg-green-100 text-green-800"
-                            : floorData.status === "In Progress"
-                            ? "bg-blue-100 text-blue-800"
-                            : floorData.status === "On Hold"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {floorData.floor}
-                      </div>
-                    </div>
+        {/* Tabs */}
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8 px-6">
+            <button
+              onClick={() => setActiveTab('articles')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'articles'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Articles ({order.articles.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'logs'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Logs
+            </button>
+            <button
+              onClick={() => setActiveTab('timeline')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'timeline'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Timeline
+            </button>
+          </nav>
+        </div>
 
+        {/* Content */}
+        <div className="p-6 max-h-96 overflow-y-auto">
+          {activeTab === 'articles' && (
+            <div className="space-y-4">
+              {order.articles.map((article, index) => (
+                <div
+                  key={article.id}
+                  className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                    selectedArticle?.id === article.id
+                      ? 'border-primary bg-primary-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => handleArticleClick(article)}
+                >
+                  <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <div className="flex items-center space-x-2">
-                        <div className="flex-1 bg-gray-200 rounded-full h-2">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <h3 className="text-lg font-medium text-gray-900">
+                          {article.articleNumber}
+                        </h3>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority)}`}>
+                          {article.priority}
+                        </span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(article.status)}`}>
+                          {article.status}
+                        </span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFloorBadge(article.currentFloor)}`}>
+                          {article.currentFloor}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-500">Planned:</span>
+                          <span className="ml-1 font-medium">{article.plannedQuantity.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Completed:</span>
+                          <span className="ml-1 font-medium">{article.completedQuantity.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Linking Type:</span>
+                          <span className="ml-1 font-medium">{article.linkingType}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Progress:</span>
+                          <span className="ml-1 font-medium">{calculateProgress(article)}%</span>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="mt-3">
+                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                          <span>Progress</span>
+                          <span>{calculateProgress(article)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
                           <div
-                            className={`h-2 rounded-full transition-all duration-300 ${
-                              floorData.status === "Completed"
-                                ? "bg-green-500"
-                                : floorData.status === "In Progress"
-                                ? "bg-blue-500"
-                                : floorData.status === "On Hold"
-                                ? "bg-red-500"
-                                : "bg-gray-300"
-                            }`}
-                            style={{
-                              width: `${
-                                activeArticle.plannedQuantity > 0
-                                  ? (floorData.completed / activeArticle.plannedQuantity) * 100
-                                  : 0
-                              }%`,
-                            }}
+                            className="bg-primary h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${calculateProgress(article)}%` }}
                           ></div>
                         </div>
-                        <div className="text-xs text-gray-600 w-16 text-right">
-                          {floorData.completed}/{activeArticle.plannedQuantity}
-                        </div>
                       </div>
-                    </div>
 
-                    <div className="w-20 flex-shrink-0">
-                      <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          floorData.status === "Completed"
-                            ? "bg-green-100 text-green-800"
-                            : floorData.status === "In Progress"
-                            ? "bg-blue-100 text-blue-800"
-                            : floorData.status === "On Hold"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {floorData.status}
-                      </span>
+                      {/* Quality Categories */}
+                      {(article.m1Quantity > 0 || article.m2Quantity > 0 || article.m3Quantity > 0 || article.m4Quantity > 0) && (
+                        <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+                          <div className="text-center">
+                            <div className="font-medium text-green-600">M1</div>
+                            <div className="text-gray-600">{article.m1Quantity}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="font-medium text-yellow-600">M2</div>
+                            <div className="text-gray-600">{article.m2Quantity}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="font-medium text-orange-600">M3</div>
+                            <div className="text-gray-600">{article.m3Quantity}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="font-medium text-red-600">M4</div>
+                            <div className="text-gray-600">{article.m4Quantity}</div>
+                          </div>
+                        </div>
+                      )}
+
+                      {article.remarks && (
+                        <div className="mt-2 text-sm text-gray-600">
+                          <span className="font-medium">Remarks:</span> {article.remarks}
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md-grid-cols-3 md:grid-cols-3 gap-4 mb-2">
-              <div>
-                <label className="text-sm font-medium text-gray-600">Planned Quantity</label>
-                <div className="text-lg font-semibold text-gray-900">
-                  {activeArticle.plannedQuantity.toLocaleString()}
                 </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Completed Quantity</label>
-                <div className="text-lg font-semibold text-green-600">
-                  {activeArticle.completedQuantity.toLocaleString()}
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Current Floor</label>
-                <div className="text-sm text-gray-900">{activeArticle.currentFloor}</div>
-              </div>
+              ))}
             </div>
+          )}
 
-            {/* Article Logs Toggle and Panel */}
-            <div className="mb-4">
-              <button
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
-                onClick={() => setShowLogs(!showLogs)}
-                title="View Article Logs"
-                type="button"
-              >
-                <i className="ri-file-list-3-line"></i>
-                {showLogs ? 'Hide Logs' : 'View Logs'}
-              </button>
-              {showLogs && (
-                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded max-w-full overflow-x-auto">
-                  <ul className="list-disc list-inside text-sm text-blue-900 space-y-1 break-words">
-                    {buildArticleLogs(activeArticle).map((log, i) => (
-                      <li key={i}>{log}</li>
-                    ))}
-                  </ul>
+          {activeTab === 'logs' && (
+            <div>
+              {selectedArticle ? (
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">
+                    Logs for Article: {selectedArticle.articleNumber}
+                  </h3>
+                  
+                  {isLoadingLogs ? (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    </div>
+                  ) : articleLogs.length > 0 ? (
+                    <div className="space-y-3">
+                      {articleLogs.map((log) => (
+                        <div key={log.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <span className="font-medium text-gray-900">{log.action}</span>
+                                <span className="text-sm text-gray-500">
+                                  {formatDate(log.timestamp)}
+                                </span>
+                              </div>
+                              {log.details && (
+                                <div className="text-sm text-gray-600">
+                                  <pre className="whitespace-pre-wrap">{JSON.stringify(log.details, null, 2)}</pre>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      No logs found for this article
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  Select an article to view its logs
                 </div>
               )}
             </div>
+          )}
 
-            <div className="mb-4">
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-sm font-medium text-gray-600">Progress</label>
-                <span className="text-sm font-medium text-gray-900">{activeArticle.progress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className="bg-primary h-3 rounded-full transition-all duration-300"
-                  style={{ width: `${activeArticle.progress}%` }}
-                ></div>
+          {activeTab === 'timeline' && (
+            <div className="space-y-4">
+              <div className="text-center py-8 text-gray-500">
+                Timeline view - Coming soon
               </div>
             </div>
+          )}
+        </div>
 
-            <div className="flex justify-between items-center">
-              <div>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(activeArticle.status)}`}>
-                  {activeArticle.status}
-                </span>
-              </div>
-              <div className="text-sm text-gray-500">
-                {activeArticle.completedQuantity} of {activeArticle.plannedQuantity} completed
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="flex justify-end mt-6 pt-4 border-t">
-          <button onClick={onClose} className="ti-btn ti-btn-secondary">
+        {/* Footer */}
+        <div className="flex justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="ti-btn ti-btn-secondary"
+          >
             Close
           </button>
         </div>
@@ -313,5 +356,3 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
 };
 
 export default OrderViewModal;
-
-

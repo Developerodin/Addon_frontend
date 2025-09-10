@@ -3,40 +3,7 @@ import React, { useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
-
-interface ArticleLog {
-  id: string;
-  date: string; // YYYY-MM-DD
-  action: string; // e.g., "Transferred to Linking"
-  quantity: number;
-  fromFloor?: string;
-  toFloor?: string;
-  remarks?: string;
-}
-
-interface Article {
-  id: string;
-  articleNumber: string;
-  plannedQuantity: number;
-  completedQuantity: number;
-  linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
-  priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
-  progress: number;
-  currentFloor: string;
-  remarks?: string;
-  logs?: ArticleLog[];
-}
-
-interface ProductionOrder {
-  id: string;
-  priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
-  articles: Article[];
-  floor: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 
 const KnittingFloorSupervisorPage = () => {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
@@ -51,135 +18,57 @@ const KnittingFloorSupervisorPage = () => {
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
   const [updateData, setUpdateData] = useState<{[key: string]: {completedQuantity: number, remarks: string}}>({});
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
-  const [showLogs, setShowLogs] = useState(false);
   const [filters, setFilters] = useState({
     status: '',
     priority: '',
     linkingType: '',
     floor: ''
   });
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
 
-  // Static data for demonstration - filtered for Knitting floor
-  const staticOrders: ProductionOrder[] = [
-    {
-      id: 'ORD-001',
-      priority: 'High',
-      status: 'In Progress',
-      floor: 'Knitting',
-      createdAt: '2024-01-15',
-      updatedAt: '2024-01-20',
-      articles: [
-        {
-          id: 'ART001',
-          articleNumber: 'ART001',
-          plannedQuantity: 1000,
-          completedQuantity: 750,
-          linkingType: 'Auto Linking',
-          priority: 'High',
-          status: 'In Progress',
-          progress: 75,
-          currentFloor: 'Knitting',
-          remarks: 'Good progress, no issues'
-        },
-        {
-          id: 'ART002',
-          articleNumber: 'ART002',
-          plannedQuantity: 500,
-          completedQuantity: 200,
-          linkingType: 'Rosso Linking',
-          priority: 'Medium',
-          status: 'In Progress',
-          progress: 40,
-          currentFloor: 'Linking',
-          remarks: 'Started yesterday'
-        }
-      ]
-    },
-    {
-      id: 'ORD-003',
-      priority: 'Urgent',
-      status: 'In Progress',
-      floor: 'Knitting',
-      createdAt: '2024-01-20',
-      updatedAt: '2024-01-20',
-      articles: [
-        {
-          id: 'ART004',
-          articleNumber: 'ART004',
-          plannedQuantity: 750,
-          completedQuantity: 0,
-          linkingType: 'Hand Linking',
-          priority: 'Urgent',
-          status: 'Pending',
-          progress: 0,
-          currentFloor: 'Knitting',
-          remarks: 'Ready to start'
-        },
-        {
-          id: 'ART005',
-          articleNumber: 'ART005',
-          plannedQuantity: 300,
-          completedQuantity: 0,
-          linkingType: 'Auto Linking',
-          priority: 'High',
-          status: 'Pending',
-          progress: 0,
-          currentFloor: 'Knitting',
-          remarks: 'Waiting for materials'
-        }
-      ]
-    },
-    {
-      id: 'ORD-005',
-      priority: 'High',
-      status: 'In Progress',
-      floor: 'Knitting',
-      createdAt: '2024-01-08',
-      updatedAt: '2024-01-21',
-      articles: [
-        {
-          id: 'ART007',
-          articleNumber: 'ART007',
-          plannedQuantity: 800,
-          completedQuantity: 720,
-          linkingType: 'Rosso Linking',
-          priority: 'High',
-          status: 'In Progress',
-          progress: 90,
-          currentFloor: 'Knitting',
-          remarks: 'Almost complete, quality check needed'
-        }
-      ]
-    }
-  ];
-
-  useEffect(() => {
-    // Simulate loading
+  // Load knitting floor orders from API
+  const loadOrders = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setOrders(staticOrders);
+    try {
+      const apiFilters: FloorOrderFilters = {
+        page: currentPage,
+        limit: itemsPerPage,
+        ...(filters.status && { status: filters.status }),
+        ...(filters.priority && { priority: filters.priority }),
+        ...(searchQuery && { search: searchQuery })
+      };
+
+      const response = await productionService.getFloorOrders('Knitting', apiFilters);
+      
+      if (response.success) {
+        console.log('Knitting orders loaded:', response.data.results);
+        setOrders(response.data.results);
+        setTotalPages(response.data.totalPages);
+        setTotalResults(response.data.totalResults);
+      } else {
+        console.error('Failed to load knitting orders:', response.error);
+        toast.error('Failed to load knitting orders');
+      }
+    } catch (error: any) {
+      console.error('Error loading knitting orders:', error);
+      toast.error(error.message || 'Failed to load knitting orders');
+    } finally {
       setIsLoading(false);
-    }, 500);
-  }, []);
+    }
+  };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.articles.some(article => 
-      article.articleNumber.toLowerCase().includes(searchQuery.toLowerCase())
-    ) || order.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = !filters.status || order.status === filters.status;
-    const matchesPriority = !filters.priority || order.priority === filters.priority;
-    const matchesLinkingType = !filters.linkingType || order.articles.some(article => article.linkingType === filters.linkingType);
-    const matchesFloor = !filters.floor || order.floor.toLowerCase().includes(filters.floor.toLowerCase());
+  // Debounced search effect
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadOrders();
+    }, 500); // 500ms delay
 
-    return matchesSearch && matchesStatus && matchesPriority && matchesLinkingType && matchesFloor;
-  });
+    return () => clearTimeout(timeoutId);
+  }, [currentPage, itemsPerPage, filters, searchQuery]);
 
-  const paginatedOrders = filteredOrders.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  // No client-side filtering needed since we're using API filtering
+  const paginatedOrders = orders;
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -210,7 +99,6 @@ const KnittingFloorSupervisorPage = () => {
     });
     setUpdateData(initialData);
     setActiveUpdateTabIndex(0);
-    setShowLogs(false);
     setShowUpdateModal(true);
   };
 
@@ -240,56 +128,44 @@ const KnittingFloorSupervisorPage = () => {
     }));
   };
 
-  const handleUpdateSubmit = () => {
+  const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
-    // Update the order with new data
-    setOrders(prev => prev.map(order => 
-      order.id === selectedOrder.id 
-        ? {
-            ...order,
-            articles: order.articles.map(article => {
-              const update = updateData[article.id];
-              if (update) {
-                const newProgress = Math.round((update.completedQuantity / article.plannedQuantity) * 100);
-                const newStatus = update.completedQuantity >= article.plannedQuantity ? 'Completed' : 
-                                 update.completedQuantity > 0 ? 'In Progress' : 'Pending';
+    try {
+      setIsLoading(true);
+      
+      // Update each article that has changes
+      const updatePromises = selectedOrder.articles.map(async (article) => {
+        const update = updateData[article.id];
+        if (update && (update.completedQuantity !== article.completedQuantity || update.remarks !== article.remarks)) {
+          const progressData = {
+            completedQuantity: update.completedQuantity,
+            remarks: update.remarks
+          };
+          
+          return productionService.updateArticleProgress(
+            'Knitting',
+            selectedOrder.id,
+            article._id || article.id,
+            progressData
+          );
+        }
+        return null;
+      }).filter(Boolean);
 
-                // Compute delta to log transfers to Linking
-                const previousCompleted = article.completedQuantity || 0;
-                const deltaTransferred = Math.max(0, update.completedQuantity - previousCompleted);
-                let newLogs = article.logs ? [...article.logs] : [] as ArticleLog[];
-                if (deltaTransferred > 0) {
-                  const today = new Date();
-                  const isoDate = today.toISOString().split('T')[0];
-                  newLogs.push({
-                    id: `${article.id}-${Date.now()}`,
-                    date: isoDate,
-                    action: 'Transferred to Linking',
-                    quantity: deltaTransferred,
-                    fromFloor: 'Knitting',
-                    toFloor: 'Linking',
-                    remarks: update.remarks || ''
-                  });
-                }
-
-                return {
-                  ...article,
-                  completedQuantity: update.completedQuantity,
-                  progress: newProgress,
-                  status: newStatus,
-                  remarks: update.remarks,
-                  logs: newLogs
-                };
-              }
-              return article;
-            })
-          }
-        : order
-    ));
-
-    toast.success('Order updated successfully');
-    closeUpdateModal();
+      await Promise.all(updatePromises);
+      
+      toast.success('Order updated successfully');
+      closeUpdateModal();
+      
+      // Reload orders to get updated data
+      loadOrders();
+    } catch (error: any) {
+      console.error('Error updating order:', error);
+      toast.error(error.message || 'Failed to update order');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handlePageChange = (page: number) => {
@@ -382,6 +258,17 @@ const KnittingFloorSupervisorPage = () => {
                     </div>
                   }
                 />
+              </div>
+              <div className="box-tools flex items-center space-x-2">
+                <button 
+                  type="button" 
+                  className="ti-btn ti-btn-light"
+                  onClick={loadOrders}
+                  disabled={isLoading}
+                  title="Refresh Orders"
+                >
+                  <i className={`ri-refresh-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+                </button>
               </div>
             </div>
           </div>
@@ -587,7 +474,7 @@ const KnittingFloorSupervisorPage = () => {
                     <p className="text-gray-600">Loading orders...</p>
                   </div>
                 </div>
-              ) : filteredOrders.length === 0 ? (
+              ) : orders.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-gray-400 mb-4">
                     <i className="ri-file-list-line text-6xl"></i>
@@ -635,12 +522,12 @@ const KnittingFloorSupervisorPage = () => {
                           </td>
                           <td className="px-4 py-4">
                             <div className="space-y-1">
-                              <div className="font-medium text-gray-900">{order.id}</div>
+                              <div className="font-medium text-gray-900">{order.orderNumber}</div>
                               <div className="text-sm text-gray-500">
-                                Created: {order.createdAt}
+                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                               </div>
                               <div className="text-xs text-gray-400">
-                                Updated: {order.updatedAt}
+                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : 'N/A'}
                               </div>
                             </div>
                           </td>
@@ -654,6 +541,9 @@ const KnittingFloorSupervisorPage = () => {
                               </div>
                               <div className="text-xs text-gray-500">
                                 Completed: {order.articles.reduce((sum, article) => sum + article.completedQuantity, 0).toLocaleString()}
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                Floor: {order.currentFloor}
                               </div>
                             </div>
                           </td>
@@ -688,13 +578,13 @@ const KnittingFloorSupervisorPage = () => {
               )}
 
               {/* Pagination */}
-              {!isLoading && filteredOrders.length > 0 && (
+              {!isLoading && orders.length > 0 && (
                 <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-6 border-t border-gray-200">
                   <div className="text-sm text-gray-700 mb-4 sm:mb-0">
                     <span className="font-medium">
-                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredOrders.length)} 
+                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} 
                     </span>
-                    <span className="text-gray-500"> of {filteredOrders.length.toLocaleString()} orders</span>
+                    <span className="text-gray-500"> of {totalResults.toLocaleString()} orders</span>
                   </div>
                   
                   <nav aria-label="Page navigation" className="flex items-center space-x-1">
@@ -762,7 +652,7 @@ const KnittingFloorSupervisorPage = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold">Update Order - {selectedOrder.id}</h3>
+              <h3 className="text-xl font-semibold">Update Order - {selectedOrder.orderNumber}</h3>
               <button
                 onClick={closeUpdateModal}
                 className="text-gray-400 hover:text-gray-600"
@@ -782,7 +672,6 @@ const KnittingFloorSupervisorPage = () => {
                     }`}
                     onClick={() => {
                       setActiveUpdateTabIndex(idx);
-                      setShowLogs(false);
                     }}
                     title={article.articleNumber}
                   >
@@ -877,35 +766,6 @@ const KnittingFloorSupervisorPage = () => {
                         </div>
                       </div>
 
-                      {/* Article Logs Toggle and Panel (same pattern as supervisor modal) */}
-                      <div className="mt-4">
-                        <button
-                          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
-                          onClick={() => setShowLogs(!showLogs)}
-                          title="View Article Logs"
-                          type="button"
-                        >
-                          <i className="ri-file-list-3-line"></i>
-                          {showLogs ? 'Hide Logs' : 'View Logs'}
-                        </button>
-                        {showLogs && (
-                          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded max-w-full overflow-x-auto">
-                            <ul className="list-disc list-inside text-sm text-blue-900 space-y-1 break-words">
-                              {(
-                                (article.logs || [])
-                                  .slice()
-                                  .sort((a, b) => (a.date > b.date ? -1 : 1))
-                              ).map((log) => (
-                                <li key={log.id}>
-                                  {(log.fromFloor || 'Knitting')} {log.action?.toLowerCase?.() || 'action'} {log.quantity.toLocaleString()} {log.toFloor ? `to ${log.toFloor}` : ''} on {log.date}
-                                  {log.remarks ? ` — ${log.remarks}` : ''}
-                                </li>
-                              ))}
-                              {(article.logs?.length || 0) === 0 && <li>No logs yet</li>}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
                     </div>
                   );
                 })()}
