@@ -95,9 +95,9 @@ const LinkingFloorSupervisorPage = () => {
     order.articles.forEach(article => {
       const articleId = article.id || article._id;
       if (articleId) {
-        // Initialize with 0 for completed quantity
+        // Initialize with current completed quantity for cumulative updates
         initialData[articleId] = {
-          completedQuantity: 0,
+          completedQuantity: article.completedQuantity || 0,
           remarks: article.remarks || ''
         };
       }
@@ -144,8 +144,10 @@ const LinkingFloorSupervisorPage = () => {
         if (!articleId) return null;
         
         const update = updateData[articleId];
-        const linkingTransferredQuantity = article.floorQuantities?.linking?.transferred || 0;
-        if (update && (update.completedQuantity !== linkingTransferredQuantity || update.remarks !== (article.remarks || ''))) {
+        if (update && (
+          update.completedQuantity !== article.completedQuantity ||
+          update.remarks !== (article.remarks || '')
+        )) {
           const progressData = {
             completedQuantity: update.completedQuantity,
             remarks: update.remarks
@@ -715,6 +717,12 @@ const LinkingFloorSupervisorPage = () => {
             {/* Articles Update Form with Tabs */}
             <div className="space-y-6">
               <h4 className="text-lg font-medium text-gray-900">Update Article Progress</h4>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  <i className="ri-information-line me-1"></i>
+                  <strong>Note:</strong> Enter the total cumulative completed quantity. The system will automatically calculate the difference from the previous amount.
+                </p>
+              </div>
 
               {/* Blue Article Tabs */}
               <div className="mb-4">
@@ -745,7 +753,7 @@ const LinkingFloorSupervisorPage = () => {
                 if (!articleId) return null;
                 
                 const currentUpdateData = updateData[articleId] || { 
-                  completedQuantity: 0, 
+                  completedQuantity: article.completedQuantity || 0, 
                   remarks: article.remarks || '' 
                 };
                 
@@ -777,7 +785,7 @@ const LinkingFloorSupervisorPage = () => {
                         </div>
                       </div>
                       <div>
-                        <label className="form-label">Linking Completed Quantity *</label>
+                        <label className="form-label">Total Linking Completed Quantity *</label>
                         <input
                           type="number"
                           className="form-control"
@@ -787,7 +795,7 @@ const LinkingFloorSupervisorPage = () => {
                           max={article.floorQuantities?.linking?.received || 0}
                         />
                         <div className="text-xs text-gray-500 mt-1">
-                          Transferred to next floor: {article.floorQuantities?.linking?.transferred || 0}
+                          Current: {article.completedQuantity || 0} | Transferred: {article.floorQuantities?.linking?.transferred || 0}
                         </div>
                       </div>
                     </div>

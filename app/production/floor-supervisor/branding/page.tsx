@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
-import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
+import { productionService, FloorOrderFilters } from "@/shared/services/productionService";
 
 interface ArticleLog {
   id: string;
@@ -17,28 +17,37 @@ interface ArticleLog {
 
 interface Article {
   id: string;
+  _id?: string;
   articleNumber: string;
   plannedQuantity: number;
-  quantityFromChecking: number;
   completedQuantity: number;
   linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
   priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
+  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
   progress: number;
   currentFloor: string;
   remarks?: string;
   brandingType?: 'Heat Transfer' | 'Embroidery';
+  floorQuantities?: {
+    branding?: {
+      received?: number;
+      transferred?: number;
+      remaining?: number;
+    };
+  };
   logs?: ArticleLog[];
 }
 
 interface ProductionOrder {
   id: string;
+  orderNumber?: string;
   priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
+  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
   articles: Article[];
-  floor: string;
-  createdAt: string;
-  updatedAt: string;
+  floor?: string;
+  currentFloor?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 const BrandingFloorSupervisorPage = () => {
@@ -272,7 +281,8 @@ const BrandingFloorSupervisorPage = () => {
       'Pending': 'bg-yellow-100 text-yellow-800',
       'In Progress': 'bg-blue-100 text-blue-800',
       'Completed': 'bg-green-100 text-green-800',
-      'On Hold': 'bg-red-100 text-red-800'
+      'On Hold': 'bg-red-100 text-red-800',
+      'Cancelled': 'bg-gray-100 text-gray-800'
     };
     return statusClasses[status as keyof typeof statusClasses] || 'bg-gray-100 text-gray-800';
   };
@@ -289,7 +299,7 @@ const BrandingFloorSupervisorPage = () => {
 
   return (
     <div className="main-content">
-      <Seo title="Branding Supervisor Dashboard"/>
+      <Seo title="Branding Floor Supervisor Dashboard"/>
       
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
@@ -297,23 +307,25 @@ const BrandingFloorSupervisorPage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <div className="flex items-center space-x-3">
-                <h1 className="box-title text-2xl font-semibold">Branding Supervisor Dashboard</h1>
+                <h1 className="box-title text-2xl font-semibold">Branding Floor Supervisor Dashboard</h1>
                 <HelpIcon
-                  title="Branding Supervisor Dashboard"
+                  title="Branding Floor Supervisor Dashboard"
                   content={
                     <div className="space-y-4">
                       <div>
                         <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
                         <p className="text-gray-700">
-                          Branding (by Branding Supervisor): Select branding type and enter branded quantities.
+                          This is the Branding Floor Supervisor Dashboard where you can view and update production orders that are currently on the Branding floor.
                         </p>
                       </div>
                       
                       <div>
                         <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
                         <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li><strong>Select Branding Type:</strong> Heat Transfer or Embroidery per article</li>
-                          <li><strong>Enter Branding Quantity:</strong> Update branded quantity for each article</li>
+                          <li><strong>View Orders:</strong> See all orders with articles on the Branding floor</li>
+                          <li><strong>Track Quantities:</strong> Monitor planned, received from linking, and completed quantities</li>
+                          <li><strong>Update Progress:</strong> Click "Update" to modify completed quantities and select branding type</li>
+                          <li><strong>Select Branding Type:</strong> Choose between Heat Transfer or Embroidery for each article</li>
                           <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
                         </ul>
                       </div>
@@ -479,6 +491,7 @@ const BrandingFloorSupervisorPage = () => {
                           <option value="In Progress">In Progress</option>
                           <option value="Completed">Completed</option>
                           <option value="On Hold">On Hold</option>
+                          <option value="Cancelled">Cancelled</option>
                         </select>
                       </div>
 
@@ -584,7 +597,7 @@ const BrandingFloorSupervisorPage = () => {
                           </td>
                           <td className="px-4 py-4">
                             <div className="space-y-1">
-                              <div className="font-medium text-gray-900">{order.orderNumber}</div>
+                              <div className="font-medium text-gray-900">{order.orderNumber || order.id}</div>
                               <div className="text-sm text-gray-500">
                                 Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                               </div>
@@ -601,8 +614,14 @@ const BrandingFloorSupervisorPage = () => {
                               <div className="text-sm text-gray-600">
                                 Total Qty: {order.articles.reduce((sum, article) => sum + article.plannedQuantity, 0).toLocaleString()}
                               </div>
-                              <div className="text-xs text-gray-500">
-                                Completed: {order.articles.reduce((sum, article) => sum + article.completedQuantity, 0).toLocaleString()}
+                              {order.articles.some(article => article.floorQuantities?.branding) && (
+                                <div className="text-xs text-blue-600">
+                                  Branding: R:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.branding?.received || 0), 0)} | 
+                                  Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.branding?.remaining || 0), 0)}
+                                </div>
+                              )}
+                              <div className="text-xs text-gray-400">
+                                Floor: {order.currentFloor || order.floor || 'Unknown'}
                               </div>
                             </div>
                           </td>
@@ -712,7 +731,7 @@ const BrandingFloorSupervisorPage = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold">Update Order - {selectedOrder.orderNumber}</h3>
+              <h3 className="text-xl font-semibold">Update Order - {selectedOrder.orderNumber || selectedOrder.id}</h3>
               <button
                 onClick={closeUpdateModal}
                 className="text-gray-400 hover:text-gray-600"
@@ -741,9 +760,15 @@ const BrandingFloorSupervisorPage = () => {
               </div>
             </div>
 
-            {/* Articles Update Form (Tabs + Branding Type + Quantity from Checking) */}
+            {/* Articles Update Form with Tabs */}
             <div className="space-y-6">
               <h4 className="text-lg font-medium text-gray-900">Update Article Progress</h4>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  <i className="ri-information-line me-1"></i>
+                  <strong>Note:</strong> Enter the total cumulative completed quantity. The system will automatically calculate the difference from the previous amount.
+                </p>
+              </div>
 
               {/* Blue Article Tabs */}
               <div className="mb-4">
@@ -756,7 +781,6 @@ const BrandingFloorSupervisorPage = () => {
                       }`}
                       onClick={() => {
                         setActiveUpdateTabIndex(idx);
-                        setShowLogs(false);
                       }}
                       title={article.articleNumber}
                     >
@@ -770,93 +794,85 @@ const BrandingFloorSupervisorPage = () => {
               {(() => {
                 const article = selectedOrder.articles[activeUpdateTabIndex];
                 if (!article) return null;
+                
+                const articleId = article.id || article._id;
+                if (!articleId) return null;
+                
+                const currentUpdateData = updateData[articleId] || { 
+                  brandingQuantity: 0, 
+                  brandingType: article.brandingType || 'Heat Transfer' 
+                };
+                
                 return (
                   <div className="border border-gray-200 rounded-lg p-4">
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h5 className="text-md font-medium text-gray-900">{article.articleNumber}</h5>
+                        <h5 className="text-md font-medium text-gray-900">{article.articleNumber || 'Unknown Article'}</h5>
                         <div className="text-sm text-gray-600 mt-1">
-                          <span className="font-medium">Linking Type:</span> {article.linkingType}
+                          <span className="font-medium">Linking Type:</span> {article.linkingType || 'Not specified'}
                         </div>
                       </div>
                       <div className="text-right">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority)}`}>
-                          {article.priority}
+                          {article.priority || 'Unknown'}
                         </span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                       <div>
                         <label className="form-label">Planned Quantity</label>
-                        <div className="text-lg font-semibold text-gray-900">{article.plannedQuantity.toLocaleString()}</div>
+                        <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
                       </div>
                       <div>
-                        <label className="form-label">Quantity from Checking</label>
-                        <div className="text-lg font-semibold text-blue-600">{(article.quantityFromChecking || 0).toLocaleString()}</div>
+                        <label className="form-label">Received from Linking</label>
+                        <div className="text-lg font-semibold text-blue-600">
+                          {article.floorQuantities?.branding?.received || 0}
+                        </div>
                       </div>
                       <div>
                         <label className="form-label">Branding Type</label>
                         <select
                           className="form-select"
-                          value={updateData[article.id]?.brandingType || 'Heat Transfer'}
-                          onChange={(e) => handleBrandingTypeChange(article.id, e.target.value as 'Heat Transfer' | 'Embroidery')}
+                          value={currentUpdateData.brandingType}
+                          onChange={(e) => handleBrandingTypeChange(articleId, e.target.value as 'Heat Transfer' | 'Embroidery')}
                         >
                           <option value="Heat Transfer">Heat Transfer</option>
                           <option value="Embroidery">Embroidery</option>
                         </select>
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                       <div>
-                        <label className="form-label">Branded Quantity *</label>
+                        <label className="form-label">Total Branding Completed Quantity *</label>
                         <input
                           type="number"
                           className="form-control"
-                          value={updateData[article.id]?.brandingQuantity || 0}
-                          onChange={(e) => handleBrandingQuantityChange(article.id, Number(e.target.value))}
+                          value={currentUpdateData.brandingQuantity}
+                          onChange={(e) => handleBrandingQuantityChange(articleId, Number(e.target.value))}
                           min="0"
-                          max={article.quantityFromChecking}
+                          max={article.floorQuantities?.branding?.received || 0}
                         />
+                        <div className="text-xs text-gray-500 mt-1">
+                          Current: {article.completedQuantity || 0} | Transferred: {article.floorQuantities?.branding?.transferred || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="form-label">Current Floor</label>
+                        <div className="text-sm font-medium text-gray-900">{article.currentFloor}</div>
                       </div>
                     </div>
 
                     <div className="flex justify-between items-center text-sm text-gray-600">
                       <div>
-                        Remaining: {(article.quantityFromChecking - (updateData[article.id]?.brandingQuantity || 0)).toLocaleString()}
+                        Remaining: {(article.floorQuantities?.branding?.remaining || 0).toLocaleString()}
                       </div>
                       <div>
-                        Progress: {Math.round(((updateData[article.id]?.brandingQuantity || 0) / article.plannedQuantity) * 100)}%
+                        Progress: {Math.round((currentUpdateData.brandingQuantity / (article.floorQuantities?.branding?.received || 1)) * 100)}%
                       </div>
                     </div>
 
-                    {/* View Logs Button and panel */}
-                    <div className="mt-4">
-                      <button
-                        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
-                        onClick={() => setShowLogs(!showLogs)}
-                        title="View Article Logs"
-                        type="button"
-                      >
-                        <i className="ri-file-list-3-line"></i>
-                        {showLogs ? 'Hide Logs' : 'View Logs'}
-                      </button>
-                      {showLogs && (
-                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded max-w-full overflow-x-auto">
-                          <ul className="list-disc list-inside text-sm text-blue-900 space-y-1 break-words">
-                            {(
-                              (article.logs || [])
-                                .slice()
-                                .sort((a, b) => (a.date > b.date ? -1 : 1))
-                            ).map((log) => (
-                              <li key={log.id}>
-                                {(log.fromFloor || 'Branding')} {log.action?.toLowerCase?.() || 'action'} {log.quantity.toLocaleString()} {log.toFloor ? `to ${log.toFloor}` : ''} on {log.date}
-                                {log.remarks ? ` — ${log.remarks}` : ''}
-                              </li>
-                            ))}
-                            {(article.logs?.length || 0) === 0 && <li>No logs yet</li>}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 );
               })()}
@@ -866,15 +882,17 @@ const BrandingFloorSupervisorPage = () => {
               <button
                 onClick={closeUpdateModal}
                 className="ti-btn ti-btn-secondary"
+                disabled={isLoading}
               >
                 Cancel
               </button>
               <button
                 onClick={handleUpdateSubmit}
                 className="ti-btn ti-btn-primary"
+                disabled={isLoading}
               >
-                <i className="ri-save-line me-2"></i>
-                Update Order
+                <i className={`ri-save-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i>
+                {isLoading ? 'Updating...' : 'Update Order'}
               </button>
             </div>
           </div>
