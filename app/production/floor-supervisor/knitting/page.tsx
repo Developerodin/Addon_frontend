@@ -551,10 +551,14 @@ const KnittingFloorSupervisorPage = () => {
                             <div className="space-y-1">
                               <div className="font-medium text-gray-900">{order.orderNumber}</div>
                               <div className="text-sm text-gray-500">
-                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
+                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 
+                                  (order.articles && order.articles.length > 0 && order.articles[0].createdAt ? 
+                                    new Date(order.articles[0].createdAt).toLocaleDateString() : 'N/A')}
                               </div>
                               <div className="text-xs text-gray-400">
-                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : 'N/A'}
+                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : 
+                                  (order.articles && order.articles.length > 0 && order.articles[0].updatedAt ? 
+                                    new Date(order.articles[0].updatedAt).toLocaleDateString() : 'N/A')}
                               </div>
                             </div>
                           </td>
@@ -773,7 +777,7 @@ const KnittingFloorSupervisorPage = () => {
                           <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
                         </div>
                         <div>
-                          <label className="form-label">Received from Previous Floor</label>
+                          <label className="form-label">Received from Production</label>
                           <div className="text-lg font-semibold text-blue-600">
                             {article.floorQuantities?.knitting?.received || 0}
                           </div>

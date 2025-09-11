@@ -308,30 +308,7 @@ const BrandingFloorSupervisorPage = () => {
             <div className="box-header flex justify-between items-center">
               <div className="flex items-center space-x-3">
                 <h1 className="box-title text-2xl font-semibold">Branding Floor Supervisor Dashboard</h1>
-                <HelpIcon
-                  title="Branding Floor Supervisor Dashboard"
-                  content={
-                    <div className="space-y-4">
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
-                        <p className="text-gray-700">
-                          This is the Branding Floor Supervisor Dashboard where you can view and update production orders that are currently on the Branding floor.
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li><strong>View Orders:</strong> See all orders with articles on the Branding floor</li>
-                          <li><strong>Track Quantities:</strong> Monitor planned, received from linking, and completed quantities</li>
-                          <li><strong>Update Progress:</strong> Click "Update" to modify completed quantities and select branding type</li>
-                          <li><strong>Select Branding Type:</strong> Choose between Heat Transfer or Embroidery for each article</li>
-                          <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
-                        </ul>
-                      </div>
-                    </div>
-                  }
-                />
+               
               </div>
               <div className="box-tools flex items-center space-x-2">
                 <button 
@@ -599,10 +576,10 @@ const BrandingFloorSupervisorPage = () => {
                             <div className="space-y-1">
                               <div className="font-medium text-gray-900">{order.orderNumber || order.id}</div>
                               <div className="text-sm text-gray-500">
-                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
+                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : (order.articles[0]?.createdAt ? new Date(order.articles[0].createdAt).toLocaleDateString() : 'N/A')}
                               </div>
                               <div className="text-xs text-gray-400">
-                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : 'N/A'}
+                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : (order.articles[0]?.updatedAt ? new Date(order.articles[0].updatedAt).toLocaleDateString() : 'N/A')}
                               </div>
                             </div>
                           </td>
@@ -620,9 +597,6 @@ const BrandingFloorSupervisorPage = () => {
                                   Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.branding?.remaining || 0), 0)}
                                 </div>
                               )}
-                              <div className="text-xs text-gray-400">
-                                Floor: {order.currentFloor || order.floor || 'Unknown'}
-                              </div>
                             </div>
                           </td>
                           
@@ -825,7 +799,7 @@ const BrandingFloorSupervisorPage = () => {
                         <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
                       </div>
                       <div>
-                        <label className="form-label">Received from Linking</label>
+                        <label className="form-label">Received from Final Checking</label>
                         <div className="text-lg font-semibold text-blue-600">
                           {article.floorQuantities?.branding?.received || 0}
                         </div>
