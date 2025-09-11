@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
+import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 
 interface ArticleLog {
   id: string;
@@ -59,128 +60,51 @@ const WarehouseFloorSupervisorPage = () => {
     linkingType: '',
     floor: ''
   });
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
 
-  // Static data for demonstration - filtered for Warehouse floor
-  const staticOrders: ProductionOrder[] = [
-    {
-      id: 'ORD-001',
-      priority: 'High',
-      status: 'In Progress',
-      floor: 'Warehouse',
-      createdAt: '2024-01-15',
-      updatedAt: '2024-01-20',
-      articles: [
-        {
-          id: 'ART001',
-          articleNumber: 'ART001',
-          plannedQuantity: 1000,
-          completedQuantity: 750,
-          linkingType: 'Auto Linking',
-          priority: 'High',
-          status: 'In Progress',
-          progress: 75,
-          currentFloor: 'Warehouse',
-          remarks: 'Good progress, no issues'
-        },
-        {
-          id: 'ART002',
-          articleNumber: 'ART002',
-          plannedQuantity: 500,
-          completedQuantity: 200,
-          linkingType: 'Rosso Linking',
-          priority: 'Medium',
-          status: 'In Progress',
-          progress: 40,
-          currentFloor: 'Warehouse',
-          remarks: 'Started yesterday'
-        }
-      ]
-    },
-    {
-      id: 'ORD-003',
-      priority: 'Urgent',
-      status: 'In Progress',
-      floor: 'Warehouse',
-      createdAt: '2024-01-20',
-      updatedAt: '2024-01-20',
-      articles: [
-        {
-          id: 'ART004',
-          articleNumber: 'ART004',
-          plannedQuantity: 750,
-          completedQuantity: 0,
-          linkingType: 'Hand Linking',
-          priority: 'Urgent',
-          status: 'Pending',
-          progress: 0,
-          currentFloor: 'Warehouse',
-          remarks: 'Ready to start'
-        },
-        {
-          id: 'ART005',
-          articleNumber: 'ART005',
-          plannedQuantity: 300,
-          completedQuantity: 0,
-          linkingType: 'Auto Linking',
-          priority: 'High',
-          status: 'Pending',
-          progress: 0,
-          currentFloor: 'Warehouse',
-          remarks: 'Waiting for materials'
-        }
-      ]
-    },
-    {
-      id: 'ORD-005',
-      priority: 'High',
-      status: 'In Progress',
-      floor: 'Warehouse',
-      createdAt: '2024-01-08',
-      updatedAt: '2024-01-21',
-      articles: [
-        {
-          id: 'ART007',
-          articleNumber: 'ART007',
-          plannedQuantity: 800,
-          completedQuantity: 720,
-          linkingType: 'Rosso Linking',
-          priority: 'High',
-          status: 'In Progress',
-          progress: 90,
-          currentFloor: 'Warehouse',
-          remarks: 'Almost complete, quality check needed'
-        }
-      ]
-    }
-  ];
-
-  useEffect(() => {
-    // Simulate loading
+  // Load warehouse floor orders from API
+  const loadOrders = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setOrders(staticOrders);
+    try {
+      const apiFilters: FloorOrderFilters = {
+        page: currentPage,
+        limit: itemsPerPage,
+        ...(filters.status && { status: filters.status }),
+        ...(filters.priority && { priority: filters.priority }),
+        ...(searchQuery && { search: searchQuery })
+      };
+
+      const response = await productionService.getFloorOrders('Warehouse', apiFilters);
+      
+      if (response.success) {
+        console.log('Warehouse orders loaded:', response.data.results);
+        setOrders(response.data.results);
+        setTotalPages(response.data.totalPages);
+        setTotalResults(response.data.totalResults);
+      } else {
+        console.error('Failed to load warehouse orders:', response.error);
+        toast.error('Failed to load warehouse orders');
+      }
+    } catch (error: any) {
+      console.error('Error loading warehouse orders:', error);
+      toast.error(error.message || 'Failed to load warehouse orders');
+    } finally {
       setIsLoading(false);
-    }, 500);
-  }, []);
+    }
+  };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.articles.some(article => 
-      article.articleNumber.toLowerCase().includes(searchQuery.toLowerCase())
-    ) || order.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = !filters.status || order.status === filters.status;
-    const matchesPriority = !filters.priority || order.priority === filters.priority;
-    const matchesLinkingType = !filters.linkingType || order.articles.some(article => article.linkingType === filters.linkingType);
-    const matchesFloor = !filters.floor || order.floor.toLowerCase().includes(filters.floor.toLowerCase());
+  // Debounced search effect
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadOrders();
+    }, 500); // 500ms delay
 
-    return matchesSearch && matchesStatus && matchesPriority && matchesLinkingType && matchesFloor;
-  });
+    return () => clearTimeout(timeoutId);
+  }, [currentPage, itemsPerPage, filters, searchQuery]);
 
-  const paginatedOrders = filteredOrders.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  // No client-side filtering needed since we're using API filtering
+  const paginatedOrders = orders;
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -205,10 +129,14 @@ const WarehouseFloorSupervisorPage = () => {
     // Initialize update data with current values
     const initialData: {[key: string]: {receivedQuantity: number, remarks: string}} = {};
     order.articles.forEach(article => {
-      initialData[article.id] = {
-        receivedQuantity: article.receivedFromBranding ?? 0,
-        remarks: article.remarks || ''
-      };
+      const articleId = article.id || article._id;
+      if (articleId) {
+        // Initialize with 0 for received quantity
+        initialData[articleId] = {
+          receivedQuantity: 0,
+          remarks: article.remarks || ''
+        };
+      }
     });
     setUpdateData(initialData);
     setShowLogs(false);
@@ -241,51 +169,67 @@ const WarehouseFloorSupervisorPage = () => {
     }));
   };
 
-  const handleUpdateSubmit = () => {
+  const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
-    // Update the order with new data
-    setOrders(prev => prev.map(order => 
-      order.id === selectedOrder.id 
-        ? {
-            ...order,
-            articles: order.articles.map(article => {
-              const update = updateData[article.id];
-              if (update) {
-                // Append log when received quantity increases
-                const previousReceived = article.receivedFromBranding ?? 0;
-                const deltaReceived = Math.max(0, update.receivedQuantity - previousReceived);
-                let newLogs = article.logs ? [...article.logs] : [] as NonNullable<Article['logs']>;
-                if (deltaReceived > 0) {
-                  const today = new Date();
-                  const isoDate = today.toISOString().split('T')[0];
-                  newLogs.push({
-                    id: `${article.id}-${Date.now()}`,
-                    date: isoDate,
-                    action: 'Received from Branding',
-                    quantity: deltaReceived,
-                    fromFloor: 'Branding',
-                    toFloor: 'Warehouse',
-                    remarks: update.remarks || ''
-                  });
-                }
-
-                return {
-                  ...article,
-                  receivedFromBranding: update.receivedQuantity,
-                  remarks: update.remarks,
-                  currentFloor: 'Warehouse',
-                  logs: newLogs
-                };
-              }
-              return article;
-            })
+    try {
+      setIsLoading(true);
+      
+      // Update each article that has changes
+      const updatePromises = selectedOrder.articles.map(async (article) => {
+        const articleId = article.id || article._id;
+        if (!articleId) return null;
+        
+        const update = updateData[articleId];
+        const warehouseTransferredQuantity = article.floorQuantities?.warehouse?.transferred || 0;
+        if (update && (update.receivedQuantity !== warehouseTransferredQuantity || update.remarks !== (article.remarks || ''))) {
+          const progressData = {
+            completedQuantity: update.receivedQuantity,
+            remarks: update.remarks
+          };
+          
+          try {
+            const response = await productionService.updateArticleProgress(
+              'Warehouse',
+              selectedOrder.id,
+              article._id || article.id,
+              progressData
+            );
+            
+            if (!response.success) {
+              throw new Error(response.error?.message || 'Failed to update article');
+            }
+            
+            return response.data;
+          } catch (error) {
+            console.error(`Error updating article ${articleId}:`, error);
+            throw error;
           }
-        : order
-    ));
+        }
+        return null;
+      }).filter(Boolean);
 
-    toast.success('Warehouse receipt updated successfully');
-    closeUpdateModal();
+      const results = await Promise.allSettled(updatePromises);
+      
+      // Check if any updates failed
+      const failedUpdates = results.filter(result => result.status === 'rejected');
+      if (failedUpdates.length > 0) {
+        console.error('Some updates failed:', failedUpdates);
+        toast.error(`${failedUpdates.length} article(s) failed to update`);
+      } else {
+        toast.success('Order updated successfully');
+      }
+      
+      closeUpdateModal();
+      
+      // Reload orders to get updated data
+      loadOrders();
+    } catch (error: any) {
+      console.error('Error updating order:', error);
+      toast.error(error.message || 'Failed to update order');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handlePageChange = (page: number) => {
@@ -377,6 +321,17 @@ const WarehouseFloorSupervisorPage = () => {
                     </div>
                   }
                 />
+              </div>
+              <div className="box-tools flex items-center space-x-2">
+                <button 
+                  type="button" 
+                  className="ti-btn ti-btn-light"
+                  onClick={loadOrders}
+                  disabled={isLoading}
+                  title="Refresh Orders"
+                >
+                  <i className={`ri-refresh-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+                </button>
               </div>
             </div>
           </div>
@@ -582,7 +537,7 @@ const WarehouseFloorSupervisorPage = () => {
                     <p className="text-gray-600">Loading orders...</p>
                   </div>
                 </div>
-              ) : filteredOrders.length === 0 ? (
+              ) : orders.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-gray-400 mb-4">
                     <i className="ri-file-list-line text-6xl"></i>
@@ -630,12 +585,12 @@ const WarehouseFloorSupervisorPage = () => {
                           </td>
                           <td className="px-4 py-4">
                             <div className="space-y-1">
-                              <div className="font-medium text-gray-900">{order.id}</div>
+                              <div className="font-medium text-gray-900">{order.orderNumber}</div>
                               <div className="text-sm text-gray-500">
-                                Created: {order.createdAt}
+                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                               </div>
                               <div className="text-xs text-gray-400">
-                                Updated: {order.updatedAt}
+                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : 'N/A'}
                               </div>
                             </div>
                           </td>
@@ -684,13 +639,13 @@ const WarehouseFloorSupervisorPage = () => {
               )}
 
               {/* Pagination */}
-              {!isLoading && filteredOrders.length > 0 && (
+              {!isLoading && orders.length > 0 && (
                 <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-6 border-t border-gray-200">
                   <div className="text-sm text-gray-700 mb-4 sm:mb-0">
                     <span className="font-medium">
-                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredOrders.length)} 
+                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} 
                     </span>
-                    <span className="text-gray-500"> of {filteredOrders.length.toLocaleString()} orders</span>
+                    <span className="text-gray-500"> of {totalResults.toLocaleString()} orders</span>
                   </div>
                   
                   <nav aria-label="Page navigation" className="flex items-center space-x-1">
@@ -758,7 +713,7 @@ const WarehouseFloorSupervisorPage = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold">Update Order - {selectedOrder.id}</h3>
+              <h3 className="text-xl font-semibold">Update Order - {selectedOrder.orderNumber}</h3>
               <button
                 onClick={closeUpdateModal}
                 className="text-gray-400 hover:text-gray-600"

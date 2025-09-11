@@ -3,41 +3,7 @@ import React, { useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
-
-interface ArticleLog {
-  id: string;
-  date: string; // YYYY-MM-DD
-  action: string; // e.g., "Transferred to Boarding"
-  quantity: number;
-  fromFloor?: string;
-  toFloor?: string;
-  remarks?: string;
-}
-
-interface Article {
-  id: string;
-  articleNumber: string;
-  plannedQuantity: number;
-  quantityFromChecking: number;
-  completedQuantity: number;
-  linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
-  priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
-  progress: number;
-  currentFloor: string;
-  remarks?: string;
-  logs?: ArticleLog[];
-}
-
-interface ProductionOrder {
-  id: string;
-  priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
-  articles: Article[];
-  floor: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 
 const WashingFloorSupervisorPage = () => {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
@@ -51,141 +17,58 @@ const WashingFloorSupervisorPage = () => {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
-  const [updateData, setUpdateData] = useState<{[key: string]: {washedQuantity: number}}>({});
-  const [showLogs, setShowLogs] = useState(false);
+  const [updateData, setUpdateData] = useState<{[key: string]: {completedQuantity: number, remarks: string}}>({});
   const [filters, setFilters] = useState({
     status: '',
     priority: '',
     linkingType: '',
     floor: ''
   });
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
 
-  // Static data for demonstration - filtered for Knitting floor
-  const staticOrders: ProductionOrder[] = [
-    {
-      id: 'ORD-001',
-      priority: 'High',
-      status: 'In Progress',
-      floor: 'Knitting',
-      createdAt: '2024-01-15',
-      updatedAt: '2024-01-20',
-      articles: [
-        {
-          id: 'ART001',
-          articleNumber: 'ART001',
-          plannedQuantity: 1000,
-          quantityFromChecking: 800,
-          completedQuantity: 750,
-          linkingType: 'Auto Linking',
-          priority: 'High',
-          status: 'In Progress',
-          progress: 75,
-          currentFloor: 'Knitting',
-          remarks: 'Good progress, no issues'
-        },
-        {
-          id: 'ART002',
-          articleNumber: 'ART002',
-          plannedQuantity: 500,
-          quantityFromChecking: 300,
-          completedQuantity: 200,
-          linkingType: 'Rosso Linking',
-          priority: 'Medium',
-          status: 'In Progress',
-          progress: 40,
-          currentFloor: 'Linking',
-          remarks: 'Started yesterday'
-        }
-      ]
-    },
-    {
-      id: 'ORD-003',
-      priority: 'Urgent',
-      status: 'In Progress',
-      floor: 'Knitting',
-      createdAt: '2024-01-20',
-      updatedAt: '2024-01-20',
-      articles: [
-        {
-          id: 'ART004',
-          articleNumber: 'ART004',
-          plannedQuantity: 750,
-          quantityFromChecking: 0,
-          completedQuantity: 0,
-          linkingType: 'Hand Linking',
-          priority: 'Urgent',
-          status: 'Pending',
-          progress: 0,
-          currentFloor: 'Knitting',
-          remarks: 'Ready to start'
-        },
-        {
-          id: 'ART005',
-          articleNumber: 'ART005',
-          plannedQuantity: 300,
-          quantityFromChecking: 0,
-          completedQuantity: 0,
-          linkingType: 'Auto Linking',
-          priority: 'High',
-          status: 'Pending',
-          progress: 0,
-          currentFloor: 'Knitting',
-          remarks: 'Waiting for materials'
-        }
-      ]
-    },
-    {
-      id: 'ORD-005',
-      priority: 'High',
-      status: 'In Progress',
-      floor: 'Knitting',
-      createdAt: '2024-01-08',
-      updatedAt: '2024-01-21',
-      articles: [
-        {
-          id: 'ART007',
-          articleNumber: 'ART007',
-          plannedQuantity: 800,
-          quantityFromChecking: 720,
-          completedQuantity: 720,
-          linkingType: 'Rosso Linking',
-          priority: 'High',
-          status: 'In Progress',
-          progress: 90,
-          currentFloor: 'Knitting',
-          remarks: 'Almost complete, quality check needed'
-        }
-      ]
-    }
-  ];
-
-  useEffect(() => {
-    // Simulate loading
+  // Load washing floor orders from API
+  const loadOrders = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setOrders(staticOrders);
+    try {
+      const apiFilters: FloorOrderFilters = {
+        page: currentPage,
+        limit: itemsPerPage,
+        ...(filters.status && { status: filters.status }),
+        ...(filters.priority && { priority: filters.priority }),
+        ...(searchQuery && { search: searchQuery })
+      };
+
+      const response = await productionService.getFloorOrders('Washing', apiFilters);
+      
+      if (response.success) {
+        console.log('Washing orders loaded:', response.data.results);
+        setOrders(response.data.results);
+        setTotalPages(response.data.totalPages);
+        setTotalResults(response.data.totalResults);
+      } else {
+        console.error('Failed to load washing orders:', response.error);
+        toast.error('Failed to load washing orders');
+      }
+    } catch (error: any) {
+      console.error('Error loading washing orders:', error);
+      toast.error(error.message || 'Failed to load washing orders');
+    } finally {
       setIsLoading(false);
-    }, 500);
-  }, []);
+    }
+  };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.articles.some(article => 
-      article.articleNumber.toLowerCase().includes(searchQuery.toLowerCase())
-    ) || order.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = !filters.status || order.status === filters.status;
-    const matchesPriority = !filters.priority || order.priority === filters.priority;
-    const matchesLinkingType = !filters.linkingType || order.articles.some(article => article.linkingType === filters.linkingType);
-    const matchesFloor = !filters.floor || order.floor.toLowerCase().includes(filters.floor.toLowerCase());
+  // Debounced search effect
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadOrders();
+    }, 500); // 500ms delay
 
-    return matchesSearch && matchesStatus && matchesPriority && matchesLinkingType && matchesFloor;
-  });
+    return () => clearTimeout(timeoutId);
+  }, [currentPage, itemsPerPage, filters, searchQuery]);
 
-  const paginatedOrders = filteredOrders.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  // No client-side filtering needed since we're using API filtering
+  const paginatedOrders = orders;
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -208,14 +91,18 @@ const WashingFloorSupervisorPage = () => {
     setSelectedOrder(order);
     setActiveUpdateTabIndex(0);
     // Initialize update data with current values
-    const initialData: {[key: string]: {washedQuantity: number}} = {};
+    const initialData: {[key: string]: {completedQuantity: number, remarks: string}} = {};
     order.articles.forEach(article => {
-      initialData[article.id] = {
-        washedQuantity: article.completedQuantity
-      };
+      const articleId = article.id || article._id;
+      if (articleId) {
+        // Initialize with 0 for completed quantity
+        initialData[articleId] = {
+          completedQuantity: 0,
+          remarks: article.remarks || ''
+        };
+      }
     });
     setUpdateData(initialData);
-    setShowLogs(false);
     setShowUpdateModal(true);
   };
 
@@ -230,60 +117,82 @@ const WashingFloorSupervisorPage = () => {
       ...prev,
       [articleId]: {
         ...prev[articleId],
-        washedQuantity: value
+        completedQuantity: value
       }
     }));
   };
 
-  const handleUpdateSubmit = () => {
+  const handleRemarksChange = (articleId: string, value: string) => {
+    setUpdateData(prev => ({
+      ...prev,
+      [articleId]: {
+        ...prev[articleId],
+        remarks: value
+      }
+    }));
+  };
+
+  const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
-    // Update the order with new data
-    setOrders(prev => prev.map(order => 
-      order.id === selectedOrder.id 
-        ? {
-            ...order,
-            articles: order.articles.map(article => {
-              const update = updateData[article.id];
-              if (update) {
-                const newProgress = Math.round((update.washedQuantity / article.plannedQuantity) * 100);
-                const newStatus = update.washedQuantity >= article.plannedQuantity ? 'Completed' : 
-                                 update.washedQuantity > 0 ? 'In Progress' : 'Pending';
-                // Log transfers from Washing to Boarding when washed increases
-                const previousCompleted = article.completedQuantity || 0;
-                const deltaTransferred = Math.max(0, update.washedQuantity - previousCompleted);
-                let newLogs = article.logs ? [...article.logs] : [] as ArticleLog[];
-                if (deltaTransferred > 0) {
-                  const today = new Date();
-                  const isoDate = today.toISOString().split('T')[0];
-                  newLogs.push({
-                    id: `${article.id}-${Date.now()}`,
-                    date: isoDate,
-                    action: 'Transferred to Boarding',
-                    quantity: deltaTransferred,
-                    fromFloor: 'Washing',
-                    toFloor: 'Boarding',
-                    remarks: ''
-                  });
-                }
-
-                return {
-                  ...article,
-                  completedQuantity: update.washedQuantity,
-                  progress: newProgress,
-                  status: newStatus,
-                  currentFloor: 'Boarding',
-                  logs: newLogs
-                };
-              }
-              return article;
-            })
+    try {
+      setIsLoading(true);
+      
+      // Update each article that has changes
+      const updatePromises = selectedOrder.articles.map(async (article) => {
+        const articleId = article.id || article._id;
+        if (!articleId) return null;
+        
+        const update = updateData[articleId];
+        const washingTransferredQuantity = article.floorQuantities?.washing?.transferred || 0;
+        if (update && (update.completedQuantity !== washingTransferredQuantity || update.remarks !== (article.remarks || ''))) {
+          const progressData = {
+            completedQuantity: update.completedQuantity,
+            remarks: update.remarks
+          };
+          
+          try {
+            const response = await productionService.updateArticleProgress(
+              'Washing',
+              selectedOrder.id,
+              article._id || article.id,
+              progressData
+            );
+            
+            if (!response.success) {
+              throw new Error(response.error?.message || 'Failed to update article');
+            }
+            
+            return response.data;
+          } catch (error) {
+            console.error(`Error updating article ${articleId}:`, error);
+            throw error;
           }
-        : order
-    ));
+        }
+        return null;
+      }).filter(Boolean);
 
-    toast.success('Order updated successfully');
-    closeUpdateModal();
+      const results = await Promise.allSettled(updatePromises);
+      
+      // Check if any updates failed
+      const failedUpdates = results.filter(result => result.status === 'rejected');
+      if (failedUpdates.length > 0) {
+        console.error('Some updates failed:', failedUpdates);
+        toast.error(`${failedUpdates.length} article(s) failed to update`);
+      } else {
+        toast.success('Order updated successfully');
+      }
+      
+      closeUpdateModal();
+      
+      // Reload orders to get updated data
+      loadOrders();
+    } catch (error: any) {
+      console.error('Error updating order:', error);
+      toast.error(error.message || 'Failed to update order');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handlePageChange = (page: number) => {
@@ -351,29 +260,42 @@ const WashingFloorSupervisorPage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <div className="flex items-center space-x-3">
-                <h1 className="box-title text-2xl font-semibold">Washing Supervisor Dashboard</h1>
+                <h1 className="box-title text-2xl font-semibold">Washing Floor Supervisor Dashboard</h1>
                 <HelpIcon
-                  title="Washing Supervisor Dashboard"
+                  title="Washing Floor Supervisor Dashboard"
                   content={
                     <div className="space-y-4">
                       <div>
                         <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
                         <p className="text-gray-700">
-                          Washing (by Washing Supervisor): Enter washed quantities.
+                          This is the Washing Floor Supervisor Dashboard where you can view and update production orders that are currently on the Washing floor.
                         </p>
                       </div>
                       
                       <div>
                         <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
                         <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li><strong>Enter Washed Quantity:</strong> Update washed quantity for each article</li>
-                          <li><strong>Auto Move:</strong> On update, article moves to Boarding</li>
+                          <li><strong>View Orders:</strong> See all orders with articles on the Washing floor</li>
+                          <li><strong>Track Quantities:</strong> Monitor planned, received from checking, and completed quantities</li>
+                          <li><strong>Update Progress:</strong> Click "Update" to modify completed quantities and add remarks</li>
+                          <li><strong>Add Remarks:</strong> Add notes and comments for each article</li>
                           <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
                         </ul>
                       </div>
                     </div>
                   }
                 />
+              </div>
+              <div className="box-tools flex items-center space-x-2">
+                <button 
+                  type="button" 
+                  className="ti-btn ti-btn-light"
+                  onClick={loadOrders}
+                  disabled={isLoading}
+                  title="Refresh Orders"
+                >
+                  <i className={`ri-refresh-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+                </button>
               </div>
             </div>
           </div>
@@ -579,7 +501,7 @@ const WashingFloorSupervisorPage = () => {
                     <p className="text-gray-600">Loading orders...</p>
                   </div>
                 </div>
-              ) : filteredOrders.length === 0 ? (
+              ) : orders.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-gray-400 mb-4">
                     <i className="ri-file-list-line text-6xl"></i>
@@ -588,7 +510,7 @@ const WashingFloorSupervisorPage = () => {
                   <p className="text-gray-500 mb-4">
                     {hasActiveFilters 
                       ? 'Try adjusting your filters or search terms' 
-                      : 'No orders currently on Knitting floor'
+                      : 'No orders currently on Washing floor'
                     }
                   </p>
                 </div>
@@ -627,12 +549,12 @@ const WashingFloorSupervisorPage = () => {
                           </td>
                           <td className="px-4 py-4">
                             <div className="space-y-1">
-                              <div className="font-medium text-gray-900">{order.id}</div>
+                              <div className="font-medium text-gray-900">{order.orderNumber}</div>
                               <div className="text-sm text-gray-500">
-                                Created: {order.createdAt}
+                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                               </div>
                               <div className="text-xs text-gray-400">
-                                Updated: {order.updatedAt}
+                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : 'N/A'}
                               </div>
                             </div>
                           </td>
@@ -644,8 +566,14 @@ const WashingFloorSupervisorPage = () => {
                               <div className="text-sm text-gray-600">
                                 Total Qty: {order.articles.reduce((sum, article) => sum + article.plannedQuantity, 0).toLocaleString()}
                               </div>
-                              <div className="text-xs text-gray-500">
-                                Completed: {order.articles.reduce((sum, article) => sum + article.completedQuantity, 0).toLocaleString()}
+                              {order.articles.some(article => article.floorQuantities?.washing) && (
+                                <div className="text-xs text-blue-600">
+                                  Washing: R:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.washing?.received || 0), 0)} | 
+                                  Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.washing?.remaining || 0), 0)}
+                                </div>
+                              )}
+                              <div className="text-xs text-gray-400">
+                                Floor: {order.currentFloor}
                               </div>
                             </div>
                           </td>
@@ -681,13 +609,13 @@ const WashingFloorSupervisorPage = () => {
               )}
 
               {/* Pagination */}
-              {!isLoading && filteredOrders.length > 0 && (
+              {!isLoading && orders.length > 0 && (
                 <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-6 border-t border-gray-200">
                   <div className="text-sm text-gray-700 mb-4 sm:mb-0">
                     <span className="font-medium">
-                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredOrders.length)} 
+                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} 
                     </span>
-                    <span className="text-gray-500"> of {filteredOrders.length.toLocaleString()} orders</span>
+                    <span className="text-gray-500"> of {totalResults.toLocaleString()} orders</span>
                   </div>
                   
                   <nav aria-label="Page navigation" className="flex items-center space-x-1">
@@ -755,7 +683,7 @@ const WashingFloorSupervisorPage = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold">Update Order - {selectedOrder.id}</h3>
+              <h3 className="text-xl font-semibold">Update Order - {selectedOrder.orderNumber}</h3>
               <button
                 onClick={closeUpdateModal}
                 className="text-gray-400 hover:text-gray-600"
@@ -784,7 +712,7 @@ const WashingFloorSupervisorPage = () => {
               </div>
             </div>
 
-            {/* Articles Update Form (Tabs + Quantity from Checking) */}
+            {/* Articles Update Form with Tabs */}
             <div className="space-y-6">
               <h4 className="text-lg font-medium text-gray-900">Update Article Progress</h4>
 
@@ -799,7 +727,6 @@ const WashingFloorSupervisorPage = () => {
                       }`}
                       onClick={() => {
                         setActiveUpdateTabIndex(idx);
-                        setShowLogs(false);
                       }}
                       title={article.articleNumber}
                     >
@@ -813,18 +740,27 @@ const WashingFloorSupervisorPage = () => {
               {(() => {
                 const article = selectedOrder.articles[activeUpdateTabIndex];
                 if (!article) return null;
+                
+                const articleId = article.id || article._id;
+                if (!articleId) return null;
+                
+                const currentUpdateData = updateData[articleId] || { 
+                  completedQuantity: 0, 
+                  remarks: article.remarks || '' 
+                };
+                
                 return (
                   <div className="border border-gray-200 rounded-lg p-4">
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h5 className="text-md font-medium text-gray-900">{article.articleNumber}</h5>
+                        <h5 className="text-md font-medium text-gray-900">{article.articleNumber || 'Unknown Article'}</h5>
                         <div className="text-sm text-gray-600 mt-1">
-                          <span className="font-medium">Linking Type:</span> {article.linkingType}
+                          <span className="font-medium">Linking Type:</span> {article.linkingType || 'Not specified'}
                         </div>
                       </div>
                       <div className="text-right">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority)}`}>
-                          {article.priority}
+                          {article.priority || 'Unknown'}
                         </span>
                       </div>
                     </div>
@@ -832,63 +768,50 @@ const WashingFloorSupervisorPage = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                       <div>
                         <label className="form-label">Planned Quantity</label>
-                        <div className="text-lg font-semibold text-gray-900">{article.plannedQuantity.toLocaleString()}</div>
+                        <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
                       </div>
                       <div>
-                        <label className="form-label">Quantity from Checking</label>
-                        <div className="text-lg font-semibold text-blue-600">{article.quantityFromChecking.toLocaleString()}</div>
+                        <label className="form-label">Received from Previous Floor</label>
+                        <div className="text-lg font-semibold text-blue-600">
+                          {article.floorQuantities?.washing?.received || 0}
+                        </div>
                       </div>
                       <div>
-                        <label className="form-label">Washed Quantity *</label>
+                        <label className="form-label">Washing Completed Quantity *</label>
                         <input
                           type="number"
                           className="form-control"
-                          value={updateData[article.id]?.washedQuantity || 0}
-                          onChange={(e) => handleQuantityChange(article.id, Number(e.target.value))}
+                          value={currentUpdateData.completedQuantity}
+                          onChange={(e) => handleQuantityChange(articleId, Number(e.target.value))}
                           min="0"
-                          max={article.quantityFromChecking}
+                          max={article.floorQuantities?.washing?.received || 0}
                         />
+                        <div className="text-xs text-gray-500 mt-1">
+                          Transferred to next floor: {article.floorQuantities?.washing?.transferred || 0}
+                        </div>
                       </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="form-label">Remarks</label>
+                      <textarea
+                        className="form-control"
+                        rows={2}
+                        placeholder="Add remarks for this article..."
+                        value={currentUpdateData.remarks}
+                        onChange={(e) => handleRemarksChange(articleId, e.target.value)}
+                      />
                     </div>
 
                     <div className="flex justify-between items-center text-sm text-gray-600">
                       <div>
-                        Remaining: {(article.quantityFromChecking - (updateData[article.id]?.washedQuantity || 0)).toLocaleString()}
+                        Remaining: {(article.floorQuantities?.washing?.remaining || 0).toLocaleString()}
                       </div>
                       <div>
-                        Progress: {Math.round(((updateData[article.id]?.washedQuantity || 0) / article.plannedQuantity) * 100)}%
+                        Progress: {Math.round((currentUpdateData.completedQuantity / (article.floorQuantities?.washing?.received || 1)) * 100)}%
                       </div>
                     </div>
 
-                    {/* View Logs Button and panel */}
-                    <div className="mt-4">
-                      <button
-                        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
-                        onClick={() => setShowLogs(!showLogs)}
-                        title="View Article Logs"
-                        type="button"
-                      >
-                        <i className="ri-file-list-3-line"></i>
-                        {showLogs ? 'Hide Logs' : 'View Logs'}
-                      </button>
-                      {showLogs && (
-                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded max-w-full overflow-x-auto">
-                          <ul className="list-disc list-inside text-sm text-blue-900 space-y-1 break-words">
-                            {(
-                              (article.logs || [])
-                                .slice()
-                                .sort((a, b) => (a.date > b.date ? -1 : 1))
-                            ).map((log) => (
-                              <li key={log.id}>
-                                {(log.fromFloor || 'Washing')} {log.action?.toLowerCase?.() || 'action'} {log.quantity.toLocaleString()} {log.toFloor ? `to ${log.toFloor}` : ''} on {log.date}
-                                {log.remarks ? ` — ${log.remarks}` : ''}
-                              </li>
-                            ))}
-                            {(article.logs?.length || 0) === 0 && <li>No logs yet</li>}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 );
               })()}

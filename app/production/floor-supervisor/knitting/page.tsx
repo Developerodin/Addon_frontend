@@ -89,16 +89,20 @@ const KnittingFloorSupervisorPage = () => {
 
   const handleUpdateOrder = (order: ProductionOrder) => {
     setSelectedOrder(order);
+    setActiveUpdateTabIndex(0);
     // Initialize update data with current values
     const initialData: {[key: string]: {completedQuantity: number, remarks: string}} = {};
     order.articles.forEach(article => {
-      initialData[article.id] = {
-        completedQuantity: article.completedQuantity,
-        remarks: article.remarks || ''
-      };
+      const articleId = article.id || article._id;
+      if (articleId) {
+        // Initialize with 0 for completed quantity
+        initialData[articleId] = {
+          completedQuantity: 0,
+          remarks: article.remarks || ''
+        };
+      }
     });
     setUpdateData(initialData);
-    setActiveUpdateTabIndex(0);
     setShowUpdateModal(true);
   };
 
@@ -136,26 +140,49 @@ const KnittingFloorSupervisorPage = () => {
       
       // Update each article that has changes
       const updatePromises = selectedOrder.articles.map(async (article) => {
-        const update = updateData[article.id];
-        if (update && (update.completedQuantity !== article.completedQuantity || update.remarks !== article.remarks)) {
+        const articleId = article.id || article._id;
+        if (!articleId) return null;
+        
+        const update = updateData[articleId];
+        const knittingTransferredQuantity = article.floorQuantities?.knitting?.transferred || 0;
+        if (update && (update.completedQuantity !== knittingTransferredQuantity || update.remarks !== (article.remarks || ''))) {
           const progressData = {
             completedQuantity: update.completedQuantity,
             remarks: update.remarks
           };
           
-          return productionService.updateArticleProgress(
-            'Knitting',
-            selectedOrder.id,
-            article._id || article.id,
-            progressData
-          );
+          try {
+            const response = await productionService.updateArticleProgress(
+              'Knitting',
+              selectedOrder.id,
+              article._id || article.id,
+              progressData
+            );
+            
+            if (!response.success) {
+              throw new Error(response.error?.message || 'Failed to update article');
+            }
+            
+            return response.data;
+          } catch (error) {
+            console.error(`Error updating article ${articleId}:`, error);
+            throw error;
+          }
         }
         return null;
       }).filter(Boolean);
 
-      await Promise.all(updatePromises);
+      const results = await Promise.allSettled(updatePromises);
       
-      toast.success('Order updated successfully');
+      // Check if any updates failed
+      const failedUpdates = results.filter(result => result.status === 'rejected');
+      if (failedUpdates.length > 0) {
+        console.error('Some updates failed:', failedUpdates);
+        toast.error(`${failedUpdates.length} article(s) failed to update`);
+      } else {
+        toast.success('Order updated successfully');
+      }
+      
       closeUpdateModal();
       
       // Reload orders to get updated data
@@ -539,9 +566,12 @@ const KnittingFloorSupervisorPage = () => {
                               <div className="text-sm text-gray-600">
                                 Total Qty: {order.articles.reduce((sum, article) => sum + article.plannedQuantity, 0).toLocaleString()}
                               </div>
-                              <div className="text-xs text-gray-500">
-                                Completed: {order.articles.reduce((sum, article) => sum + article.completedQuantity, 0).toLocaleString()}
-                              </div>
+                              {order.articles.some(article => article.floorQuantities?.knitting) && (
+                                <div className="text-xs text-blue-600">
+                                  Knitting: R:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.received || 0), 0)} | 
+                                  Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.remaining || 0), 0)}
+                                </div>
+                              )}
                               <div className="text-xs text-gray-400">
                                 Floor: {order.currentFloor}
                               </div>
@@ -682,7 +712,7 @@ const KnittingFloorSupervisorPage = () => {
             </div>
 
             {/* Order Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
               <div>
                 <label className="text-sm font-medium text-gray-600">Priority</label>
                 <div className="mt-1">
@@ -712,37 +742,55 @@ const KnittingFloorSupervisorPage = () => {
                 {(() => {
                   const article = selectedOrder.articles[activeUpdateTabIndex];
                   if (!article) return null;
+                  
+                  const articleId = article.id || article._id;
+                  if (!articleId) return null;
+                  
+                  const currentUpdateData = updateData[articleId] || { 
+                    completedQuantity: 0, 
+                    remarks: article.remarks || '' 
+                  };
+                  
                   return (
                     <div className="border border-gray-200 rounded-lg p-4">
                       <div className="flex justify-between items-start mb-4">
                         <div>
-                          <h5 className="text-md font-medium text-gray-900">{article.articleNumber}</h5>
+                          <h5 className="text-md font-medium text-gray-900">{article.articleNumber || 'Unknown Article'}</h5>
                           <div className="text-sm text-gray-600 mt-1">
-                            <span className="font-medium">Linking Type:</span> {article.linkingType}
+                            <span className="font-medium">Linking Type:</span> {article.linkingType || 'Not specified'}
                           </div>
                         </div>
                         <div className="text-right">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority)}`}>
-                            {article.priority}
+                            {article.priority || 'Unknown'}
                           </span>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                         <div>
                           <label className="form-label">Planned Quantity</label>
-                          <div className="text-lg font-semibold text-gray-900">{article.plannedQuantity.toLocaleString()}</div>
+                          <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
                         </div>
                         <div>
-                          <label className="form-label">Completed Quantity *</label>
+                          <label className="form-label">Received from Previous Floor</label>
+                          <div className="text-lg font-semibold text-blue-600">
+                            {article.floorQuantities?.knitting?.received || 0}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="form-label">Knitting Completed Quantity *</label>
                           <input
                             type="number"
                             className="form-control"
-                            value={updateData[article.id]?.completedQuantity || 0}
-                            onChange={(e) => handleQuantityChange(article.id, Number(e.target.value))}
+                            value={currentUpdateData.completedQuantity}
+                            onChange={(e) => handleQuantityChange(articleId, Number(e.target.value))}
                             min="0"
-                            max={article.plannedQuantity}
+                            max={article.floorQuantities?.knitting?.received || 0}
                           />
+                          <div className="text-xs text-gray-500 mt-1">
+                            Transferred to next floor: {article.floorQuantities?.knitting?.transferred || 0}
+                          </div>
                         </div>
                       </div>
 
@@ -752,17 +800,17 @@ const KnittingFloorSupervisorPage = () => {
                           className="form-control"
                           rows={2}
                           placeholder="Add remarks for this article..."
-                          value={updateData[article.id]?.remarks || ''}
-                          onChange={(e) => handleRemarksChange(article.id, e.target.value)}
+                          value={currentUpdateData.remarks}
+                          onChange={(e) => handleRemarksChange(articleId, e.target.value)}
                         />
                       </div>
 
                       <div className="flex justify-between items-center text-sm text-gray-600">
                         <div>
-                          Remaining: {(article.plannedQuantity - (updateData[article.id]?.completedQuantity || 0)).toLocaleString()}
+                          Remaining: {(article.floorQuantities?.knitting?.remaining || 0).toLocaleString()}
                         </div>
                         <div>
-                          Progress: {Math.round(((updateData[article.id]?.completedQuantity || 0) / article.plannedQuantity) * 100)}%
+                          Progress: {Math.round((currentUpdateData.completedQuantity / (article.floorQuantities?.knitting?.received || 1)) * 100)}%
                         </div>
                       </div>
 
