@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
@@ -23,7 +23,7 @@ interface EditOrderFormData {
   plannedEndDate?: string;
 }
 
-const EditOrderPage = () => {
+const EditOrderContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderId = searchParams.get('id');
@@ -579,6 +579,24 @@ const EditOrderPage = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const EditOrderPage = () => {
+  return (
+    <Suspense fallback={
+      <div className="main-content">
+        <Seo title="Edit Production Order"/>
+        <div className="flex justify-center items-center min-h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <EditOrderContent />
+    </Suspense>
   );
 };
 
