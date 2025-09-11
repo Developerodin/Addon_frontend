@@ -73,7 +73,6 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	}
 
 	function menuClose() {
-		;
 		const theme = store.getState();
 		if (window.innerWidth <= 992) {
 			ThemeChanger({ ...theme, dataToggled: "close" });

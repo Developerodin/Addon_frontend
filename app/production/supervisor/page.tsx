@@ -5,7 +5,20 @@ import Link from "next/link";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import OrderViewModal from "../../../shared/components/production/OrderViewModal";
-import { productionService, ProductionOrder, OrderFilters } from "@/shared/services/productionService";
+import { productionService, OrderFilters } from "@/shared/services/productionService";
+
+interface ProductionOrder {
+  id: string;
+  orderNumber?: string;
+  priority: string;
+  status: string;
+  articles: any[];
+  currentFloor?: string;
+  floor?: string;
+  orderNote?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 interface FloorQuantity {
   floor: string;
@@ -183,7 +196,8 @@ const ProductionSupervisorPage = () => {
       'Pending': 'bg-yellow-100 text-yellow-800',
       'In Progress': 'bg-blue-100 text-blue-800',
       'Completed': 'bg-green-100 text-green-800',
-      'On Hold': 'bg-red-100 text-red-800'
+      'On Hold': 'bg-red-100 text-red-800',
+      'Cancelled': 'bg-gray-100 text-gray-800'
     };
     return statusClasses[status as keyof typeof statusClasses] || 'bg-gray-100 text-gray-800';
   };
@@ -408,6 +422,7 @@ const ProductionSupervisorPage = () => {
                           <option value="In Progress">In Progress</option>
                           <option value="Completed">Completed</option>
                           <option value="On Hold">On Hold</option>
+                          <option value="Cancelled">Cancelled</option>
                         </select>
                       </div>
 
@@ -523,7 +538,7 @@ const ProductionSupervisorPage = () => {
                           </td>
                           <td className="px-4 py-4">
                             <div className="space-y-1">
-                              <div className="font-medium text-gray-900">{order.orderNumber}</div>
+                              <div className="font-medium text-gray-900">{order.orderNumber || order.id}</div>
                               <div className="text-sm text-gray-500">
                                 Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                               </div>
@@ -544,7 +559,7 @@ const ProductionSupervisorPage = () => {
                                 Completed: {order.articles.reduce((sum, article) => sum + article.completedQuantity, 0).toLocaleString()}
                               </div>
                               <div className="text-xs text-gray-400">
-                                Floor: {order.currentFloor}
+                                Floor: {order.currentFloor || order.floor || 'Unknown'}
                               </div>
                             </div>
                           </td>

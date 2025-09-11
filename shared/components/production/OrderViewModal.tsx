@@ -1,7 +1,52 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
-import { productionService, ProductionOrder, Article } from "@/shared/services/productionService";
+import { productionService, ProductionOrder } from "@/shared/services/productionService";
+
+interface Article {
+  id: string;
+  _id?: string;
+  articleNumber: string;
+  plannedQuantity: number;
+  completedQuantity: number;
+  linkingType: string;
+  priority: string;
+  status: string;
+  progress: number;
+  currentFloor: string;
+  remarks?: string;
+  m1Quantity?: number;
+  m2Quantity?: number;
+  m3Quantity?: number;
+  m4Quantity?: number;
+  floorQuantities?: {
+    [key: string]: {
+      received?: number;
+      completed?: number;
+      remaining?: number;
+      transferred?: number;
+      m1Quantity?: number;
+      m2Quantity?: number;
+      m3Quantity?: number;
+      m4Quantity?: number;
+      repairStatus?: string;
+      repairRemarks?: string;
+    };
+  };
+}
+
+interface ProductionOrder {
+  id: string;
+  orderNumber?: string;
+  priority: string;
+  status: string;
+  articles: Article[];
+  currentFloor?: string;
+  floor?: string;
+  orderNote?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 interface OrderViewModalProps {
   order: ProductionOrder;
@@ -43,7 +88,9 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
 
   const handleArticleClick = (article: Article) => {
     setSelectedArticle(article);
-    loadArticleLogs(article.id);
+    // Use _id for logs API, fallback to id if _id is not available
+    const articleId = article._id || article.id;
+    loadArticleLogs(articleId);
   };
 
   const getStatusBadge = (status: string) => {
@@ -86,8 +133,8 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
   };
 
   const calculateProgress = (article: Article) => {
-    if (article.plannedQuantity === 0) return 0;
-    return Math.round((article.completedQuantity / article.plannedQuantity) * 100);
+    if (!article.plannedQuantity || article.plannedQuantity === 0) return 0;
+    return Math.round(((article.completedQuantity || 0) / article.plannedQuantity) * 100);
   };
 
   return (
@@ -97,7 +144,7 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
         <div className="flex justify-between items-center p-6 border-b border-gray-200">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Order Details</h2>
-            <p className="text-gray-600">Order Number: {order.orderNumber}</p>
+            <p className="text-gray-600">Order Number: {order.orderNumber || order.id}</p>
           </div>
           <button
             onClick={onClose}
@@ -129,8 +176,8 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
             <div>
               <label className="text-sm font-medium text-gray-500">Current Floor</label>
               <div className="mt-1">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFloorBadge(order.currentFloor)}`}>
-                  {order.currentFloor}
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFloorBadge(order.currentFloor || order.floor || 'Unknown')}`}>
+                  {order.currentFloor || order.floor || 'Unknown'}
                 </span>
               </div>
             </div>
@@ -148,6 +195,7 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
               <p className="mt-1 text-gray-900">{order.orderNote}</p>
             </div>
           )}
+
         </div>
 
         {/* Tabs */}
@@ -204,31 +252,31 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-2">
                         <h3 className="text-lg font-medium text-gray-900">
-                          {article.articleNumber}
+                          {article.articleNumber || 'Unknown Article'}
                         </h3>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority)}`}>
-                          {article.priority}
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority || 'Unknown')}`}>
+                          {article.priority || 'Unknown'}
                         </span>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(article.status)}`}>
-                          {article.status}
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(article.status || 'Unknown')}`}>
+                          {article.status || 'Unknown'}
                         </span>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFloorBadge(article.currentFloor)}`}>
-                          {article.currentFloor}
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFloorBadge(article.currentFloor || 'Unknown')}`}>
+                          {article.currentFloor || 'Unknown'}
                         </span>
                       </div>
                       
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>
                           <span className="text-gray-500">Planned:</span>
-                          <span className="ml-1 font-medium">{article.plannedQuantity.toLocaleString()}</span>
+                          <span className="ml-1 font-medium">{(article.plannedQuantity || 0).toLocaleString()}</span>
                         </div>
                         <div>
                           <span className="text-gray-500">Completed:</span>
-                          <span className="ml-1 font-medium">{article.completedQuantity.toLocaleString()}</span>
+                          <span className="ml-1 font-medium">{(article.completedQuantity || 0).toLocaleString()}</span>
                         </div>
                         <div>
                           <span className="text-gray-500">Linking Type:</span>
-                          <span className="ml-1 font-medium">{article.linkingType}</span>
+                          <span className="ml-1 font-medium">{article.linkingType || 'N/A'}</span>
                         </div>
                         <div>
                           <span className="text-gray-500">Progress:</span>
@@ -236,10 +284,10 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
                         </div>
                       </div>
 
-                      {/* Progress Bar */}
+                      {/* Overall Progress Bar */}
                       <div className="mt-3">
                         <div className="flex justify-between text-xs text-gray-500 mb-1">
-                          <span>Progress</span>
+                          <span>Overall Progress</span>
                           <span>{calculateProgress(article)}%</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
@@ -250,24 +298,57 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
                         </div>
                       </div>
 
+                      {/* Floor-wise Progress */}
+                      {article.floorQuantities && (
+                        <div className="mt-4">
+                          <h4 className="text-sm font-medium text-gray-700 mb-3">Floor-wise Progress</h4>
+                          <div className="space-y-2">
+                            {Object.entries(article.floorQuantities).map(([floor, data]) => (
+                              <div key={floor} className="bg-gray-50 rounded-lg p-3">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="text-sm font-medium text-gray-700 capitalize">
+                                    {floor.replace(/([A-Z])/g, ' $1').trim()}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {data.completed || 0} / {data.received || 0}
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                  <div
+                                    className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                                    style={{ 
+                                      width: `${data.received > 0 ? Math.round(((data.completed || 0) / data.received) * 100) : 0}%` 
+                                    }}
+                                  ></div>
+                                </div>
+                                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                  <span>Remaining: {(data.remaining || 0).toLocaleString()}</span>
+                                  <span>Transferred: {(data.transferred || 0).toLocaleString()}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Quality Categories */}
-                      {(article.m1Quantity > 0 || article.m2Quantity > 0 || article.m3Quantity > 0 || article.m4Quantity > 0) && (
+                      {((article.m1Quantity || 0) > 0 || (article.m2Quantity || 0) > 0 || (article.m3Quantity || 0) > 0 || (article.m4Quantity || 0) > 0) && (
                         <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
                           <div className="text-center">
                             <div className="font-medium text-green-600">M1</div>
-                            <div className="text-gray-600">{article.m1Quantity}</div>
+                            <div className="text-gray-600">{article.m1Quantity || 0}</div>
                           </div>
                           <div className="text-center">
                             <div className="font-medium text-yellow-600">M2</div>
-                            <div className="text-gray-600">{article.m2Quantity}</div>
+                            <div className="text-gray-600">{article.m2Quantity || 0}</div>
                           </div>
                           <div className="text-center">
                             <div className="font-medium text-orange-600">M3</div>
-                            <div className="text-gray-600">{article.m3Quantity}</div>
+                            <div className="text-gray-600">{article.m3Quantity || 0}</div>
                           </div>
                           <div className="text-center">
                             <div className="font-medium text-red-600">M4</div>
-                            <div className="text-gray-600">{article.m4Quantity}</div>
+                            <div className="text-gray-600">{article.m4Quantity || 0}</div>
                           </div>
                         </div>
                       )}

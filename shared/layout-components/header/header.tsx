@@ -139,7 +139,13 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
     const handleResize = () => {
       const windowObject = window;
       if (windowObject.innerWidth <= 991) {
+        // Mobile - overlay can be active
       } else {
+        // Desktop - remove overlay if it exists
+        const overlay = document.querySelector("#responsive-overlay");
+        if (overlay) {
+          overlay.classList.remove("active");
+        }
       }
     };
     handleResize(); // Check on component mount
@@ -148,6 +154,28 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
       window.removeEventListener("resize", handleResize);
     };
   }, []);
+
+  // Sync Redux state with DOM attributes
+  useEffect(() => {
+    console.log('Header: Redux state changed, syncing with DOM');
+    console.log('Current local_varaiable:', local_varaiable);
+    
+    // Update DOM attributes based on Redux state
+    if (local_varaiable.dataToggled !== undefined) {
+      document.documentElement.setAttribute('data-toggled', local_varaiable.dataToggled);
+    }
+    if (local_varaiable.iconOverlay !== undefined) {
+      document.documentElement.setAttribute('data-icon-overlay', local_varaiable.iconOverlay);
+    }
+    
+    // Ensure overlay is only active on mobile
+    const overlay = document.querySelector("#responsive-overlay");
+    if (overlay) {
+      if (window.innerWidth >= 992) {
+        overlay.classList.remove("active");
+      }
+    }
+  }, [local_varaiable.dataToggled, local_varaiable.iconOverlay]);
 
 
   function menuClose() {
@@ -161,139 +189,48 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
   }
 
   const toggleSidebar = () => { 
+    console.log('Toggle sidebar clicked');
     const theme = store.getState();
-    let sidemenuType = theme.dataNavLayout;
-    if (window.innerWidth >= 992) {
-      if (sidemenuType === "vertical") {
-        let verticalStyle = theme.dataVerticalStyle;
-        const navStyle = theme.dataNavStyle;
-        switch (verticalStyle) {
-          // closed
-          case "closed":
-            ThemeChanger({ ...theme, "dataNavStyle": "" });
-            if (theme.dataToggled === "close-menu-close") {
-              ThemeChanger({ ...theme, "dataToggled": "" });
-            } else {
-              ThemeChanger({ ...theme, "dataToggled": "close-menu-close" });
-            }
-            break;
-          // icon-overlay
-          case "overlay":
-            ThemeChanger({ ...theme, "dataNavStyle": "" });
-            if (theme.dataToggled === "icon-overlay-close") {
-              ThemeChanger({ ...theme, "dataToggled": "","iconOverlay" :''});
-            } else {
-              if (window.innerWidth >= 992) {
-                ThemeChanger({ ...theme, "dataToggled": "icon-overlay-close","iconOverlay" :'' });
-              }
-            }
-            break;
-          // icon-text
-          case "icontext":
-            ThemeChanger({ ...theme, "dataNavStyle": "" });
-            if (theme.dataToggled === "icon-text-close") {
-              ThemeChanger({ ...theme, "dataToggled": "" });
-            } else {
-              ThemeChanger({ ...theme, "dataToggled": "icon-text-close" });
-            }
-            break;
-          // doublemenu
-          case "doublemenu":
-            ThemeChanger({ ...theme, "dataNavStyle": "" });
-            ThemeChanger({ ...theme, "dataNavStyle": "" });
-              if (theme.dataToggled === "double-menu-open") {
-                ThemeChanger({ ...theme, "dataToggled": "double-menu-close" });
-              } else {
-                let sidemenu = document.querySelector(".side-menu__item.active");
-                if (sidemenu) {
-                  ThemeChanger({ ...theme, "dataToggled": "double-menu-open" });
-                  if (sidemenu.nextElementSibling) {
-                    sidemenu.nextElementSibling.classList.add("double-menu-active");
-                  } else {
-
-                    ThemeChanger({ ...theme, "dataToggled": "double-menu-close" });
-                  }
-                }
-              }
-            // doublemenu(ThemeChanger);
-            break;
-          // detached
-          case "detached":
-            if (theme.dataToggled === "detached-close") {
-              ThemeChanger({ ...theme, "dataToggled": "","iconOverlay" :'' });
-            } else {
-              ThemeChanger({ ...theme, "dataToggled": "detached-close","iconOverlay" :'' });
-            }
-            
-            break;
-
-          // default
-          case "default":
-            ThemeChanger({ ...theme, "dataToggled": "" });
-        }
-        switch (navStyle) {
-          case "menu-click":
-            if (theme.dataToggled === "menu-click-closed") {
-              ThemeChanger({ ...theme, "dataToggled": "" });
-            }
-            else {
-              ThemeChanger({ ...theme, "dataToggled": "menu-click-closed" });
-            }
-            break;
-          // icon-overlay
-          case "menu-hover":
-            if (theme.dataToggled === "menu-hover-closed") {
-              ThemeChanger({ ...theme, "dataToggled": "" });
-            } else {
-              ThemeChanger({ ...theme, "dataToggled": "menu-hover-closed"});
-
-            }
-            break;
-          case "icon-click":
-            if (theme.dataToggled === "icon-click-closed") {
-              ThemeChanger({ ...theme, "dataToggled": "" });
-            } else {
-              ThemeChanger({ ...theme, "dataToggled": "icon-click-closed" });
-
-            }
-            break;
-          case "icon-hover":
-            if (theme.dataToggled === "icon-hover-closed") {
-              ThemeChanger({ ...theme, "dataToggled": "" });
-            } else {
-              ThemeChanger({ ...theme, "dataToggled": "icon-hover-closed" });
-
-            }
-            break;
-
-        }
-      }
-    }
-    else {
-      if (theme.dataToggled === "close") {
-        ThemeChanger({ ...theme, "dataToggled": "open" });
+    console.log('Current theme state:', theme);
+    
+    const isMobile = window.innerWidth < 992;
+    console.log('Is mobile:', isMobile);
+    
+    if (isMobile) {
+      // Mobile behavior - simple toggle between open and close
+      console.log('Mobile toggle - current dataToggled:', theme.dataToggled);
+      
+      if (theme.dataToggled === "close" || theme.dataToggled === "") {
+        console.log('Opening sidebar on mobile');
+        const newState = { ...theme, "dataToggled": "open" };
+        ThemeChanger(newState);
+        
+        // Force DOM update
+        setTimeout(() => {
+          document.documentElement.setAttribute('data-toggled', 'open');
+        }, 0);
 
         setTimeout(() => {
-          if (theme.dataToggled == "open") {
-            const overlay = document.querySelector("#responsive-overlay");
-
-            if (overlay) {
-              overlay.classList.add("active");
-              overlay.addEventListener("click", () => {
-                const overlay = document.querySelector("#responsive-overlay");
-
-                if (overlay) {
-                  overlay.classList.remove("active");
-                  menuClose();
-                }
-              });
-            }
+          const overlay = document.querySelector("#responsive-overlay");
+          if (overlay) {
+            overlay.classList.add("active");
+            // Remove existing event listeners to prevent duplicates
+            const newOverlay = overlay.cloneNode(true);
+            overlay.parentNode?.replaceChild(newOverlay, overlay);
+            
+            // Add new event listener
+            newOverlay.addEventListener("click", () => {
+              const overlay = document.querySelector("#responsive-overlay");
+              if (overlay) {
+                overlay.classList.remove("active");
+                menuClose();
+              }
+            });
           }
 
           window.addEventListener("resize", () => {
-            if (window.screen.width >= 992) {
+            if (window.innerWidth >= 992) {
               const overlay = document.querySelector("#responsive-overlay");
-
               if (overlay) {
                 overlay.classList.remove("active");
               }
@@ -301,12 +238,82 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
           });
         }, 100);
       } else {
-        ThemeChanger({ ...theme, "dataToggled": "close" });
+        console.log('Closing sidebar on mobile');
+        const newState = { ...theme, "dataToggled": "close" };
+        ThemeChanger(newState);
+        
+        // Force DOM update
+        setTimeout(() => {
+          document.documentElement.setAttribute('data-toggled', 'close');
+        }, 0);
+        
+        // Remove overlay if it exists
+        const overlay = document.querySelector("#responsive-overlay");
+        if (overlay) {
+          overlay.classList.remove("active");
+        }
       }
+    } else {
+      // Desktop behavior
+      console.log('Desktop toggle - verticalStyle:', theme.dataVerticalStyle, 'dataToggled:', theme.dataToggled);
+      
+      let newToggledState = "";
+      let newIconOverlay = "";
+      
+      if (theme.dataVerticalStyle === "overlay") {
+        if (theme.dataToggled === "icon-overlay-close") {
+          console.log('Opening overlay sidebar');
+          newToggledState = "";
+          newIconOverlay = "";
+        } else {
+          console.log('Closing overlay sidebar');
+          newToggledState = "icon-overlay-close";
+          newIconOverlay = "";
+        }
+      } else if (theme.dataVerticalStyle === "closed") {
+        if (theme.dataToggled === "close-menu-close") {
+          console.log('Opening closed sidebar');
+          newToggledState = "";
+        } else {
+          console.log('Closing closed sidebar');
+          newToggledState = "close-menu-close";
+        }
+      } else if (theme.dataVerticalStyle === "icontext") {
+        if (theme.dataToggled === "icon-text-close") {
+          console.log('Opening icontext sidebar');
+          newToggledState = "";
+        } else {
+          console.log('Closing icontext sidebar');
+          newToggledState = "icon-text-close";
+        }
+      } else if (theme.dataVerticalStyle === "detached") {
+        if (theme.dataToggled === "detached-close") {
+          console.log('Opening detached sidebar');
+          newToggledState = "";
+          newIconOverlay = "";
+        } else {
+          console.log('Closing detached sidebar');
+          newToggledState = "detached-close";
+          newIconOverlay = "";
+        }
+      } else {
+        // Default behavior - just toggle
+        console.log('Default toggle behavior');
+        newToggledState = theme.dataToggled === "" ? "close" : "";
+      }
+      
+      const newState = { ...theme, "dataToggled": newToggledState, "iconOverlay": newIconOverlay };
+      ThemeChanger(newState);
+      
+      // Force DOM update
+      setTimeout(() => {
+        document.documentElement.setAttribute('data-toggled', newToggledState);
+        if (newIconOverlay !== undefined) {
+          document.documentElement.setAttribute('data-icon-overlay', newIconOverlay);
+        }
+        console.log('DOM updated with data-toggled:', newToggledState);
+      }, 0);
     }
-    
-   
-
   };
   //Dark Model
 
@@ -390,9 +397,15 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
                   </Link>
                 </div>
               </div>
-              <div className="header-element md:px-[0.325rem] !items-center" onClick={() => toggleSidebar()}>
-                <Link aria-label="Hide Sidebar"
-                  className="sidemenu-toggle animated-arrow  hor-toggle horizontal-navtoggle inline-flex items-center" href="#!" scroll={false}><span></span></Link>
+              <div className="header-element md:px-[0.325rem] !items-center">
+                <button 
+                  aria-label="Toggle Sidebar"
+                  className="sidemenu-toggle animated-arrow hor-toggle horizontal-navtoggle inline-flex items-center"
+                  onClick={() => toggleSidebar()}
+                  type="button"
+                >
+                  <span></span>
+                </button>
               </div>
             </div>
             <div className="header-content-right">
