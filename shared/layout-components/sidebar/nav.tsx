@@ -8,6 +8,7 @@ const CategoriesIcon = <i className="bx bx-category side-menu__icon"></i>;
 const MaterialIcon = <i className="bx bx-layer side-menu__icon"></i>;
 const ProcessIcon = <i className="bx bx-cog side-menu__icon"></i>;
 const AttributeIcon = <i className="bx bx-list-ul side-menu__icon"></i>;
+const MachinesIcon = <i className="bx bx-cog side-menu__icon"></i>;
 const SalesIcon = <i className="bx bx-cart side-menu__icon"></i>;
 const StoresIcon = <i className="bx bx-store side-menu__icon"></i>;
 const AnalyticsIcon = <i className="bx bx-bar-chart side-menu__icon"></i>;
@@ -38,7 +39,7 @@ const BaseMenuItems: any = [
   },
   {
     icon: CatalogIcon,
-    title: "Catalog",
+    title: "Master Catalog",
     type: "sub",
     active: false,
     selected: false,
@@ -82,6 +83,14 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Attributes",
+      },
+      {
+        icon: MachinesIcon,
+        path: "/catalog/machines",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Machines",
       },
     ],
   },
@@ -152,7 +161,7 @@ const BaseMenuItems: any = [
   },
   {
     icon: SupervisorIcon,
-    title: "Production",
+    title: "Production Planning",
     type: "sub",
     active: false,
     selected: false,
@@ -163,7 +172,7 @@ const BaseMenuItems: any = [
         type: "link",
         active: false,
         selected: false,
-        title: "Production Supervisor",
+        title: "Production Orders",
       },
       {
         icon: FloorIcon,
@@ -171,7 +180,7 @@ const BaseMenuItems: any = [
         type: "link",
         active: false,
         selected: false,
-        title: "Knitting Floor Supervisor",
+        title: "Knitting Floor",
       },
       {
         icon: FloorIcon,
@@ -179,7 +188,7 @@ const BaseMenuItems: any = [
         type: "link",
         active: false,
         selected: false,
-        title: "Linking Floor Supervisor",
+        title: "Linking Floor",
       },
       {
         icon: FloorIcon,
@@ -187,7 +196,7 @@ const BaseMenuItems: any = [
         type: "link",
         active: false,
         selected: false,
-        title: "Checking Floor Supervisor",
+        title: "Checking Floor",
       },
       {
         icon: FloorIcon,
@@ -195,7 +204,7 @@ const BaseMenuItems: any = [
         type: "link",
         active: false,
         selected: false,
-        title: "Washing Floor Supervisor",
+        title: "Washing Floor",
       },
       {
         icon: FloorIcon,
@@ -203,7 +212,7 @@ const BaseMenuItems: any = [
         type: "link",
         active: false,
         selected: false,
-        title: "Boarding Floor Supervisor",
+        title: "Boarding Floor",
       },
       {
         icon: FloorIcon,
@@ -211,7 +220,7 @@ const BaseMenuItems: any = [
         type: "link",
         active: false,
         selected: false,
-        title: "Final Checking Floor Supervisor",
+        title: "Final Checking Floor",
       },
       {
         icon: FloorIcon,
@@ -219,7 +228,7 @@ const BaseMenuItems: any = [
         type: "link",
         active: false,
         selected: false,
-        title: "Branding Floor Supervisor",
+        title: "Branding Floor",
       },
       {
         icon: FloorIcon,
@@ -227,7 +236,7 @@ const BaseMenuItems: any = [
         type: "link",
         active: false,
         selected: false,
-        title: "Warehouse Floor Supervisor",
+        title: "Warehouse Floor",
       },
     ],
   },

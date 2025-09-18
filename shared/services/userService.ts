@@ -16,7 +16,6 @@ export interface User {
   role: 'admin' | 'user' | 'super_admin';
   navigation: {
     // Main Sidebar
-    Users: boolean;
     Dashboard: boolean;
     Catalog: {
       Items: boolean;
@@ -24,6 +23,7 @@ export interface User {
       'Raw Material': boolean;
       Processes: boolean;
       Attributes: boolean;
+      Machines: boolean;
     };
     Sales: {
       'All Sales': boolean;
@@ -33,16 +33,17 @@ export interface User {
     Analytics: boolean;
     'Replenishment Agent': boolean;
     'File Manager': boolean;
-    Production: {
-      'Production Supervisor': boolean;
-      'Knitting Floor Supervisor': boolean;
-      'Linking Floor Supervisor': boolean;
-      'Checking Floor Supervisor': boolean;
-      'Washing Floor Supervisor': boolean;
-      'Boarding Floor Supervisor': boolean;
-      'Final Checking Floor Supervisor': boolean;
-      'Branding Floor Supervisor': boolean;
-      'Warehouse Floor Supervisor': boolean;
+    Users: boolean;
+    'Production Planning': {
+      'Production Orders': boolean;
+      'Knitting Floor': boolean;
+      'Linking Floor': boolean;
+      'Checking Floor': boolean;
+      'Washing Floor': boolean;
+      'Boarding Floor': boolean;
+      'Final Checking Floor': boolean;
+      'Branding Floor': boolean;
+      'Warehouse Floor': boolean;
     };
   };
   createdAt: string;

@@ -5,7 +5,6 @@ import { User } from '@/shared/services/userService';
 
 interface NavigationPermissions {
   // Main Sidebar
-  Users: boolean;
   Dashboard: boolean;
   Catalog: {
     Items: boolean;
@@ -13,6 +12,7 @@ interface NavigationPermissions {
     'Raw Material': boolean;
     Processes: boolean;
     Attributes: boolean;
+    Machines: boolean;
   };
   Sales: {
     'All Sales': boolean;
@@ -22,16 +22,17 @@ interface NavigationPermissions {
   Analytics: boolean;
   'Replenishment Agent': boolean;
   'File Manager': boolean;
-  Production: {
-    'Production Supervisor': boolean;
-    'Knitting Floor Supervisor': boolean;
-    'Linking Floor Supervisor': boolean;
-    'Checking Floor Supervisor': boolean;
-    'Washing Floor Supervisor': boolean;
-    'Boarding Floor Supervisor': boolean;
-    'Final Checking Floor Supervisor': boolean;
-    'Branding Floor Supervisor': boolean;
-    'Warehouse Floor Supervisor': boolean;
+  Users: boolean;
+  'Production Planning': {
+    'Production Orders': boolean;
+    'Knitting Floor': boolean;
+    'Linking Floor': boolean;
+    'Checking Floor': boolean;
+    'Washing Floor': boolean;
+    'Boarding Floor': boolean;
+    'Final Checking Floor': boolean;
+    'Branding Floor': boolean;
+    'Warehouse Floor': boolean;
   };
 }
 
@@ -46,7 +47,6 @@ const NavigationContext = createContext<NavigationContextType | undefined>(undef
 
 // Default permissions (all false for security)
 const defaultPermissions: NavigationPermissions = {
-  Users: false,
   Dashboard: false,
   Catalog: {
     Items: false,
@@ -54,6 +54,7 @@ const defaultPermissions: NavigationPermissions = {
     'Raw Material': false,
     Processes: false,
     Attributes: false,
+    Machines: false,
   },
   Sales: {
     'All Sales': false,
@@ -63,16 +64,17 @@ const defaultPermissions: NavigationPermissions = {
   Analytics: false,
   'Replenishment Agent': false,
   'File Manager': false,
-  Production: {
-    'Production Supervisor': false,
-    'Knitting Floor Supervisor': false,
-    'Linking Floor Supervisor': false,
-    'Checking Floor Supervisor': false,
-    'Washing Floor Supervisor': false,
-    'Boarding Floor Supervisor': false,
-    'Final Checking Floor Supervisor': false,
-    'Branding Floor Supervisor': false,
-    'Warehouse Floor Supervisor': false,
+  Users: false,
+  'Production Planning': {
+    'Production Orders': false,
+    'Knitting Floor': false,
+    'Linking Floor': false,
+    'Checking Floor': false,
+    'Washing Floor': false,
+    'Boarding Floor': false,
+    'Final Checking Floor': false,
+    'Branding Floor': false,
+    'Warehouse Floor': false,
   },
 };
 
@@ -106,9 +108,9 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
           ...defaultPermissions.Sales,
           ...(user.navigation.Sales || {})
         },
-        Production: {
-          ...defaultPermissions.Production,
-          ...(user.navigation.Production || {})
+        'Production Planning': {
+          ...defaultPermissions['Production Planning'],
+          ...(user.navigation['Production Planning'] || {})
         }
       };
       setPermissions(mergedPermissions);
@@ -129,21 +131,22 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
           'Raw Material': true,
           Processes: true,
           Attributes: true,
+          Machines: true,
         },
         Sales: {
           'All Sales': true,
           'Master Sales': true,
         },
-        Production: {
-          'Production Supervisor': true,
-          'Knitting Floor Supervisor': true,
-          'Linking Floor Supervisor': true,
-          'Checking Floor Supervisor': true,
-          'Washing Floor Supervisor': true,
-          'Boarding Floor Supervisor': true,
-          'Final Checking Floor Supervisor': true,
-          'Branding Floor Supervisor': true,
-          'Warehouse Floor Supervisor': true,
+        'Production Planning': {
+          'Production Orders': true,
+          'Knitting Floor': true,
+          'Linking Floor': true,
+          'Checking Floor': true,
+          'Washing Floor': true,
+          'Boarding Floor': true,
+          'Final Checking Floor': true,
+          'Branding Floor': true,
+          'Warehouse Floor': true,
         }
       };
       setPermissions(devPermissions);
@@ -181,7 +184,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     const parentMap: { [key: string]: keyof NavigationPermissions } = {
       '/catalog': 'Catalog',
       '/sales': 'Sales',
-      '/production': 'Production',
+      '/production': 'Production Planning',
     };
 
     const parentKey = parentMap[parent];

@@ -359,12 +359,12 @@ const EditUserPage = () => {
                                             <h4 className="text-md font-medium text-gray-900 mb-3">Main Sections</h4>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                 {[
-                                                    { key: 'Users', label: 'Users Management' },
                                                     { key: 'Dashboard', label: 'Dashboard' },
                                                     { key: 'Stores', label: 'Stores' },
                                                     { key: 'Analytics', label: 'Analytics' },
                                                     { key: 'Replenishment Agent', label: 'Replenishment Agent' },
-                                                    { key: 'File Manager', label: 'File Manager' }
+                                                    { key: 'File Manager', label: 'File Manager' },
+                                                    { key: 'Users', label: 'Users Management' }
                                                 ].map(section => (
                                                     <label key={section.key} className="flex items-center">
                                                         <input
@@ -381,14 +381,15 @@ const EditUserPage = () => {
 
                                         {/* Catalog Section */}
                                         <div>
-                                            <h4 className="text-md font-medium text-gray-900 mb-3">Catalog</h4>
+                                            <h4 className="text-md font-medium text-gray-900 mb-3">Master Catalog</h4>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
                                                 {[
                                                     { key: 'Items', label: 'Items' },
                                                     { key: 'Categories', label: 'Categories' },
                                                     { key: 'Raw Material', label: 'Raw Material' },
                                                     { key: 'Processes', label: 'Processes' },
-                                                    { key: 'Attributes', label: 'Attributes' }
+                                                    { key: 'Attributes', label: 'Attributes' },
+                                                    { key: 'Machines', label: 'Machines' }
                                                 ].map(subsection => (
                                                     <label key={subsection.key} className="flex items-center">
                                                         <input
@@ -424,26 +425,26 @@ const EditUserPage = () => {
                                             </div>
                                         </div>
 
-                                        {/* Production Section */}
+                                        {/* Production Planning Section */}
                                         <div>
-                                            <h4 className="text-md font-medium text-gray-900 mb-3">Production</h4>
+                                            <h4 className="text-md font-medium text-gray-900 mb-3">Production Planning</h4>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
                                                 {[
-                                                    { key: 'Production Supervisor', label: 'Production Supervisor' },
-                                                    { key: 'Knitting Floor Supervisor', label: 'Knitting Floor Supervisor' },
-                                                    { key: 'Linking Floor Supervisor', label: 'Linking Floor Supervisor' },
-                                                    { key: 'Checking Floor Supervisor', label: 'Checking Floor Supervisor' },
-                                                    { key: 'Washing Floor Supervisor', label: 'Washing Floor Supervisor' },
-                                                    { key: 'Boarding Floor Supervisor', label: 'Boarding Floor Supervisor' },
-                                                    { key: 'Final Checking Floor Supervisor', label: 'Final Checking Floor Supervisor' },
-                                                    { key: 'Branding Floor Supervisor', label: 'Branding Floor Supervisor' },
-                                                    { key: 'Warehouse Floor Supervisor', label: 'Warehouse Floor Supervisor' }
+                                                    { key: 'Production Orders', label: 'Production Orders' },
+                                                    { key: 'Knitting Floor', label: 'Knitting Floor' },
+                                                    { key: 'Linking Floor', label: 'Linking Floor' },
+                                                    { key: 'Checking Floor', label: 'Checking Floor' },
+                                                    { key: 'Washing Floor', label: 'Washing Floor' },
+                                                    { key: 'Boarding Floor', label: 'Boarding Floor' },
+                                                    { key: 'Final Checking Floor', label: 'Final Checking Floor' },
+                                                    { key: 'Branding Floor', label: 'Branding Floor' },
+                                                    { key: 'Warehouse Floor', label: 'Warehouse Floor' }
                                                 ].map(subsection => (
                                                     <label key={subsection.key} className="flex items-center">
                                                         <input
                                                             type="checkbox"
-                                                            checked={(navigation.Production as any)?.[subsection.key] === true}
-                                                            onChange={(e) => handleNavigationChange('Production', subsection.key, e.target.checked)}
+                                                            checked={(navigation['Production Planning'] as any)?.[subsection.key] === true}
+                                                            onChange={(e) => handleNavigationChange('Production Planning', subsection.key, e.target.checked)}
                                                             className="rounded border-gray-300 text-primary focus:ring-primary"
                                                         />
                                                         <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
