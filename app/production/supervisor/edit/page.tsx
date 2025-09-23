@@ -20,7 +20,6 @@ interface EditOrderFormData {
   orderPriority: 'High' | 'Medium' | 'Low' | 'Urgent';
   articles: Article[];
   orderNote?: string;
-  plannedEndDate?: string;
 }
 
 const EditOrderContent = () => {
@@ -32,8 +31,7 @@ const EditOrderContent = () => {
   const [formData, setFormData] = useState<EditOrderFormData>({
     orderPriority: 'Medium',
     articles: [],
-    orderNote: '',
-    plannedEndDate: ''
+    orderNote: ''
   });
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -69,8 +67,7 @@ const EditOrderContent = () => {
             priority: article.priority,
             remarks: article.remarks || ''
           })),
-          orderNote: orderData.orderNote || '',
-          plannedEndDate: orderData.plannedEndDate || ''
+          orderNote: orderData.orderNote || ''
         });
       } else {
         console.error('Failed to load order:', response.error);
@@ -104,16 +101,6 @@ const EditOrderContent = () => {
       }
     });
 
-    // Validate planned end date if provided
-    if (formData.plannedEndDate) {
-      const endDate = new Date(formData.plannedEndDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      if (endDate < today) {
-        newErrors.plannedEndDate = 'Planned end date cannot be in the past';
-      }
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -124,10 +111,11 @@ const EditOrderContent = () => {
     
     // Clear error when user starts typing
     if (errors[field]) {
-      setErrors(prev => ({
-        ...prev,
-        [field]: undefined
-      }));
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
     }
   };
 
@@ -144,10 +132,11 @@ const EditOrderContent = () => {
     // Clear error when user starts typing
     const errorKey = `article_${articleIndex}_${field}`;
     if (errors[errorKey]) {
-      setErrors(prev => ({
-        ...prev,
-        [errorKey]: undefined
-      }));
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[errorKey];
+        return newErrors;
+      });
     }
   };
 
@@ -195,7 +184,6 @@ const EditOrderContent = () => {
       const updateData: UpdateOrderRequest = {
         priority: formData.orderPriority,
         orderNote: formData.orderNote || undefined,
-        plannedEndDate: formData.plannedEndDate || undefined,
         articles: formData.articles.map(article => ({
           id: article.id,
           articleNumber: article.articleNumber,
@@ -234,8 +222,7 @@ const EditOrderContent = () => {
           priority: article.priority,
           remarks: article.remarks || ''
         })),
-        orderNote: order.orderNote || '',
-        plannedEndDate: order.plannedEndDate || ''
+        orderNote: order.orderNote || ''
       });
     }
     setErrors({});
@@ -278,46 +265,44 @@ const EditOrderContent = () => {
     <div className="main-content">
       <Seo title="Edit Production Order"/>
       
-      <div className="grid grid-cols-12 gap-6">
+      <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12">
           {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
+          <div className="box !bg-transparent border-0 shadow-none mb-4">
             <div className="box-header flex justify-between items-center">
               <div className="flex items-center space-x-3">
-                <h1 className="box-title text-2xl font-semibold">Edit Production Order</h1>
+                <h1 className="box-title text-xl font-semibold">Edit Production Order</h1>
                 <HelpIcon
                   title="Edit Production Order"
                   content={
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       <div>
-                        <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
-                        <p className="text-gray-700">
-                          This page allows you to edit an existing production order. You can update the order priority, notes, and planned end date.
+                        <h4 className="font-semibold text-base mb-1">What is this page?</h4>
+                        <p className="text-gray-700 text-sm">
+                          Edit an existing production order. Update order priority, notes, and article details.
                         </p>
                       </div>
                       
                       <div>
-                        <h4 className="font-semibold text-lg mb-2">What can you edit?</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li><strong>Order Priority:</strong> Change the urgency level (Urgent, High, Medium, Low)</li>
+                        <h4 className="font-semibold text-base mb-1">What can you edit?</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
+                          <li><strong>Order Priority:</strong> Change urgency level (Urgent, High, Medium, Low)</li>
                           <li><strong>Articles:</strong> Add, remove, or modify article details</li>
                           <li><strong>Article Number:</strong> 4-5 alphanumeric characters (e.g., ART001)</li>
                           <li><strong>Planned Quantity:</strong> Number of units to produce (1-100,000)</li>
-                          <li><strong>Linking Type:</strong> Choose from Auto, Rosso, or Hand linking</li>
+                          <li><strong>Linking Type:</strong> Auto, Rosso, or Hand linking</li>
                           <li><strong>Article Priority:</strong> Set individual article priority</li>
-                          <li><strong>Order Note:</strong> Update order-level instructions or notes</li>
-                          <li><strong>Planned End Date:</strong> Modify the expected completion date</li>
+                          <li><strong>Order Note:</strong> Update order-level instructions</li>
                         </ul>
                       </div>
 
                       <div>
-                        <h4 className="font-semibold text-lg mb-2">Important Notes:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <h4 className="font-semibold text-base mb-1">Important Notes:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
                           <li>You can add or remove articles from the order</li>
                           <li>Article numbers must be unique and contain only uppercase letters and numbers</li>
                           <li>Order status and current floor are managed by the production process</li>
                           <li>Changes will be logged in the system audit trail</li>
-                          <li>Planned end date cannot be set to a past date</li>
                         </ul>
                       </div>
                     </div>
@@ -325,8 +310,8 @@ const EditOrderContent = () => {
                 />
               </div>
               <div className="box-tools">
-                <Link href="/production/supervisor" className="ti-btn ti-btn-secondary">
-                  <i className="ri-arrow-left-line me-2"></i> Back to Dashboard
+                <Link href="/production/supervisor" className="ti-btn ti-btn-secondary ti-btn-sm">
+                  <i className="ri-arrow-left-line me-1"></i> Back
                 </Link>
               </div>
             </div>
@@ -370,129 +355,14 @@ const EditOrderContent = () => {
 
           {/* Edit Form */}
           <div className="box">
-            <div className="box-body">
+            <div className="box-body p-4">
               <form onSubmit={handleSubmit}>
-                {/* Articles Section */}
-                <div className="border-b pb-8 mb-8">
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-semibold text-gray-900">Articles ({formData.articles.length})</h3>
-                    <button
-                      type="button"
-                      onClick={addArticle}
-                      className="ti-btn ti-btn-primary ti-btn-sm"
-                      title="Add Article"
-                    >
-                      <i className="ri-add-line"></i>
-                    </button>
-                  </div>
-
-                  <div className="space-y-6">
-                    {formData.articles.map((article, index) => (
-                      <div key={article.id} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
-                        <div className="flex justify-between items-center mb-4">
-                          <h4 className="text-md font-medium text-gray-700">Article {index + 1}</h4>
-                          {formData.articles.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeArticle(article.id)}
-                              className="ti-btn ti-btn-danger ti-btn-sm"
-                            >
-                              <i className="ri-delete-bin-line"></i>
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          {/* Article Number */}
-                          <div>
-                            <label className="form-label">Article Number *</label>
-                            <input
-                              type="text"
-                              className={`form-control ${errors[`article_${index}_number`] ? 'border-danger' : ''}`}
-                              value={article.articleNumber}
-                              onChange={(e) => handleArticleChange(index, 'articleNumber', e.target.value)}
-                              placeholder="e.g., ART001"
-                              maxLength={5}
-                            />
-                            {errors[`article_${index}_number`] && (
-                              <div className="text-danger text-sm mt-1">{errors[`article_${index}_number`]}</div>
-                            )}
-                            <div className="text-muted text-sm mt-1">4-5 alphanumeric characters</div>
-                          </div>
-
-                          {/* Planned Quantity */}
-                          <div>
-                            <label className="form-label">Planned Quantity *</label>
-                            <input
-                              type="number"
-                              className={`form-control ${errors[`article_${index}_quantity`] ? 'border-danger' : ''}`}
-                              value={article.plannedQuantity}
-                              onChange={(e) => handleArticleChange(index, 'plannedQuantity', Number(e.target.value))}
-                              placeholder="0"
-                              min="1"
-                              max="100000"
-                            />
-                            {errors[`article_${index}_quantity`] && (
-                              <div className="text-danger text-sm mt-1">{errors[`article_${index}_quantity`]}</div>
-                            )}
-                            <div className="text-muted text-sm mt-1">Number of units (1-100,000)</div>
-                          </div>
-
-                          {/* Linking Type */}
-                          <div>
-                            <label className="form-label">Linking Type *</label>
-                            <select
-                              className="form-select"
-                              value={article.linkingType}
-                              onChange={(e) => handleArticleChange(index, 'linkingType', e.target.value as 'Auto Linking' | 'Rosso Linking' | 'Hand Linking')}
-                            >
-                              <option value="Auto Linking">Auto Linking</option>
-                              <option value="Rosso Linking">Rosso Linking</option>
-                              <option value="Hand Linking">Hand Linking</option>
-                            </select>
-                            <div className="text-muted text-sm mt-1">Select linking type</div>
-                          </div>
-
-                          {/* Priority */}
-                          <div>
-                            <label className="form-label">Priority *</label>
-                            <select
-                              className="form-select"
-                              value={article.priority}
-                              onChange={(e) => handleArticleChange(index, 'priority', e.target.value as 'Urgent' | 'High' | 'Medium' | 'Low')}
-                            >
-                              <option value="Urgent">Urgent</option>
-                              <option value="High">High</option>
-                              <option value="Medium">Medium</option>
-                              <option value="Low">Low</option>
-                            </select>
-                            <div className="text-muted text-sm mt-1">Set article priority</div>
-                          </div>
-                        </div>
-
-                        {/* Article Remarks */}
-                        <div className="mt-4">
-                          <label className="form-label">Article Remarks (optional)</label>
-                          <textarea
-                            className="form-control"
-                            rows={2}
-                            placeholder="Add article-specific remarks..."
-                            value={article.remarks || ''}
-                            onChange={(e) => handleArticleChange(index, 'remarks', e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Order Level Fields */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Order Priority */}
+                {/* Order Priority + Order Note */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                   <div>
-                    <label className="form-label">Order Priority *</label>
+                    <label className="form-label text-sm">Order Priority *</label>
                     <select
-                      className="form-select"
+                      className="form-select form-select-sm text-xs py-1 px-2 h-8"
                       value={formData.orderPriority}
                       onChange={(e) => handleInputChange('orderPriority', e.target.value as 'Urgent' | 'High' | 'Medium' | 'Low')}
                     >
@@ -501,73 +371,160 @@ const EditOrderContent = () => {
                       <option value="Medium">Medium</option>
                       <option value="Low">Low</option>
                     </select>
-                    <div className="text-muted text-sm mt-1">Sets the urgency level for the whole order</div>
                   </div>
-
-                  {/* Planned End Date */}
                   <div>
-                    <label className="form-label">Planned End Date</label>
-                    <input
-                      type="date"
-                      className={`form-control ${errors.plannedEndDate ? 'border-danger' : ''}`}
-                      value={formData.plannedEndDate}
-                      onChange={(e) => handleInputChange('plannedEndDate', e.target.value)}
+                    <label className="form-label text-sm">Order Name (optional)</label>
+                    <textarea
+                      className="form-control form-control-sm text-xs py-1 px-2"
+                      rows={1}
+                      placeholder="Add order-level instructions..."
+                      value={formData.orderNote || ''}
+                      onChange={(e) => handleInputChange('orderNote', e.target.value)}
                     />
-                    {errors.plannedEndDate && (
-                      <div className="text-danger text-sm mt-1">{errors.plannedEndDate}</div>
-                    )}
-                    <div className="text-muted text-sm mt-1">Expected completion date (optional)</div>
                   </div>
                 </div>
 
-                {/* Order Note */}
-                <div className="mt-6">
-                  <label className="form-label">Order Note</label>
-                  <textarea
-                    className="form-control"
-                    rows={4}
-                    placeholder="Add any order-level instructions or notes..."
-                    value={formData.orderNote || ''}
-                    onChange={(e) => handleInputChange('orderNote', e.target.value)}
-                  />
-                  <div className="text-muted text-sm mt-1">Optional notes or instructions for this order</div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex justify-between items-center pt-6 border-t mt-8">
-                  <div className="flex gap-3">
+                {/* Articles Table */}
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-base font-semibold text-gray-900">Articles ({formData.articles.length})</h3>
                     <button
                       type="button"
-                      className="ti-btn ti-btn-light"
-                      onClick={handleReset}
+                      onClick={addArticle}
+                      className="ti-btn ti-btn-primary ti-btn-w-sm flex items-center gap-2"
+                      title="Add Article"
                     >
-                      <i className="ri-refresh-line me-2"></i>
-                      Reset Changes
+                      <i className="ri-add-line text-sm"></i>
+                      <span>Add Article</span>
                     </button>
                   </div>
 
-                  <div className="flex gap-3">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full table-fixed">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="w-32 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Article #</th>
+                          <th className="w-24 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                          <th className="w-32 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Linking</th>
+                          <th className="w-24 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                          <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
+                          <th className="w-16 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {formData.articles.map((article, index) => (
+                          <tr key={article.id} className="hover:bg-gray-50">
+                            <td className="px-2 py-2">
+                              <input
+                                type="text"
+                                className={`form-control form-control-sm w-full text-xs py-1 px-2 h-8 ${errors[`article_${index}_number`] ? 'border-danger' : ''}`}
+                                value={article.articleNumber}
+                                onChange={(e) => handleArticleChange(index, 'articleNumber', e.target.value)}
+                                placeholder="ART001"
+                                maxLength={5}
+                              />
+                              {errors[`article_${index}_number`] && (
+                                <div className="text-danger text-xs mt-1 truncate">{errors[`article_${index}_number`]}</div>
+                              )}
+                            </td>
+                            <td className="px-2 py-2">
+                              <input
+                                type="number"
+                                className={`form-control form-control-sm w-full text-xs py-1 px-2 h-8 ${errors[`article_${index}_quantity`] ? 'border-danger' : ''}`}
+                                value={article.plannedQuantity}
+                                onChange={(e) => handleArticleChange(index, 'plannedQuantity', Number(e.target.value))}
+                                placeholder="0"
+                                min="1"
+                                max="100000"
+                              />
+                              {errors[`article_${index}_quantity`] && (
+                                <div className="text-danger text-xs mt-1 truncate">{errors[`article_${index}_quantity`]}</div>
+                              )}
+                            </td>
+                            <td className="px-2 py-2">
+                              <select
+                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8"
+                                value={article.linkingType}
+                                onChange={(e) => handleArticleChange(index, 'linkingType', e.target.value as 'Auto Linking' | 'Rosso Linking' | 'Hand Linking')}
+                              >
+                                <option value="Auto Linking">Auto</option>
+                                <option value="Rosso Linking">Rosso</option>
+                                <option value="Hand Linking">Hand</option>
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              <select
+                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8"
+                                value={article.priority}
+                                onChange={(e) => handleArticleChange(index, 'priority', e.target.value as 'Urgent' | 'High' | 'Medium' | 'Low')}
+                              >
+                                <option value="Urgent">Urgent</option>
+                                <option value="High">High</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Low">Low</option>
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              <input
+                                type="text"
+                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8"
+                                placeholder="Remarks..."
+                                value={article.remarks || ''}
+                                onChange={(e) => handleArticleChange(index, 'remarks', e.target.value)}
+                              />
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              {formData.articles.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeArticle(article.id)}
+                                  className="ti-btn ti-btn-danger ti-btn-w-sm flex items-center justify-center w-8 h-8"
+                                  title="Remove Article"
+                                >
+                                  <i className="ri-delete-bin-line text-sm"></i>
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row justify-between items-center pt-6 border-t mt-6 gap-4">
+                  <button
+                    type="button"
+                    className="ti-btn ti-btn-light ti-btn-w-sm flex items-center gap-2 w-full sm:w-auto"
+                    onClick={handleReset}
+                  >
+                    <i className="ri-refresh-line text-sm"></i>
+                    <span>Reset Changes</span>
+                  </button>
+
+                  <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                     <Link
                       href="/production/supervisor"
-                      className="ti-btn ti-btn-secondary"
+                      className="ti-btn ti-btn-secondary ti-btn-w-sm flex items-center gap-2 w-full sm:w-auto"
                     >
-                      <i className="ri-close-line me-2"></i>
-                      Cancel
+                      <i className="ri-close-line text-sm"></i>
+                      <span>Cancel</span>
                     </Link>
                     <button
                       type="submit"
-                      className="ti-btn ti-btn-primary"
+                      className="ti-btn ti-btn-primary ti-btn-w-sm flex items-center gap-2 w-full sm:w-auto"
                       disabled={isSubmitting}
                     >
                       {isSubmitting ? (
                         <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2"></div>
-                          Updating Order...
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <span>Updating...</span>
                         </>
                       ) : (
                         <>
-                          <i className="ri-save-line me-2"></i>
-                          Update Order
+                          <i className="ri-save-line text-sm"></i>
+                          <span>Update Order</span>
                         </>
                       )}
                     </button>

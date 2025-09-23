@@ -275,7 +275,7 @@ const AddOrderPage = () => {
                     </select>
                   </div>
                   <div className="lg:col-span-2">
-                    <label className="form-label text-sm">Order Note (optional)</label>
+                    <label className="form-label text-sm">Order Name (optional)</label>
                     <textarea
                       className="form-control form-control-sm text-xs py-1 px-2"
                       rows={1}

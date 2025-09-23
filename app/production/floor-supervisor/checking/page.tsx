@@ -70,7 +70,9 @@ const CheckingFloorSupervisorPage = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
+  const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
   const [updateData, setUpdateData] = useState<{[key: string]: {
     completedQuantity: number, 
@@ -152,6 +154,12 @@ const CheckingFloorSupervisorPage = () => {
     }
   };
 
+  const handleViewOrder = (order: ProductionOrder) => {
+    setSelectedOrder(order);
+    setActiveViewTabIndex(0);
+    setShowViewModal(true);
+  };
+
   const handleUpdateOrder = (order: ProductionOrder) => {
     setSelectedOrder(order);
     setActiveUpdateTabIndex(0);
@@ -184,6 +192,11 @@ const CheckingFloorSupervisorPage = () => {
     setUpdateData(initialData);
     setShowLogs(false);
     setShowUpdateModal(true);
+  };
+
+  const closeViewModal = () => {
+    setShowViewModal(false);
+    setSelectedOrder(null);
   };
 
   const closeUpdateModal = () => {
@@ -809,6 +822,13 @@ const CheckingFloorSupervisorPage = () => {
                           <td className="px-4 py-4">
                             <div className="flex items-center space-x-2">
                               <button 
+                                className="ti-btn ti-btn-primary ti-btn-sm"
+                                onClick={() => handleViewOrder(order)}
+                                title="View Order"
+                              >
+                                <i className="ri-eye-line"></i>
+                              </button>
+                              <button 
                                 className="ti-btn ti-btn-success ti-btn-sm"
                                 onClick={() => handleUpdateOrder(order)}
                                 title="Update Order"
@@ -1207,6 +1227,179 @@ const CheckingFloorSupervisorPage = () => {
               >
                 <i className="ri-save-line me-2"></i>
                 Update Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Order Modal */}
+      {showViewModal && selectedOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold">View Order - {selectedOrder.orderNumber}</h3>
+              <button
+                onClick={closeViewModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="ri-close-line text-xl"></i>
+              </button>
+            </div>
+
+            {/* Order Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+              <div>
+                <label className="text-sm font-medium text-gray-600">Priority</label>
+                <div className="mt-1">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(selectedOrder.priority)}`}>
+                    {selectedOrder.priority}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-600">Status</label>
+                <div className="mt-1">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedOrder.status)}`}>
+                    {selectedOrder.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Articles View with Tabs */}
+            <div className="space-y-6">
+              <h4 className="text-lg font-medium text-gray-900">Article Details</h4>
+
+              {/* Article Tabs */}
+              <div className="mb-4">
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {selectedOrder.articles.map((article, idx) => (
+                    <button
+                      key={article.id}
+                      className={`px-3 py-2 text-sm font-medium rounded-md whitespace-nowrap focus:outline-none ${
+                        idx === activeViewTabIndex ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                      }`}
+                      onClick={() => {
+                        setActiveViewTabIndex(idx);
+                      }}
+                      title={article.articleNumber}
+                    >
+                      {article.articleNumber || `Article ${idx + 1}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Active Article Details */}
+              {(() => {
+                const article = selectedOrder.articles[activeViewTabIndex];
+                if (!article) return null;
+                
+                return (
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h5 className="text-md font-medium text-gray-900">{article.articleNumber || 'Unknown Article'}</h5>
+                        <div className="text-sm text-gray-600 mt-1">
+                          <span className="font-medium">Linking Type:</span> {article.linkingType || 'Not specified'}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority)}`}>
+                          {article.priority || 'Unknown'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div>
+                        <label className="form-label">Planned Quantity</label>
+                        <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <label className="form-label">Received from Linking</label>
+                        <div className="text-lg font-semibold text-blue-600">
+                          {article.floorQuantities?.checking?.received || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="form-label">Checking Completed Quantity</label>
+                        <div className="text-lg font-semibold text-green-600">
+                          {article.floorQuantities?.checking?.transferred || 0}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Transferred to next floor: {article.floorQuantities?.checking?.transferred || 0}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quality Check Results */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div>
+                        <label className="form-label">M1 (Good Quality)</label>
+                        <div className="text-lg font-semibold text-green-600">{article.m1Quantity || 0}</div>
+                      </div>
+                      <div>
+                        <label className="form-label">M2 (Needs Repair)</label>
+                        <div className="text-lg font-semibold text-yellow-600">{article.m2Quantity || 0}</div>
+                      </div>
+                      <div>
+                        <label className="form-label">M3 (Minor Defects)</label>
+                        <div className="text-lg font-semibold text-orange-600">{article.m3Quantity || 0}</div>
+                      </div>
+                      <div>
+                        <label className="form-label">M4 (Major Defects)</label>
+                        <div className="text-lg font-semibold text-red-600">{article.m4Quantity || 0}</div>
+                      </div>
+                    </div>
+
+                    {article.repairStatus && article.repairStatus !== 'Not Required' && (
+                      <div className="mb-4">
+                        <label className="form-label">Repair Status</label>
+                        <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700">
+                          {article.repairStatus}
+                        </div>
+                      </div>
+                    )}
+
+                    {article.repairRemarks && (
+                      <div className="mb-4">
+                        <label className="form-label">Repair Remarks</label>
+                        <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700">
+                          {article.repairRemarks}
+                        </div>
+                      </div>
+                    )}
+
+                    {article.remarks && (
+                      <div className="mb-4">
+                        <label className="form-label">Remarks</label>
+                        <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700">
+                          {article.remarks}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-center text-sm text-gray-600">
+                      <div>
+                        Remaining: {(article.floorQuantities?.checking?.remaining || 0).toLocaleString()}
+                      </div>
+                      <div>
+                        Progress: {Math.round(((article.floorQuantities?.checking?.transferred || 0) / (article.floorQuantities?.checking?.received || 1)) * 100)}%
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
+              <button
+                onClick={closeViewModal}
+                className="ti-btn ti-btn-secondary"
+              >
+                Close
               </button>
             </div>
           </div>
