@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import { productionService, ProductionOrder } from "@/shared/services/productionService";
+import ArticleLogsModal from "./ArticleLogsModal";
 
 interface Article {
   id: string;
@@ -71,6 +72,7 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
   const [articleLogs, setArticleLogs] = useState<ArticleLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [showArticleLogsModal, setShowArticleLogsModal] = useState(false);
 
   const loadArticleLogs = async (articleId: string) => {
     setIsLoadingLogs(true);
@@ -96,6 +98,16 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
     // Use _id for logs API, fallback to id if _id is not available
     const articleId = article._id || article.id;
     loadArticleLogs(articleId);
+  };
+
+  const handleViewArticleLogs = (article: Article) => {
+    setSelectedArticle(article);
+    setShowArticleLogsModal(true);
+  };
+
+  const closeArticleLogsModal = () => {
+    setShowArticleLogsModal(false);
+    setSelectedArticle(null);
   };
 
   const getStatusBadge = (status: string) => {
@@ -260,19 +272,32 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <h3 className="text-lg font-medium text-gray-900">
-                          {article.articleNumber || 'Unknown Article'}
-                        </h3>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority || 'Unknown')}`}>
-                          {article.priority || 'Unknown'}
-                        </span>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(article.status || 'Unknown')}`}>
-                          {article.status || 'Unknown'}
-                        </span>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFloorBadge(article.currentFloor || 'Unknown')}`}>
-                          {article.currentFloor || 'Unknown'}
-                        </span>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-3">
+                          <h3 className="text-lg font-medium text-gray-900">
+                            {article.articleNumber || 'Unknown Article'}
+                          </h3>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority || 'Unknown')}`}>
+                            {article.priority || 'Unknown'}
+                          </span>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(article.status || 'Unknown')}`}>
+                            {article.status || 'Unknown'}
+                          </span>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFloorBadge(article.currentFloor || 'Unknown')}`}>
+                            {article.currentFloor || 'Unknown'}
+                          </span>
+                        </div>
+                        <button
+                          className="ti-btn ti-btn-secondary ti-btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewArticleLogs(article);
+                          }}
+                          title="View Article Logs"
+                        >
+                          <i className="ri-file-list-line me-1"></i>
+                          Logs
+                        </button>
                       </div>
                       
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -511,6 +536,16 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
           </button>
         </div>
       </div>
+
+      {/* Article Logs Modal */}
+      {showArticleLogsModal && selectedArticle && (
+        <ArticleLogsModal 
+          articleId={selectedArticle.id}
+          articleNumber={selectedArticle.articleNumber}
+          isOpen={showArticleLogsModal}
+          onClose={closeArticleLogsModal}
+        />
+      )}
     </div>
   );
 };

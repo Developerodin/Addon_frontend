@@ -5,6 +5,8 @@ import Link from "next/link";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import OrderViewModal from "../../../shared/components/production/OrderViewModal";
+import OrderLogsModal from "../../../shared/components/production/OrderLogsModal";
+import ArticleLogsModal from "../../../shared/components/production/ArticleLogsModal";
 import { productionService, OrderFilters } from "@/shared/services/productionService";
 
 interface ProductionOrder {
@@ -41,6 +43,9 @@ const ProductionSupervisorPage = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
+  const [showOrderLogsModal, setShowOrderLogsModal] = useState(false);
+  const [showArticleLogsModal, setShowArticleLogsModal] = useState(false);
+  const [selectedArticle, setSelectedArticle] = useState<any>(null);
   const [filters, setFilters] = useState({
     status: '',
     priority: '',
@@ -228,6 +233,26 @@ const ProductionSupervisorPage = () => {
     setSelectedOrder(null);
   };
 
+  const handleViewOrderLogs = (order: ProductionOrder) => {
+    setSelectedOrder(order);
+    setShowOrderLogsModal(true);
+  };
+
+  const closeOrderLogsModal = () => {
+    setShowOrderLogsModal(false);
+    setSelectedOrder(null);
+  };
+
+  const handleViewArticleLogs = (article: any) => {
+    setSelectedArticle(article);
+    setShowArticleLogsModal(true);
+  };
+
+  const closeArticleLogsModal = () => {
+    setShowArticleLogsModal(false);
+    setSelectedArticle(null);
+  };
+
 
   const getStatusBadge = (status: string) => {
     const statusClasses = {
@@ -280,6 +305,7 @@ const ProductionSupervisorPage = () => {
                           <li><strong>Track Progress:</strong> Monitor order progress and completion status</li>
                           <li><strong>Manage Priorities:</strong> Set and update order priorities (Urgent, High, Medium, Low)</li>
                           <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
+                          <li><strong>View Logs:</strong> Click the logs button to view detailed activity logs for orders and articles</li>
                           <li><strong>Bulk Operations:</strong> Select multiple orders for bulk actions</li>
                         </ul>
                       </div>
@@ -631,6 +657,13 @@ const ProductionSupervisorPage = () => {
                               >
                                 <i className="ri-eye-line"></i>
                               </button>
+                              <button 
+                                className="ti-btn ti-btn-secondary ti-btn-sm"
+                                onClick={() => handleViewOrderLogs(order)}
+                                title="View Order Logs"
+                              >
+                                <i className="ri-file-list-line"></i>
+                              </button>
                               <Link 
                                 href={`/production/supervisor/edit?id=${order.id}`}
                                 className="ti-btn ti-btn-primary ti-btn-sm"
@@ -727,6 +760,26 @@ const ProductionSupervisorPage = () => {
       {/* View Articles Modal */}
       {showViewModal && selectedOrder && (
         <OrderViewModal order={selectedOrder} onClose={closeViewModal} />
+      )}
+
+      {/* Order Logs Modal */}
+      {showOrderLogsModal && selectedOrder && (
+        <OrderLogsModal 
+          orderId={selectedOrder.id}
+          orderNumber={selectedOrder.orderNumber}
+          isOpen={showOrderLogsModal}
+          onClose={closeOrderLogsModal}
+        />
+      )}
+
+      {/* Article Logs Modal */}
+      {showArticleLogsModal && selectedArticle && (
+        <ArticleLogsModal 
+          articleId={selectedArticle.id}
+          articleNumber={selectedArticle.articleNumber}
+          isOpen={showArticleLogsModal}
+          onClose={closeArticleLogsModal}
+        />
       )}
 
     </div>

@@ -1077,7 +1077,7 @@ const CheckingFloorSupervisorPage = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                       <div>
                         <label className="form-label">Planned Quantity</label>
                         <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
@@ -1087,11 +1087,8 @@ const CheckingFloorSupervisorPage = () => {
                         <div className="text-lg font-semibold text-blue-600">
                           {checkingFloor.data?.received || 0}
                         </div>
-                      </div>
-                      <div>
-                        <label className="form-label">Checking Completed Quantity (M1 - Good Quality)</label>
-                        <div className="text-lg font-semibold text-green-600">
-                          {checkingFloor.data?.m1Quantity || currentUpdateData.m1Quantity || 0}
+                        <div className="text-sm text-green-600 mt-1">
+                          M1 (Good Quality): {checkingFloor.data?.m1Quantity || currentUpdateData.m1Quantity || 0}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
                           Only M1 items pass to next floor
@@ -1103,7 +1100,7 @@ const CheckingFloorSupervisorPage = () => {
                     <div className="mb-6">
                       <h6 className="text-md font-semibold text-gray-900 mb-3 border-b pb-2">Step 4B: Article-wise Checked Quantities</h6>
                       
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                         <div>
                           <label className="form-label text-green-700 font-medium">M1 - Good Quality</label>
                           <input
@@ -1114,7 +1111,19 @@ const CheckingFloorSupervisorPage = () => {
                             min="0"
                             max={article.plannedQuantity}
                           />
-                          <small className="text-green-600">Ready for next step</small>
+                          <small className="text-green-600">Ready for next step (User input)</small>
+                          
+                          {/* Transferred and Remaining Quantities */}
+                          <div className="mt-2 space-y-1">
+                            <div className="text-sm">
+                              <span className="text-blue-600 font-medium">Transferred:</span> 
+                              <span className="ml-1 font-semibold">{checkingFloor.data?.transferred || 0}</span>
+                            </div>
+                            <div className="text-sm">
+                              <span className="text-gray-600 font-medium">Remaining:</span> 
+                              <span className="ml-1 font-semibold">{checkingFloor.data?.remaining || 0}</span>
+                            </div>
+                          </div>
                         </div>
                         
                         <div>
@@ -1142,7 +1151,9 @@ const CheckingFloorSupervisorPage = () => {
                           />
                           <small className="text-orange-600">Can be fixed</small>
                         </div>
-                        
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-1 gap-4 mb-4">
                         <div>
                           <label className="form-label text-red-700 font-medium">M4 - Major Defects</label>
                           <input
@@ -1230,11 +1241,13 @@ const CheckingFloorSupervisorPage = () => {
                         </div>
                       )}
 
+
                       {/* Quantity Summary */}
                       <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           <div className="text-center">
                             <div className="font-medium text-green-700">M1: {currentUpdateData.m1Quantity}</div>
+                            <div className="text-xs text-gray-500">(User input)</div>
                           </div>
                           <div className="text-center">
                             <div className="font-medium text-yellow-700">M2: {currentUpdateData.m2Quantity}</div>
@@ -1378,7 +1391,7 @@ const CheckingFloorSupervisorPage = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                       <div>
                         <label className="form-label">Planned Quantity</label>
                         <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
@@ -1396,6 +1409,15 @@ const CheckingFloorSupervisorPage = () => {
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
                           Only M1 items pass to next floor
+                        </div>
+                      </div>
+                      <div>
+                        <label className="form-label">Transferred Quantity</label>
+                        <div className="text-lg font-semibold text-purple-600">
+                          {checkingFloor.data?.transferred || 0}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Transferred to next floor (Washing)
                         </div>
                       </div>
                     </div>

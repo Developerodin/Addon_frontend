@@ -538,13 +538,38 @@ class ProductionService {
   }
 
   // Logging & Audit APIs
-  async getArticleLogs(articleId: string, filters: {
+  async getOrderLogs(orderId: string, filters: {
+    action?: string;
     dateFrom?: string;
     dateTo?: string;
-    action?: string;
+    floor?: string;
     limit?: number;
-    offset?: number;
-  } = {}): Promise<ApiResponse<any>> {
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<PaginatedResponse<any>>> {
+    const queryParams = new URLSearchParams();
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, String(value));
+      }
+    });
+
+    const queryString = queryParams.toString();
+    const endpoint = queryString ? `/logs/order/${orderId}?${queryString}` : `/logs/order/${orderId}`;
+    
+    return this.request<PaginatedResponse<any>>(endpoint);
+  }
+
+  async getArticleLogs(articleId: string, filters: {
+    action?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    floor?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<PaginatedResponse<any>>> {
     const queryParams = new URLSearchParams();
     
     Object.entries(filters).forEach(([key, value]) => {
@@ -556,19 +581,51 @@ class ProductionService {
     const queryString = queryParams.toString();
     const endpoint = queryString ? `/logs/article/${articleId}?${queryString}` : `/logs/article/${articleId}`;
     
-    return this.request(endpoint);
+    return this.request<PaginatedResponse<any>>(endpoint);
   }
 
-  async getOrderLogs(orderId: string): Promise<ApiResponse<any>> {
-    return this.request(`/logs/order/${orderId}`);
+  async getFloorLogs(floor: string, filters: {
+    action?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<PaginatedResponse<any>>> {
+    const queryParams = new URLSearchParams();
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, String(value));
+      }
+    });
+
+    const queryString = queryParams.toString();
+    const endpoint = queryString ? `/logs/floor/${floor}?${queryString}` : `/logs/floor/${floor}`;
+    
+    return this.request<PaginatedResponse<any>>(endpoint);
   }
 
-  async getFloorLogs(floor: string): Promise<ApiResponse<any>> {
-    return this.request(`/logs/floor/${floor}`);
-  }
+  async getUserLogs(userId: string, filters: {
+    action?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<PaginatedResponse<any>>> {
+    const queryParams = new URLSearchParams();
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, String(value));
+      }
+    });
 
-  async getUserLogs(userId: string): Promise<ApiResponse<any>> {
-    return this.request(`/logs/user/${userId}`);
+    const queryString = queryParams.toString();
+    const endpoint = queryString ? `/logs/user/${userId}?${queryString}` : `/logs/user/${userId}`;
+    
+    return this.request<PaginatedResponse<any>>(endpoint);
   }
 
   async getLogStatistics(filters: {
@@ -592,15 +649,27 @@ class ProductionService {
     return this.request(endpoint);
   }
 
-  async getAuditTrail(orderId: string, includeSystemLogs?: boolean, includeUserActions?: boolean): Promise<ApiResponse<any>> {
+  async getAuditTrail(orderId: string, filters: {
+    includeSystemLogs?: boolean;
+    includeUserActions?: boolean;
+    dateFrom?: string;
+    dateTo?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<PaginatedResponse<any>>> {
     const queryParams = new URLSearchParams();
-    if (includeSystemLogs !== undefined) queryParams.append('includeSystemLogs', String(includeSystemLogs));
-    if (includeUserActions !== undefined) queryParams.append('includeUserActions', String(includeUserActions));
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, String(value));
+      }
+    });
 
     const queryString = queryParams.toString();
     const endpoint = queryString ? `/logs/audit-trail/${orderId}?${queryString}` : `/logs/audit-trail/${orderId}`;
     
-    return this.request(endpoint);
+    return this.request<PaginatedResponse<any>>(endpoint);
   }
 
   // Bulk Operations APIs
