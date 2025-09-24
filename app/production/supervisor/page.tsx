@@ -18,6 +18,8 @@ interface ProductionOrder {
   orderNote?: string;
   createdAt?: string;
   updatedAt?: string;
+  createdBy?: string;
+  lastModifiedBy?: string;
 }
 
 interface FloorQuantity {
@@ -114,11 +116,24 @@ const ProductionSupervisorPage = () => {
   const handleDeleteOrder = async (orderId: string) => {
     if (window.confirm('Are you sure you want to delete this order?')) {
       try {
-        await productionService.deleteOrder(orderId);
-        toast.success('Order deleted successfully');
-        loadOrders(); // Reload orders
+        setIsLoading(true);
+        const response = await productionService.deleteOrder(orderId);
+        
+        if (response.success) {
+          toast.success('Order deleted successfully');
+          // Remove the deleted order from the current state immediately
+          setOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+          setTotalResults(prev => prev - 1);
+          // Also remove from selected orders if it was selected
+          setSelectedOrders(prev => prev.filter(id => id !== orderId));
+        } else {
+          toast.error(response.error?.message || 'Failed to delete order');
+        }
       } catch (error: any) {
+        console.error('Error deleting order:', error);
         toast.error(error.message || 'Failed to delete order');
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -131,16 +146,39 @@ const ProductionSupervisorPage = () => {
 
     if (window.confirm(`Are you sure you want to delete ${selectedOrders.length} orders?`)) {
       try {
+        setIsLoading(true);
         // Delete orders one by one
         const deletePromises = selectedOrders.map(orderId => productionService.deleteOrder(orderId));
-        await Promise.all(deletePromises);
+        const results = await Promise.allSettled(deletePromises);
+        
+        // Check which deletions were successful
+        const successfulDeletions = results.filter(result => 
+          result.status === 'fulfilled' && result.value.success
+        );
+        const failedDeletions = results.filter(result => 
+          result.status === 'rejected' || !result.value.success
+        );
+        
+        if (successfulDeletions.length > 0) {
+          // Remove successfully deleted orders from state
+          setOrders(prevOrders => 
+            prevOrders.filter(order => !selectedOrders.includes(order.id))
+          );
+          setTotalResults(prev => prev - successfulDeletions.length);
+          toast.success(`${successfulDeletions.length} orders deleted successfully`);
+        }
+        
+        if (failedDeletions.length > 0) {
+          toast.error(`${failedDeletions.length} orders failed to delete`);
+        }
         
         setSelectedOrders([]);
         setSelectAll(false);
-        toast.success(`${selectedOrders.length} orders deleted successfully`);
-        loadOrders(); // Reload orders
       } catch (error: any) {
-        toast.error(error.message || 'Failed to delete some orders');
+        console.error('Error in bulk delete:', error);
+        toast.error(error.message || 'Failed to delete orders');
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -564,7 +602,10 @@ const ProductionSupervisorPage = () => {
                                 {order.articles.length} Article{order.articles.length > 1 ? 's' : ''}
                               </div>
                               <div className="text-sm text-gray-600">
-                                Total Qty: {order.articles.reduce((sum, article) => sum + article.plannedQuantity, 0).toLocaleString()}
+                                Total Qty: {order.articles.reduce((sum, article) => sum + (article.plannedQuantity || 0), 0).toLocaleString()}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Avg Progress: {Math.round(order.articles.reduce((sum, article) => sum + (article.progress || 0), 0) / order.articles.length)}%
                               </div>
                             </div>
                           </td>

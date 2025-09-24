@@ -3,7 +3,10 @@ import React, { useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
+import TransferModal from "@/shared/components/production/TransferModal";
+import FloorProgression from "@/shared/components/production/FloorProgression";
 import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
+import { getNextFloor, FloorType } from "@/shared/utils/productionUtils";
 
 const KnittingFloorSupervisorPage = () => {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
@@ -16,8 +19,10 @@ const KnittingFloorSupervisorPage = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
-  const [updateData, setUpdateData] = useState<{[key: string]: {completedQuantity: number, remarks: string}}>({});
+  const [selectedArticle, setSelectedArticle] = useState<any>(null);
+  const [updateData, setUpdateData] = useState<{[key: string]: {completedQuantity: number, remarks: string, m4Quantity: number}}>({});
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [filters, setFilters] = useState({
@@ -69,8 +74,27 @@ const KnittingFloorSupervisorPage = () => {
     return () => clearTimeout(timeoutId);
   }, [currentPage, itemsPerPage, filters, searchQuery]);
 
-  // No client-side filtering needed since we're using API filtering
-  const paginatedOrders = orders;
+  // Filter orders and articles based on received quantity
+  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
+    return orders.map(order => {
+      // Filter articles that have received quantity > 0
+      const filteredArticles = order.articles.filter(article => {
+        const receivedQuantity = article.floorQuantities?.knitting?.received || 0;
+        return receivedQuantity > 0;
+      });
+      
+      return {
+        ...order,
+        articles: filteredArticles
+      };
+    }).filter(order => {
+      // Only show orders that have at least one article with received quantity > 0
+      return order.articles.length > 0;
+    });
+  };
+
+  // Apply filtering to orders
+  const paginatedOrders = filterOrdersByReceivedQuantity(orders);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -99,14 +123,15 @@ const KnittingFloorSupervisorPage = () => {
     setSelectedOrder(order);
     setActiveUpdateTabIndex(0);
     // Initialize update data with current values
-    const initialData: {[key: string]: {completedQuantity: number, remarks: string}} = {};
+    const initialData: {[key: string]: {completedQuantity: number, remarks: string, m4Quantity: number}} = {};
     order.articles.forEach(article => {
       const articleId = article.id || article._id;
       if (articleId) {
         // Initialize with 0 for completed quantity
         initialData[articleId] = {
           completedQuantity: 0,
-          remarks: article.remarks || ''
+          remarks: article.remarks || '',
+          m4Quantity: article.floorQuantities?.knitting?.m4Quantity || 0
         };
       }
     });
@@ -123,6 +148,21 @@ const KnittingFloorSupervisorPage = () => {
     setShowUpdateModal(false);
     setSelectedOrder(null);
     setUpdateData({});
+  };
+
+  const handleTransferArticle = (article: any) => {
+    setSelectedArticle(article);
+    setShowTransferModal(true);
+  };
+
+  const closeTransferModal = () => {
+    setShowTransferModal(false);
+    setSelectedArticle(null);
+  };
+
+  const handleTransferSuccess = () => {
+    // Reload orders to get updated data
+    loadOrders();
   };
 
   const handleQuantityChange = (articleId: string, value: number) => {
@@ -145,6 +185,16 @@ const KnittingFloorSupervisorPage = () => {
     }));
   };
 
+  const handleM4QuantityChange = (articleId: string, value: number) => {
+    setUpdateData(prev => ({
+      ...prev,
+      [articleId]: {
+        ...prev[articleId],
+        m4Quantity: value
+      }
+    }));
+  };
+
   const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
@@ -158,10 +208,11 @@ const KnittingFloorSupervisorPage = () => {
         
         const update = updateData[articleId];
         const knittingTransferredQuantity = article.floorQuantities?.knitting?.transferred || 0;
-        if (update && (update.completedQuantity !== knittingTransferredQuantity || update.remarks !== (article.remarks || ''))) {
+        if (update && (update.completedQuantity !== knittingTransferredQuantity || update.remarks !== (article.remarks || '') || update.m4Quantity !== (article.floorQuantities?.knitting?.m4Quantity || 0))) {
           const progressData = {
             completedQuantity: update.completedQuantity,
-            remarks: update.remarks
+            remarks: update.remarks,
+            m4Quantity: update.m4Quantity
           };
           
           try {
@@ -293,6 +344,8 @@ const KnittingFloorSupervisorPage = () => {
                           <li><strong>Track Articles:</strong> Monitor individual article progress and status</li>
                           <li><strong>Add Remarks:</strong> Add notes and comments for each article</li>
                           <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
+                          <li><strong>Overproduction:</strong> Allow knitting to produce more than planned quantity</li>
+                          <li><strong>M4 Defect Tracking:</strong> Track major defects from knitting machine</li>
                         </ul>
                       </div>
                     </div>
@@ -310,6 +363,15 @@ const KnittingFloorSupervisorPage = () => {
                   <i className={`ri-refresh-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
                 </button>
               </div>
+            </div>
+            
+            {/* Floor Progression */}
+            <div className="mt-4">
+              <FloorProgression 
+                linkingType="Auto Linking" 
+                currentFloor="Knitting"
+                className="mb-4"
+              />
             </div>
           </div>
 
@@ -810,12 +872,31 @@ const KnittingFloorSupervisorPage = () => {
                             value={currentUpdateData.completedQuantity}
                             onChange={(e) => handleQuantityChange(articleId, Number(e.target.value))}
                             min="0"
-                            max={article.floorQuantities?.knitting?.received || 0}
+                            // Allow overproduction in knitting floor - no max limit
                           />
                           <div className="text-xs text-gray-500 mt-1">
                             Transferred to next floor: {article.floorQuantities?.knitting?.transferred || 0}
+                            {currentUpdateData.completedQuantity > (article.plannedQuantity || 0) && (
+                              <div className="text-orange-600 font-medium mt-1">
+                                ⚠️ Overproduction: +{currentUpdateData.completedQuantity - (article.plannedQuantity || 0)} pieces
+                              </div>
+                            )}
                           </div>
                         </div>
+                      </div>
+
+                      {/* M4 Defect Tracking for Knitting */}
+                      <div className="mb-4">
+                        <label className="form-label text-red-700 font-medium">M4 Defects (Major Defects)</label>
+                        <input
+                          type="number"
+                          className="form-control border-red-300 focus:border-red-500"
+                          value={currentUpdateData.m4Quantity}
+                          onChange={(e) => handleM4QuantityChange(articleId, Number(e.target.value))}
+                          min="0"
+                          max={currentUpdateData.completedQuantity}
+                        />
+                        <small className="text-red-600">Track major defects from knitting machine</small>
                       </div>
 
                       <div className="mb-4">
@@ -837,6 +918,7 @@ const KnittingFloorSupervisorPage = () => {
                           Progress: {Math.round((currentUpdateData.completedQuantity / (article.floorQuantities?.knitting?.received || 1)) * 100)}%
                         </div>
                       </div>
+
 
                     </div>
                   );
@@ -961,6 +1043,11 @@ const KnittingFloorSupervisorPage = () => {
                         <div className="text-xs text-gray-500 mt-1">
                           Transferred to next floor: {article.floorQuantities?.knitting?.transferred || 0}
                         </div>
+                        {article.floorQuantities?.knitting?.m4Quantity && article.floorQuantities.knitting.m4Quantity > 0 && (
+                          <div className="text-xs text-red-600 mt-1">
+                            M4 Defects: {article.floorQuantities.knitting.m4Quantity}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -996,6 +1083,20 @@ const KnittingFloorSupervisorPage = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Transfer Modal */}
+      {showTransferModal && selectedArticle && (
+        <TransferModal
+          isOpen={showTransferModal}
+          onClose={closeTransferModal}
+          articleId={selectedArticle._id || selectedArticle.id}
+          articleNumber={selectedArticle.articleNumber}
+          maxQuantity={selectedArticle.floorQuantities?.knitting?.completed || 0}
+          currentFloor="Knitting"
+          nextFloor={getNextFloor('Knitting' as FloorType, selectedArticle.linkingType) || 'Next Floor'}
+          onSuccess={handleTransferSuccess}
+        />
       )}
     </div>
   );

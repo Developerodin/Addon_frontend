@@ -5,7 +5,7 @@ export interface ProductionOrder {
   orderNumber: string;
   priority: 'Urgent' | 'High' | 'Medium' | 'Low';
   status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
-  currentFloor: 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Branding' | 'Final Checking' | 'Warehouse';
+  currentFloor: 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Final Checking' | 'Branding' | 'Warehouse';
   articles: Article[];
   orderNote?: string;
   customerId?: string;
@@ -40,7 +40,7 @@ export interface Article {
   m2Quantity: number;
   m3Quantity: number;
   m4Quantity: number;
-  repairStatus: 'Not Required' | 'Required' | 'In Progress' | 'Completed';
+  repairStatus: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected';
   repairRemarks?: string;
   qualityConfirmed?: boolean;
   finalQualityConfirmed?: boolean;
@@ -48,13 +48,13 @@ export interface Article {
   createdAt?: string;
   updatedAt?: string;
   floorQuantities?: {
-    knitting: { received: number; completed: number; remaining: number; transferred: number };
+    knitting: { received: number; completed: number; remaining: number; transferred: number; m4Quantity?: number };
     linking: { received: number; completed: number; remaining: number; transferred: number };
-    checking: { received: number; completed: number; remaining: number; transferred: number };
+    checking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number };
     washing: { received: number; completed: number; remaining: number; transferred: number };
     boarding: { received: number; completed: number; remaining: number; transferred: number };
+    finalChecking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number };
     branding: { received: number; completed: number; remaining: number; transferred: number };
-    finalChecking: { received: number; completed: number; remaining: number; transferred: number };
     warehouse: { received: number; completed: number; remaining: number; transferred: number };
   };
 }
@@ -96,8 +96,10 @@ export interface UpdateArticleProgressRequest {
   m2Quantity?: number;
   m3Quantity?: number;
   m4Quantity?: number;
-  repairStatus?: 'Not Required' | 'Required' | 'In Progress' | 'Completed';
+  repairStatus?: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected';
   repairRemarks?: string;
+  machineId?: string;
+  shiftId?: string;
 }
 
 export interface TransferArticleRequest {
@@ -105,6 +107,7 @@ export interface TransferArticleRequest {
   articleId: string;
   quantity: number;
   remarks?: string;
+  batchNumber?: string;
 }
 
 export interface OrderFilters {
@@ -147,6 +150,15 @@ export interface PaginatedResponse<T> {
 
 class ProductionService {
   private baseUrl = `${API_BASE_URL}/production`;
+
+  // Utility function to get floor order based on linking type
+  getFloorOrderByLinkingType(linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking'): string[] {
+    if (linkingType === 'Auto Linking') {
+      return ['Knitting', 'Checking', 'Washing', 'Boarding', 'Final Checking', 'Branding', 'Warehouse'];
+    } else {
+      return ['Knitting', 'Linking', 'Checking', 'Washing', 'Boarding', 'Final Checking', 'Branding', 'Warehouse'];
+    }
+  }
 
   // Transform API response to match our interfaces
   private transformOrder(order: any): ProductionOrder {
@@ -404,6 +416,17 @@ class ProductionService {
     });
   }
 
+  async transferToNextFloor(articleId: string, transferData: {
+    quantity: number;
+    remarks?: string;
+    batchNumber?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request(`/articles/${articleId}/transfer`, {
+      method: 'POST',
+      body: JSON.stringify(transferData),
+    });
+  }
+
   async getFloorStatistics(floor: string, dateFrom?: string, dateTo?: string): Promise<ApiResponse<any>> {
     const queryParams = new URLSearchParams();
     if (dateFrom) queryParams.append('dateFrom', dateFrom);
@@ -416,12 +439,28 @@ class ProductionService {
   }
 
   // Quality Control APIs
+  async updateQualityInspection(articleId: string, qualityData: {
+    inspectedQuantity: number;
+    m1Quantity: number;
+    m2Quantity: number;
+    m3Quantity: number;
+    m4Quantity: number;
+    remarks?: string;
+    machineId?: string;
+    shiftId?: string;
+  }): Promise<ApiResponse<Article>> {
+    return this.request<Article>(`/articles/${articleId}/quality-inspection`, {
+      method: 'POST',
+      body: JSON.stringify(qualityData),
+    });
+  }
+
   async updateQualityCategories(articleId: string, qualityData: {
     m1Quantity: number;
     m2Quantity: number;
     m3Quantity: number;
     m4Quantity: number;
-    repairStatus: 'Not Required' | 'Required' | 'In Progress' | 'Completed';
+    repairStatus: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected';
     repairRemarks?: string;
   }): Promise<ApiResponse<Article>> {
     return this.request<Article>(`/floors/final-checking/quality/${articleId}`, {

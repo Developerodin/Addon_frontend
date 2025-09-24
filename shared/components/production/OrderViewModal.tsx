@@ -8,17 +8,22 @@ interface Article {
   _id?: string;
   articleNumber: string;
   plannedQuantity: number;
-  completedQuantity: number;
+  completedQuantity?: number;
   linkingType: string;
   priority: string;
   status: string;
   progress: number;
   currentFloor: string;
+  finalQualityConfirmed?: boolean;
   remarks?: string;
   m1Quantity?: number;
   m2Quantity?: number;
   m3Quantity?: number;
   m4Quantity?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  startedAt?: string;
   floorQuantities?: {
     [key: string]: {
       received?: number;
@@ -123,6 +128,7 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
       'Boarding': 'bg-orange-100 text-orange-800',
       'Branding': 'bg-pink-100 text-pink-800',
       'Final Checking': 'bg-indigo-100 text-indigo-800',
+      'finalChecking': 'bg-indigo-100 text-indigo-800',
       'Warehouse': 'bg-green-100 text-green-800'
     };
     return floorClasses[floor as keyof typeof floorClasses] || 'bg-gray-100 text-gray-800';
@@ -133,6 +139,10 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
   };
 
   const calculateProgress = (article: Article) => {
+    // Use the progress field from API data if available, otherwise calculate from completed/planned
+    if (article.progress !== undefined) {
+      return article.progress;
+    }
     if (!article.plannedQuantity || article.plannedQuantity === 0) return 0;
     return Math.round(((article.completedQuantity || 0) / article.plannedQuantity) * 100);
   };
@@ -283,6 +293,31 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
                           <span className="ml-1 font-medium">{calculateProgress(article)}%</span>
                         </div>
                       </div>
+                      
+                      {/* Article Dates */}
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-500">
+                        <div>
+                          <span className="font-medium">Created:</span> {formatDate(article.createdAt)}
+                        </div>
+                        <div>
+                          <span className="font-medium">Started:</span> {formatDate(article.startedAt)}
+                        </div>
+                        <div>
+                          <span className="font-medium">Completed:</span> {formatDate(article.completedAt)}
+                        </div>
+                      </div>
+                      
+                      {/* Final Quality Status */}
+                      {article.finalQualityConfirmed !== undefined && (
+                        <div className="mt-2 text-xs">
+                          <span className="font-medium text-gray-600">Final Quality:</span>
+                          <span className={`ml-1 px-2 py-0.5 rounded text-xs ${
+                            article.finalQualityConfirmed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {article.finalQualityConfirmed ? 'Confirmed' : 'Pending'}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Overall Progress Bar */}
                       <div className="mt-3">
@@ -302,56 +337,100 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
                       {article.floorQuantities && (
                         <div className="mt-4">
                           <h4 className="text-sm font-medium text-gray-700 mb-3">Floor-wise Progress</h4>
-                          <div className="space-y-2">
-                            {Object.entries(article.floorQuantities).map(([floor, data]) => (
-                              <div key={floor} className="bg-gray-50 rounded-lg p-3">
-                                <div className="flex justify-between items-center mb-2">
-                                  <span className="text-sm font-medium text-gray-700 capitalize">
-                                    {floor.replace(/([A-Z])/g, ' $1').trim()}
-                                  </span>
-                                  <span className="text-xs text-gray-500">
-                                    {data.completed || 0} / {data.received || 0}
-                                  </span>
+                          <div className="space-y-3">
+                            {Object.entries(article.floorQuantities).map(([floor, data]) => {
+                              const floorName = floor.replace(/([A-Z])/g, ' $1').trim();
+                              const received = data.received || 0;
+                              const completed = data.completed || 0;
+                              const remaining = data.remaining || 0;
+                              const transferred = data.transferred || 0;
+                              const completionPercentage = received > 0 ? Math.round((completed / received) * 100) : 0;
+                              
+                              return (
+                                <div key={floor} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                  <div className="flex justify-between items-center mb-3">
+                                    <span className="text-sm font-medium text-gray-700 capitalize">
+                                      {floorName}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {completed.toLocaleString()} / {received.toLocaleString()} ({completionPercentage}%)
+                                    </span>
+                                  </div>
+                                  
+                                  {/* Progress Bar */}
+                                  <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                                    <div
+                                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                      style={{ width: `${completionPercentage}%` }}
+                                    ></div>
+                                  </div>
+                                  
+                                  {/* Quantities Grid */}
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                    <div className="text-center">
+                                      <div className="font-medium text-blue-600">Received</div>
+                                      <div className="text-gray-600">{received.toLocaleString()}</div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="font-medium text-green-600">Completed</div>
+                                      <div className="text-gray-600">{completed.toLocaleString()}</div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="font-medium text-yellow-600">Remaining</div>
+                                      <div className="text-gray-600">{remaining.toLocaleString()}</div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="font-medium text-purple-600">Transferred</div>
+                                      <div className="text-gray-600">{transferred.toLocaleString()}</div>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Quality Categories for Checking floors */}
+                                  {(floor === 'checking' || floor === 'finalChecking') && (
+                                    <div className="mt-3 pt-3 border-t border-gray-300">
+                                      <div className="text-xs font-medium text-gray-600 mb-2">Quality Categories:</div>
+                                      <div className="grid grid-cols-4 gap-2 text-xs">
+                                        <div className="text-center">
+                                          <div className="font-medium text-green-600">M1</div>
+                                          <div className="text-gray-600">{data.m1Quantity || 0}</div>
+                                        </div>
+                                        <div className="text-center">
+                                          <div className="font-medium text-yellow-600">M2</div>
+                                          <div className="text-gray-600">{data.m2Quantity || 0}</div>
+                                        </div>
+                                        <div className="text-center">
+                                          <div className="font-medium text-orange-600">M3</div>
+                                          <div className="text-gray-600">{data.m3Quantity || 0}</div>
+                                        </div>
+                                        <div className="text-center">
+                                          <div className="font-medium text-red-600">M4</div>
+                                          <div className="text-gray-600">{data.m4Quantity || 0}</div>
+                                        </div>
+                                      </div>
+                                      {data.repairStatus && (
+                                        <div className="mt-2 text-xs">
+                                          <span className="font-medium text-gray-600">Repair Status:</span>
+                                          <span className={`ml-1 px-2 py-0.5 rounded text-xs ${
+                                            data.repairStatus === 'Required' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                                          }`}>
+                                            {data.repairStatus}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {data.repairRemarks && (
+                                        <div className="mt-1 text-xs text-gray-600">
+                                          <span className="font-medium">Repair Remarks:</span> {data.repairRemarks}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                  <div
-                                    className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                                    style={{ 
-                                      width: `${data.received > 0 ? Math.round(((data.completed || 0) / data.received) * 100) : 0}%` 
-                                    }}
-                                  ></div>
-                                </div>
-                                <div className="flex justify-between text-xs text-gray-500 mt-1">
-                                  <span>Remaining: {(data.remaining || 0).toLocaleString()}</span>
-                                  <span>Transferred: {(data.transferred || 0).toLocaleString()}</span>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}
 
-                      {/* Quality Categories */}
-                      {((article.m1Quantity || 0) > 0 || (article.m2Quantity || 0) > 0 || (article.m3Quantity || 0) > 0 || (article.m4Quantity || 0) > 0) && (
-                        <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-                          <div className="text-center">
-                            <div className="font-medium text-green-600">M1</div>
-                            <div className="text-gray-600">{article.m1Quantity || 0}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium text-yellow-600">M2</div>
-                            <div className="text-gray-600">{article.m2Quantity || 0}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium text-orange-600">M3</div>
-                            <div className="text-gray-600">{article.m3Quantity || 0}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium text-red-600">M4</div>
-                            <div className="text-gray-600">{article.m4Quantity || 0}</div>
-                          </div>
-                        </div>
-                      )}
 
                       {article.remarks && (
                         <div className="mt-2 text-sm text-gray-600">

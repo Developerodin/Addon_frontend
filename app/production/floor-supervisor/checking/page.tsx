@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
+import FloorProgression from "@/shared/components/production/FloorProgression";
 import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 
 interface ArticleLog {
@@ -20,6 +21,12 @@ interface FloorQuantities {
   completed: number;
   remaining: number;
   transferred: number;
+  m1Quantity?: number;
+  m2Quantity?: number;
+  m3Quantity?: number;
+  m4Quantity?: number;
+  repairStatus?: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected';
+  repairRemarks?: string;
 }
 
 interface Article {
@@ -75,7 +82,6 @@ const CheckingFloorSupervisorPage = () => {
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
   const [updateData, setUpdateData] = useState<{[key: string]: {
-    completedQuantity: number, 
     remarks: string,
     m1Quantity: number,
     m2Quantity: number,
@@ -134,8 +140,35 @@ const CheckingFloorSupervisorPage = () => {
     return () => clearTimeout(timeoutId);
   }, [currentPage, itemsPerPage, filters, searchQuery]);
 
-  // No client-side filtering needed since we're using API filtering
-  const paginatedOrders = orders;
+  // Filter orders and articles based on received quantity for checking floor only
+  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
+    return orders.map(order => {
+      // Filter articles that have received quantity > 0 on checking floor only
+      const filteredArticles = order.articles.filter(article => {
+        const checkingReceived = article.floorQuantities?.checking?.received || 0;
+        return checkingReceived > 0;
+      });
+      
+      return {
+        ...order,
+        articles: filteredArticles
+      };
+    }).filter(order => {
+      // Only show orders that have at least one article with received quantity > 0
+      return order.articles.length > 0;
+    });
+  };
+
+  // Helper function to get checking floor data
+  const getCheckingFloorData = (article: Article) => {
+    return {
+      floor: 'checking',
+      data: article.floorQuantities?.checking
+    };
+  };
+
+  // Apply filtering to orders
+  const paginatedOrders = filterOrdersByReceivedQuantity(orders);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -165,7 +198,6 @@ const CheckingFloorSupervisorPage = () => {
     setActiveUpdateTabIndex(0);
     // Initialize update data with current values
     const initialData: {[key: string]: {
-      completedQuantity: number, 
       remarks: string,
       m1Quantity: number,
       m2Quantity: number,
@@ -177,15 +209,15 @@ const CheckingFloorSupervisorPage = () => {
     order.articles.forEach(article => {
       const articleId = article.id || article._id;
       if (articleId) {
+        const checkingFloor = getCheckingFloorData(article);
         initialData[articleId] = {
-          completedQuantity: 0, // Always start with 0 for new updates
           remarks: article.remarks || '',
-          m1Quantity: article.m1Quantity,
-          m2Quantity: article.m2Quantity,
-          m3Quantity: article.m3Quantity,
-          m4Quantity: article.m4Quantity,
-          repairStatus: article.repairStatus,
-          repairRemarks: article.repairRemarks || ''
+          m1Quantity: checkingFloor.data?.m1Quantity || article.m1Quantity || 0,
+          m2Quantity: checkingFloor.data?.m2Quantity || article.m2Quantity || 0,
+          m3Quantity: checkingFloor.data?.m3Quantity || article.m3Quantity || 0,
+          m4Quantity: checkingFloor.data?.m4Quantity || article.m4Quantity || 0,
+          repairStatus: checkingFloor.data?.repairStatus || article.repairStatus || 'Not Required',
+          repairRemarks: checkingFloor.data?.repairRemarks || article.repairRemarks || ''
         };
       }
     });
@@ -205,15 +237,6 @@ const CheckingFloorSupervisorPage = () => {
     setUpdateData({});
   };
 
-  const handleQuantityChange = (articleId: string, value: number) => {
-    setUpdateData(prev => ({
-      ...prev,
-      [articleId]: {
-        ...prev[articleId],
-        completedQuantity: value
-      }
-    }));
-  };
 
   const handleRemarksChange = (articleId: string, value: string) => {
     setUpdateData(prev => ({
@@ -322,7 +345,6 @@ const CheckingFloorSupervisorPage = () => {
         
         const update = updateData[articleId];
         if (update && (
-          update.completedQuantity !== article.completedQuantity ||
           update.remarks !== (article.remarks || '') ||
           update.m1Quantity !== article.m1Quantity ||
           update.m2Quantity !== article.m2Quantity ||
@@ -331,13 +353,39 @@ const CheckingFloorSupervisorPage = () => {
           update.repairStatus !== article.repairStatus ||
           update.repairRemarks !== (article.repairRemarks || '')
         )) {
+          // Use new bulk quality inspection API for M1-M4 updates
+          if (update.m1Quantity !== article.m1Quantity || 
+              update.m2Quantity !== article.m2Quantity || 
+              update.m3Quantity !== article.m3Quantity || 
+              update.m4Quantity !== article.m4Quantity) {
+            
+            const inspectedQuantity = update.m1Quantity + update.m2Quantity + update.m3Quantity + update.m4Quantity;
+            
+            try {
+              const qualityResponse = await productionService.updateQualityInspection(
+                article._id || article.id,
+                {
+                  inspectedQuantity,
+                  m1Quantity: update.m1Quantity,
+                  m2Quantity: update.m2Quantity,
+                  m3Quantity: update.m3Quantity,
+                  m4Quantity: update.m4Quantity,
+                  remarks: update.remarks
+                }
+              );
+              
+              if (!qualityResponse.success) {
+                throw new Error(qualityResponse.error?.message || 'Failed to update quality inspection');
+              }
+            } catch (error) {
+              console.error(`Error updating quality inspection for article ${articleId}:`, error);
+              throw error;
+            }
+          }
+          
+          // Update other progress data
           const progressData = {
-            completedQuantity: update.completedQuantity,
             remarks: update.remarks,
-            m1Quantity: update.m1Quantity,
-            m2Quantity: update.m2Quantity,
-            m3Quantity: update.m3Quantity,
-            m4Quantity: update.m4Quantity,
             repairStatus: update.repairStatus,
             repairRemarks: update.repairRemarks
           };
@@ -467,8 +515,8 @@ const CheckingFloorSupervisorPage = () => {
                         <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
                         <ul className="list-disc list-inside space-y-1 text-gray-700">
                           <li><strong>View Orders:</strong> See all orders with articles on the Checking floor</li>
-                          <li><strong>Track Quantities:</strong> Monitor planned, received from linking, and completed quantities</li>
-                          <li><strong>Update Progress:</strong> Click "Update" to modify completed quantities and add remarks</li>
+                          <li><strong>Track Quantities:</strong> Monitor planned, received from linking, and M1 quantities (good quality items that pass to next floor)</li>
+                          <li><strong>Update Progress:</strong> Click "Update" to modify quality categories (M1-M4) and add remarks</li>
                           <li><strong>Step 4B - Quality Check:</strong> Categorize checked quantities into M1, M2, M3, M4</li>
                           <li><strong>M2 Repair Review:</strong> Review M2 items and shift them to M1, M3, or M4 as needed</li>
                           <li><strong>Track Articles:</strong> Monitor individual article progress and repair status</li>
@@ -491,6 +539,15 @@ const CheckingFloorSupervisorPage = () => {
                   <i className={`ri-refresh-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
                 </button>
               </div>
+            </div>
+            
+            {/* Floor Progression */}
+            <div className="mt-4">
+              <FloorProgression 
+                linkingType="Auto Linking" 
+                currentFloor="Checking"
+                className="mb-4"
+              />
             </div>
           </div>
 
@@ -519,7 +576,10 @@ const CheckingFloorSupervisorPage = () => {
                     <p className="text-green-100 text-sm font-medium">M1 - Good Quality</p>
                     <p className="text-2xl font-bold text-white">
                       {orders.reduce((sum, order) => 
-                        sum + order.articles.reduce((articleSum, article) => articleSum + article.m1Quantity, 0), 0
+                        sum + order.articles.reduce((articleSum, article) => {
+                          const checkingFloor = getCheckingFloorData(article);
+                          return articleSum + (checkingFloor.data?.m1Quantity || article.m1Quantity || 0);
+                        }, 0), 0
                       )}
                     </p>
                   </div>
@@ -537,7 +597,10 @@ const CheckingFloorSupervisorPage = () => {
                     <p className="text-yellow-100 text-sm font-medium">M2 - Needs Repair</p>
                     <p className="text-2xl font-bold text-white">
                       {orders.reduce((sum, order) => 
-                        sum + order.articles.reduce((articleSum, article) => articleSum + article.m2Quantity, 0), 0
+                        sum + order.articles.reduce((articleSum, article) => {
+                          const checkingFloor = getCheckingFloorData(article);
+                          return articleSum + (checkingFloor.data?.m2Quantity || article.m2Quantity || 0);
+                        }, 0), 0
                       )}
                     </p>
                   </div>
@@ -555,7 +618,10 @@ const CheckingFloorSupervisorPage = () => {
                     <p className="text-red-100 text-sm font-medium">M3+M4 - Defects</p>
                     <p className="text-2xl font-bold text-white">
                       {orders.reduce((sum, order) => 
-                        sum + order.articles.reduce((articleSum, article) => articleSum + article.m3Quantity + article.m4Quantity, 0), 0
+                        sum + order.articles.reduce((articleSum, article) => {
+                          const checkingFloor = getCheckingFloorData(article);
+                          return articleSum + (checkingFloor.data?.m3Quantity || article.m3Quantity || 0) + (checkingFloor.data?.m4Quantity || article.m4Quantity || 0);
+                        }, 0), 0
                       )}
                     </p>
                   </div>
@@ -781,29 +847,32 @@ const CheckingFloorSupervisorPage = () => {
                           </td>
                           <td className="px-4 py-4">
                             <div className="space-y-2">
-                              {order.articles.map((article, index) => (
-                                <div key={article.id} className="text-xs">
-                                  <div className="font-medium text-gray-700 mb-1">{article.articleNumber}</div>
-                                  <div className="grid grid-cols-2 gap-1">
-                                    <div className="text-green-600">M1: {article.m1Quantity}</div>
-                                    <div className="text-yellow-600">M2: {article.m2Quantity}</div>
-                                    <div className="text-orange-600">M3: {article.m3Quantity}</div>
-                                    <div className="text-red-600">M4: {article.m4Quantity}</div>
-                                  </div>
-                                  {article.repairStatus !== 'Not Required' && (
-                                    <div className="mt-1">
-                                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                                        article.repairStatus === 'Repaired' ? 'bg-green-100 text-green-800' :
-                                        article.repairStatus === 'In Review' ? 'bg-yellow-100 text-yellow-800' :
-                                        article.repairStatus === 'Rejected' ? 'bg-red-100 text-red-800' :
-                                        'bg-gray-100 text-gray-800'
-                                      }`}>
-                                        {article.repairStatus}
-                                      </span>
+                              {order.articles.map((article, index) => {
+                                const checkingFloor = getCheckingFloorData(article);
+                                return (
+                                  <div key={article.id} className="text-xs">
+                                    <div className="font-medium text-gray-700 mb-1">{article.articleNumber}</div>
+                                    <div className="grid grid-cols-2 gap-1">
+                                      <div className="text-green-600">M1: {checkingFloor.data?.m1Quantity || article.m1Quantity || 0}</div>
+                                      <div className="text-yellow-600">M2: {checkingFloor.data?.m2Quantity || article.m2Quantity || 0}</div>
+                                      <div className="text-orange-600">M3: {checkingFloor.data?.m3Quantity || article.m3Quantity || 0}</div>
+                                      <div className="text-red-600">M4: {checkingFloor.data?.m4Quantity || article.m4Quantity || 0}</div>
                                     </div>
-                                  )}
-                                </div>
-                              ))}
+                                    {(checkingFloor.data?.repairStatus || article.repairStatus) && (checkingFloor.data?.repairStatus || article.repairStatus) !== 'Not Required' && (
+                                      <div className="mt-1">
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                                          (checkingFloor.data?.repairStatus || article.repairStatus) === 'Repaired' ? 'bg-green-100 text-green-800' :
+                                          (checkingFloor.data?.repairStatus || article.repairStatus) === 'In Review' ? 'bg-yellow-100 text-yellow-800' :
+                                          (checkingFloor.data?.repairStatus || article.repairStatus) === 'Rejected' ? 'bg-red-100 text-red-800' :
+                                          'bg-gray-100 text-gray-800'
+                                        }`}>
+                                          {checkingFloor.data?.repairStatus || article.repairStatus}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </td>
                           
@@ -981,15 +1050,15 @@ const CheckingFloorSupervisorPage = () => {
                 const articleId = article.id || article._id;
                 if (!articleId) return null;
                 
+                const checkingFloor = getCheckingFloorData(article);
                 const currentUpdateData = updateData[articleId] || { 
-                  completedQuantity: 0, // Always start with 0 for new updates
                   remarks: article.remarks || '',
-                  m1Quantity: article.m1Quantity,
-                  m2Quantity: article.m2Quantity,
-                  m3Quantity: article.m3Quantity,
-                  m4Quantity: article.m4Quantity,
-                  repairStatus: article.repairStatus,
-                  repairRemarks: article.repairRemarks || ''
+                  m1Quantity: checkingFloor.data?.m1Quantity || article.m1Quantity || 0,
+                  m2Quantity: checkingFloor.data?.m2Quantity || article.m2Quantity || 0,
+                  m3Quantity: checkingFloor.data?.m3Quantity || article.m3Quantity || 0,
+                  m4Quantity: checkingFloor.data?.m4Quantity || article.m4Quantity || 0,
+                  repairStatus: checkingFloor.data?.repairStatus || article.repairStatus || 'Not Required',
+                  repairRemarks: checkingFloor.data?.repairRemarks || article.repairRemarks || ''
                 };
                 
                 return (
@@ -1016,21 +1085,16 @@ const CheckingFloorSupervisorPage = () => {
                       <div>
                         <label className="form-label">Received from Linking</label>
                         <div className="text-lg font-semibold text-blue-600">
-                          {article.floorQuantities?.checking?.received || 0}
+                          {checkingFloor.data?.received || 0}
                         </div>
                       </div>
                       <div>
-                        <label className="form-label">Checking Completed Quantity *</label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          value={currentUpdateData.completedQuantity}
-                          onChange={(e) => handleQuantityChange(articleId, Number(e.target.value))}
-                          min="0"
-                          max={article.floorQuantities?.checking?.received || 0}
-                        />
+                        <label className="form-label">Checking Completed Quantity (M1 - Good Quality)</label>
+                        <div className="text-lg font-semibold text-green-600">
+                          {checkingFloor.data?.m1Quantity || currentUpdateData.m1Quantity || 0}
+                        </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          Transferred to next floor: {article.floorQuantities?.checking?.transferred || 0}
+                          Only M1 items pass to next floor
                         </div>
                       </div>
                     </div>
@@ -1201,10 +1265,10 @@ const CheckingFloorSupervisorPage = () => {
 
                     <div className="flex justify-between items-center text-sm text-gray-600">
                       <div>
-                        Remaining: {(article.floorQuantities?.checking?.remaining || 0).toLocaleString()}
+                        Remaining: {(checkingFloor.data?.remaining || 0).toLocaleString()}
                       </div>
                       <div>
-                        Progress: {Math.round((currentUpdateData.completedQuantity / (article.floorQuantities?.checking?.received || 1)) * 100)}%
+                        Progress: {Math.round((currentUpdateData.m1Quantity / (checkingFloor.data?.received || 1)) * 100)}%
                       </div>
                     </div>
 
@@ -1296,6 +1360,8 @@ const CheckingFloorSupervisorPage = () => {
                 const article = selectedOrder.articles[activeViewTabIndex];
                 if (!article) return null;
                 
+                const checkingFloor = getCheckingFloorData(article);
+                
                 return (
                   <div className="border border-gray-200 rounded-lg p-4">
                     <div className="flex justify-between items-start mb-4">
@@ -1320,16 +1386,16 @@ const CheckingFloorSupervisorPage = () => {
                       <div>
                         <label className="form-label">Received from Linking</label>
                         <div className="text-lg font-semibold text-blue-600">
-                          {article.floorQuantities?.checking?.received || 0}
+                          {checkingFloor.data?.received || 0}
                         </div>
                       </div>
                       <div>
-                        <label className="form-label">Checking Completed Quantity</label>
+                        <label className="form-label">Checking Completed Quantity (M1 - Good Quality)</label>
                         <div className="text-lg font-semibold text-green-600">
-                          {article.floorQuantities?.checking?.transferred || 0}
+                          {checkingFloor.data?.m1Quantity || article.m1Quantity || 0}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          Transferred to next floor: {article.floorQuantities?.checking?.transferred || 0}
+                          Only M1 items pass to next floor
                         </div>
                       </div>
                     </div>
@@ -1338,36 +1404,36 @@ const CheckingFloorSupervisorPage = () => {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div>
                         <label className="form-label">M1 (Good Quality)</label>
-                        <div className="text-lg font-semibold text-green-600">{article.m1Quantity || 0}</div>
+                        <div className="text-lg font-semibold text-green-600">{checkingFloor.data?.m1Quantity || article.m1Quantity || 0}</div>
                       </div>
                       <div>
                         <label className="form-label">M2 (Needs Repair)</label>
-                        <div className="text-lg font-semibold text-yellow-600">{article.m2Quantity || 0}</div>
+                        <div className="text-lg font-semibold text-yellow-600">{checkingFloor.data?.m2Quantity || article.m2Quantity || 0}</div>
                       </div>
                       <div>
                         <label className="form-label">M3 (Minor Defects)</label>
-                        <div className="text-lg font-semibold text-orange-600">{article.m3Quantity || 0}</div>
+                        <div className="text-lg font-semibold text-orange-600">{checkingFloor.data?.m3Quantity || article.m3Quantity || 0}</div>
                       </div>
                       <div>
                         <label className="form-label">M4 (Major Defects)</label>
-                        <div className="text-lg font-semibold text-red-600">{article.m4Quantity || 0}</div>
+                        <div className="text-lg font-semibold text-red-600">{checkingFloor.data?.m4Quantity || article.m4Quantity || 0}</div>
                       </div>
                     </div>
 
-                    {article.repairStatus && article.repairStatus !== 'Not Required' && (
+                    {(checkingFloor.data?.repairStatus || article.repairStatus) && (checkingFloor.data?.repairStatus || article.repairStatus) !== 'Not Required' && (
                       <div className="mb-4">
                         <label className="form-label">Repair Status</label>
                         <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700">
-                          {article.repairStatus}
+                          {checkingFloor.data?.repairStatus || article.repairStatus}
                         </div>
                       </div>
                     )}
 
-                    {article.repairRemarks && (
+                    {(checkingFloor.data?.repairRemarks || article.repairRemarks) && (
                       <div className="mb-4">
                         <label className="form-label">Repair Remarks</label>
                         <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700">
-                          {article.repairRemarks}
+                          {checkingFloor.data?.repairRemarks || article.repairRemarks}
                         </div>
                       </div>
                     )}
@@ -1383,10 +1449,10 @@ const CheckingFloorSupervisorPage = () => {
 
                     <div className="flex justify-between items-center text-sm text-gray-600">
                       <div>
-                        Remaining: {(article.floorQuantities?.checking?.remaining || 0).toLocaleString()}
+                        Remaining: {(checkingFloor.data?.remaining || 0).toLocaleString()}
                       </div>
                       <div>
-                        Progress: {Math.round(((article.floorQuantities?.checking?.transferred || 0) / (article.floorQuantities?.checking?.received || 1)) * 100)}%
+                        Progress: {Math.round(((checkingFloor.data?.m1Quantity || article.m1Quantity || 0) / (checkingFloor.data?.received || 1)) * 100)}%
                       </div>
                     </div>
                   </div>

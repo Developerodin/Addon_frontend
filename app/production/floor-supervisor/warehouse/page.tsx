@@ -114,8 +114,27 @@ const WarehouseFloorSupervisorPage = () => {
     return () => clearTimeout(timeoutId);
   }, [currentPage, itemsPerPage, filters, searchQuery]);
 
-  // No client-side filtering needed since we're using API filtering
-  const paginatedOrders = orders;
+  // Filter orders and articles based on received quantity
+  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
+    return orders.map(order => {
+      // Filter articles that have received quantity > 0
+      const filteredArticles = order.articles.filter(article => {
+        const receivedQuantity = article.floorQuantities?.warehouse?.received || 0;
+        return receivedQuantity > 0;
+      });
+      
+      return {
+        ...order,
+        articles: filteredArticles
+      };
+    }).filter(order => {
+      // Only show orders that have at least one article with received quantity > 0
+      return order.articles.length > 0;
+    });
+  };
+
+  // Apply filtering to orders
+  const paginatedOrders = filterOrdersByReceivedQuantity(orders);
 
   const handleSelectAll = () => {
     if (selectAll) {
