@@ -601,7 +601,14 @@ const BoardingFloorSupervisorPage = () => {
                           </td>
                           <td className="px-4 py-4">
                             <div className="space-y-1">
-                              <div className="font-medium text-gray-900">{order.orderNumber}</div>
+                              <div className="font-medium text-gray-900">
+                                {order.orderNumber || order.id}
+                                {order.orderNote && (
+                                  <span className="text-sm text-gray-500 ml-2">
+                                    ({order.orderNote})
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-sm text-gray-500">
                                 Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 
                                   (order.articles && order.articles.length > 0 && order.articles[0].createdAt ? 

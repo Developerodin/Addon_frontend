@@ -626,7 +626,14 @@ const BrandingFloorSupervisorPage = () => {
                           </td>
                           <td className="px-4 py-4">
                             <div className="space-y-1">
-                              <div className="font-medium text-gray-900">{order.orderNumber || order.id}</div>
+                              <div className="font-medium text-gray-900">
+                                {order.orderNumber || order.id}
+                                {order.orderNote && (
+                                  <span className="text-sm text-gray-500 ml-2">
+                                    ({order.orderNote})
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-sm text-gray-500">
                                 Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : (order.articles[0]?.createdAt ? new Date(order.articles[0].createdAt).toLocaleDateString() : 'N/A')}
                               </div>
