@@ -351,6 +351,21 @@ const FinalCheckingFloorSupervisorPage = () => {
   const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
+    // Validate M1 quantities before submission
+    const invalidArticles = selectedOrder.articles.filter(article => {
+      const articleId = article.id || article._id;
+      if (!articleId) return false;
+      const update = updateData[articleId];
+      if (!update) return false;
+      const received = article.floorQuantities?.finalChecking?.received || 0;
+      return update.m1Quantity > received;
+    });
+
+    if (invalidArticles.length > 0) {
+      toast.error('M1 quantity cannot exceed received quantity for some articles');
+      return;
+    }
+
     try {
       setIsLoading(true);
       
@@ -1085,7 +1100,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
                       <div>
                         <label className="form-label">Planned Quantity</label>
                         <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
@@ -1097,12 +1112,67 @@ const FinalCheckingFloorSupervisorPage = () => {
                         </div>
                       </div>
                       <div>
-                        <label className="form-label">Final Checking Completed Quantity (M1 - Good Quality)</label>
+                        <label className="form-label">M1 Completed Quantity *</label>
+                        {(() => {
+                          const received = article.floorQuantities?.finalChecking?.received || 0;
+                          const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
+                          const remaining = received - transferred;
+                          const isFullyTransferred = transferred >= received;
+                          
+                          return (
+                            <>
+                              <input
+                                type="number"
+                                className={`form-control ${
+                                  isFullyTransferred 
+                                    ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
+                                    : currentUpdateData.m1Quantity > received 
+                                      ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
+                                      : ''
+                                }`}
+                                value={currentUpdateData.m1Quantity}
+                                onChange={(e) => {
+                                  if (isFullyTransferred) return;
+                                  const value = Number(e.target.value);
+                                  if (value <= received) {
+                                    handleM1QuantityChange(articleId, value);
+                                  }
+                                }}
+                                min="0"
+                                max={received}
+                                placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${received}`}
+                                disabled={isFullyTransferred}
+                              />
+                              {isFullyTransferred ? (
+                                <div className="text-xs text-green-600 mt-1 font-medium">
+                                  ✓ All quantity has been transferred to next floor
+                                </div>
+                              ) : currentUpdateData.m1Quantity > received ? (
+                                <div className="text-xs text-red-500 mt-1">
+                                  Cannot exceed received quantity ({received})
+                                </div>
+                              ) : null}
+                              <div className="text-xs text-green-600 mt-1">
+                                Only M1 (Good Quality) passes to warehouse
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                      <div>
+                        <label className="form-label">Transferred to Next Floor</label>
                         <div className="text-lg font-semibold text-green-600">
-                          {currentUpdateData.m1Quantity || 0}
+                          {article.floorQuantities?.finalChecking?.transferred || 0}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          Only M1 items pass to next floor
+                      </div>
+                      <div>
+                        <label className="form-label">Remaining</label>
+                        <div className="text-lg font-semibold text-orange-600">
+                          {(() => {
+                            const received = article.floorQuantities?.finalChecking?.received || 0;
+                            const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
+                            return (received - transferred).toLocaleString();
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -1111,20 +1181,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                     <div className="mb-6">
                       <h6 className="text-md font-semibold text-gray-900 mb-3 border-b pb-2">Step 4B: Article-wise Checked Quantities</h6>
                       
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        <div>
-                          <label className="form-label text-green-700 font-medium">M1 - Good Quality</label>
-                          <input
-                            type="number"
-                            className="form-control border-green-300 focus:border-green-500"
-                            value={currentUpdateData.m1Quantity}
-                            onChange={(e) => handleM1QuantityChange(articleId, Number(e.target.value))}
-                            min="0"
-                            max={article.plannedQuantity}
-                          />
-                          <small className="text-green-600">Ready for next step</small>
-                        </div>
-                        
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                         <div>
                           <label className="form-label text-yellow-700 font-medium">M2 - Needs Repair</label>
                           <input
@@ -1271,14 +1328,6 @@ const FinalCheckingFloorSupervisorPage = () => {
                       />
                     </div>
 
-                    <div className="flex justify-between items-center text-sm text-gray-600">
-                      <div>
-                        Remaining: {(article.floorQuantities?.finalChecking?.remaining || 0).toLocaleString()}
-                      </div>
-                      <div>
-                        Progress: {Math.round((currentUpdateData.m1Quantity / (article.floorQuantities?.finalChecking?.received || 1)) * 100)}%
-                      </div>
-                    </div>
 
                     {/* View Logs Button and panel */}
                     <div className="mt-4">
@@ -1324,6 +1373,14 @@ const FinalCheckingFloorSupervisorPage = () => {
               <button
                 onClick={handleUpdateSubmit}
                 className="ti-btn ti-btn-primary"
+                disabled={selectedOrder?.articles.some(article => {
+                  const articleId = article.id || article._id;
+                  if (!articleId) return false;
+                  const update = updateData[articleId];
+                  if (!update) return false;
+                  const received = article.floorQuantities?.finalChecking?.received || 0;
+                  return update.m1Quantity > received;
+                })}
               >
                 <i className="ri-save-line me-2"></i>
                 Update Order

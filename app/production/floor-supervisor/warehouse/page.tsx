@@ -213,6 +213,21 @@ const WarehouseFloorSupervisorPage = () => {
   const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
+    // Validate warehouse quantities before submission
+    const invalidArticles = selectedOrder.articles.filter(article => {
+      const articleId = article.id || article._id;
+      if (!articleId) return false;
+      const update = updateData[articleId];
+      if (!update) return false;
+      const received = article.floorQuantities?.warehouse?.received || 0;
+      return update.receivedQuantity > received;
+    });
+
+    if (invalidArticles.length > 0) {
+      toast.error('Warehouse completed quantity cannot exceed received quantity for some articles');
+      return;
+    }
+
     try {
       setIsLoading(true);
       
@@ -855,58 +870,94 @@ const WarehouseFloorSupervisorPage = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
                       <div>
                         <label className="form-label">Planned Quantity</label>
                         <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
                       </div>
                       <div>
-                        <label className="form-label">Received from Branding</label>
+                        <label className="form-label">Received from Final Checking</label>
                         <div className="text-lg font-semibold text-blue-600">
                           {article.floorQuantities?.warehouse?.received || 0}
                         </div>
                       </div>
                       <div>
-                        <label className="form-label">Current Floor</label>
-                        <div className="text-sm font-medium text-gray-900">{article.currentFloor}</div>
+                        <label className="form-label">Warehouse Completed Quantity *</label>
+                        {(() => {
+                          const received = article.floorQuantities?.warehouse?.received || 0;
+                          const transferred = article.floorQuantities?.warehouse?.transferred || 0;
+                          const remaining = received - transferred;
+                          const isFullyTransferred = transferred >= received;
+                          
+                          return (
+                            <>
+                              <input
+                                type="number"
+                                className={`form-control ${
+                                  isFullyTransferred 
+                                    ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
+                                    : currentUpdateData.receivedQuantity > received 
+                                      ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
+                                      : ''
+                                }`}
+                                value={currentUpdateData.receivedQuantity}
+                                onChange={(e) => {
+                                  if (isFullyTransferred) return;
+                                  const value = Number(e.target.value);
+                                  if (value <= received) {
+                                    handleReceivedQuantityChange(articleId, value);
+                                  }
+                                }}
+                                min="0"
+                                max={received}
+                                placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${received}`}
+                                disabled={isFullyTransferred}
+                              />
+                              {isFullyTransferred ? (
+                                <div className="text-xs text-green-600 mt-1 font-medium">
+                                  ✓ All quantity has been transferred to next floor
+                                </div>
+                              ) : currentUpdateData.receivedQuantity > received ? (
+                                <div className="text-xs text-red-500 mt-1">
+                                  Cannot exceed received quantity ({received})
+                                </div>
+                              ) : null}
+                              <div className="text-xs text-green-600 mt-1">
+                                Ready for dispatch
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                       <div>
-                        <label className="form-label">Total Warehouse Completed Quantity *</label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          value={currentUpdateData.receivedQuantity}
-                          onChange={(e) => handleReceivedQuantityChange(articleId, Number(e.target.value))}
-                          min="0"
-                          max={article.floorQuantities?.warehouse?.received || 0}
-                        />
-                        <div className="text-xs text-gray-500 mt-1">
-                          Current: {article.completedQuantity || 0} | Transferred: {article.floorQuantities?.warehouse?.transferred || 0}
+                        <label className="form-label">Transferred to Next Floor</label>
+                        <div className="text-lg font-semibold text-green-600">
+                          {article.floorQuantities?.warehouse?.transferred || 0}
                         </div>
                       </div>
                       <div>
-                        <label className="form-label">Remarks</label>
-                        <textarea
-                          className="form-control"
-                          rows={2}
-                          placeholder="Add remarks for this article..."
-                          value={currentUpdateData.remarks}
-                          onChange={(e) => handleRemarksChange(articleId, e.target.value)}
-                        />
+                        <label className="form-label">Remaining</label>
+                        <div className="text-lg font-semibold text-orange-600">
+                          {(() => {
+                            const received = article.floorQuantities?.warehouse?.received || 0;
+                            const transferred = article.floorQuantities?.warehouse?.transferred || 0;
+                            return (received - transferred).toLocaleString();
+                          })()}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center text-sm text-gray-600">
-                      <div>
-                        Remaining: {(article.floorQuantities?.warehouse?.remaining || 0).toLocaleString()}
-                      </div>
-                      <div>
-                        Progress: {Math.round((currentUpdateData.receivedQuantity / (article.floorQuantities?.warehouse?.received || 1)) * 100)}%
-                      </div>
+                    <div className="mb-4">
+                      <label className="form-label">Remarks</label>
+                      <textarea
+                        className="form-control"
+                        rows={2}
+                        placeholder="Add remarks for this article..."
+                        value={currentUpdateData.remarks}
+                        onChange={(e) => handleRemarksChange(articleId, e.target.value)}
+                      />
                     </div>
+
 
                   </div>
                 );
@@ -924,7 +975,14 @@ const WarehouseFloorSupervisorPage = () => {
               <button
                 onClick={handleUpdateSubmit}
                 className="ti-btn ti-btn-primary"
-                disabled={isLoading}
+                disabled={isLoading || selectedOrder?.articles.some(article => {
+                  const articleId = article.id || article._id;
+                  if (!articleId) return false;
+                  const update = updateData[articleId];
+                  if (!update) return false;
+                  const received = article.floorQuantities?.warehouse?.received || 0;
+                  return update.receivedQuantity > received;
+                })}
               >
                 <i className={`ri-save-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i>
                 {isLoading ? 'Updating...' : 'Update Order'}
