@@ -563,13 +563,13 @@ const CheckingFloorSupervisorPage = () => {
             </div>
             
             {/* Floor Progression */}
-            <div className="mt-4">
+            {/* <div className="mt-4">
               <FloorProgression 
                 linkingType="Auto Linking" 
                 currentFloor="Checking"
                 className="mb-4"
               />
-            </div>
+            </div> */}
           </div>
 
           {/* Statistics Cards */}
