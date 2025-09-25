@@ -88,19 +88,12 @@ const EditOrderContent = () => {
 
     // Validate articles
     formData.articles.forEach((article, index) => {
-      if (!article.articleNumber.trim()) {
-        newErrors[`article_${index}_number`] = 'Article Number is required';
-      } else if (!/^[A-Z0-9]{4,5}$/.test(article.articleNumber)) {
-        newErrors[`article_${index}_number`] = 'Article Number must be 4-5 alphanumeric characters';
-      }
-
       if (article.plannedQuantity <= 0) {
         newErrors[`article_${index}_quantity`] = 'Planned Quantity must be greater than 0';
       } else if (article.plannedQuantity > 100000) {
         newErrors[`article_${index}_quantity`] = 'Planned Quantity cannot exceed 100,000';
       }
     });
-
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -132,11 +125,10 @@ const EditOrderContent = () => {
     // Clear error when user starts typing
     const errorKey = `article_${articleIndex}_${field}`;
     if (errors[errorKey]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[errorKey];
-        return newErrors;
-      });
+      setErrors(prev => ({
+        ...prev,
+        [errorKey]: undefined
+      }));
     }
   };
 
@@ -417,15 +409,11 @@ const EditOrderContent = () => {
                             <td className="px-2 py-2">
                               <input
                                 type="text"
-                                className={`form-control form-control-sm w-full text-xs py-1 px-2 h-8 ${errors[`article_${index}_number`] ? 'border-danger' : ''}`}
+                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8"
                                 value={article.articleNumber}
                                 onChange={(e) => handleArticleChange(index, 'articleNumber', e.target.value)}
                                 placeholder="ART001"
-                                maxLength={5}
                               />
-                              {errors[`article_${index}_number`] && (
-                                <div className="text-danger text-xs mt-1 truncate">{errors[`article_${index}_number`]}</div>
-                              )}
                             </td>
                             <td className="px-2 py-2">
                               <input
