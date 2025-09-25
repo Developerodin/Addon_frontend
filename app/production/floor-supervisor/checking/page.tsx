@@ -345,12 +345,14 @@ const CheckingFloorSupervisorPage = () => {
       
       const checkingFloor = getCheckingFloorData(article);
       const received = checkingFloor.data?.received || 0;
+      const transferred = checkingFloor.data?.transferred || 0;
+      const remaining = received - transferred;
       
-      return update.m1Quantity > received;
+      return update.m1Quantity > remaining;
     });
 
     if (invalidArticles.length > 0) {
-      toast.error('Cannot submit: Some articles have M1 quantities exceeding received quantities');
+      toast.error('Cannot submit: Some articles have M1 quantities exceeding remaining quantities');
       return;
     }
 
@@ -1113,7 +1115,7 @@ const CheckingFloorSupervisorPage = () => {
                           const received = checkingFloor.data?.received || 0;
                           const transferred = checkingFloor.data?.transferred || 0;
                           const remaining = received - transferred;
-                          const isFullyTransferred = transferred >= received;
+                          const isFullyTransferred = remaining <= 0;
                           
                           return (
                             <>
@@ -1122,7 +1124,7 @@ const CheckingFloorSupervisorPage = () => {
                                 className={`form-control ${
                                   isFullyTransferred 
                                     ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
-                                    : currentUpdateData.m1Quantity > received 
+                                    : currentUpdateData.m1Quantity > remaining 
                                       ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
                                       : ''
                                 }`}
@@ -1130,22 +1132,22 @@ const CheckingFloorSupervisorPage = () => {
                                 onChange={(e) => {
                                   if (isFullyTransferred) return;
                                   const value = Number(e.target.value);
-                                  if (value <= received) {
+                                  if (value <= remaining) {
                                     handleM1QuantityChange(articleId, value);
                                   }
                                 }}
                                 min="0"
-                                max={received}
-                                placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${received}`}
+                                max={remaining}
+                                placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${remaining}`}
                                 disabled={isFullyTransferred}
                               />
                               {isFullyTransferred ? (
                                 <div className="text-xs text-green-600 mt-1 font-medium">
                                   ✓ All quantity has been transferred to next floor
                                 </div>
-                              ) : currentUpdateData.m1Quantity > received ? (
+                              ) : currentUpdateData.m1Quantity > remaining ? (
                                 <div className="text-xs text-red-500 mt-1">
-                                  Cannot exceed received quantity ({received})
+                                  Cannot exceed remaining quantity ({remaining})
                                 </div>
                               ) : null}
                               <div className="text-xs text-green-600 mt-1">
@@ -1352,8 +1354,10 @@ const CheckingFloorSupervisorPage = () => {
                     
                     const checkingFloor = getCheckingFloorData(article);
                     const received = checkingFloor.data?.received || 0;
+                    const transferred = checkingFloor.data?.transferred || 0;
+                    const remaining = received - transferred;
                     
-                    return update.m1Quantity > received;
+                    return update.m1Quantity > remaining;
                   })
                 }
               >
