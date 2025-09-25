@@ -167,6 +167,26 @@ const WashingFloorSupervisorPage = () => {
   const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
+    // Validate all quantities before submission
+    const invalidArticles = selectedOrder.articles.filter(article => {
+      const articleId = article.id || article._id;
+      if (!articleId) return false;
+      
+      const update = updateData[articleId];
+      if (!update) return false;
+      
+      const received = article.floorQuantities?.washing?.received || 0;
+      const transferred = article.floorQuantities?.washing?.transferred || 0;
+      const remaining = received - transferred;
+      
+      return update.completedQuantity > remaining;
+    });
+
+    if (invalidArticles.length > 0) {
+      toast.error('Cannot submit: Some articles have completed quantities exceeding remaining quantities');
+      return;
+    }
+
     try {
       setIsLoading(true);
       
@@ -805,7 +825,7 @@ const WashingFloorSupervisorPage = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
                       <div>
                         <label className="form-label">Planned Quantity</label>
                         <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
@@ -818,16 +838,63 @@ const WashingFloorSupervisorPage = () => {
                       </div>
                       <div>
                         <label className="form-label">Washing Completed Quantity *</label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          value={currentUpdateData.completedQuantity}
-                          onChange={(e) => handleQuantityChange(articleId, Number(e.target.value))}
-                          min="0"
-                          max={article.floorQuantities?.washing?.received || 0}
-                        />
-                        <div className="text-xs text-gray-500 mt-1">
-                          Transferred to next floor: {article.floorQuantities?.washing?.transferred || 0}
+                        {(() => {
+                          const received = article.floorQuantities?.washing?.received || 0;
+                          const transferred = article.floorQuantities?.washing?.transferred || 0;
+                          const remaining = received - transferred;
+                          const isFullyTransferred = remaining <= 0;
+                          
+                          return (
+                            <>
+                              <input
+                                type="number"
+                                className={`form-control ${
+                                  isFullyTransferred 
+                                    ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
+                                    : currentUpdateData.completedQuantity > remaining 
+                                      ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
+                                      : ''
+                                }`}
+                                value={currentUpdateData.completedQuantity}
+                                onChange={(e) => {
+                                  if (isFullyTransferred) return;
+                                  const value = Number(e.target.value);
+                                  if (value <= remaining) {
+                                    handleQuantityChange(articleId, value);
+                                  }
+                                }}
+                                min="0"
+                                max={remaining}
+                                placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${remaining}`}
+                                disabled={isFullyTransferred}
+                              />
+                              {isFullyTransferred ? (
+                                <div className="text-xs text-green-600 mt-1 font-medium">
+                                  ✓ All quantity has been transferred to next floor
+                                </div>
+                              ) : currentUpdateData.completedQuantity > remaining ? (
+                                <div className="text-xs text-red-500 mt-1">
+                                  Cannot exceed remaining quantity ({remaining})
+                                </div>
+                              ) : null}
+                            </>
+                          );
+                        })()}
+                      </div>
+                      <div>
+                        <label className="form-label">Transferred to Next Floor</label>
+                        <div className="text-lg font-semibold text-green-600">
+                          {article.floorQuantities?.washing?.transferred || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="form-label">Remaining</label>
+                        <div className="text-lg font-semibold text-orange-600">
+                          {(() => {
+                            const received = article.floorQuantities?.washing?.received || 0;
+                            const transferred = article.floorQuantities?.washing?.transferred || 0;
+                            return (received - transferred).toLocaleString();
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -841,15 +908,6 @@ const WashingFloorSupervisorPage = () => {
                         value={currentUpdateData.remarks}
                         onChange={(e) => handleRemarksChange(articleId, e.target.value)}
                       />
-                    </div>
-
-                    <div className="flex justify-between items-center text-sm text-gray-600">
-                      <div>
-                        Remaining: {(article.floorQuantities?.washing?.remaining || 0).toLocaleString()}
-                      </div>
-                      <div>
-                        Progress: {Math.round((currentUpdateData.completedQuantity / (article.floorQuantities?.washing?.received || 1)) * 100)}%
-                      </div>
                     </div>
 
                   </div>
@@ -867,6 +925,20 @@ const WashingFloorSupervisorPage = () => {
               <button
                 onClick={handleUpdateSubmit}
                 className="ti-btn ti-btn-primary"
+                disabled={
+                  selectedOrder.articles.some(article => {
+                    const articleId = article.id || article._id;
+                    if (!articleId) return false;
+                    const update = updateData[articleId];
+                    if (!update) return false;
+                    
+                    const received = article.floorQuantities?.washing?.received || 0;
+                    const transferred = article.floorQuantities?.washing?.transferred || 0;
+                    const remaining = received - transferred;
+                    
+                    return update.completedQuantity > remaining;
+                  })
+                }
               >
                 <i className="ri-save-line me-2"></i>
                 Update Order
