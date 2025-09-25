@@ -853,7 +853,7 @@ const KnittingFloorSupervisorPage = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                         <div>
                           <label className="form-label">Planned Quantity</label>
                           <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
@@ -865,38 +865,48 @@ const KnittingFloorSupervisorPage = () => {
                           </div>
                         </div>
                         <div>
+                          <label className="form-label">Transferred to Next Floor</label>
+                          <div className="text-lg font-semibold text-green-600">
+                            {article.floorQuantities?.knitting?.transferred || 0}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="form-label">Remaining</label>
+                          <div className="text-lg font-semibold text-orange-600">
+                            {(article.floorQuantities?.knitting?.remaining || 0).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
                           <label className="form-label">Knitting Completed Quantity *</label>
                           <input
                             type="number"
-                            className="form-control"
+                            className="form-control py-2"
                             value={currentUpdateData.completedQuantity}
                             onChange={(e) => handleQuantityChange(articleId, Number(e.target.value))}
                             min="0"
                             // Allow overproduction in knitting floor - no max limit
                           />
-                          <div className="text-xs text-gray-500 mt-1">
-                            Transferred to next floor: {article.floorQuantities?.knitting?.transferred || 0}
-                            {currentUpdateData.completedQuantity > (article.plannedQuantity || 0) && (
-                              <div className="text-orange-600 font-medium mt-1">
-                                ⚠️ Overproduction: +{currentUpdateData.completedQuantity - (article.plannedQuantity || 0)} pieces
-                              </div>
-                            )}
-                          </div>
+                          {currentUpdateData.completedQuantity > (article.plannedQuantity || 0) && (
+                            <div className="text-orange-600 font-medium mt-1">
+                              ⚠️ Overproduction: +{currentUpdateData.completedQuantity - (article.plannedQuantity || 0)} pieces
+                            </div>
+                          )}
                         </div>
-                      </div>
-
-                      {/* M4 Defect Tracking for Knitting */}
-                      <div className="mb-4">
-                        <label className="form-label text-red-700 font-medium">M4 Defects (Major Defects)</label>
-                        <input
-                          type="number"
-                          className="form-control border-red-300 focus:border-red-500"
-                          value={currentUpdateData.m4Quantity}
-                          onChange={(e) => handleM4QuantityChange(articleId, Number(e.target.value))}
-                          min="0"
-                          max={currentUpdateData.completedQuantity}
-                        />
-                        <small className="text-red-600">Track major defects from knitting machine</small>
+                        <div>
+                          <label className="form-label text-red-700 font-medium">M4 Defects (Major Defects)</label>
+                          <input
+                            type="number"
+                            className="form-control py-2 border-red-300 focus:border-red-500"
+                            value={currentUpdateData.m4Quantity}
+                            onChange={(e) => handleM4QuantityChange(articleId, Number(e.target.value))}
+                            min="0"
+                            max={currentUpdateData.completedQuantity}
+                          />
+                          <small className="text-red-600">Track major defects from knitting machine</small>
+                        </div>
                       </div>
 
                       <div className="mb-4">
@@ -908,15 +918,6 @@ const KnittingFloorSupervisorPage = () => {
                           value={currentUpdateData.remarks}
                           onChange={(e) => handleRemarksChange(articleId, e.target.value)}
                         />
-                      </div>
-
-                      <div className="flex justify-between items-center text-sm text-gray-600">
-                        <div>
-                          Remaining: {(article.floorQuantities?.knitting?.remaining || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          Progress: {Math.round((currentUpdateData.completedQuantity / (article.floorQuantities?.knitting?.received || 1)) * 100)}%
-                        </div>
                       </div>
 
 

@@ -926,22 +926,16 @@ const BrandingFloorSupervisorPage = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="form-label">Branding Type</label>
-                        <select
-                          className="form-select"
-                          value={currentUpdateData.brandingType}
-                          onChange={(e) => handleBrandingTypeChange(articleId, e.target.value as 'Heat Transfer' | 'Embroidery')}
-                        >
-                          <option value="Heat Transfer">Heat Transfer</option>
-                          <option value="Embroidery">Embroidery</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="form-label">Current Floor</label>
-                        <div className="text-sm font-medium text-gray-900">{article.currentFloor}</div>
-                      </div>
+                    <div className="mb-4">
+                      <label className="form-label">Branding Type</label>
+                      <select
+                        className="form-select"
+                        value={currentUpdateData.brandingType}
+                        onChange={(e) => handleBrandingTypeChange(articleId, e.target.value as 'Heat Transfer' | 'Embroidery')}
+                      >
+                        <option value="Heat Transfer">Heat Transfer</option>
+                        <option value="Embroidery">Embroidery</option>
+                      </select>
                     </div>
 
 
