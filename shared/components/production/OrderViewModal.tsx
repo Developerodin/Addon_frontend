@@ -60,15 +60,25 @@ interface OrderViewModalProps {
 }
 
 interface ArticleLog {
-  id: string;
+  _id?: string;
+  id?: string;
   action: string;
-  details: any;
-  timestamp: string;
-  userId: string;
+  fromFloor?: string;
+  toFloor?: string;
+  quantity?: number;
+  remarks?: string;
+  previousValue?: any;
+  newValue?: any;
+  changeReason?: string;
+  qualityStatus?: string;
+  userId?: string;
+  floorSupervisorId?: string;
+  timestamp?: string;
+  createdAt?: string;
 }
 
 const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'articles' | 'logs' | 'timeline'>('articles');
+  const [activeTab, setActiveTab] = useState<'articles' | 'logs'>('articles');
   const [articleLogs, setArticleLogs] = useState<ArticleLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -77,17 +87,23 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
   const loadArticleLogs = async (articleId: string) => {
     setIsLoadingLogs(true);
     try {
-      const response = await productionService.getArticleLogs(articleId, {
-        limit: 50,
-        offset: 0
-      });
+      console.log('Loading logs for article ID:', articleId);
+      const response = await productionService.getArticleLogs(articleId);
+      
+      console.log('Article logs response:', response);
       
       if (response.success) {
-        setArticleLogs(response.data.logs || []);
+        console.log('Article logs data:', response.data);
+        setArticleLogs(response.data.results || []);
+      } else {
+        console.error('Failed to load article logs:', response.error);
+        toast.error('Failed to load article logs');
+        setArticleLogs([]);
       }
     } catch (error: any) {
       console.error('Error loading article logs:', error);
-      toast.error('Failed to load article logs');
+      toast.error(error.message || 'Failed to load article logs');
+      setArticleLogs([]);
     } finally {
       setIsLoadingLogs(false);
     }
@@ -242,16 +258,6 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
               }`}
             >
               Logs
-            </button>
-            <button
-              onClick={() => setActiveTab('timeline')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'timeline'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Timeline
             </button>
           </nav>
         </div>
@@ -474,56 +480,115 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
               {selectedArticle ? (
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-4">
-                    Logs for Article: {selectedArticle.articleNumber}
+                    Logs for Article: {selectedArticle.articleNumber} {articleLogs.length > 0 && `(${articleLogs.length} found)`}
                   </h3>
                   
                   {isLoadingLogs ? (
                     <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                        <p className="text-gray-600 text-sm">Loading logs...</p>
+                      </div>
                     </div>
                   ) : articleLogs.length > 0 ? (
-                    <div className="space-y-3">
-                      {articleLogs.map((log) => (
-                        <div key={log.id} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2 mb-2">
-                                <span className="font-medium text-gray-900">{log.action}</span>
-                                <span className="text-sm text-gray-500">
-                                  {formatDate(log.timestamp)}
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {articleLogs.map((log, index) => (
+                        <div key={log._id || log.id || index} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                log.action === 'Quality Inspection' ? 'bg-yellow-100 text-yellow-800' :
+                                log.action === 'Transferred to Branding' ? 'bg-purple-100 text-purple-800' :
+                                log.action === 'Transferred to Washing' ? 'bg-blue-100 text-blue-800' :
+                                log.action === 'M1 Quantity Updated' ? 'bg-green-100 text-green-800' :
+                                log.action === 'M2 Quantity Updated' ? 'bg-orange-100 text-orange-800' :
+                                log.action === 'M3 Quantity Updated' ? 'bg-red-100 text-red-800' :
+                                log.action === 'M4 Quantity Updated' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {log.action || 'ACTION'}
+                              </span>
+                              {log.fromFloor && log.toFloor && (
+                                <span className="text-sm text-gray-600">
+                                  {log.fromFloor} → {log.toFloor}
                                 </span>
-                              </div>
-                              {log.details && (
-                                <div className="text-sm text-gray-600">
-                                  <pre className="whitespace-pre-wrap">{JSON.stringify(log.details, null, 2)}</pre>
-                                </div>
+                              )}
+                              {log.quantity && log.quantity > 0 && (
+                                <span className="text-sm text-gray-600">
+                                  Qty: {log.quantity}
+                                </span>
                               )}
                             </div>
+                            <span className="text-xs text-gray-500">
+                              {log.timestamp ? new Date(log.timestamp).toLocaleString() : 
+                               log.createdAt ? new Date(log.createdAt).toLocaleString() : 'Unknown time'}
+                            </span>
+                          </div>
+                          
+                          {log.remarks && (
+                            <div className="text-sm text-gray-700 mb-2">
+                              {log.remarks}
+                            </div>
+                          )}
+                          
+                          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                            {log.previousValue && (
+                              <div>
+                                <strong>Previous:</strong> {log.previousValue}
+                              </div>
+                            )}
+                            {log.newValue && (
+                              <div>
+                                <strong>New:</strong> {log.newValue}
+                              </div>
+                            )}
+                            {log.changeReason && (
+                              <div className="col-span-2">
+                                <strong>Reason:</strong> {log.changeReason}
+                              </div>
+                            )}
+                            {log.qualityStatus && (
+                              <div className="col-span-2">
+                                <strong>Quality Status:</strong> {log.qualityStatus}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="text-xs text-gray-500 mt-2 flex justify-between">
+                            <div>
+                              <i className="ri-user-line me-1"></i>
+                              {log.userId || 'System'}
+                            </div>
+                            {log.floorSupervisorId && (
+                              <div>
+                                <i className="ri-user-settings-line me-1"></i>
+                                Supervisor: {log.floorSupervisorId}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      No logs found for this article
+                    <div className="text-center py-8">
+                      <div className="text-gray-400 mb-2">
+                        <i className="ri-file-list-line text-3xl"></i>
+                      </div>
+                      <p className="text-gray-600">No logs found for this article</p>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  Select an article to view its logs
+                <div className="text-center py-8">
+                  <div className="text-gray-400 mb-2">
+                    <i className="ri-file-list-line text-3xl"></i>
+                  </div>
+                  <p className="text-gray-600">Select an article to view its logs</p>
                 </div>
               )}
             </div>
           )}
 
-          {activeTab === 'timeline' && (
-            <div className="space-y-4">
-              <div className="text-center py-8 text-gray-500">
-                Timeline view - Coming soon
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer */}
