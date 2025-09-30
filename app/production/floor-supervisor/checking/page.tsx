@@ -32,13 +32,13 @@ interface FloorQuantities {
 
 interface Article {
   id: string;
-  _id: string;
+  _id?: string;
   articleNumber: string;
   plannedQuantity: number;
   completedQuantity: number;
   linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
   priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
+  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
   progress: number;
   currentFloor: string;
   remarks?: string;
@@ -64,8 +64,8 @@ interface Article {
   repairRemarks?: string;
   finalQualityConfirmed?: boolean;
   startedAt?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 const CheckingFloorSupervisorPage = () => {
@@ -217,7 +217,7 @@ const CheckingFloorSupervisorPage = () => {
         const checkingFloor = getCheckingFloorData(article);
         initialData[articleId] = {
           remarks: article.remarks || '',
-          m1Quantity: checkingFloor.data?.m1Quantity || article.m1Quantity || 0,
+          m1Quantity: 0, // Always start with 0 for user input
           m2Quantity: checkingFloor.data?.m2Quantity || article.m2Quantity || 0,
           m3Quantity: checkingFloor.data?.m3Quantity || article.m3Quantity || 0,
           m4Quantity: checkingFloor.data?.m4Quantity || article.m4Quantity || 0,
@@ -388,8 +388,7 @@ const CheckingFloorSupervisorPage = () => {
       const checkingFloor = getCheckingFloorData(article);
       const received = checkingFloor.data?.received || 0;
       const transferred = checkingFloor.data?.transferred || 0;
-      const currentM1Quantity = checkingFloor.data?.m1Quantity || article.m1Quantity || 0;
-      const remaining = received - currentM1Quantity;
+      const remaining = received - transferred; // Use transferred instead of current M1
       
       return update.m1Quantity > remaining;
     });
@@ -1092,7 +1091,7 @@ const CheckingFloorSupervisorPage = () => {
                 const checkingFloor = getCheckingFloorData(article);
                 const currentUpdateData = updateData[articleId] || { 
                   remarks: article.remarks || '',
-                  m1Quantity: checkingFloor.data?.m1Quantity || article.m1Quantity || 0,
+                  m1Quantity: 0, // Always start with 0 for user input
                   m2Quantity: checkingFloor.data?.m2Quantity || article.m2Quantity || 0,
                   m3Quantity: checkingFloor.data?.m3Quantity || article.m3Quantity || 0,
                   m4Quantity: checkingFloor.data?.m4Quantity || article.m4Quantity || 0,
@@ -1134,8 +1133,7 @@ const CheckingFloorSupervisorPage = () => {
                         {(() => {
                           const received = checkingFloor.data?.received || 0;
                           const transferred = checkingFloor.data?.transferred || 0;
-                          const currentM1Quantity = checkingFloor.data?.m1Quantity || article.m1Quantity || 0;
-                          const remaining = received - currentM1Quantity;
+                          const remaining = received - transferred; // Use transferred instead of current M1
                           const isFullyTransferred = remaining <= 0;
                           
                           return (
@@ -1189,8 +1187,8 @@ const CheckingFloorSupervisorPage = () => {
                         <div className="text-lg font-semibold text-orange-600">
                           {(() => {
                             const received = checkingFloor.data?.received || 0;
-                            const currentM1Quantity = checkingFloor.data?.m1Quantity || article.m1Quantity || 0;
-                            return (received - currentM1Quantity).toLocaleString();
+                            const transferred = checkingFloor.data?.transferred || 0;
+                            return (received - transferred).toLocaleString();
                           })()}
                         </div>
                       </div>
@@ -1337,8 +1335,7 @@ const CheckingFloorSupervisorPage = () => {
                     const checkingFloor = getCheckingFloorData(article);
                     const received = checkingFloor.data?.received || 0;
                     const transferred = checkingFloor.data?.transferred || 0;
-                    const currentM1Quantity = checkingFloor.data?.m1Quantity || article.m1Quantity || 0;
-                    const remaining = received - currentM1Quantity;
+                    const remaining = received - transferred; // Use transferred instead of current M1
                     
                     return update.m1Quantity > remaining;
                   })

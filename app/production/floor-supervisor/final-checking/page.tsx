@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
-import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
+import { productionService, ProductionOrder, FloorOrderFilters, Article } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 
 interface ArticleLog {
@@ -29,55 +29,7 @@ interface FloorQuantities {
   repairRemarks?: string;
 }
 
-interface Article {
-  id: string;
-  _id: string;
-  articleNumber: string;
-  plannedQuantity: number;
-  completedQuantity: number;
-  linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
-  priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
-  progress: number;
-  currentFloor: string;
-  remarks?: string;
-  logs?: ArticleLog[];
-  // Floor quantities tracking
-  floorQuantities?: {
-    knitting?: FloorQuantities;
-    linking?: FloorQuantities;
-    checking?: FloorQuantities;
-    washing?: FloorQuantities;
-    boarding?: FloorQuantities;
-    branding?: FloorQuantities;
-    finalChecking?: FloorQuantities;
-    warehouse?: FloorQuantities;
-  };
-  // Step 4B: Article-wise checked quantities
-  m1Quantity: number; // Good quality - ready for next step
-  m2Quantity: number; // Needs repair - to be reviewed
-  m3Quantity: number; // Minor defects - can be fixed
-  m4Quantity: number; // Major defects - needs significant repair
-  // Repair sub-step tracking
-  repairStatus: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected';
-  repairRemarks?: string;
-  finalQualityConfirmed?: boolean;
-  startedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
 
-interface ProductionOrder {
-  id: string;
-  orderNumber: string;
-  priority: 'High' | 'Medium' | 'Low' | 'Urgent';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
-  articles: Article[];
-  currentFloor: string;
-  createdAt: string;
-  updatedAt: string;
-  forwardedToBranding?: boolean;
-}
 
 const FinalCheckingFloorSupervisorPage = () => {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
@@ -219,12 +171,12 @@ const FinalCheckingFloorSupervisorPage = () => {
       if (articleId) {
         initialData[articleId] = {
           remarks: article.remarks || '',
-          m1Quantity: article.floorQuantities?.finalChecking?.m1Quantity || article.m1Quantity || 0,
+          m1Quantity: 0, // Always start with 0 for user input
           m2Quantity: article.floorQuantities?.finalChecking?.m2Quantity || article.m2Quantity || 0,
           m3Quantity: article.floorQuantities?.finalChecking?.m3Quantity || article.m3Quantity || 0,
           m4Quantity: article.floorQuantities?.finalChecking?.m4Quantity || article.m4Quantity || 0,
-          repairStatus: article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus || 'Not Required',
-          repairRemarks: article.floorQuantities?.finalChecking?.repairRemarks || article.repairRemarks || ''
+          repairStatus: (article as any).floorQuantities?.finalChecking?.repairStatus || (article as any).repairStatus || 'Not Required',
+          repairRemarks: (article as any).floorQuantities?.finalChecking?.repairRemarks || (article as any).repairRemarks || ''
         };
       }
     });
@@ -400,7 +352,9 @@ const FinalCheckingFloorSupervisorPage = () => {
       const update = updateData[articleId];
       if (!update) return false;
       const received = article.floorQuantities?.finalChecking?.received || 0;
-      return update.m1Quantity > received;
+      const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
+      const remaining = received - transferred; // Use transferred instead of current M1
+      return update.m1Quantity > remaining;
     });
 
     if (invalidArticles.length > 0) {
@@ -1096,12 +1050,12 @@ const FinalCheckingFloorSupervisorPage = () => {
                 
                 const currentUpdateData = updateData[articleId] || { 
                   remarks: article.remarks || '',
-                  m1Quantity: article.floorQuantities?.finalChecking?.m1Quantity || article.m1Quantity || 0,
+                  m1Quantity: 0, // Always start with 0 for user input
                   m2Quantity: article.floorQuantities?.finalChecking?.m2Quantity || article.m2Quantity || 0,
                   m3Quantity: article.floorQuantities?.finalChecking?.m3Quantity || article.m3Quantity || 0,
                   m4Quantity: article.floorQuantities?.finalChecking?.m4Quantity || article.m4Quantity || 0,
-                  repairStatus: article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus || 'Not Required',
-                  repairRemarks: article.floorQuantities?.finalChecking?.repairRemarks || article.repairRemarks || ''
+                  repairStatus: (article as any).floorQuantities?.finalChecking?.repairStatus || (article as any).repairStatus || 'Not Required',
+                  repairRemarks: (article as any).floorQuantities?.finalChecking?.repairRemarks || (article as any).repairRemarks || ''
                 };
                 
                 return (
@@ -1136,8 +1090,8 @@ const FinalCheckingFloorSupervisorPage = () => {
                         {(() => {
                           const received = article.floorQuantities?.finalChecking?.received || 0;
                           const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
-                          const remaining = received - transferred;
-                          const isFullyTransferred = transferred >= received;
+                          const remaining = received - transferred; // Use transferred instead of current M1
+                          const isFullyTransferred = remaining <= 0;
                           
                           return (
                             <>
@@ -1325,16 +1279,16 @@ const FinalCheckingFloorSupervisorPage = () => {
                         <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded max-w-full overflow-x-auto">
                           <ul className="list-disc list-inside text-sm text-blue-900 space-y-1 break-words">
                             {(
-                              (article.logs || [])
+                              ((article as any).logs || [])
                                 .slice()
-                                .sort((a, b) => (a.date > b.date ? -1 : 1))
-                            ).map((log) => (
+                                .sort((a: any, b: any) => (a.date > b.date ? -1 : 1))
+                            ).map((log: any) => (
                               <li key={log.id}>
                                 {(log.fromFloor || 'Final Checking')} {log.action?.toLowerCase?.() || 'action'} {log.quantity.toLocaleString()} {log.toFloor ? `to ${log.toFloor}` : ''} on {log.date}
                                 {log.remarks ? ` — ${log.remarks}` : ''}
                               </li>
                             ))}
-                            {(article.logs?.length || 0) === 0 && <li>No logs yet</li>}
+                            {(((article as any).logs?.length || 0) === 0) && <li>No logs yet</li>}
                           </ul>
                         </div>
                       )}
@@ -1360,7 +1314,9 @@ const FinalCheckingFloorSupervisorPage = () => {
                   const update = updateData[articleId];
                   if (!update) return false;
                   const received = article.floorQuantities?.finalChecking?.received || 0;
-                  return update.m1Quantity > received;
+                  const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
+                  const remaining = received - transferred; // Use transferred instead of current M1
+                  return update.m1Quantity > remaining;
                 })}
               >
                 <i className="ri-save-line me-2"></i>
@@ -1510,20 +1466,20 @@ const FinalCheckingFloorSupervisorPage = () => {
                       </div>
                     )}
 
-                    {(article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus) && (article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus) !== 'Not Required' && (
+                    {((article as any).floorQuantities?.finalChecking?.repairStatus || (article as any).repairStatus) && ((article as any).floorQuantities?.finalChecking?.repairStatus || (article as any).repairStatus) !== 'Not Required' && (
                       <div className="mb-4">
                         <label className="form-label">Repair Status</label>
                         <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700">
-                          {article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus}
+                          {(article as any).floorQuantities?.finalChecking?.repairStatus || (article as any).repairStatus}
                         </div>
                       </div>
                     )}
 
-                    {(article.floorQuantities?.finalChecking?.repairRemarks || article.repairRemarks) && (
+                    {((article as any).floorQuantities?.finalChecking?.repairRemarks || (article as any).repairRemarks) && (
                       <div className="mb-4">
                         <label className="form-label">Repair Remarks</label>
                         <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700">
-                          {article.floorQuantities?.finalChecking?.repairRemarks || article.repairRemarks}
+                          {(article as any).floorQuantities?.finalChecking?.repairRemarks || (article as any).repairRemarks}
                         </div>
                       </div>
                     )}
