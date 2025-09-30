@@ -864,7 +864,6 @@ const FinalCheckingFloorSupervisorPage = () => {
                         </th>
                         <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Order Info</th>
                         <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Articles</th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Checked Quantities</th>
                         <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Status</th>
                         <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Actions</th>
                       </tr>
@@ -921,34 +920,6 @@ const FinalCheckingFloorSupervisorPage = () => {
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-4">
-                            <div className="space-y-2">
-                              {order.articles.map((article, index) => (
-                                <div key={article.id} className="text-xs">
-                                  <div className="font-medium text-gray-700 mb-1">{article.articleNumber}</div>
-                                  <div className="grid grid-cols-2 gap-1">
-                                    <div className="text-green-600">M1: {article.floorQuantities?.finalChecking?.m1Quantity || article.m1Quantity || 0}</div>
-                                    <div className="text-yellow-600">M2: {article.floorQuantities?.finalChecking?.m2Quantity || article.m2Quantity || 0}</div>
-                                    <div className="text-orange-600">M3: {article.floorQuantities?.finalChecking?.m3Quantity || article.m3Quantity || 0}</div>
-                                    <div className="text-red-600">M4: {article.floorQuantities?.finalChecking?.m4Quantity || article.m4Quantity || 0}</div>
-                                  </div>
-                                  {(article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus) && (article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus) !== 'Not Required' && (
-                                    <div className="mt-1">
-                                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                                        (article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus) === 'Repaired' ? 'bg-green-100 text-green-800' :
-                                        (article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus) === 'In Review' ? 'bg-yellow-100 text-yellow-800' :
-                                        (article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus) === 'Rejected' ? 'bg-red-100 text-red-800' :
-                                        'bg-gray-100 text-gray-800'
-                                      }`}>
-                                        {article.floorQuantities?.finalChecking?.repairStatus || article.repairStatus}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                          
                           <td className="px-4 py-4">
                             <div className="space-y-2">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>

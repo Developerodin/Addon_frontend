@@ -82,6 +82,7 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
   const [articleLogs, setArticleLogs] = useState<ArticleLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [selectedLogsArticle, setSelectedLogsArticle] = useState<Article | null>(null);
   const [showArticleLogsModal, setShowArticleLogsModal] = useState(false);
 
   const loadArticleLogs = async (articleId: string) => {
@@ -111,6 +112,13 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
 
   const handleArticleClick = (article: Article) => {
     setSelectedArticle(article);
+    // Use _id for logs API, fallback to id if _id is not available
+    const articleId = article._id || article.id;
+    loadArticleLogs(articleId);
+  };
+
+  const handleLogsArticleSelect = (article: Article) => {
+    setSelectedLogsArticle(article);
     // Use _id for logs API, fallback to id if _id is not available
     const articleId = article._id || article.id;
     loadArticleLogs(articleId);
@@ -293,17 +301,6 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
                             {article.currentFloor || 'Unknown'}
                           </span>
                         </div>
-                        <button
-                          className="ti-btn ti-btn-secondary ti-btn-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewArticleLogs(article);
-                          }}
-                          title="View Article Logs"
-                        >
-                          <i className="ri-file-list-line me-1"></i>
-                          Logs
-                        </button>
                       </div>
                       
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -477,11 +474,49 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
 
           {activeTab === 'logs' && (
             <div>
-              {selectedArticle ? (
+              {/* Article Selection Tabs */}
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Select Article to View Logs</h3>
+                <div className="flex flex-wrap gap-2">
+                  {order.articles.map((article) => (
+                    <button
+                      key={article.id}
+                      onClick={() => handleLogsArticleSelect(article)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        selectedLogsArticle?.id === article.id
+                          ? 'bg-primary text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span>{article.articleNumber || 'Unknown Article'}</span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs ${
+                          article.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                          article.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+                          article.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {article.status || 'Unknown'}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Logs Content */}
+              {selectedLogsArticle ? (
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">
-                    Logs for Article: {selectedArticle.articleNumber} {articleLogs.length > 0 && `(${articleLogs.length} found)`}
-                  </h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-medium text-gray-900">
+                      Logs for Article: {selectedLogsArticle.articleNumber}
+                    </h4>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-500">
+                        {articleLogs.length > 0 && `${articleLogs.length} log${articleLogs.length > 1 ? 's' : ''} found`}
+                      </span>
+                    </div>
+                  </div>
                   
                   {isLoadingLogs ? (
                     <div className="flex justify-center py-8">
@@ -583,7 +618,7 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
                   <div className="text-gray-400 mb-2">
                     <i className="ri-file-list-line text-3xl"></i>
                   </div>
-                  <p className="text-gray-600">Select an article to view its logs</p>
+                  <p className="text-gray-600">Select an article above to view its logs</p>
                 </div>
               )}
             </div>
@@ -605,7 +640,7 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
       {/* Article Logs Modal */}
       {showArticleLogsModal && selectedArticle && (
         <ArticleLogsModal 
-          articleId={selectedArticle.id}
+          articleId={selectedArticle._id || selectedArticle.id}
           articleNumber={selectedArticle.articleNumber}
           isOpen={showArticleLogsModal}
           onClose={closeArticleLogsModal}
