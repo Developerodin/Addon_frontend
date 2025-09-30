@@ -1260,45 +1260,6 @@ const CheckingFloorSupervisorPage = () => {
                                 <option value="Rejected">Rejected</option>
                               </select>
                             </div>
-                            
-                            <div>
-                              <label className="form-label">M2 Items Available: {currentUpdateData.m2Quantity}</label>
-                              <div className="flex gap-2 mt-2">
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-success ti-btn-sm"
-                                  onClick={() => {
-                                    const shiftQty = Math.min(10, currentUpdateData.m2Quantity);
-                                    handleShiftM2Items(articleId, 'M1', shiftQty);
-                                  }}
-                                  disabled={!currentUpdateData.m2Quantity}
-                                >
-                                  Shift 10 to M1
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-warning ti-btn-sm"
-                                  onClick={() => {
-                                    const shiftQty = Math.min(10, currentUpdateData.m2Quantity);
-                                    handleShiftM2Items(articleId, 'M3', shiftQty);
-                                  }}
-                                  disabled={!currentUpdateData.m2Quantity}
-                                >
-                                  Shift 10 to M3
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-danger ti-btn-sm"
-                                  onClick={() => {
-                                    const shiftQty = Math.min(10, currentUpdateData.m2Quantity);
-                                    handleShiftM2Items(articleId, 'M4', shiftQty);
-                                  }}
-                                  disabled={!currentUpdateData.m2Quantity}
-                                >
-                                  Shift 10 to M4
-                                </button>
-                              </div>
-                            </div>
                           </div>
                           
                           <div>
