@@ -179,7 +179,7 @@ const WarehouseFloorSupervisorPage = () => {
       }
     });
     setUpdateData(initialData);
-    setShowLogs(false);
+    setShowLogsSection(false);
     setShowUpdateModal(true);
   };
 

@@ -65,7 +65,7 @@ const BrandingFloorSupervisorPage = () => {
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
-  const [updateData, setUpdateData] = useState<{[key: string]: {brandingQuantity: number; brandingType: 'Heat Transfer' | 'Embroidery'}} >({});
+  const [updateData, setUpdateData] = useState<{[key: string]: {brandingQuantity: number; brandingType: 'Heat Transfer' | 'Embroidery'; remarks: string}} >({});
   const [filters, setFilters] = useState({
     status: '',
     priority: '',
@@ -168,14 +168,15 @@ const BrandingFloorSupervisorPage = () => {
     setSelectedOrder(order);
     setActiveUpdateTabIndex(0);
     // Initialize update data with current values
-    const initialData: {[key: string]: {brandingQuantity: number; brandingType: 'Heat Transfer' | 'Embroidery'}} = {};
+    const initialData: {[key: string]: {brandingQuantity: number; brandingType: 'Heat Transfer' | 'Embroidery'; remarks: string}} = {};
     order.articles.forEach(article => {
       const articleId = article.id || article._id;
       if (articleId) {
         // Initialize with 0 for completed quantity
         initialData[articleId] = {
           brandingQuantity: 0,
-          brandingType: article.brandingType || 'Heat Transfer'
+          brandingType: article.brandingType || 'Heat Transfer',
+          remarks: article.remarks || ''
         };
       }
     });
@@ -251,6 +252,16 @@ const BrandingFloorSupervisorPage = () => {
     }));
   };
 
+  const handleRemarksChange = (articleId: string, value: string) => {
+    setUpdateData(prev => ({
+      ...prev,
+      [articleId]: {
+        ...prev[articleId],
+        remarks: value
+      }
+    }));
+  };
+
   const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
@@ -284,10 +295,11 @@ const BrandingFloorSupervisorPage = () => {
         
         const update = updateData[articleId];
         const brandingTransferredQuantity = article.floorQuantities?.branding?.transferred || 0;
-        if (update && (update.brandingQuantity !== brandingTransferredQuantity)) {
+        if (update && (update.brandingQuantity !== brandingTransferredQuantity || update.remarks !== (article.remarks || ''))) {
           const progressData = {
             completedQuantity: update.brandingQuantity,
-            brandingType: update.brandingType
+            brandingType: update.brandingType,
+            remarks: update.remarks
           };
           
           try {
@@ -881,7 +893,8 @@ const BrandingFloorSupervisorPage = () => {
                 
                 const currentUpdateData = updateData[articleId] || { 
                   brandingQuantity: 0, 
-                  brandingType: article.brandingType || 'Heat Transfer' 
+                  brandingType: article.brandingType || 'Heat Transfer',
+                  remarks: article.remarks || ''
                 };
                 
                 return (
@@ -986,6 +999,16 @@ const BrandingFloorSupervisorPage = () => {
                       </select>
                     </div>
 
+                    <div className="mb-4">
+                      <label className="form-label">Remarks</label>
+                      <textarea
+                        className="form-control"
+                        rows={2}
+                        placeholder="Add remarks for this article..."
+                        value={currentUpdateData.remarks}
+                        onChange={(e) => handleRemarksChange(articleId, e.target.value)}
+                      />
+                    </div>
 
                   </div>
                 );
