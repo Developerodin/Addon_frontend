@@ -170,8 +170,9 @@ const AddOrderPage = () => {
           articleNumber: article.articleNumber,
           plannedQuantity: article.plannedQuantity,
           linkingType: article.linkingType,
-          priority: article.priority
-          // Note: machineId is intentionally excluded from order creation
+          priority: article.priority,
+          machineId: article.machineId || undefined,
+          remarks: article.remarks
         })),
         orderNote: formData.orderNote || undefined
       };

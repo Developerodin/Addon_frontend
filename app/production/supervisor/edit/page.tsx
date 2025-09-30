@@ -6,6 +6,7 @@ import Link from "next/link";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, UpdateOrderRequest } from "@/shared/services/productionService";
+import { API_BASE_URL } from "@/shared/data/utilities/api";
 
 interface Article {
   id: string;
@@ -13,7 +14,18 @@ interface Article {
   plannedQuantity: number;
   linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
   priority: 'High' | 'Medium' | 'Low' | 'Urgent';
+  machineId?: string;
   remarks?: string;
+}
+
+interface Machine {
+  _id?: string;
+  id?: string;
+  machineCode: string;
+  machineNumber: string;
+  model: string;
+  floor: string;
+  status: 'Active' | 'Under Maintenance' | 'Idle';
 }
 
 interface EditOrderFormData {
@@ -36,21 +48,67 @@ const EditOrderContent = () => {
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [isLoadingMachines, setIsLoadingMachines] = useState(true);
 
-  // Load order data
+  // Load order data and machines
   useEffect(() => {
     if (orderId) {
-      loadOrder();
+      loadOrderAndMachines();
     } else {
       toast.error('Order ID is required');
       router.push('/production/supervisor');
     }
   }, [orderId]);
 
-  const loadOrder = async () => {
+  // Load both order and machines together
+  const loadOrderAndMachines = async () => {
     if (!orderId) return;
     
     setIsLoading(true);
+    try {
+      // Load machines first
+      await fetchMachines();
+      // Then load order
+      await loadOrder();
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast.error('Failed to load data');
+      router.push('/production/supervisor');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch machines from API
+  const fetchMachines = async () => {
+    try {
+      setIsLoadingMachines(true);
+      const response = await fetch(`${API_BASE_URL}/machines?page=1&limit=1000`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch machines');
+      }
+      
+      const data = await response.json();
+      const machinesArray = Array.isArray(data.results) ? data.results : [];
+      setMachines(machinesArray);
+    } catch (error) {
+      console.error('Error fetching machines:', error);
+      toast.error('Failed to load machines');
+    } finally {
+      setIsLoadingMachines(false);
+    }
+  };
+
+  const loadOrder = async () => {
+    if (!orderId) return;
+    
     try {
       const response = await productionService.getOrder(orderId);
       
@@ -65,6 +123,7 @@ const EditOrderContent = () => {
             plannedQuantity: article.plannedQuantity,
             linkingType: article.linkingType,
             priority: article.priority,
+            machineId: typeof article.machineId === 'object' && article.machineId ? article.machineId.id || article.machineId._id : article.machineId || '',
             remarks: article.remarks || ''
           })),
           orderNote: orderData.orderNote || ''
@@ -76,10 +135,7 @@ const EditOrderContent = () => {
       }
     } catch (error: any) {
       console.error('Error loading order:', error);
-      toast.error(error.message || 'Failed to load order');
-      router.push('/production/supervisor');
-    } finally {
-      setIsLoading(false);
+      throw error; // Re-throw to be handled by parent function
     }
   };
 
@@ -139,6 +195,7 @@ const EditOrderContent = () => {
       plannedQuantity: 0,
       linkingType: 'Auto Linking',
       priority: 'Medium',
+      machineId: '',
       remarks: ''
     };
 
@@ -177,11 +234,12 @@ const EditOrderContent = () => {
         priority: formData.orderPriority,
         orderNote: formData.orderNote || undefined,
         articles: formData.articles.map(article => ({
-          id: article.id,
+          _id: article.id,
           articleNumber: article.articleNumber,
           plannedQuantity: article.plannedQuantity,
           linkingType: article.linkingType,
           priority: article.priority,
+          machineId: article.machineId || undefined,
           remarks: article.remarks
         }))
       };
@@ -212,6 +270,7 @@ const EditOrderContent = () => {
           plannedQuantity: article.plannedQuantity,
           linkingType: article.linkingType,
           priority: article.priority,
+          machineId: typeof article.machineId === 'object' && article.machineId ? article.machineId.id || article.machineId._id : article.machineId || '',
           remarks: article.remarks || ''
         })),
         orderNote: order.orderNote || ''
@@ -284,6 +343,7 @@ const EditOrderContent = () => {
                           <li><strong>Planned Quantity:</strong> Number of units to produce (1-100,000)</li>
                           <li><strong>Linking Type:</strong> Auto, Rosso, or Hand linking</li>
                           <li><strong>Article Priority:</strong> Set individual article priority</li>
+                          <li><strong>Machine:</strong> Select machine for each article</li>
                           <li><strong>Order Note:</strong> Update order-level instructions</li>
                         </ul>
                       </div>
@@ -399,6 +459,7 @@ const EditOrderContent = () => {
                           <th className="w-24 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
                           <th className="w-32 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Linking</th>
                           <th className="w-24 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                          <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine</th>
                           <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                           <th className="w-16 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                         </tr>
@@ -450,6 +511,21 @@ const EditOrderContent = () => {
                                 <option value="High">High</option>
                                 <option value="Medium">Medium</option>
                                 <option value="Low">Low</option>
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              <select
+                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8"
+                                value={article.machineId || ''}
+                                onChange={(e) => handleArticleChange(index, 'machineId', e.target.value)}
+                                disabled={isLoadingMachines}
+                              >
+                                <option value="">Select Machine</option>
+                                {machines.map((machine) => (
+                                  <option key={machine._id || machine.id} value={machine._id || machine.id}>
+                                    {machine.machineCode}
+                                  </option>
+                                ))}
                               </select>
                             </td>
                             <td className="px-2 py-2">

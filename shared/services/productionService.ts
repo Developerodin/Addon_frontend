@@ -34,6 +34,7 @@ export interface Article {
   status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
   progress: number;
   currentFloor: string;
+  machineId?: string | any; // Can be string or populated object
   remarks?: string;
   quantityFromPreviousFloor?: number;
   m1Quantity: number;
@@ -66,6 +67,8 @@ export interface CreateOrderRequest {
     plannedQuantity: number;
     linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
     priority: 'Urgent' | 'High' | 'Medium' | 'Low';
+    machineId?: string;
+    remarks?: string;
   }[];
   orderNote?: string;
   customerId?: string;
@@ -80,11 +83,12 @@ export interface UpdateOrderRequest {
   orderNote?: string;
   plannedEndDate?: string;
   articles?: {
-    id?: string;
+    _id?: string;
     articleNumber: string;
     plannedQuantity: number;
     linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
     priority: 'Urgent' | 'High' | 'Medium' | 'Low';
+    machineId?: string;
     remarks?: string;
   }[];
 }
@@ -202,6 +206,7 @@ class ProductionService {
       status: article.status,
       progress: article.progress,
       currentFloor: article.currentFloor,
+      machineId: article.machineId,
       remarks: article.remarks,
       quantityFromPreviousFloor: article.quantityFromPreviousFloor,
       m1Quantity: article.m1Quantity,
