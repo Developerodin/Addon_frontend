@@ -433,7 +433,8 @@ const CheckingFloorSupervisorPage = () => {
                   m2Quantity: update.m2Quantity,
                   m3Quantity: update.m3Quantity,
                   m4Quantity: update.m4Quantity,
-                  remarks: update.remarks
+                  remarks: update.remarks,
+                  floor: "Checking"
                 }
               );
               

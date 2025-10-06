@@ -453,6 +453,7 @@ class ProductionService {
     remarks?: string;
     machineId?: string;
     shiftId?: string;
+    floor?: string;
   }): Promise<ApiResponse<Article>> {
     return this.request<Article>(`/articles/${articleId}/quality-inspection`, {
       method: 'POST',
