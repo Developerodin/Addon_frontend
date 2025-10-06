@@ -74,9 +74,37 @@ const ProductionSupervisorPage = () => {
       
       if (response.success) {
         console.log('Orders loaded:', response.data.results);
-        setOrders(response.data.results);
+        let filteredOrders = response.data.results;
+        
+        // If we have a search query and no results from backend search, 
+        // try client-side filtering by article numbers
+        if (searchQuery && filteredOrders.length === 0) {
+          // Get all orders without search filter to do client-side filtering
+          const allOrdersResponse = await productionService.getOrders({
+            page: 1,
+            limit: 1000, // Get a large number to search through all orders
+            ...(filters.status && { status: filters.status }),
+            ...(filters.priority && { priority: filters.priority }),
+            ...(filters.floor && { currentFloor: filters.floor }),
+            sortBy: 'createdAt',
+            populate: 'articles'
+          });
+          
+          if (allOrdersResponse.success) {
+            // Filter orders that contain articles with matching article numbers
+            filteredOrders = allOrdersResponse.data.results.filter(order => {
+              return order.articles.some(article => 
+                article.articleNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                order.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                order.id.toLowerCase().includes(searchQuery.toLowerCase())
+              );
+            });
+          }
+        }
+        
+        setOrders(filteredOrders);
         setTotalPages(response.data.totalPages);
-        setTotalResults(response.data.totalResults);
+        setTotalResults(filteredOrders.length);
       } else {
         console.error('Failed to load orders:', response.error);
         toast.error('Failed to load orders');
@@ -304,7 +332,7 @@ const ProductionSupervisorPage = () => {
                           <li><strong>Add New Order:</strong> Click "Add New Order" to create a new production order</li>
                           <li><strong>Track Progress:</strong> Monitor order progress and completion status</li>
                           <li><strong>Manage Priorities:</strong> Set and update order priorities (Urgent, High, Medium, Low)</li>
-                          <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
+                          <li><strong>Filter & Search:</strong> Use filters and search to find specific orders by order number, customer name, or article number</li>
                           <li><strong>View Logs:</strong> Click the logs button to view detailed activity logs for orders and articles</li>
                           <li><strong>Bulk Operations:</strong> Select multiple orders for bulk actions</li>
                         </ul>
@@ -444,7 +472,7 @@ const ProductionSupervisorPage = () => {
                       <input
                         type="text"
                         className="form-control py-3 pl-10 pr-4 w-full"
-                        placeholder="Search orders by article number or ID..."
+                        placeholder="Search by order number, customer name, or article number..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                       />
