@@ -33,6 +33,7 @@ interface NavigationPermissions {
     'Final Checking Floor': boolean;
     'Branding Floor': boolean;
     'Warehouse Floor': boolean;
+    'Machine Floor': boolean;
   };
 }
 

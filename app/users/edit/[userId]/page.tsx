@@ -438,6 +438,7 @@ const EditUserPage = () => {
                                                     { key: 'Boarding Floor', label: 'Boarding Floor' },
                                                     { key: 'Final Checking Floor', label: 'Final Checking Floor' },
                                                     { key: 'Branding Floor', label: 'Branding Floor' },
+                                                    { key: 'Machine Floor', label: 'Machine Floor' },
                                                     { key: 'Warehouse Floor', label: 'Warehouse Floor' }
                                                 ].map(subsection => (
                                                     <label key={subsection.key} className="flex items-center">
