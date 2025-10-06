@@ -6,6 +6,7 @@ import PrelineScript from "./PrelineScript";
 import { useState } from "react";
 import { Initialload } from "@/shared/contextapi";
 import { NavigationProvider } from "@/shared/contextapi/navigationContext";
+import { AuthProvider } from "@/shared/providers/AuthProvider";
 import '../public/assets/css/dashboard-styles.css';
 
 const RootLayout = ({children}:any) => {
@@ -19,11 +20,13 @@ const RootLayout = ({children}:any) => {
       </head>
       <body>
         <Provider store={store}>
-          <NavigationProvider>
+          <AuthProvider>
+            <NavigationProvider>
             <Initialload.Provider value={{ pageloading, setpageloading }}>
               {children}
             </Initialload.Provider>
-          </NavigationProvider>
+            </NavigationProvider>
+          </AuthProvider>
         </Provider>
         <PrelineScript />
       </body>

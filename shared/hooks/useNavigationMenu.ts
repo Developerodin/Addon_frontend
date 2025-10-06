@@ -17,13 +17,16 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
 
   const filteredMenuItems = useMemo(() => {
     if (isLoading) {
-      return menuItems; // Return all items while loading
+      return []; // Return empty array while loading to prevent flash
     }
 
-    // If no permissions are available, show all items (fallback)
+    // If no permissions are available, show minimal items (only dashboard)
     if (!hasPermission || !hasSubPermission) {
-      console.log('No permission functions available, showing all menu items');
-      return menuItems;
+      console.log('No permission functions available, showing minimal menu items');
+      return menuItems.filter(item => 
+        item.menutitle || 
+        (item.type === 'link' && item.path === '/dashboard')
+      );
     }
 
     return menuItems.filter(item => {

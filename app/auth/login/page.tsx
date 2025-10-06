@@ -5,11 +5,14 @@ import { useRouter } from 'next/navigation';
 import React, { Fragment, useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux';
 import { authActions } from '@/shared/redux/actions/authActions';
+import { useNavigation } from '@/shared/contextapi/navigationContext';
+import { getFirstAvailableRoute } from '@/shared/utils/routeUtils';
 
 const Signinbasic = () => {
     const router = useRouter();
     const dispatch = useDispatch();
     const { loading, error, isAuthenticated } = useSelector((state: any) => state.auth);
+    const { permissions } = useNavigation();
     const [passwordshow1, setpasswordshow1] = useState(false);
     const [formData, setFormData] = useState({
         email: '',
@@ -17,10 +20,12 @@ const Signinbasic = () => {
     });
 
     useEffect(() => {
-        if (isAuthenticated) {
-            router.push('/dashboards/main');
+        if (isAuthenticated && permissions) {
+            const firstAvailableRoute = getFirstAvailableRoute(permissions);
+            console.log('Redirecting to first available route:', firstAvailableRoute);
+            router.push(firstAvailableRoute);
         }
-    }, [isAuthenticated, router]);
+    }, [isAuthenticated, permissions, router]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;

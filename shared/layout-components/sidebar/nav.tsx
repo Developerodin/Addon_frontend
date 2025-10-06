@@ -35,7 +35,7 @@ const BaseMenuItems: any = [
     type: "link",
     active: false,
     selected: false,
-    path: "/dashboard",
+    path: "/dashboards/main",
   },
   {
     icon: CatalogIcon,

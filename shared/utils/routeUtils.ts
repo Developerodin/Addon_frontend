@@ -1,0 +1,44 @@
+import { NavigationPermissions } from '@/shared/contextapi/navigationContext';
+
+export const getFirstAvailableRoute = (permissions: NavigationPermissions | null): string => {
+  if (!permissions) {
+    return '/auth/login';
+  }
+
+  // Check routes in order of priority
+  const routeChecks = [
+    { path: '/dashboards/main', permission: permissions.Dashboard }, // Check actual Dashboard permission
+    { path: '/catalog/items', permission: permissions.Catalog?.Items },
+    { path: '/catalog/categories', permission: permissions.Catalog?.Categories },
+    { path: '/catalog/raw-material', permission: permissions.Catalog?.['Raw Material'] },
+    { path: '/catalog/processes', permission: permissions.Catalog?.Processes },
+    { path: '/catalog/attributes', permission: permissions.Catalog?.Attributes },
+    { path: '/catalog/machines', permission: permissions.Catalog?.Machines },
+    { path: '/sales/page', permission: permissions.Sales?.['All Sales'] },
+    { path: '/sales/master', permission: permissions.Sales?.['Master Sales'] },
+    { path: '/stores', permission: permissions.Stores },
+    { path: '/analytics', permission: permissions.Analytics },
+    { path: '/replenishment', permission: permissions['Replenishment Agent'] },
+    { path: '/filemanager', permission: permissions['File Manager'] },
+    { path: '/users', permission: permissions.Users },
+    { path: '/production/supervisor', permission: permissions['Production Planning']?.['Production Orders'] },
+    { path: '/production/floor-supervisor/knitting', permission: permissions['Production Planning']?.['Knitting Floor'] },
+    { path: '/production/floor-supervisor/linking', permission: permissions['Production Planning']?.['Linking Floor'] },
+    { path: '/production/floor-supervisor/checking', permission: permissions['Production Planning']?.['Checking Floor'] },
+    { path: '/production/floor-supervisor/washing', permission: permissions['Production Planning']?.['Washing Floor'] },
+    { path: '/production/floor-supervisor/boarding', permission: permissions['Production Planning']?.['Boarding Floor'] },
+    { path: '/production/floor-supervisor/final-checking', permission: permissions['Production Planning']?.['Final Checking Floor'] },
+    { path: '/production/floor-supervisor/branding', permission: permissions['Production Planning']?.['Branding Floor'] },
+    { path: '/production/floor-supervisor/warehouse', permission: permissions['Production Planning']?.['Warehouse Floor'] },
+  ];
+
+  // Find the first route the user has permission for
+  for (const route of routeChecks) {
+    if (route.permission) {
+      return route.path;
+    }
+  }
+
+  // If no permissions, redirect to login
+  return '/auth/login';
+};

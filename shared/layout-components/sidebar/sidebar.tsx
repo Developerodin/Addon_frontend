@@ -9,10 +9,12 @@ import SimpleBar from 'simplebar-react';
 import Menuloop from "./menuloop";
 import { usePathname, useRouter } from "next/navigation";
 import { useMenuItems } from "./nav";
+import { useNavigation } from "@/shared/contextapi/navigationContext";
 
 const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	const filteredMenuItems = useMenuItems();
 	const [menuitems, setMenuitems] = useState(filteredMenuItems || []);
+	const { isLoading } = useNavigation();
 
 	const path = usePathname()	
 
@@ -657,52 +659,76 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 							</svg></div>
 
 							<ul className="main-menu" onClick={() => Sideclick()}>
-								{menuitems.map((levelone: any, index:any) => (
-									<Fragment key={index}>
-										<li className={`${levelone.menutitle ? 'slide__category' : ''} ${levelone.type === 'link' ? 'slide' : ''}
-                                               ${levelone.type === 'sub' ? 'slide has-sub' : ''} ${levelone?.active ? 'open' : ''} ${levelone?.selected ? 'active' : ''}`}>
-											{levelone.menutitle ?
-												<span className='category-name'>
-													{levelone.menutitle}
-												</span>
-												: ""}
-											{levelone.type === "link" ?
-												<Link href={levelone.path} className={`side-menu__item ${levelone.selected ? 'active' : ''}`} >
-												<span className={`hs-tooltip inline-block [--placement:right] leading-none ${local_varaiable?.dataVerticalStyle == 'doublemenu' ? '' : 'hidden'}`}>
-													<button type="button" className="hs-tooltip-toggle  inline-flex justify-center items-center
-															">
-														{levelone.icon}
-														<span className="hs-tooltip-content hs-tooltip-shown:opacity-100 hs-tooltip-shown:visible opacity-0 transition-opacity inline-block absolute invisible z-10 py-1 px-2 bg-black text-xs font-medium text-white rounded shadow-sm dark:bg-neutral-700" role="tooltip">
-															{levelone.title}
-														</span>
-													</button>
-												</span>
+								{isLoading ? (
+									// Loading skeleton
+									<>
+										<li className="slide">
+											<div className="side-menu__item animate-pulse">
+												<div className="w-4 h-4 bg-gray-300 rounded mr-3"></div>
+												<div className="h-4 bg-gray-300 rounded w-20"></div>
+											</div>
+										</li>
+										<li className="slide">
+											<div className="side-menu__item animate-pulse">
+												<div className="w-4 h-4 bg-gray-300 rounded mr-3"></div>
+												<div className="h-4 bg-gray-300 rounded w-24"></div>
+											</div>
+										</li>
+										<li className="slide">
+											<div className="side-menu__item animate-pulse">
+												<div className="w-4 h-4 bg-gray-300 rounded mr-3"></div>
+												<div className="h-4 bg-gray-300 rounded w-16"></div>
+											</div>
+										</li>
+									</>
+								) : (
+									menuitems.map((levelone: any, index:any) => (
+										<Fragment key={index}>
+											<li className={`${levelone.menutitle ? 'slide__category' : ''} ${levelone.type === 'link' ? 'slide' : ''}
+	                                               ${levelone.type === 'sub' ? 'slide has-sub' : ''} ${levelone?.active ? 'open' : ''} ${levelone?.selected ? 'active' : ''}`}>
+												{levelone.menutitle ?
+													<span className='category-name'>
+														{levelone.menutitle}
+													</span>
+													: ""}
+												{levelone.type === "link" ?
+													<Link href={levelone.path} className={`side-menu__item ${levelone.selected ? 'active' : ''}`} >
+													<span className={`hs-tooltip inline-block [--placement:right] leading-none ${local_varaiable?.dataVerticalStyle == 'doublemenu' ? '' : 'hidden'}`}>
+														<button type="button" className="hs-tooltip-toggle  inline-flex justify-center items-center
+																">
+															{levelone.icon}
+															<span className="hs-tooltip-content hs-tooltip-shown:opacity-100 hs-tooltip-shown:visible opacity-0 transition-opacity inline-block absolute invisible z-10 py-1 px-2 bg-black text-xs font-medium text-white rounded shadow-sm dark:bg-neutral-700" role="tooltip">
+																{levelone.title}
+															</span>
+														</button>
+													</span>
 
-												{local_varaiable.dataVerticalStyle != "doublemenu" ? levelone.icon :""}
-												<span className="side-menu__label">{levelone.title} {levelone.badgetxt ? (<span className={levelone.class}> {levelone.badgetxt}</span>
+													{local_varaiable.dataVerticalStyle != "doublemenu" ? levelone.icon :""}
+													<span className="side-menu__label">{levelone.title} {levelone.badgetxt ? (<span className={levelone.class}> {levelone.badgetxt}</span>
+														) : (
+															""
+														)}
+														</span>
+													</Link>
+													: ""}
+												{levelone.type === "empty" ?
+													<Link href="#!" className='side-menu__item'
+													 onClick={handleClick}
+													>{levelone.icon}<span className=""> {levelone.title} {levelone.badgetxt ? (
+														<span className={levelone.class}>{levelone.badgetxt} </span>
 													) : (
 														""
 													)}
 													</span>
-												</Link>
-												: ""}
-											{levelone.type === "empty" ?
-												<Link href="#!" className='side-menu__item'
-												 onClick={handleClick}
-												>{levelone.icon}<span className=""> {levelone.title} {levelone.badgetxt ? (
-													<span className={levelone.class}>{levelone.badgetxt} </span>
-												) : (
-													""
-												)}
-												</span>
-												</Link>
-												: ""}
-											{levelone.type === "sub" ?
-												<Menuloop MenuItems={levelone} level={level + 1} toggleSidemenu={toggleSidemenu} HoverToggleInnerMenuFn={HoverToggleInnerMenuFn} />
-												: ''}
-										</li>
-									</Fragment>
-								))}
+													</Link>
+													: ""}
+												{levelone.type === "sub" ?
+													<Menuloop MenuItems={levelone} level={level + 1} toggleSidemenu={toggleSidemenu} HoverToggleInnerMenuFn={HoverToggleInnerMenuFn} />
+													: ''}
+											</li>
+										</Fragment>
+									))
+								)}
 							</ul>
 
 							<div className="slide-right" onClick={() => { slideRight(); }} id="slide-right">

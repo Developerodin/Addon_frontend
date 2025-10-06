@@ -83,8 +83,28 @@ interface NavigationProviderProps {
 }
 
 export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children }) => {
-  const [permissions, setPermissions] = useState<NavigationPermissions | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [permissions, setPermissions] = useState<NavigationPermissions | null>(() => {
+    // Initialize with cached permissions if available
+    if (typeof window !== 'undefined') {
+      const cachedPermissions = localStorage.getItem('navigationPermissions');
+      if (cachedPermissions) {
+        try {
+          return JSON.parse(cachedPermissions);
+        } catch (error) {
+          console.error('Failed to parse cached permissions on init:', error);
+        }
+      }
+    }
+    return null;
+  });
+  const [isLoading, setIsLoading] = useState(() => {
+    // If we have cached permissions, don't show loading initially
+    if (typeof window !== 'undefined') {
+      const cachedPermissions = localStorage.getItem('navigationPermissions');
+      return !cachedPermissions;
+    }
+    return true;
+  });
   
   // Get user from Redux store
   const user = useSelector((state: any) => state.auth?.user);
@@ -93,6 +113,16 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     console.log('Navigation context - User data:', user);
     console.log('Navigation context - User navigation:', user?.navigation);
     
+    // Clear cache if no user (logout scenario)
+    if (!user) {
+      localStorage.removeItem('navigationPermissions');
+      localStorage.removeItem('cachedUserId');
+      setPermissions(defaultPermissions);
+      setIsLoading(false);
+      return;
+    }
+    
+    // If user exists, try to load permissions
     if (user && user.navigation) {
       console.log('Setting navigation permissions from user:', user.navigation);
       // Merge with default permissions to ensure all keys exist
@@ -114,44 +144,46 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         }
       };
       setPermissions(mergedPermissions);
-    } else {
-      console.log('No user or navigation data found, using default permissions');
-      // For development/testing, let's enable some basic permissions
-      const devPermissions = {
-        ...defaultPermissions,
-        Dashboard: true, // Always show dashboard
-        Users: true, // Show users for testing
-        Stores: true, // Show stores for testing
-        Analytics: true, // Show analytics for testing
-        'File Manager': true, // Show file manager for testing
-        'Replenishment Agent': true, // Show replenishment for testing
-        Catalog: {
-          Items: true,
-          Categories: true,
-          'Raw Material': true,
-          Processes: true,
-          Attributes: true,
-          Machines: true,
-        },
-        Sales: {
-          'All Sales': true,
-          'Master Sales': true,
-        },
-        'Production Planning': {
-          'Production Orders': true,
-          'Knitting Floor': true,
-          'Linking Floor': true,
-          'Checking Floor': true,
-          'Washing Floor': true,
-          'Boarding Floor': true,
-          'Final Checking Floor': true,
-          'Branding Floor': true,
-          'Warehouse Floor': true,
+      // Cache permissions for faster loading on refresh
+      localStorage.setItem('navigationPermissions', JSON.stringify(mergedPermissions));
+      localStorage.setItem('cachedUserId', user.id);
+      setIsLoading(false);
+    } else if (user) {
+      // User exists but no navigation permissions - check cache first
+      const cachedPermissions = localStorage.getItem('navigationPermissions');
+      const cachedUserId = localStorage.getItem('cachedUserId');
+      
+      if (cachedPermissions && cachedUserId === user.id) {
+        try {
+          const parsedPermissions = JSON.parse(cachedPermissions);
+          setPermissions(parsedPermissions);
+          console.log('Using cached permissions for user without navigation data');
+          setIsLoading(false);
+          return;
+        } catch (error) {
+          console.error('Failed to parse cached permissions:', error);
         }
+      }
+      
+      // No cache or cache failed - use secure defaults
+      console.log('User exists but no navigation permissions found, using secure defaults');
+      const securePermissions = {
+        ...defaultPermissions,
+        Dashboard: true, // Always show dashboard for authenticated users
       };
-      setPermissions(devPermissions);
+      setPermissions(securePermissions);
+      // Cache permissions for faster loading on refresh
+      localStorage.setItem('navigationPermissions', JSON.stringify(securePermissions));
+      localStorage.setItem('cachedUserId', user.id);
+      setIsLoading(false);
+    } else {
+      // No user - use completely secure defaults
+      console.log('No user found, using secure defaults');
+      setPermissions(defaultPermissions);
+      // Cache permissions for faster loading on refresh
+      localStorage.setItem('navigationPermissions', JSON.stringify(defaultPermissions));
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [user]);
 
   // Check if user has permission for a main menu item
@@ -162,6 +194,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     const pathMap: { [key: string]: keyof NavigationPermissions } = {
       '/users': 'Users',
       '/dashboard': 'Dashboard',
+      '/dashboards/main': 'Dashboard',
       '/stores': 'Stores',
       '/analytics': 'Analytics',
       '/replenishment': 'Replenishment Agent',
