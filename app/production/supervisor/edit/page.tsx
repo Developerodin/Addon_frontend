@@ -234,7 +234,7 @@ const EditOrderContent = () => {
         priority: formData.orderPriority,
         orderNote: formData.orderNote || undefined,
         articles: formData.articles.map(article => ({
-          _id: article.id,
+          ...(article.id && !article.id.match(/^\d+$/) && { _id: article.id }),
           articleNumber: article.articleNumber,
           plannedQuantity: article.plannedQuantity,
           linkingType: article.linkingType,
