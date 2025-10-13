@@ -255,8 +255,12 @@ const KnittingFloorSupervisorPage = () => {
         if (!articleId) return null;
         
         const update = updateData[articleId];
+        const knittingCompletedQuantity = article.floorQuantities?.knitting?.completed || 0;
         const knittingTransferredQuantity = article.floorQuantities?.knitting?.transferred || 0;
-        if (update && (update.completedQuantity !== knittingTransferredQuantity || update.remarks !== (article.remarks || '') || update.m4Quantity !== (article.floorQuantities?.knitting?.m4Quantity || 0))) {
+        const currentRemarks = article.remarks || '';
+        const currentM4Quantity = article.floorQuantities?.knitting?.m4Quantity || 0;
+        
+      
           const progressData = {
             completedQuantity: update.completedQuantity,
             remarks: update.remarks,
@@ -280,7 +284,7 @@ const KnittingFloorSupervisorPage = () => {
             console.error(`Error updating article ${articleId}:`, error);
             throw error;
           }
-        }
+    
         return null;
       }).filter(Boolean);
 
@@ -703,6 +707,7 @@ const KnittingFloorSupervisorPage = () => {
                               {order.articles.some(article => article.floorQuantities?.knitting) && (
                                 <div className="text-xs text-blue-600">
                                   Knitting: R:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.received || 0), 0)} | 
+                                  Trf:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.transferred || 0), 0)} | 
                                   Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.remaining || 0), 0)}
                                 </div>
                               )}
