@@ -711,6 +711,11 @@ const KnittingFloorSupervisorPage = () => {
                                   Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.remaining || 0), 0)}
                                 </div>
                               )}
+                              {order.articles.some(article => article.floorQuantities?.knitting?.m4Quantity) && (
+                                <div className="text-xs text-red-600">
+                                  M4 Quantity In Knitting: {order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.m4Quantity || 0), 0)}
+                                </div>
+                              )}
                               <div className="text-xs text-gray-400">
                                 Floor: {order.currentFloor}
                               </div>

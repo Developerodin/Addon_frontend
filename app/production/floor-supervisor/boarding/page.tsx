@@ -677,6 +677,11 @@ const BoardingFloorSupervisorPage = () => {
                                   Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.boarding?.remaining || 0), 0)}
                                 </div>
                               )}
+                              {order.articles.some(article => article.floorQuantities?.knitting?.m4Quantity) && (
+                                <div className="text-xs text-red-600">
+                                  M4 Quantity In Knitting: {order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.m4Quantity || 0), 0)}
+                                </div>
+                              )}
                             </div>
                           </td>
                           
@@ -1114,6 +1119,12 @@ const BoardingFloorSupervisorPage = () => {
                         <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700">
                           {article.remarks}
                         </div>
+                      </div>
+                    )}
+
+                    {article.floorQuantities?.knitting?.m4Quantity && article.floorQuantities.knitting.m4Quantity > 0 && (
+                      <div className="text-xs text-red-600 mt-1">
+                        M4 Quantity In Knitting: {article.floorQuantities.knitting.m4Quantity}
                       </div>
                     )}
 

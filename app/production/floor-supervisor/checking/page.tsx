@@ -913,6 +913,11 @@ const CheckingFloorSupervisorPage = () => {
                                   Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.checking?.remaining || 0), 0)}
                                 </div>
                               )}
+                              {order.articles.some(article => article.floorQuantities?.knitting?.m4Quantity) && (
+                                <div className="text-xs text-red-600">
+                                  M4 Quantity In Knitting: {order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.m4Quantity || 0), 0)}
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-4">
@@ -1461,6 +1466,11 @@ const CheckingFloorSupervisorPage = () => {
                         <div className="text-xs text-gray-500 mt-1">
                           Only M1 items pass to next floor
                         </div>
+                        {article.floorQuantities?.knitting?.m4Quantity && article.floorQuantities.knitting.m4Quantity > 0 && (
+                          <div className="text-xs text-red-600 mt-1">
+                            M4 Quantity In Knitting: {article.floorQuantities.knitting.m4Quantity}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="form-label">Transferred Quantity</label>

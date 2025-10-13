@@ -709,6 +709,11 @@ const BrandingFloorSupervisorPage = () => {
                                   Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.branding?.remaining || 0), 0)}
                                 </div>
                               )}
+                              {order.articles.some(article => article.floorQuantities?.knitting?.m4Quantity) && (
+                                <div className="text-xs text-red-600">
+                                  M4 Quantity In Knitting: {order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.m4Quantity || 0), 0)}
+                                </div>
+                              )}
                             </div>
                           </td>
                           
@@ -1157,6 +1162,11 @@ const BrandingFloorSupervisorPage = () => {
                         <div className="text-xs text-gray-500 mt-1">
                           Transferred to next floor: {article.floorQuantities?.branding?.transferred || 0}
                         </div>
+                        {article.floorQuantities?.knitting?.m4Quantity && article.floorQuantities.knitting.m4Quantity > 0 && (
+                          <div className="text-xs text-red-600 mt-1">
+                            M4 Quantity In Knitting: {article.floorQuantities.knitting.m4Quantity}
+                          </div>
+                        )}
                       </div>
                     </div>
 

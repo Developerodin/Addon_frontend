@@ -747,6 +747,7 @@ const MachineFloorPage = () => {
                                 <div className="font-medium text-gray-900">{article.articleNumber}</div>
                                 <div className="text-sm text-gray-600">Order: {article.orderNumber}</div>
                                 <div className="text-sm text-gray-600">Qty: {article.plannedQuantity.toLocaleString()}</div>
+                                {/* Note: M4 quantity would need to be added to the machine status API response */}
                               </div>
                               <div className="text-right">
                                 <div className={`text-xs px-2 py-1 rounded mb-1 ${
