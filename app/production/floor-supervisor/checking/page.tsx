@@ -1332,7 +1332,7 @@ const CheckingFloorSupervisorPage = () => {
                                 />
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-success ti-btn-sm"
+                                  className="ti-btn ti-btn-success "
                                   onClick={() => applyShift(articleId, 'm2ToM1')}
                                   disabled={!shiftInputs[articleId]?.m2ToM1 || shiftInputs[articleId].m2ToM1 <= 0}
                                 >
@@ -1340,7 +1340,7 @@ const CheckingFloorSupervisorPage = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  className="ti-btn ti-btn-primary "
                                   onClick={() => {
                                     const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
                                     handleShiftM2Items(articleId, 'M1', shiftQty);
@@ -1369,7 +1369,7 @@ const CheckingFloorSupervisorPage = () => {
                                 />
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-warning ti-btn-sm"
+                                  className="ti-btn ti-btn-warning  "
                                   onClick={() => applyShift(articleId, 'm2ToM3')}
                                   disabled={!shiftInputs[articleId]?.m2ToM3 || shiftInputs[articleId].m2ToM3 <= 0}
                                 >
@@ -1377,7 +1377,7 @@ const CheckingFloorSupervisorPage = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  className="ti-btn ti-btn-primary  "
                                   onClick={() => {
                                     const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
                                     handleShiftM2Items(articleId, 'M3', shiftQty);
@@ -1406,7 +1406,7 @@ const CheckingFloorSupervisorPage = () => {
                                 />
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-danger ti-btn-sm"
+                                  className="ti-btn ti-btn-danger  "
                                   onClick={() => applyShift(articleId, 'm2ToM4')}
                                   disabled={!shiftInputs[articleId]?.m2ToM4 || shiftInputs[articleId].m2ToM4 <= 0}
                                 >
@@ -1414,7 +1414,7 @@ const CheckingFloorSupervisorPage = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  className="ti-btn ti-btn-primary  "
                                   onClick={() => {
                                     const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
                                     handleShiftM2Items(articleId, 'M4', shiftQty);
@@ -1446,7 +1446,7 @@ const CheckingFloorSupervisorPage = () => {
                                 />
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-warning ti-btn-sm"
+                                  className="ti-btn ti-btn-warning  "
                                   onClick={() => applyShift(articleId, 'm3ToM2')}
                                   disabled={!shiftInputs[articleId]?.m3ToM2 || shiftInputs[articleId].m3ToM2 <= 0}
                                 >
@@ -1454,7 +1454,7 @@ const CheckingFloorSupervisorPage = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  className="ti-btn ti-btn-primary  "
                                   onClick={() => {
                                     const shiftQty = Math.min(currentUpdateData.m3Quantity, 1);
                                     setUpdateData(prev => {
@@ -1491,7 +1491,7 @@ const CheckingFloorSupervisorPage = () => {
                                 />
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-danger ti-btn-sm"
+                                  className="ti-btn ti-btn-danger  "
                                   onClick={() => applyShift(articleId, 'm4ToM3')}
                                   disabled={!shiftInputs[articleId]?.m4ToM3 || shiftInputs[articleId].m4ToM3 <= 0}
                                 >
@@ -1499,7 +1499,7 @@ const CheckingFloorSupervisorPage = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  className="ti-btn ti-btn-primary  "
                                   onClick={() => {
                                     const shiftQty = Math.min(currentUpdateData.m4Quantity, 1);
                                     setUpdateData(prev => {
