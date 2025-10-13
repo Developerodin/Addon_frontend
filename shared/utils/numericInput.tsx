@@ -5,7 +5,7 @@ import React from 'react';
  * Replaces type="number" inputs to avoid default 0 value issue
  */
 interface NumericInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange'> {
-  value: number;
+  value: number | undefined;
   onChange: (value: number) => void;
   allowDecimals?: boolean;
   allowNegative?: boolean;
@@ -77,7 +77,7 @@ export const NumericInput: React.FC<NumericInputProps> = ({
       {...props}
       type="text"
       className={`form-control ${className}`}
-      value={value === 0 ? '' : value.toString()}
+      value={value === undefined || value === 0 ? '' : value.toString()}
       onChange={handleChange}
       onKeyDown={handleKeyDown}
       inputMode="numeric"

@@ -92,6 +92,13 @@ const CheckingFloorSupervisorPage = () => {
     repairStatus: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected',
     repairRemarks: string
   }}>({});
+  const [shiftInputs, setShiftInputs] = useState<{[key: string]: {
+    m2ToM1: number,
+    m2ToM3: number,
+    m2ToM4: number,
+    m3ToM2: number,
+    m4ToM3: number
+  }}>({});
   const [showLogs, setShowLogs] = useState(false);
   const [showLogsSection, setShowLogsSection] = useState(false);
   const [selectedLogArticleId, setSelectedLogArticleId] = useState<string>('');
@@ -219,9 +226,9 @@ const CheckingFloorSupervisorPage = () => {
         initialData[articleId] = {
           remarks: article.remarks || '',
           m1Quantity: 0, // Always start with 0 for user input
-          m2Quantity: checkingFloor.data?.m2Quantity || article.m2Quantity || 0,
-          m3Quantity: checkingFloor.data?.m3Quantity || article.m3Quantity || 0,
-          m4Quantity: checkingFloor.data?.m4Quantity || article.m4Quantity || 0,
+          m2Quantity: checkingFloor.data?.m2Quantity ?? article.m2Quantity ?? 0,
+          m3Quantity: checkingFloor.data?.m3Quantity ?? article.m3Quantity ?? 0,
+          m4Quantity: checkingFloor.data?.m4Quantity ?? article.m4Quantity ?? 0,
           repairStatus: checkingFloor.data?.repairStatus || article.repairStatus || 'Not Required',
           repairRemarks: checkingFloor.data?.repairRemarks || article.repairRemarks || ''
         };
@@ -278,6 +285,7 @@ const CheckingFloorSupervisorPage = () => {
     setShowUpdateModal(false);
     setSelectedOrder(null);
     setUpdateData({});
+    setShiftInputs({});
   };
 
 
@@ -373,6 +381,76 @@ const CheckingFloorSupervisorPage = () => {
         [articleId]: updatedData
       };
     });
+  };
+
+  // Handle shift input changes
+  const handleShiftInputChange = (articleId: string, shiftType: 'm2ToM1' | 'm2ToM3' | 'm2ToM4' | 'm3ToM2' | 'm4ToM3', value: number) => {
+    setShiftInputs(prev => ({
+      ...prev,
+      [articleId]: {
+        ...prev[articleId],
+        [shiftType]: value
+      }
+    }));
+  };
+
+  // Apply shift from input
+  const applyShift = (articleId: string, shiftType: 'm2ToM1' | 'm2ToM3' | 'm2ToM4' | 'm3ToM2' | 'm4ToM3') => {
+    const currentData = updateData[articleId];
+    const shiftValue = shiftInputs[articleId]?.[shiftType] || 0;
+    
+    if (!currentData || shiftValue <= 0) return;
+
+    setUpdateData(prev => {
+      const updatedData = { ...prev[articleId] };
+      
+      switch (shiftType) {
+        case 'm2ToM1':
+          if (shiftValue <= updatedData.m2Quantity) {
+            updatedData.m2Quantity -= shiftValue;
+            updatedData.m1Quantity += shiftValue;
+          }
+          break;
+        case 'm2ToM3':
+          if (shiftValue <= updatedData.m2Quantity) {
+            updatedData.m2Quantity -= shiftValue;
+            updatedData.m3Quantity += shiftValue;
+          }
+          break;
+        case 'm2ToM4':
+          if (shiftValue <= updatedData.m2Quantity) {
+            updatedData.m2Quantity -= shiftValue;
+            updatedData.m4Quantity += shiftValue;
+          }
+          break;
+        case 'm3ToM2':
+          if (shiftValue <= updatedData.m3Quantity) {
+            updatedData.m3Quantity -= shiftValue;
+            updatedData.m2Quantity += shiftValue;
+          }
+          break;
+        case 'm4ToM3':
+          if (shiftValue <= updatedData.m4Quantity) {
+            updatedData.m4Quantity -= shiftValue;
+            updatedData.m3Quantity += shiftValue;
+          }
+          break;
+      }
+
+      return {
+        ...prev,
+        [articleId]: updatedData
+      };
+    });
+
+    // Clear the input after applying
+    setShiftInputs(prev => ({
+      ...prev,
+      [articleId]: {
+        ...prev[articleId],
+        [shiftType]: 0
+      }
+    }));
   };
 
   const handleUpdateSubmit = async () => {
@@ -1099,9 +1177,9 @@ const CheckingFloorSupervisorPage = () => {
                 const currentUpdateData = updateData[articleId] || { 
                   remarks: article.remarks || '',
                   m1Quantity: 0, // Always start with 0 for user input
-                  m2Quantity: checkingFloor.data?.m2Quantity || article.m2Quantity || 0,
-                  m3Quantity: checkingFloor.data?.m3Quantity || article.m3Quantity || 0,
-                  m4Quantity: checkingFloor.data?.m4Quantity || article.m4Quantity || 0,
+                  m2Quantity: checkingFloor.data?.m2Quantity ?? article.m2Quantity ?? 0,
+                  m3Quantity: checkingFloor.data?.m3Quantity ?? article.m3Quantity ?? 0,
+                  m4Quantity: checkingFloor.data?.m4Quantity ?? article.m4Quantity ?? 0,
                   repairStatus: checkingFloor.data?.repairStatus || article.repairStatus || 'Not Required',
                   repairRemarks: checkingFloor.data?.repairRemarks || article.repairRemarks || ''
                 };
@@ -1230,6 +1308,218 @@ const CheckingFloorSupervisorPage = () => {
                             onChange={(value) => handleM4QuantityChange(articleId, value)}
                           />
                           <small className="text-red-600">Needs significant repair</small>
+                        </div>
+                      </div>
+
+                      {/* Quantity Shifting Options */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                        <h6 className="text-md font-semibold text-blue-800 mb-3">Quantity Shifting Options</h6>
+                        <p className="text-sm text-blue-700 mb-4">Use these options to shift quantities between categories when needed</p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* M2 to M1 Shift */}
+                          {currentUpdateData.m2Quantity > 0 && (
+                            <div className="bg-white border border-yellow-200 rounded-lg p-3">
+                              <label className="form-label text-yellow-700 font-medium">M2 → M1 (Good Quality)</label>
+                              <div className="flex gap-2 mb-2">
+                                <NumericInput
+                                  className="flex-1"
+                                  placeholder="Qty to shift"
+                                  min={0}
+                                  max={currentUpdateData.m2Quantity}
+                                  value={shiftInputs[articleId]?.m2ToM1 || 0}
+                                  onChange={(value) => handleShiftInputChange(articleId, 'm2ToM1', value)}
+                                />
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-success ti-btn-sm"
+                                  onClick={() => applyShift(articleId, 'm2ToM1')}
+                                  disabled={!shiftInputs[articleId]?.m2ToM1 || shiftInputs[articleId].m2ToM1 <= 0}
+                                >
+                                  Apply
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  onClick={() => {
+                                    const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
+                                    handleShiftM2Items(articleId, 'M1', shiftQty);
+                                  }}
+                                  disabled={currentUpdateData.m2Quantity === 0}
+                                >
+                                  +1
+                                </button>
+                              </div>
+                              <small className="text-yellow-600">Available: {currentUpdateData.m2Quantity}</small>
+                            </div>
+                          )}
+
+                          {/* M2 to M3 Shift */}
+                          {currentUpdateData.m2Quantity > 0 && (
+                            <div className="bg-white border border-orange-200 rounded-lg p-3">
+                              <label className="form-label text-orange-700 font-medium">M2 → M3 (Minor Defects)</label>
+                              <div className="flex gap-2 mb-2">
+                                <NumericInput
+                                  className="flex-1"
+                                  placeholder="Qty to shift"
+                                  min={0}
+                                  max={currentUpdateData.m2Quantity}
+                                  value={shiftInputs[articleId]?.m2ToM3 || 0}
+                                  onChange={(value) => handleShiftInputChange(articleId, 'm2ToM3', value)}
+                                />
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-warning ti-btn-sm"
+                                  onClick={() => applyShift(articleId, 'm2ToM3')}
+                                  disabled={!shiftInputs[articleId]?.m2ToM3 || shiftInputs[articleId].m2ToM3 <= 0}
+                                >
+                                  Apply
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  onClick={() => {
+                                    const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
+                                    handleShiftM2Items(articleId, 'M3', shiftQty);
+                                  }}
+                                  disabled={currentUpdateData.m2Quantity === 0}
+                                >
+                                  +1
+                                </button>
+                              </div>
+                              <small className="text-orange-600">Available: {currentUpdateData.m2Quantity}</small>
+                            </div>
+                          )}
+
+                          {/* M2 to M4 Shift */}
+                          {currentUpdateData.m2Quantity > 0 && (
+                            <div className="bg-white border border-red-200 rounded-lg p-3">
+                              <label className="form-label text-red-700 font-medium">M2 → M4 (Major Defects)</label>
+                              <div className="flex gap-2 mb-2">
+                                <NumericInput
+                                  className="flex-1"
+                                  placeholder="Qty to shift"
+                                  min={0}
+                                  max={currentUpdateData.m2Quantity}
+                                  value={shiftInputs[articleId]?.m2ToM4 || 0}
+                                  onChange={(value) => handleShiftInputChange(articleId, 'm2ToM4', value)}
+                                />
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-danger ti-btn-sm"
+                                  onClick={() => applyShift(articleId, 'm2ToM4')}
+                                  disabled={!shiftInputs[articleId]?.m2ToM4 || shiftInputs[articleId].m2ToM4 <= 0}
+                                >
+                                  Apply
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  onClick={() => {
+                                    const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
+                                    handleShiftM2Items(articleId, 'M4', shiftQty);
+                                  }}
+                                  disabled={currentUpdateData.m2Quantity === 0}
+                                >
+                                  +1
+                                </button>
+                              </div>
+                              <small className="text-red-600">Available: {currentUpdateData.m2Quantity}</small>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Additional shifting options for M3 and M4 */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                          {/* M3 to M2 Shift */}
+                          {currentUpdateData.m3Quantity > 0 && (
+                            <div className="bg-white border border-orange-200 rounded-lg p-3">
+                              <label className="form-label text-orange-700 font-medium">M3 → M2 (Needs Repair)</label>
+                              <div className="flex gap-2 mb-2">
+                                <NumericInput
+                                  className="flex-1"
+                                  placeholder="Qty to shift"
+                                  min={0}
+                                  max={currentUpdateData.m3Quantity}
+                                  value={shiftInputs[articleId]?.m3ToM2 || 0}
+                                  onChange={(value) => handleShiftInputChange(articleId, 'm3ToM2', value)}
+                                />
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-warning ti-btn-sm"
+                                  onClick={() => applyShift(articleId, 'm3ToM2')}
+                                  disabled={!shiftInputs[articleId]?.m3ToM2 || shiftInputs[articleId].m3ToM2 <= 0}
+                                >
+                                  Apply
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  onClick={() => {
+                                    const shiftQty = Math.min(currentUpdateData.m3Quantity, 1);
+                                    setUpdateData(prev => {
+                                      const updatedData = { ...prev[articleId] };
+                                      updatedData.m3Quantity = updatedData.m3Quantity - shiftQty;
+                                      updatedData.m2Quantity = updatedData.m2Quantity + shiftQty;
+                                      return {
+                                        ...prev,
+                                        [articleId]: updatedData
+                                      };
+                                    });
+                                  }}
+                                  disabled={currentUpdateData.m3Quantity === 0}
+                                >
+                                  +1
+                                </button>
+                              </div>
+                              <small className="text-orange-600">Available: {currentUpdateData.m3Quantity}</small>
+                            </div>
+                          )}
+
+                          {/* M4 to M3 Shift */}
+                          {currentUpdateData.m4Quantity > 0 && (
+                            <div className="bg-white border border-red-200 rounded-lg p-3">
+                              <label className="form-label text-red-700 font-medium">M4 → M3 (Minor Defects)</label>
+                              <div className="flex gap-2 mb-2">
+                                <NumericInput
+                                  className="flex-1"
+                                  placeholder="Qty to shift"
+                                  min={0}
+                                  max={currentUpdateData.m4Quantity}
+                                  value={shiftInputs[articleId]?.m4ToM3 || 0}
+                                  onChange={(value) => handleShiftInputChange(articleId, 'm4ToM3', value)}
+                                />
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-danger ti-btn-sm"
+                                  onClick={() => applyShift(articleId, 'm4ToM3')}
+                                  disabled={!shiftInputs[articleId]?.m4ToM3 || shiftInputs[articleId].m4ToM3 <= 0}
+                                >
+                                  Apply
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  onClick={() => {
+                                    const shiftQty = Math.min(currentUpdateData.m4Quantity, 1);
+                                    setUpdateData(prev => {
+                                      const updatedData = { ...prev[articleId] };
+                                      updatedData.m4Quantity = updatedData.m4Quantity - shiftQty;
+                                      updatedData.m3Quantity = updatedData.m3Quantity + shiftQty;
+                                      return {
+                                        ...prev,
+                                        [articleId]: updatedData
+                                      };
+                                    });
+                                  }}
+                                  disabled={currentUpdateData.m4Quantity === 0}
+                                >
+                                  +1
+                                </button>
+                              </div>
+                              <small className="text-red-600">Available: {currentUpdateData.m4Quantity}</small>
+                            </div>
+                          )}
                         </div>
                       </div>
 
