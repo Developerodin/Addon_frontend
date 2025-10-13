@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, FloorOrderFilters } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
+import NumericInput from "@/shared/utils/numericInput";
 
 interface ArticleLog {
   id: string;
@@ -944,9 +945,8 @@ const WarehouseFloorSupervisorPage = () => {
                           
                           return (
                             <>
-                              <input
-                                type="number"
-                                className={`form-control ${
+                              <NumericInput
+                                className={`${
                                   isFullyTransferred 
                                     ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
                                     : currentUpdateData.receivedQuantity > received 
@@ -954,15 +954,12 @@ const WarehouseFloorSupervisorPage = () => {
                                       : ''
                                 }`}
                                 value={currentUpdateData.receivedQuantity}
-                                onChange={(e) => {
+                                onChange={(value) => {
                                   if (isFullyTransferred) return;
-                                  const value = Number(e.target.value);
                                   if (value <= received) {
                                     handleReceivedQuantityChange(articleId, value);
                                   }
                                 }}
-                                min="0"
-                                max={received}
                                 placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${received}`}
                                 disabled={isFullyTransferred}
                               />

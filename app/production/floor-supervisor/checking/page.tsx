@@ -6,6 +6,7 @@ import HelpIcon from "@/shared/components/HelpIcon";
 import FloorProgression from "@/shared/components/production/FloorProgression";
 import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
+import NumericInput from "@/shared/utils/numericInput";
 
 interface ArticleLog {
   id: string;
@@ -1144,9 +1145,8 @@ const CheckingFloorSupervisorPage = () => {
                           
                           return (
                             <>
-                              <input
-                                type="number"
-                                className={`form-control ${
+                              <NumericInput
+                                className={`${
                                   isFullyTransferred 
                                     ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
                                     : currentUpdateData.m1Quantity > remaining 
@@ -1154,15 +1154,12 @@ const CheckingFloorSupervisorPage = () => {
                                       : ''
                                 }`}
                                 value={currentUpdateData.m1Quantity}
-                                onChange={(e) => {
+                                onChange={(value) => {
                                   if (isFullyTransferred) return;
-                                  const value = Number(e.target.value);
                                   if (value <= remaining) {
                                     handleM1QuantityChange(articleId, value);
                                   }
                                 }}
-                                min="0"
-                                max={remaining}
                                 placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${remaining}`}
                                 disabled={isFullyTransferred}
                               />
@@ -1207,39 +1204,30 @@ const CheckingFloorSupervisorPage = () => {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                         <div>
                           <label className="form-label text-yellow-700 font-medium">M2 - Needs Repair</label>
-                          <input
-                            type="number"
-                            className="form-control border-yellow-300 focus:border-yellow-500"
+                          <NumericInput
+                            className="border-yellow-300 focus:border-yellow-500"
                             value={currentUpdateData.m2Quantity}
-                            onChange={(e) => handleM2QuantityChange(articleId, Number(e.target.value))}
-                            min="0"
-                            max={article.plannedQuantity}
+                            onChange={(value) => handleM2QuantityChange(articleId, value)}
                           />
                           <small className="text-yellow-600">To be reviewed</small>
                         </div>
                         
                         <div>
                           <label className="form-label text-orange-700 font-medium">M3 - Minor Defects</label>
-                          <input
-                            type="number"
-                            className="form-control border-orange-300 focus:border-orange-500"
+                          <NumericInput
+                            className="border-orange-300 focus:border-orange-500"
                             value={currentUpdateData.m3Quantity}
-                            onChange={(e) => handleM3QuantityChange(articleId, Number(e.target.value))}
-                            min="0"
-                            max={article.plannedQuantity}
+                            onChange={(value) => handleM3QuantityChange(articleId, value)}
                           />
                           <small className="text-orange-600">Can be fixed</small>
                         </div>
                         
                         <div>
                           <label className="form-label text-red-700 font-medium">M4 - Major Defects</label>
-                          <input
-                            type="number"
-                            className="form-control border-red-300 focus:border-red-500"
+                          <NumericInput
+                            className="border-red-300 focus:border-red-500"
                             value={currentUpdateData.m4Quantity}
-                            onChange={(e) => handleM4QuantityChange(articleId, Number(e.target.value))}
-                            min="0"
-                            max={article.plannedQuantity}
+                            onChange={(value) => handleM4QuantityChange(articleId, value)}
                           />
                           <small className="text-red-600">Needs significant repair</small>
                         </div>

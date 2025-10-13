@@ -7,6 +7,7 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, CreateOrderRequest } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
+import NumericInput from "@/shared/utils/numericInput";
 
 interface Article {
   id: string;
@@ -328,14 +329,11 @@ const AddOrderPage = () => {
                               />
                             </td>
                             <td className="px-2 py-2">
-                              <input
-                                type="number"
-                                className={`form-control form-control-sm w-full text-xs py-1 px-2 h-8 ${errors[`article_${index}_quantity`] ? 'border-danger' : ''}`}
+                              <NumericInput
+                                className={`form-control-sm w-full text-xs py-1 px-2 h-8 ${errors[`article_${index}_quantity`] ? 'border-danger' : ''}`}
                                 value={article.plannedQuantity}
-                                onChange={(e) => handleArticleChange(index, 'plannedQuantity', Number(e.target.value))}
+                                onChange={(value) => handleArticleChange(index, 'plannedQuantity', value)}
                                 placeholder="0"
-                                min="1"
-                                max="100000"
                               />
                               {errors[`article_${index}_quantity`] && (
                                 <div className="text-danger text-xs mt-1 truncate">{errors[`article_${index}_quantity`]}</div>

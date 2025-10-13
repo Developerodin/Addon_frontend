@@ -8,6 +8,7 @@ import FloorProgression from "@/shared/components/production/FloorProgression";
 import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 import { getNextFloor, FloorType } from "@/shared/utils/productionUtils";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
+import NumericInput from "@/shared/utils/numericInput";
 
 const KnittingFloorSupervisorPage = () => {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
@@ -973,12 +974,10 @@ const KnittingFloorSupervisorPage = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
                           <label className="form-label">Knitting Completed Quantity *</label>
-                          <input
-                            type="number"
-                            className="form-control py-2"
+                          <NumericInput
+                            className="py-2"
                             value={currentUpdateData.completedQuantity}
-                            onChange={(e) => handleQuantityChange(articleId, Number(e.target.value))}
-                            min="0"
+                            onChange={(value) => handleQuantityChange(articleId, value)}
                             // Allow overproduction in knitting floor - no max limit
                           />
                           {currentUpdateData.completedQuantity > (article.plannedQuantity || 0) && (
@@ -989,13 +988,10 @@ const KnittingFloorSupervisorPage = () => {
                         </div>
                         <div>
                           <label className="form-label text-red-700 font-medium">M4 Defects (Major Defects)</label>
-                          <input
-                            type="number"
-                            className="form-control py-2 border-red-300 focus:border-red-500"
+                          <NumericInput
+                            className="py-2 border-red-300 focus:border-red-500"
                             value={currentUpdateData.m4Quantity}
-                            onChange={(e) => handleM4QuantityChange(articleId, Number(e.target.value))}
-                            min="0"
-                            max={currentUpdateData.completedQuantity}
+                            onChange={(value) => handleM4QuantityChange(articleId, value)}
                           />
                           <small className="text-red-600">Track major defects from knitting machine</small>
                         </div>

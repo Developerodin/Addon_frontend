@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
+import NumericInput from "@/shared/utils/numericInput";
 
 const BoardingFloorSupervisorPage = () => {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
@@ -900,9 +901,8 @@ const BoardingFloorSupervisorPage = () => {
                           
                           return (
                             <>
-                              <input
-                                type="number"
-                                className={`form-control ${
+                              <NumericInput
+                                className={`${
                                   isFullyTransferred 
                                     ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
                                     : currentUpdateData.completedQuantity > remaining 
@@ -910,15 +910,12 @@ const BoardingFloorSupervisorPage = () => {
                                       : ''
                                 }`}
                                 value={currentUpdateData.completedQuantity}
-                                onChange={(e) => {
+                                onChange={(value) => {
                                   if (isFullyTransferred) return;
-                                  const value = Number(e.target.value);
                                   if (value <= remaining) {
                                     handleQuantityChange(articleId, value);
                                   }
                                 }}
-                                min="0"
-                                max={remaining}
                                 placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${remaining}`}
                                 disabled={isFullyTransferred}
                               />
