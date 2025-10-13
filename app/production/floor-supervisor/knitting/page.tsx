@@ -246,6 +246,33 @@ const KnittingFloorSupervisorPage = () => {
   const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
+    console.log('Update button clicked');
+    console.log('Current updateData:', updateData);
+    console.log('Selected order:', selectedOrder);
+
+    // Validate that at least one article has completed quantity > 0
+    let hasValidCompletedQuantity = false;
+    
+    for (const article of selectedOrder.articles) {
+      const articleId = article.id || article._id;
+      if (articleId && updateData[articleId]) {
+        const completedQty = updateData[articleId].completedQuantity;
+        console.log(`Article ${articleId} completed quantity:`, completedQty);
+        if (completedQty > 0) {
+          hasValidCompletedQuantity = true;
+          break;
+        }
+      }
+    }
+
+    console.log('Has valid completed quantity:', hasValidCompletedQuantity);
+
+    if (!hasValidCompletedQuantity) {
+      console.log('Validation failed - showing error');
+      toast.error('Knitting completed quantity cannot be empty. Please enter a value greater than 0 for at least one article.');
+      return;
+    }
+
     try {
       setIsLoading(true);
       
