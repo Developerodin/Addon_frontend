@@ -1266,7 +1266,7 @@ const FinalCheckingFloorSupervisorPage = () => {
 
 
                     {/* View Logs Button and panel */}
-                    <div className="mt-4">
+                    {/* <div className="mt-4">
                       <button
                         className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
                         onClick={() => setShowLogs(!showLogs)}
@@ -1293,7 +1293,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                           </ul>
                         </div>
                       )}
-                    </div>
+                    </div> */}
                   </div>
                 );
               })()}
