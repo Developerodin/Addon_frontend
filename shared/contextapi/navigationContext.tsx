@@ -35,6 +35,12 @@ interface NavigationPermissions {
     'Warehouse Floor': boolean;
     'Machine Floor': boolean;
   };
+  'Yarn Management': {
+    'Cataloguing': boolean;
+    'Purchase': boolean;
+    'Inventory': boolean;
+    'Yarn Issue': boolean;
+  };
 }
 
 interface NavigationContextType {
@@ -76,6 +82,13 @@ const defaultPermissions: NavigationPermissions = {
     'Final Checking Floor': false,
     'Branding Floor': false,
     'Warehouse Floor': false,
+    'Machine Floor': false,
+  },
+  'Yarn Management': {
+    'Cataloguing': false,
+    'Purchase': false,
+    'Inventory': false,
+    'Yarn Issue': false,
   },
 };
 
@@ -142,6 +155,10 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         'Production Planning': {
           ...defaultPermissions['Production Planning'],
           ...(user.navigation['Production Planning'] || {})
+        },
+        'Yarn Management': {
+          ...defaultPermissions['Yarn Management'],
+          ...(user.navigation['Yarn Management'] || {})
         }
       };
       setPermissions(mergedPermissions);
@@ -207,6 +224,22 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       return permissions[permissionKey] as boolean;
     }
 
+    // Special handling for sub-menus - check if user has any permission for the sub-menu
+    if (path === '/catalog' || path === '/sales' || path === '/production' || path === '/yarn-management') {
+      let subMenuKey: keyof NavigationPermissions;
+      if (path === '/catalog') subMenuKey = 'Catalog';
+      else if (path === '/sales') subMenuKey = 'Sales';
+      else if (path === '/production') subMenuKey = 'Production Planning';
+      else if (path === '/yarn-management') subMenuKey = 'Yarn Management';
+      else return false;
+      
+      const subMenuPermissions = permissions[subMenuKey];
+      if (subMenuPermissions && typeof subMenuPermissions === 'object') {
+        // Check if user has any permission for this sub-menu
+        return Object.values(subMenuPermissions).some(permission => permission === true);
+      }
+    }
+
     return false;
   };
 
@@ -219,6 +252,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       '/catalog': 'Catalog',
       '/sales': 'Sales',
       '/production': 'Production Planning',
+      '/yarn-management': 'Yarn Management',
     };
 
     const parentKey = parentMap[parent];

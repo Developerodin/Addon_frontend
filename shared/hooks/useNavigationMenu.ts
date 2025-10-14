@@ -58,6 +58,10 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               const childName = child.title;
               return hasSubPermission('/production', childName);
             }
+            if (child.path.startsWith('/yarn-management/')) {
+              const childName = child.title;
+              return hasSubPermission('/yarn-management', childName);
+            }
           }
           return false;
         });
@@ -89,6 +93,10 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             if (child.path.startsWith('/production/')) {
               const childName = child.title;
               return hasSubPermission('/production', childName);
+            }
+            if (child.path.startsWith('/yarn-management/')) {
+              const childName = child.title;
+              return hasSubPermission('/yarn-management', childName);
             }
           }
           return false;

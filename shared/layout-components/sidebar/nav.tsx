@@ -18,6 +18,11 @@ const UsersIcon = <i className="ri ri-user-line side-menu__icon" style={{ margin
 const SupervisorIcon = <i className="bx bx-user-check side-menu__icon"></i>;
 const ProductionIcon = <i className="bx bx-cog side-menu__icon"></i>;
 const FloorIcon = <i className="bx bx-building side-menu__icon"></i>;
+const YarnIcon = <i className="ri ri-thread-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const CataloguingIcon = <i className="ri ri-book-open-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const PurchaseIcon = <i className="ri ri-shopping-cart-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const InventoryIcon = <i className="ri ri-archive-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const IssueIcon = <i className="ri ri-send-plane-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 // Badges if needed
 const badge = (
   <span className="badge !bg-warning/10 !text-warning !py-[0.25rem] !px-[0.45rem] !text-[0.75em] ms-1">
@@ -245,6 +250,48 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Machine Floor",
+      },
+    ],
+  },
+  {
+    icon: AnalyticsIcon,
+    title: "Yarn Management",
+    type: "sub",
+    active: false,
+    selected: false,
+    path: "/yarn-management",
+    children: [
+      {
+        icon: CataloguingIcon,
+        path: "/yarn-management/cataloguing",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Cataloguing",
+      },
+      {
+        icon: PurchaseIcon,
+        path: "/yarn-management/purchase",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Purchase",
+      },
+      {
+        icon: InventoryIcon,
+        path: "/yarn-management/inventory",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Inventory",
+      },
+      {
+        icon: IssueIcon,
+        path: "/yarn-management/yarn-issue",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Yarn Issue",
       },
     ],
   },
