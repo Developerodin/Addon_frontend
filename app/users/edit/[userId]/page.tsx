@@ -476,6 +476,30 @@ const EditUserPage = () => {
                                                 ))}
                                             </div>
                                         </div>
+
+                                        {/* Warehouse Management Section */}
+                                        <div>
+                                            <h4 className="text-md font-medium text-gray-900 mb-3">Warehouse Management</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+                                                {[
+                                                    { key: 'Orders', label: 'Orders' },
+                                                    { key: 'Pick&Pack', label: 'Pick&Pack' },
+                                                    { key: 'Layout', label: 'Layout' },
+                                                    { key: 'Stock', label: 'Stock' },
+                                                    { key: 'Reports', label: 'Reports' }
+                                                ].map(subsection => (
+                                                    <label key={subsection.key} className="flex items-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
+                                                            onChange={(e) => handleNavigationChange('Warehouse Management', subsection.key, e.target.checked)}
+                                                            className="rounded border-gray-300 text-primary focus:ring-primary"
+                                                        />
+                                                        <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 

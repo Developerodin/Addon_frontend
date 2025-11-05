@@ -45,6 +45,19 @@ export interface User {
       'Branding Floor': boolean;
       'Warehouse Floor': boolean;
     };
+    'Yarn Management': {
+      'Cataloguing': boolean;
+      'Purchase': boolean;
+      'Inventory': boolean;
+      'Yarn Issue': boolean;
+    };
+    'Warehouse Management': {
+      'Orders': boolean;
+      'Pick&Pack': boolean;
+      'Layout': boolean;
+      'Stock': boolean;
+      'Reports': boolean;
+    };
   };
   createdAt: string;
   updatedAt: string;

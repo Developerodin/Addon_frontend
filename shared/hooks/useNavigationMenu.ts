@@ -62,6 +62,10 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               const childName = child.title;
               return hasSubPermission('/yarn-management', childName);
             }
+            if (child.path.startsWith('/warehouse-management/')) {
+              const childName = child.title;
+              return hasSubPermission('/warehouse-management', childName);
+            }
           }
           return false;
         });
@@ -97,6 +101,10 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             if (child.path.startsWith('/yarn-management/')) {
               const childName = child.title;
               return hasSubPermission('/yarn-management', childName);
+            }
+            if (child.path.startsWith('/warehouse-management/')) {
+              const childName = child.title;
+              return hasSubPermission('/warehouse-management', childName);
             }
           }
           return false;

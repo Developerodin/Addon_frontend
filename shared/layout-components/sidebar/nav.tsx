@@ -23,6 +23,12 @@ const CataloguingIcon = <i className="ri ri-book-open-line side-menu__icon" styl
 const PurchaseIcon = <i className="ri ri-shopping-cart-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const InventoryIcon = <i className="ri ri-archive-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const IssueIcon = <i className="ri ri-send-plane-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const WarehouseIcon = <i className="bx bx-store side-menu__icon"></i>;
+const OrdersIcon = <i className="ri ri-file-list-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const PickPackIcon = <i className="ri ri-handbag-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const LayoutIcon = <i className="ri ri-layout-grid-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const StockIcon = <i className="ri ri-stack-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const ReportsIcon = <i className="ri ri-file-chart-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 // Badges if needed
 const badge = (
   <span className="badge !bg-warning/10 !text-warning !py-[0.25rem] !px-[0.45rem] !text-[0.75em] ms-1">
@@ -292,6 +298,56 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Yarn Issue",
+      },
+    ],
+  },
+  {
+    icon: WarehouseIcon,
+    title: "Warehouse Management",
+    type: "sub",
+    active: false,
+    selected: false,
+    path: "/warehouse-management",
+    children: [
+      {
+        icon: OrdersIcon,
+        path: "/warehouse-management/orders",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Orders",
+      },
+      {
+        icon: PickPackIcon,
+        path: "/warehouse-management/pick-pack",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Pick&Pack",
+      },
+      {
+        icon: LayoutIcon,
+        path: "/warehouse-management/layout",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Layout",
+      },
+      {
+        icon: StockIcon,
+        path: "/warehouse-management/stock",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Stock",
+      },
+      {
+        icon: ReportsIcon,
+        path: "/warehouse-management/reports",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Reports",
       },
     ],
   },

@@ -211,6 +211,71 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
               ))}
             </div>
           </div>
+
+          {/* Yarn Management Section */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-md font-medium text-gray-900 dark:text-white">Yarn Management</h3>
+              <button
+                type="button"
+                className="text-xs text-primary hover:text-primary-dark"
+                onClick={() => handleSelectAll('Yarn Management', ['Cataloguing', 'Purchase', 'Inventory', 'Yarn Issue'])}
+              >
+                Toggle All
+              </button>
+            </div>
+            <div className="space-y-2 ml-4">
+              {[
+                { key: 'Cataloguing', label: 'Cataloguing' },
+                { key: 'Purchase', label: 'Purchase' },
+                { key: 'Inventory', label: 'Inventory' },
+                { key: 'Yarn Issue', label: 'Yarn Issue' }
+              ].map(subsection => (
+                <label key={subsection.key} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={(navigation['Yarn Management'] as any)?.[subsection.key] === true}
+                    onChange={(e) => handleNavigationChange('Yarn Management', subsection.key, e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{subsection.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Warehouse Management Section */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-md font-medium text-gray-900 dark:text-white">Warehouse Management</h3>
+              <button
+                type="button"
+                className="text-xs text-primary hover:text-primary-dark"
+                onClick={() => handleSelectAll('Warehouse Management', ['Orders', 'Pick&Pack', 'Layout', 'Stock', 'Reports'])}
+              >
+                Toggle All
+              </button>
+            </div>
+            <div className="space-y-2 ml-4">
+              {[
+                { key: 'Orders', label: 'Orders' },
+                { key: 'Pick&Pack', label: 'Pick&Pack' },
+                { key: 'Layout', label: 'Layout' },
+                { key: 'Stock', label: 'Stock' },
+                { key: 'Reports', label: 'Reports' }
+              ].map(subsection => (
+                <label key={subsection.key} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
+                    onChange={(e) => handleNavigationChange('Warehouse Management', subsection.key, e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{subsection.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 mt-6">

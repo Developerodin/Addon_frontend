@@ -30,6 +30,15 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
     { path: '/production/floor-supervisor/final-checking', permission: permissions['Production Planning']?.['Final Checking Floor'] },
     { path: '/production/floor-supervisor/branding', permission: permissions['Production Planning']?.['Branding Floor'] },
     { path: '/production/floor-supervisor/warehouse', permission: permissions['Production Planning']?.['Warehouse Floor'] },
+    { path: '/yarn-management/cataloguing', permission: permissions['Yarn Management']?.['Cataloguing'] },
+    { path: '/yarn-management/purchase', permission: permissions['Yarn Management']?.['Purchase'] },
+    { path: '/yarn-management/inventory', permission: permissions['Yarn Management']?.['Inventory'] },
+    { path: '/yarn-management/yarn-issue', permission: permissions['Yarn Management']?.['Yarn Issue'] },
+    { path: '/warehouse-management/orders', permission: permissions['Warehouse Management']?.['Orders'] },
+    { path: '/warehouse-management/pick-pack', permission: permissions['Warehouse Management']?.['Pick&Pack'] },
+    { path: '/warehouse-management/layout', permission: permissions['Warehouse Management']?.['Layout'] },
+    { path: '/warehouse-management/stock', permission: permissions['Warehouse Management']?.['Stock'] },
+    { path: '/warehouse-management/reports', permission: permissions['Warehouse Management']?.['Reports'] },
   ];
 
   // Find the first route the user has permission for
