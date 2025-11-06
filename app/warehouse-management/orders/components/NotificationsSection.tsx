@@ -8,7 +8,7 @@ interface NotificationsSectionProps {
 }
 
 const NotificationsSection: React.FC<NotificationsSectionProps> = ({ notifications }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
   const visibleNotifications = notifications.filter(n => !dismissedIds.has(n.id));
@@ -53,15 +53,15 @@ const NotificationsSection: React.FC<NotificationsSectionProps> = ({ notificatio
       <div className="box">
         <div className="box-header">
           <div className="flex items-center justify-between">
-            <h3 className="box-title">
-              <i className="ri-notification-line me-2"></i>
+            <h3 className="box-title flex items-center">
+              <i className="ri-notification-line me-2 text-lg"></i>
               Notifications
             </h3>
             <button
               onClick={() => setIsExpanded(!isExpanded)}
               className="ti-btn ti-btn-sm ti-btn-light"
             >
-              <i className={`ri-${isExpanded ? 'arrow-up' : 'arrow-down'}-s-line`}></i>
+              <i className={`ri-${isExpanded ? 'arrow-up' : 'arrow-down'}-s-line text-lg`}></i>
             </button>
           </div>
         </div>
@@ -81,28 +81,28 @@ const NotificationsSection: React.FC<NotificationsSectionProps> = ({ notificatio
     <div className="box">
       <div className="box-header">
         <div className="flex items-center justify-between">
-          <h3 className="box-title">
-            <i className="ri-notification-line me-2"></i>
+          <h3 className="box-title flex items-center">
+            <i className="ri-notification-line me-2 text-lg"></i>
             Notifications
             {visibleNotifications.length > 0 && (
               <span className="badge bg-danger ms-2">{visibleNotifications.length}</span>
             )}
           </h3>
-          <div className="flex gap-2">
+          <div className="flex gap-3 items-center">
             {visibleNotifications.length > 0 && (
               <button
                 onClick={handleDismissAll}
-                className="ti-btn ti-btn-sm ti-btn-light"
+                className="ti-btn ti-btn-sm ti-btn-light ml-2"
                 title="Dismiss All"
               >
-                <i className="ri-close-line"></i>
+                <i className="ri-close-line text-lg"></i>
               </button>
             )}
             <button
               onClick={() => setIsExpanded(!isExpanded)}
               className="ti-btn ti-btn-sm ti-btn-light"
             >
-              <i className={`ri-${isExpanded ? 'arrow-up' : 'arrow-down'}-s-line`}></i>
+              <i className={`ri-${isExpanded ? 'arrow-up' : 'arrow-down'}-s-line text-lg`}></i>
             </button>
           </div>
         </div>

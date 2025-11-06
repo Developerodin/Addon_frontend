@@ -204,20 +204,21 @@ const PackListDashboard: React.FC<PackListDashboardProps> = ({
                     {order.priority.toUpperCase()} Priority
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {order.labelPrinted && (
-                    <span className="text-xs text-green-600">
-                      <i className="ri-printer-line me-1"></i>
+                <div className="flex items-center gap-3">
+                  {order.labelPrinted ? (
+                    <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium text-green-600 bg-green-50 border border-green-200 ml-2">
+                      <i className="ri-checkbox-circle-fill me-1"></i>
                       Label Printed
                     </span>
+                  ) : (
+                    <button
+                      onClick={() => onLabelPrint(order.orderId)}
+                      className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors ml-2"
+                    >
+                      <i className="ri-printer-line me-1"></i>
+                      Print Label
+                    </button>
                   )}
-                  <button
-                    onClick={() => onLabelPrint(order.orderId)}
-                    className="ti-btn ti-btn-sm ti-btn-light"
-                  >
-                    <i className="ri-printer-line me-1"></i>
-                    Print Label
-                  </button>
                 </div>
               </div>
               <p className="text-sm text-gray-600 mt-1">
@@ -279,22 +280,24 @@ const PackListDashboard: React.FC<PackListDashboardProps> = ({
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm">
                           <div className="flex items-center gap-2">
-                            {item.packedQuantity < item.quantity && (
+                            
                               <button
                                 onClick={() => handlePackItem(order.orderId, item.id, item.packedQuantity, item.quantity)}
-                                className="ti-btn ti-btn-sm ti-btn-primary"
+                                className="ti-btn ti-btn-primary inline-flex items-center justify-center px-3 py-2 min-w-[90px]"
                               >
                                 <i className="ri-check-line me-1"></i>
                                 Pack
                               </button>
-                            )}
-                            <button
-                              onClick={() => handleOpenReportModal(order, item.id)}
-                              className="ti-btn ti-btn-sm ti-btn-danger"
-                            >
-                              <i className="ri-error-warning-line me-1"></i>
-                              Report
-                            </button>
+                            
+                            
+                              <button
+                                onClick={() => handleOpenReportModal(order, item.id)}
+                                className="ti-btn ti-btn-danger inline-flex items-center justify-center px-3 py-2 min-w-[90px]"
+                              >
+                                <i className="ri-error-warning-line me-1"></i>
+                                Report
+                              </button>
+                            
                           </div>
                         </td>
                       </tr>

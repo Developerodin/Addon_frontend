@@ -275,9 +275,9 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
                         <button
                           onClick={() => handlePickItem(item)}
                           disabled={item.pickedQuantity >= item.totalQuantity}
-                          className="ti-btn ti-btn-sm ti-btn-primary"
+                          className="inline-flex items-center px-3 py-1.5 rounded-sm text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                          <i className="ri-check-line me-1"></i>
+                          <i className="ri-check-line me-1.5"></i>
                           Pick
                         </button>
                       )}

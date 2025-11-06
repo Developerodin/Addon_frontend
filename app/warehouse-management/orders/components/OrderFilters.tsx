@@ -34,14 +34,14 @@ const OrderFiltersPanel: React.FC<OrderFiltersProps> = ({
   return (
     <div className="box">
       <div className="box-header">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <h3 className="box-title">Filters</h3>
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="ti-btn ti-btn-sm ti-btn-light"
+            className="ti-btn ti-btn-light flex items-center gap-2 whitespace-nowrap"
           >
             <i className={`ri-${isExpanded ? 'arrow-up' : 'arrow-down'}-s-line`}></i>
-            {isExpanded ? 'Collapse' : 'Expand'}
+            <span>{isExpanded ? 'Collapse' : 'Expand'}</span>
           </button>
         </div>
       </div>
