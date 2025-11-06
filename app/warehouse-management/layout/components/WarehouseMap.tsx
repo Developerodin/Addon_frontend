@@ -93,7 +93,7 @@ export default function WarehouseMap({ racks, onRackClick, selectedRackId }: War
               Interactive layout with racks, rows, and baskets. Click on racks to view details.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ml-4">
             <button
               onClick={() => setZoom(prev => Math.max(0.5, prev - 0.1))}
               className="ti-btn ti-btn-sm ti-btn-light"
@@ -193,37 +193,80 @@ export default function WarehouseMap({ racks, onRackClick, selectedRackId }: War
             })}
 
             {/* Racks */}
-            {racks.map(rack => (
-              <g key={rack.id}>
-                <rect
-                  x={rack.x}
-                  y={rack.y}
-                  width={rack.width}
-                  height={rack.height}
-                  className={`${getRackColor(rack)} ${getRackBorderColor(rack)} cursor-pointer transition-all hover:opacity-80`}
-                  onClick={() => onRackClick(rack)}
-                  rx="4"
-                />
-                <text
-                  x={rack.x + rack.width / 2}
-                  y={rack.y + rack.height / 2}
-                  className="text-xs font-semibold fill-white pointer-events-none"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                >
-                  {rack.name}
-                </text>
-                <text
-                  x={rack.x + rack.width / 2}
-                  y={rack.y + rack.height / 2 + 12}
-                  className="text-[10px] fill-white pointer-events-none"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                >
-                  {rack.utilization}%
-                </text>
-              </g>
-            ))}
+            {racks.map(rack => {
+              // Calculate dynamic font sizes based on rack dimensions
+              const nameFontSize = Math.max(8, Math.min(14, rack.width / 8, rack.height / 3));
+              const utilizationFontSize = Math.max(7, Math.min(11, rack.width / 10, rack.height / 5));
+              
+              // Determine if we have space to show utilization
+              const canShowUtil = rack.height >= 25 && rack.width >= 40;
+              
+              // Calculate text positioning
+              const textYOffset = canShowUtil ? -nameFontSize / 3 : 0;
+              const utilYOffset = nameFontSize / 2 + utilizationFontSize / 2 + 2;
+              
+              // Truncate text if it's too long (simple character-based truncation)
+              const maxChars = Math.max(2, Math.floor(rack.width / (nameFontSize * 0.6)));
+              const displayName = rack.name.length > maxChars 
+                ? rack.name.substring(0, maxChars - 1) + '…' 
+                : rack.name;
+              
+              return (
+                <g key={rack.id}>
+                  <title>{`${rack.name}\nUtilization: ${rack.utilization}%\nStatus: ${rack.status}`}</title>
+                  <rect
+                    x={rack.x}
+                    y={rack.y}
+                    width={rack.width}
+                    height={rack.height}
+                    className={`${getRackColor(rack)} ${getRackBorderColor(rack)} cursor-pointer transition-all hover:opacity-80`}
+                    onClick={() => onRackClick(rack)}
+                    rx="4"
+                  />
+                  
+                  {/* Clip path to prevent text overflow */}
+                  <clipPath id={`clip-${rack.id}`}>
+                    <rect
+                      x={rack.x + 2}
+                      y={rack.y + 2}
+                      width={rack.width - 4}
+                      height={rack.height - 4}
+                      rx="3"
+                    />
+                  </clipPath>
+                  
+                  <g clipPath={`url(#clip-${rack.id})`}>
+                    {/* Rack Name */}
+                    <text
+                      x={rack.x + rack.width / 2}
+                      y={rack.y + rack.height / 2 + textYOffset}
+                      className="font-semibold fill-white pointer-events-none select-none"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={nameFontSize}
+                      style={{ userSelect: 'none' }}
+                    >
+                      {displayName}
+                    </text>
+                    
+                    {/* Utilization Percentage */}
+                    {canShowUtil && (
+                      <text
+                        x={rack.x + rack.width / 2}
+                        y={rack.y + rack.height / 2 + utilYOffset}
+                        className="fill-white/90 pointer-events-none select-none"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontSize={utilizationFontSize}
+                        style={{ userSelect: 'none' }}
+                      >
+                        {rack.utilization}%
+                      </text>
+                    )}
+                  </g>
+                </g>
+              );
+            })}
           </svg>
 
           {/* Instructions Overlay */}

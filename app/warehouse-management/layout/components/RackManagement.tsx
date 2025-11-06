@@ -111,7 +111,7 @@ const RackManagement: React.FC<RackManagementProps> = ({
   return (
     <div className="box">
       <div className="box-header">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="box-title">Rack Management</h3>
             <p className="text-sm text-gray-600 mt-1">
@@ -120,7 +120,7 @@ const RackManagement: React.FC<RackManagementProps> = ({
           </div>
           <button
             onClick={handleCreate}
-            className="ti-btn ti-btn-primary ti-btn-sm"
+            className="ti-btn ti-btn-primary whitespace-nowrap"
           >
             <i className="ri-add-line me-1"></i>
             Create Rack

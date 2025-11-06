@@ -161,14 +161,14 @@ const StockOutDashboard: React.FC<StockOutDashboardProps> = ({
                       <div className="flex gap-2">
                         <button
                           onClick={() => onListClick(list)}
-                          className="text-primary hover:text-primary-dark"
+                          className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200 font-medium text-xs"
                         >
                           View
                         </button>
                         {list.status === 'picked' && (
                           <button
                             onClick={() => onQualityCheck(list.id)}
-                            className="text-indigo-600 hover:text-indigo-800"
+                            className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors duration-200 font-medium text-xs"
                           >
                             QC
                           </button>
@@ -176,7 +176,7 @@ const StockOutDashboard: React.FC<StockOutDashboardProps> = ({
                         {list.status === 'quality-checked' && (
                           <button
                             onClick={() => onDispatch(list.id)}
-                            className="text-green-600 hover:text-green-800"
+                            className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors duration-200 font-medium text-xs"
                           >
                             Dispatch
                           </button>
