@@ -303,7 +303,7 @@ const BaseMenuItems: any = [
   },
   {
     icon: WarehouseIcon,
-    title: "Warehouse Management",
+    title: "WHMS",
     type: "sub",
     active: false,
     selected: false,

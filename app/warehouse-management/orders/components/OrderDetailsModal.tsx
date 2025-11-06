@@ -64,10 +64,13 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
           {/* Content */}
           <div className="px-6 py-4 max-h-[calc(100vh-200px)] overflow-y-auto">
             {/* Order Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="box">
                 <div className="box-body">
-                  <h4 className="font-semibold mb-3">Order Information</h4>
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <i className="ri-file-list-line text-primary"></i>
+                    Order Information
+                  </h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Order Number:</span>
@@ -84,8 +87,8 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Channel:</span>
-                      <span className="font-medium capitalize">{order.channel}</span>
+                      <span className="text-gray-600">Source:</span>
+                      <span className="font-medium">{order.source || order.channel}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Priority:</span>
@@ -93,13 +96,39 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                         {order.priority.toUpperCase()}
                       </span>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="box">
+                <div className="box-body">
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <i className="ri-bank-card-line text-primary"></i>
+                    Payment Information
+                  </h4>
+                  <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Total Value:</span>
-                      <span className="font-medium">${order.totalValue.toLocaleString()}</span>
+                      <span className="text-gray-600">Amount:</span>
+                      <span className="font-bold text-lg text-primary">₹{order.payment?.amount.toLocaleString() || order.totalValue.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Payment Method:</span>
+                      <span className="font-medium">{order.payment?.method || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Payment Status:</span>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        order.payment?.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        order.payment?.status === 'failed' ? 'bg-red-100 text-red-800' :
+                        order.payment?.status === 'refunded' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {order.payment?.status?.toUpperCase() || 'PENDING'}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Total Quantity:</span>
-                      <span className="font-medium">{order.totalQuantity}</span>
+                      <span className="font-medium">{order.totalQuantity} items</span>
                     </div>
                   </div>
                 </div>
@@ -107,15 +136,43 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
               <div className="box">
                 <div className="box-body">
-                  <h4 className="font-semibold mb-3">Dispatch Information</h4>
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <i className="ri-truck-line text-primary"></i>
+                    Logistics Information
+                  </h4>
                   <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Warehouse:</span>
+                      <span className="font-medium">{order.logistics?.warehouse || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Logistics Status:</span>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        order.logistics?.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                        order.logistics?.status === 'shipped' || order.logistics?.status === 'in-transit' ? 'bg-blue-100 text-blue-800' :
+                        order.logistics?.status === 'ready-to-ship' ? 'bg-purple-100 text-purple-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {order.logistics?.status?.toUpperCase() || 'PENDING'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Tracking ID:</span>
+                      <span className="font-medium font-mono text-xs">
+                        {order.logistics?.trackingId || '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Assigned Picker:</span>
+                      <span className="font-medium">{order.logistics?.picker || '-'}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Dispatch Mode:</span>
                       <span className="font-medium capitalize">{order.dispatchMode}</span>
                     </div>
                     {order.estimatedDispatchDate && (
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Estimated Dispatch:</span>
+                        <span className="text-gray-600">Est. Dispatch:</span>
                         <span className="font-medium">
                           {new Date(order.estimatedDispatchDate).toLocaleDateString()}
                         </span>
@@ -124,7 +181,7 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     {order.actualDispatchDate && (
                       <div className="flex justify-between">
                         <span className="text-gray-600">Actual Dispatch:</span>
-                        <span className="font-medium">
+                        <span className="font-medium text-green-600">
                           {new Date(order.actualDispatchDate).toLocaleDateString()}
                         </span>
                       </div>
@@ -137,69 +194,79 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
             {/* Customer Details */}
             <div className="box mb-6">
               <div className="box-header">
-                <h4 className="box-title">Customer Details</h4>
+                <h4 className="box-title flex items-center gap-2">
+                  <i className="ri-user-line text-primary"></i>
+                  Customer Details
+                </h4>
               </div>
               <div className="box-body">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <p className="text-sm text-gray-600">Name</p>
-                    <p className="font-medium">{order.customer.name}</p>
+                    <p className="text-sm text-gray-600 mb-1">Customer Name</p>
+                    <p className="font-semibold text-gray-900">{order.customer.name}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Email</p>
-                    <p className="font-medium">{order.customer.email}</p>
+                    <p className="text-sm text-gray-600 mb-1">Email Address</p>
+                    <p className="font-medium text-gray-900">{order.customer.email}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Phone</p>
-                    <p className="font-medium">{order.customer.phone}</p>
+                    <p className="text-sm text-gray-600 mb-1">Phone Number</p>
+                    <p className="font-medium text-gray-900">{order.customer.phone}</p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Address</p>
-                    <p className="font-medium">
-                      {order.customer.address.street}<br />
-                      {order.customer.address.city}, {order.customer.address.state} {order.customer.address.zipCode}<br />
-                      {order.customer.address.country}
-                    </p>
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-600 mb-2">Shipping Address</p>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="font-medium text-gray-900">
+                        {order.customer.address.street && (
+                          <>{order.customer.address.street}<br /></>
+                        )}
+                        {order.customer.address.city}, {order.customer.address.state} - {order.customer.address.zipCode}<br />
+                        {order.customer.address.country}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* SKU Breakdown */}
+            {/* Order Items */}
             <div className="box mb-6">
               <div className="box-header">
-                <h4 className="box-title">SKU Breakdown</h4>
+                <h4 className="box-title flex items-center gap-2">
+                  <i className="ri-shopping-cart-line text-primary"></i>
+                  Order Items
+                </h4>
               </div>
               <div className="box-body">
                 <div className="overflow-x-auto">
                   <table className="table table-hover">
-                    <thead>
+                    <thead className="bg-gray-50">
                       <tr>
-                        <th>SKU</th>
-                        <th>Product Name</th>
-                        <th>Quantity</th>
-                        <th>Unit Price</th>
-                        <th>Total Price</th>
-                        <th>Stock Status</th>
+                        <th className="text-left">SKU</th>
+                        <th className="text-left">Product Name</th>
+                        <th className="text-center">Quantity</th>
+                        <th className="text-right">Unit Price</th>
+                        <th className="text-right">Total Price</th>
+                        <th className="text-center">Stock Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {order.items.map((item, index) => (
                         <tr key={index}>
-                          <td className="font-medium">{item.sku}</td>
-                          <td>{item.name}</td>
-                          <td>{item.quantity}</td>
-                          <td>${item.unitPrice.toLocaleString()}</td>
-                          <td className="font-semibold">${item.totalPrice.toLocaleString()}</td>
-                          <td>
+                          <td className="font-medium text-gray-900">{item.sku}</td>
+                          <td className="text-gray-900">{item.name}</td>
+                          <td className="text-center font-medium">{item.quantity}</td>
+                          <td className="text-right">₹{item.unitPrice.toLocaleString()}</td>
+                          <td className="text-right font-semibold text-gray-900">₹{item.totalPrice.toLocaleString()}</td>
+                          <td className="text-center">
                             {item.stockAvailable ? (
-                              <span className="text-green-600">
+                              <span className="text-green-600 text-sm">
                                 <i className="ri-checkbox-circle-line me-1"></i>
                                 Available
                                 {item.stockQuantity !== undefined && ` (${item.stockQuantity})`}
                               </span>
                             ) : (
-                              <span className="text-red-600">
+                              <span className="text-red-600 text-sm">
                                 <i className="ri-error-warning-line me-1"></i>
                                 Unavailable
                               </span>
@@ -207,43 +274,80 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                           </td>
                         </tr>
                       ))}
+                      <tr className="bg-primary/5 font-semibold">
+                        <td colSpan={2} className="text-right">Order Total:</td>
+                        <td className="text-center">{order.totalQuantity}</td>
+                        <td></td>
+                        <td className="text-right text-lg text-primary">₹{order.totalValue.toLocaleString()}</td>
+                        <td></td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
               </div>
             </div>
 
-            {/* Packing Instructions */}
-            <div className="box">
-              <div className="box-header">
-                <h4 className="box-title">Packing Instructions</h4>
-              </div>
-              <div className="box-body">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">Packaging Type:</span>
-                    <span className="font-medium capitalize">{order.packingInstructions.packagingType}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">Fragile:</span>
-                    <span className={order.packingInstructions.fragile ? 'text-red-600 font-medium' : 'text-gray-600'}>
-                      {order.packingInstructions.fragile ? 'Yes' : 'No'}
-                    </span>
-                  </div>
-                  {order.packingInstructions.specialHandling && (
-                    <div>
-                      <span className="text-sm text-gray-600">Special Handling:</span>
-                      <p className="font-medium">{order.packingInstructions.specialHandling}</p>
+            {/* Additional Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {/* Packing Instructions */}
+              <div className="box">
+                <div className="box-header">
+                  <h4 className="box-title flex items-center gap-2">
+                    <i className="ri-box-line text-primary"></i>
+                    Packing Instructions
+                  </h4>
+                </div>
+                <div className="box-body">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">Packaging Type:</span>
+                      <span className="font-medium capitalize">{order.packingInstructions.packagingType}</span>
                     </div>
-                  )}
-                  {order.packingInstructions.notes && (
-                    <div>
-                      <span className="text-sm text-gray-600">Notes:</span>
-                      <p className="font-medium">{order.packingInstructions.notes}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">Fragile:</span>
+                      <span className={order.packingInstructions.fragile ? 'text-red-600 font-medium' : 'text-gray-600'}>
+                        {order.packingInstructions.fragile ? (
+                          <>
+                            <i className="ri-alert-line me-1"></i>
+                            Yes
+                          </>
+                        ) : (
+                          'No'
+                        )}
+                      </span>
                     </div>
-                  )}
+                    {order.packingInstructions.specialHandling && (
+                      <div>
+                        <p className="text-sm text-gray-600 mb-1">Special Handling:</p>
+                        <p className="font-medium bg-yellow-50 p-2 rounded text-sm">{order.packingInstructions.specialHandling}</p>
+                      </div>
+                    )}
+                    {order.packingInstructions.notes && (
+                      <div>
+                        <p className="text-sm text-gray-600 mb-1">Notes:</p>
+                        <p className="font-medium bg-blue-50 p-2 rounded text-sm">{order.packingInstructions.notes}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              {/* Notes */}
+              {order.meta?.notes && (
+                <div className="box">
+                  <div className="box-header">
+                    <h4 className="box-title flex items-center gap-2">
+                      <i className="ri-sticky-note-line text-primary"></i>
+                      Special Notes
+                    </h4>
+                  </div>
+                  <div className="box-body">
+                    <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded">
+                      <p className="text-sm text-gray-900">{order.meta.notes}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

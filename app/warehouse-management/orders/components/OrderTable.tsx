@@ -9,6 +9,8 @@ interface OrderTableProps {
   selectedOrders: string[];
   onSelectOrder: (orderId: string) => void;
   onSelectAll: (checked: boolean) => void;
+  onEdit: (orderId: string) => void;
+  onDelete: (orderId: string) => void;
 }
 
 const OrderTable: React.FC<OrderTableProps> = ({
@@ -17,6 +19,8 @@ const OrderTable: React.FC<OrderTableProps> = ({
   selectedOrders,
   onSelectOrder,
   onSelectAll,
+  onEdit,
+  onDelete,
 }) => {
   const allSelected = orders.length > 0 && selectedOrders.length === orders.length;
   const someSelected = selectedOrders.length > 0 && selectedOrders.length < orders.length;
@@ -129,7 +133,7 @@ const OrderTable: React.FC<OrderTableProps> = ({
                     <div>{order.totalQuantity} items</div>
                     <div className="text-sm text-gray-500">{order.items.length} SKUs</div>
                   </td>
-                  <td className="font-semibold">${order.totalValue.toLocaleString()}</td>
+                  <td className="font-semibold">₹{order.totalValue.toLocaleString()}</td>
                   <td>
                     <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityBadgeClass(order.priority)}`}>
                       {order.priority.toUpperCase()}
@@ -154,13 +158,29 @@ const OrderTable: React.FC<OrderTableProps> = ({
                     )}
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => onOrderClick(order)}
-                      className="ti-btn ti-btn-sm ti-btn-primary"
-                      title="View Details"
-                    >
-                      <i className="ri-eye-line"></i>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onOrderClick(order)}
+                        className="ti-btn ti-btn-sm ti-btn-info"
+                        title="View Details"
+                      >
+                        <i className="ri-eye-line"></i>
+                      </button>
+                      <button
+                        onClick={() => onEdit(order.id)}
+                        className="ti-btn ti-btn-sm ti-btn-primary"
+                        title="Edit Order"
+                      >
+                        <i className="ri-edit-line"></i>
+                      </button>
+                      <button
+                        onClick={() => onDelete(order.id)}
+                        className="ti-btn ti-btn-sm ti-btn-danger"
+                        title="Delete Order"
+                      >
+                        <i className="ri-delete-bin-line"></i>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

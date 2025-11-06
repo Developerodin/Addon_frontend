@@ -51,6 +51,22 @@ export interface Order {
   priority: 'low' | 'medium' | 'high';
   estimatedDispatchDate?: string;
   actualDispatchDate?: string;
+  // Additional API fields
+  source?: string;
+  payment?: {
+    method: string;
+    status: string;
+    amount: number;
+  };
+  logistics?: {
+    status: string;
+    trackingId: string;
+    warehouse: string;
+    picker: string;
+  };
+  meta?: {
+    notes: string;
+  };
 }
 
 export interface OrderFilters {
