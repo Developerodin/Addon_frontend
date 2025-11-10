@@ -3,25 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
-import { API_BASE_URL } from '@/shared/data/utilities/api';
-
-interface CountSize {
-  id: string;
-  name: string;
-  value: string;
-  description?: string;
-  status: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface ApiResponse {
-  results: CountSize[];
-  page: number;
-  limit: number;
-  totalPages: number;
-  totalResults: number;
-}
+import yarnCountSizeService, { CountSize } from '@/shared/services/yarnCountSizeService';
 
 const CountSizePage = () => {
   const [countSizes, setCountSizes] = useState<CountSize[]>([]);
@@ -43,18 +25,19 @@ const CountSizePage = () => {
   const fetchCountSizes = async () => {
     setIsLoading(true);
     try {
-      const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
-      const response = await fetch(`${API_BASE_URL}/yarn-master/count-sizes?page=${currentPage}&limit=${itemsPerPage}${searchParam}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch count/sizes');
-      }
-      const data: ApiResponse = await response.json();
-      setCountSizes(data.results || []);
-      setTotalPages(data.totalPages || 1);
-      setTotalResults(data.totalResults || 0);
+      const response = await yarnCountSizeService.getCountSizes({
+        page: currentPage,
+        limit: itemsPerPage,
+        name: searchQuery.trim() || undefined,
+      });
+      setCountSizes(response.results || []);
+      setTotalPages(response.totalPages || 1);
+      setTotalResults(response.totalResults || 0);
+      setSelectedItems([]);
+      setSelectAll(false);
     } catch (error) {
       console.error('Error fetching count/sizes:', error);
-      toast.error('Failed to fetch count/sizes');
+      toast.error(error instanceof Error ? error.message : 'Failed to fetch count/sizes');
       setCountSizes([]);
     } finally {
       setIsLoading(false);
@@ -67,14 +50,11 @@ const CountSizePage = () => {
     setIsDeleting(true);
     setDeleteId(itemId);
     try {
-      const response = await fetch(`${API_BASE_URL}/yarn-master/count-sizes/${itemId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to delete count/size');
+      await yarnCountSizeService.deleteCountSize(itemId);
       toast.success('Count/Size deleted successfully');
       await fetchCountSizes();
     } catch (error) {
-      toast.error('Failed to delete count/size');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete count/size');
     } finally {
       setIsDeleting(false);
       setDeleteId(null);
@@ -181,9 +161,8 @@ const CountSizePage = () => {
                             />
                           </th>
                           <th scope="col" className="text-start">Name</th>
-                          <th scope="col" className="text-start">Value</th>
-                          <th scope="col" className="text-start">Description</th>
                           <th scope="col" className="text-start">Status</th>
+                          <th scope="col" className="text-start">Created At</th>
                           <th scope="col" className="text-start">Action</th>
                         </tr>
                       </thead>
@@ -208,13 +187,12 @@ const CountSizePage = () => {
                               />
                             </td>
                             <td>{item.name}</td>
-                            <td>{item.value}</td>
-                            <td>{item.description || '-'}</td>
                             <td>
                               <span className={`badge ${item.status === 'active' ? 'bg-success' : 'bg-danger'}`}>
                                 {item.status}
                               </span>
                             </td>
+                            <td>{item.createdAt ? new Date(item.createdAt).toLocaleString() : '-'}</td>
                             <td>
                               <div className="flex space-x-2">
                                 <Link 

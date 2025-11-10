@@ -4,14 +4,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
-import { API_BASE_URL } from '@/shared/data/utilities/api';
-
-interface YarnType {
-  id: string;
-  name: string;
-  description?: string;
-  status: string;
-}
+import yarnTypeService, { YarnTypeDetail } from '@/shared/services/yarnTypeService';
 
 const EditYarnTypePage = () => {
   const router = useRouter();
@@ -19,7 +12,8 @@ const EditYarnTypePage = () => {
   const id = params?.id as string;
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({ name: '', description: '', status: 'active' });
+  const [formData, setFormData] = useState<{ name: string; status: 'active' | 'inactive' }>({ name: '', status: 'active' });
+  const [details, setDetails] = useState<YarnTypeDetail[]>([{ subtype: '', countSize: [], weight: '' }]);
 
   useEffect(() => {
     if (id) fetchYarnType();
@@ -28,10 +22,17 @@ const EditYarnTypePage = () => {
   const fetchYarnType = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/yarn-master/yarn-types/${id}`);
-      if (!response.ok) throw new Error('Failed to fetch yarn type');
-      const data: YarnType = await response.json();
-      setFormData({ name: data.name || '', description: data.description || '', status: data.status || 'active' });
+      const data = await yarnTypeService.getTypeById(id);
+      setFormData({ name: data.name || '', status: data.status || 'active' });
+      if (data.details && data.details.length > 0) {
+        setDetails(data.details.map(detail => ({
+          subtype: detail.subtype || '',
+          countSize: detail.countSize || [],
+          weight: detail.weight || ''
+        })));
+      } else {
+        setDetails([{ subtype: '', countSize: [], weight: '' }]);
+      }
     } catch (error) {
       toast.error('Failed to load yarn type');
       router.push('/yarn-management/yarn-master/yarn-type');
@@ -40,30 +41,60 @@ const EditYarnTypePage = () => {
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleDetailChange = (index: number, field: 'subtype' | 'weight' | 'countSize', value: string) => {
+    setDetails(prev => {
+      const updated = [...prev];
+      if (field === 'countSize') {
+        updated[index] = { ...updated[index], countSize: value ? value.split(',').map(item => item.trim()).filter(Boolean) : [] };
+      } else {
+        updated[index] = { ...updated[index], [field]: value };
+      }
+      return updated;
+    });
+  };
+
+  const addDetailRow = () => {
+    setDetails(prev => [...prev, { subtype: '', countSize: [], weight: '' }]);
+  };
+
+  const removeDetailRow = (index: number) => {
+    setDetails(prev => prev.filter((_, idx) => idx !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
+    const trimmedName = formData.name.trim();
+    if (!trimmedName) {
       toast.error('Yarn type name is required');
       return;
     }
 
+    const normalizedDetails = details
+      .map(detail => {
+        const trimmedSubtype = detail.subtype.trim();
+        const trimmedWeight = detail.weight?.trim() || '';
+        const normalizedCountSize = detail.countSize && detail.countSize.length > 0 ? detail.countSize : undefined;
+
+        return {
+          subtype: trimmedSubtype,
+          ...(normalizedCountSize ? { countSize: normalizedCountSize } : {}),
+          ...(trimmedWeight ? { weight: trimmedWeight } : {})
+        };
+      })
+      .filter(detail => detail.subtype);
+
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/yarn-master/yarn-types/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify(formData)
+      await yarnTypeService.updateType(id, {
+        name: trimmedName,
+        status: formData.status,
+        ...(normalizedDetails.length > 0 ? { details: normalizedDetails } : { details: [] })
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update yarn type');
-      }
 
       toast.success('Yarn type updated successfully');
       router.push('/yarn-management/yarn-master/yarn-type');
@@ -101,11 +132,11 @@ const EditYarnTypePage = () => {
           <div className="box">
             <div className="box-body">
               <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                  <label className="form-label">Yarn Type Name <span className="text-red-500">*</span></label>
+                  <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="form-control" placeholder="Enter yarn type name" required />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="form-label">Yarn Type Name <span className="text-red-500">*</span></label>
-                    <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="form-control" placeholder="Enter yarn type name" required />
-                  </div>
                   <div>
                     <label className="form-label">Status</label>
                     <select name="status" value={formData.status} onChange={handleInputChange} className="form-select">
@@ -114,9 +145,61 @@ const EditYarnTypePage = () => {
                     </select>
                   </div>
                 </div>
-                <div>
-                  <label className="form-label">Description</label>
-                  <textarea name="description" value={formData.description} onChange={handleInputChange} className="form-control" rows={4} placeholder="Enter description" />
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-medium">Details</h2>
+                    <button type="button" className="ti-btn ti-btn-outline-primary ti-btn-sm" onClick={addDetailRow}>
+                      <i className="ri-add-line me-1"></i> Add Detail
+                    </button>
+                  </div>
+                  {details.length === 0 && (
+                    <p className="text-sm text-gray-500">No details added yet.</p>
+                  )}
+                  {details.map((detail, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="form-label">Subtype <span className="text-red-500">*</span></label>
+                          <input
+                            type="text"
+                            value={detail.subtype}
+                            onChange={(e) => handleDetailChange(index, 'subtype', e.target.value)}
+                            className="form-control"
+                            placeholder="Enter subtype"
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label">Count Sizes (comma separated)</label>
+                          <input
+                            type="text"
+                            value={(detail.countSize || []).join(', ')}
+                            onChange={(e) => handleDetailChange(index, 'countSize', e.target.value)}
+                            className="form-control"
+                            placeholder="e.g. 40s, 60s"
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label">Weight</label>
+                          <input
+                            type="text"
+                            value={detail.weight || ''}
+                            onChange={(e) => handleDetailChange(index, 'weight', e.target.value)}
+                            className="form-control"
+                            placeholder="Enter weight"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          className="ti-btn ti-btn-outline-danger ti-btn-sm"
+                          onClick={() => removeDetailRow(index)}
+                        >
+                          <i className="ri-delete-bin-line me-1"></i> Remove Detail
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <div className="flex justify-end gap-3">
                   <Link href="/yarn-management/yarn-master/yarn-type" className="ti-btn ti-btn-light">Cancel</Link>

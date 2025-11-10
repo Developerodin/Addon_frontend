@@ -3,24 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
-import { API_BASE_URL } from '@/shared/data/utilities/api';
-
-interface YarnType {
-  id: string;
-  name: string;
-  description?: string;
-  status: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface ApiResponse {
-  results: YarnType[];
-  page: number;
-  limit: number;
-  totalPages: number;
-  totalResults: number;
-}
+import yarnTypeService, { YarnType } from '@/shared/services/yarnTypeService';
 
 const YarnTypePage = () => {
   const [yarnTypes, setYarnTypes] = useState<YarnType[]>([]);
@@ -42,12 +25,14 @@ const YarnTypePage = () => {
   const fetchYarnTypes = async () => {
     setIsLoading(true);
     try {
-      const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
-      const response = await fetch(`${API_BASE_URL}/yarn-master/yarn-types?page=${currentPage}&limit=${itemsPerPage}${searchParam}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch yarn types');
+      const params: Record<string, string | number> = {
+        page: currentPage,
+        limit: itemsPerPage,
+      };
+      if (searchQuery.trim()) {
+        params.name = searchQuery.trim();
       }
-      const data: ApiResponse = await response.json();
+      const data = await yarnTypeService.getTypes(params);
       setYarnTypes(data.results || []);
       setTotalPages(data.totalPages || 1);
       setTotalResults(data.totalResults || 0);
@@ -66,10 +51,7 @@ const YarnTypePage = () => {
     setIsDeleting(true);
     setDeleteId(typeId);
     try {
-      const response = await fetch(`${API_BASE_URL}/yarn-master/yarn-types/${typeId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to delete yarn type');
+      await yarnTypeService.deleteType(typeId);
       toast.success('Yarn type deleted successfully');
       await fetchYarnTypes();
     } catch (error) {
@@ -188,7 +170,7 @@ const YarnTypePage = () => {
                             />
                           </th>
                           <th scope="col" className="text-start">Name</th>
-                          <th scope="col" className="text-start">Description</th>
+                          <th scope="col" className="text-start">Details</th>
                           <th scope="col" className="text-start">Status</th>
                           <th scope="col" className="text-start">Action</th>
                         </tr>
@@ -208,7 +190,29 @@ const YarnTypePage = () => {
                               />
                             </td>
                             <td>{type.name}</td>
-                            <td>{type.description || '-'}</td>
+                            <td>
+                              {type.details && type.details.length > 0 ? (
+                                <div className="space-y-1">
+                                  {type.details.map((detail, detailIdx) => (
+                                    <div key={`${type.id}-detail-${detailIdx}`}>
+                                      <span className="font-medium">{detail.subtype}</span>
+                                      {detail.countSize && detail.countSize.length > 0 && (
+                                        <span className="ml-2 text-xs text-gray-500">
+                                          Sizes: {detail.countSize.join(', ')}
+                                        </span>
+                                      )}
+                                      {detail.weight && (
+                                        <span className="ml-2 text-xs text-gray-500">
+                                          Weight: {detail.weight}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
                             <td>
                               <span className={`badge ${type.status === 'active' ? 'bg-success' : 'bg-danger'}`}>
                                 {type.status}

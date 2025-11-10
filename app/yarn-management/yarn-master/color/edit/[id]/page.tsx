@@ -1,18 +1,10 @@
-"use client"
+"use client";
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
-import { API_BASE_URL } from '@/shared/data/utilities/api';
-
-interface Color {
-  id: string;
-  name: string;
-  hexCode?: string;
-  description?: string;
-  status: string;
-}
+import yarnColorService, { YarnColor } from '@/shared/services/yarnColorService';
 
 const EditColorPage = () => {
   const router = useRouter();
@@ -20,7 +12,7 @@ const EditColorPage = () => {
   const id = params?.id as string;
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({ name: '', hexCode: '', description: '', status: 'active' });
+  const [formData, setFormData] = useState<{ name: string; colorCode: string; status: 'active' | 'inactive' }>({ name: '', colorCode: '#000000', status: 'active' });
 
   useEffect(() => {
     if (id) fetchColor();
@@ -29,22 +21,36 @@ const EditColorPage = () => {
   const fetchColor = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/yarn-master/colors/${id}`);
-      if (!response.ok) throw new Error('Failed to fetch color');
-      const data: Color = await response.json();
-      setFormData({ name: data.name || '', hexCode: data.hexCode || '', description: data.description || '', status: data.status || 'active' });
+      const data: YarnColor = await yarnColorService.getColorById(id);
+      setFormData({ 
+        name: data.name || '', 
+        colorCode: data.colorCode ? data.colorCode.toUpperCase() : '#000000', 
+        status: data.status || 'active' 
+      });
     } catch (error) {
-      toast.error('Failed to load color');
+      toast.error(error instanceof Error ? error.message : 'Failed to load color');
       router.push('/yarn-management/yarn-master/color');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
+
+  const handleColorCodeChange = (value: string) => {
+    if (!value) {
+      setFormData(prev => ({ ...prev, colorCode: '#000000' }));
+      return;
+    }
+    let normalized = value.startsWith('#') ? value : `#${value}`;
+    normalized = normalized.slice(0, 7).toUpperCase();
+    setFormData(prev => ({ ...prev, colorCode: normalized }));
+  };
+
+  const isValidHex = (value: string) => /^#([0-9A-F]{6})$/i.test(value);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,20 +58,18 @@ const EditColorPage = () => {
       toast.error('Color name is required');
       return;
     }
+    if (!isValidHex(formData.colorCode)) {
+      toast.error('Please select a valid color');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/yarn-master/colors/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify(formData)
+      await yarnColorService.updateColor(id, {
+        name: formData.name.trim(),
+        colorCode: formData.colorCode.toUpperCase(),
+        status: formData.status,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update color');
-      }
-
       toast.success('Color updated successfully');
       router.push('/yarn-management/yarn-master/color');
     } catch (error) {
@@ -108,12 +112,31 @@ const EditColorPage = () => {
                     <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="form-control" placeholder="Enter color name" required />
                   </div>
                   <div>
-                    <label className="form-label">Hex Code</label>
-                    <div className="flex gap-2">
-                      <input type="text" name="hexCode" value={formData.hexCode} onChange={handleInputChange} className="form-control" placeholder="#FFFFFF" />
-                      {formData.hexCode && (
-                        <div className="w-12 h-12 rounded border border-gray-300" style={{ backgroundColor: formData.hexCode }}></div>
-                      )}
+                    <label className="form-label">Color Code <span className="text-red-500">*</span></label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        name="colorCode"
+                        value={formData.colorCode}
+                        onChange={(e) => handleColorCodeChange(e.target.value)}
+                        className="w-16 h-12 border border-gray-300 rounded cursor-pointer"
+                        required
+                      />
+                      <input
+                        type="text"
+                        name="colorCode"
+                        value={formData.colorCode}
+                        onChange={(e) => handleColorCodeChange(e.target.value)}
+                        onBlur={(e) => {
+                          if (!e.target.value.startsWith('#')) {
+                            handleColorCodeChange(`#${e.target.value}`);
+                          }
+                        }}
+                        className="form-control uppercase"
+                        placeholder="#FFFFFF"
+                        maxLength={7}
+                        required
+                      />
                     </div>
                   </div>
                 </div>
@@ -125,10 +148,6 @@ const EditColorPage = () => {
                       <option value="inactive">Inactive</option>
                     </select>
                   </div>
-                </div>
-                <div>
-                  <label className="form-label">Description</label>
-                  <textarea name="description" value={formData.description} onChange={handleInputChange} className="form-control" rows={4} placeholder="Enter description" />
                 </div>
                 <div className="flex justify-end gap-3">
                   <Link href="/yarn-management/yarn-master/color" className="ti-btn ti-btn-light">Cancel</Link>
