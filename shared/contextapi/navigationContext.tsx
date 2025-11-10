@@ -37,7 +37,8 @@ interface NavigationPermissions {
   };
   'Yarn Management': {
     'Cataloguing': boolean;
-    'Purchase': boolean;
+    'Purchase Order': boolean;
+    'Purchase Order Received': boolean;
     'Inventory': boolean;
     'Yarn Issue': boolean;
     'Yarn Master': {
@@ -99,7 +100,8 @@ const defaultPermissions: NavigationPermissions = {
   },
   'Yarn Management': {
     'Cataloguing': false,
-    'Purchase': false,
+    'Purchase Order': false,
+    'Purchase Order Received': false,
     'Inventory': false,
     'Yarn Issue': false,
     'Yarn Master': {
@@ -286,7 +288,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         // For Yarn Management, also check nested Yarn Master permissions
         if (subMenuKey === 'Yarn Management') {
           const yarnMgmt = subMenuPermissions as any;
-          // Check direct permissions (Cataloguing, Purchase, etc.)
+          // Check direct permissions (Cataloguing, Purchase Order, etc.)
           const hasDirectPermission = Object.entries(yarnMgmt)
             .filter(([key]) => key !== 'Yarn Master')
             .some(([, value]) => value === true);

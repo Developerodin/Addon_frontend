@@ -470,7 +470,8 @@ const EditUserPage = () => {
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
                                                 {[
                                                     { key: 'Cataloguing', label: 'Cataloguing' },
-                                                    { key: 'Purchase', label: 'Purchase' },
+                                                    { key: 'Purchase Order', label: 'Purchase Order' },
+                                                    { key: 'Purchase Order Received', label: 'Purchase Order Received' },
                                                     { key: 'Inventory', label: 'Inventory' },
                                                     { key: 'Yarn Issue', label: 'Yarn Issue' }
                                                 ].map(subsection => (

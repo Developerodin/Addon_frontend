@@ -16,11 +16,18 @@ const YarnManagementPage = () => {
       permission: "Cataloguing"
     },
     {
-      title: "Purchase",
+      title: "Purchase Order",
       description: "Handle yarn procurement and purchase orders",
       icon: "ri-shopping-cart-line",
       path: "/yarn-management/purchase",
-      permission: "Purchase"
+      permission: "Purchase Order"
+    },
+    {
+      title: "Purchase Order Received",
+      description: "Track and manage received purchase orders",
+      icon: "ri-inbox-line",
+      path: "/yarn-management/purchase-order-received",
+      permission: "Purchase Order Received"
     },
     {
       title: "Inventory",

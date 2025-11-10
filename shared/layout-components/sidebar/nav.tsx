@@ -21,6 +21,7 @@ const FloorIcon = <i className="bx bx-building side-menu__icon"></i>;
 const YarnIcon = <i className="ri ri-thread-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const CataloguingIcon = <i className="ri ri-book-open-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const PurchaseIcon = <i className="ri ri-shopping-cart-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const PurchaseReceivedIcon = <i className="ri ri-inbox-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const InventoryIcon = <i className="ri ri-archive-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const IssueIcon = <i className="ri ri-send-plane-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const BrandIcon = <i className="ri ri-price-tag-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
@@ -285,7 +286,15 @@ const BaseMenuItems: any = [
         type: "link",
         active: false,
         selected: false,
-        title: "Purchase",
+        title: "Purchase Order",
+      },
+      {
+        icon: PurchaseReceivedIcon,
+        path: "/yarn-management/purchase-order-received",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Purchase Order Received",
       },
       {
         icon: InventoryIcon,

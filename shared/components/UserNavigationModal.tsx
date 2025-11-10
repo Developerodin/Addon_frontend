@@ -219,7 +219,7 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
               <button
                 type="button"
                 className="text-xs text-primary hover:text-primary-dark"
-                onClick={() => handleSelectAll('Yarn Management', ['Cataloguing', 'Purchase', 'Inventory', 'Yarn Issue'])}
+                onClick={() => handleSelectAll('Yarn Management', ['Cataloguing', 'Purchase Order', 'Purchase Order Received', 'Inventory', 'Yarn Issue'])}
               >
                 Toggle All
               </button>
@@ -227,7 +227,8 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
             <div className="space-y-2 ml-4">
               {[
                 { key: 'Cataloguing', label: 'Cataloguing' },
-                { key: 'Purchase', label: 'Purchase' },
+                { key: 'Purchase Order', label: 'Purchase Order' },
+                { key: 'Purchase Order Received', label: 'Purchase Order Received' },
                 { key: 'Inventory', label: 'Inventory' },
                 { key: 'Yarn Issue', label: 'Yarn Issue' }
               ].map(subsection => (
