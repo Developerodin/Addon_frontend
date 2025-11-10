@@ -11,6 +11,7 @@ interface OrderTableProps {
   onSelectAll: (checked: boolean) => void;
   onEdit: (orderId: string) => void;
   onDelete: (orderId: string) => void;
+  onUpdateWebsiteStatus?: (order: Order) => void;
 }
 
 const OrderTable: React.FC<OrderTableProps> = ({
@@ -21,6 +22,7 @@ const OrderTable: React.FC<OrderTableProps> = ({
   onSelectAll,
   onEdit,
   onDelete,
+  onUpdateWebsiteStatus,
 }) => {
   const allSelected = orders.length > 0 && selectedOrders.length === orders.length;
   const someSelected = selectedOrders.length > 0 && selectedOrders.length < orders.length;
@@ -125,9 +127,23 @@ const OrderTable: React.FC<OrderTableProps> = ({
                     <span className="capitalize">{order.channel}</span>
                   </td>
                   <td>
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadgeClass(order.status)}`}>
-                      {order.status.toUpperCase()}
-                    </span>
+                    {order.source === 'Website' && onUpdateWebsiteStatus ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUpdateWebsiteStatus(order);
+                        }}
+                        className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadgeClass(order.status)} transition-opacity hover:opacity-80 focus:outline-none`}
+                        title="Update website order status"
+                      >
+                        {order.status.toUpperCase()}
+                      </button>
+                    ) : (
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadgeClass(order.status)}`}>
+                        {order.status.toUpperCase()}
+                      </span>
+                    )}
                   </td>
                   <td>
                     <div>{order.totalQuantity} items</div>

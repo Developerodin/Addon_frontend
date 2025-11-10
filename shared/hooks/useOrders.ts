@@ -26,6 +26,10 @@ interface UseOrdersReturn {
   deleteOrder: (orderId: string) => Promise<void>;
   getOrder: (orderId: string) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: string) => Promise<Order>;
+  updateWebsiteOrderStatus: (
+    medusaOrderId: string,
+    action: 'cancel' | 'complete' | 'archive'
+  ) => Promise<Order>;
   clearError: () => void;
 }
 
@@ -151,6 +155,27 @@ export const useOrders = (initialFilters?: OrderFilters): UseOrdersReturn => {
     }
   }, []);
 
+  const updateWebsiteOrderStatus = useCallback(async (
+    medusaOrderId: string,
+    action: 'cancel' | 'complete' | 'archive'
+  ): Promise<Order> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const updatedOrder = await orderService.updateWebsiteOrderStatus(medusaOrderId, action);
+      setOrders(prev => prev.map(order =>
+        order.externalOrderId === medusaOrderId ? updatedOrder : order
+      ));
+      return updatedOrder;
+    } catch (err: any) {
+      setError(err.message || 'Failed to update website order status');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Initial fetch with provided filters
   useEffect(() => {
     if (initialFilters) {
@@ -169,6 +194,7 @@ export const useOrders = (initialFilters?: OrderFilters): UseOrdersReturn => {
     deleteOrder,
     getOrder,
     updateOrderStatus,
+    updateWebsiteOrderStatus,
     clearError
   };
 };
