@@ -1,30 +1,12 @@
-"use client"
+"use client";
 import React, { useState, useEffect } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
-import { API_BASE_URL } from '@/shared/data/utilities/api';
-
-interface Color {
-  id: string;
-  name: string;
-  hexCode?: string;
-  description?: string;
-  status: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface ApiResponse {
-  results: Color[];
-  page: number;
-  limit: number;
-  totalPages: number;
-  totalResults: number;
-}
+import yarnColorService, { YarnColor } from '@/shared/services/yarnColorService';
 
 const ColorPage = () => {
-  const [colors, setColors] = useState<Color[]>([]);
+  const [colors, setColors] = useState<YarnColor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -43,18 +25,23 @@ const ColorPage = () => {
   const fetchColors = async () => {
     setIsLoading(true);
     try {
-      const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
-      const response = await fetch(`${API_BASE_URL}/yarn-master/colors?page=${currentPage}&limit=${itemsPerPage}${searchParam}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch colors');
-      }
-      const data: ApiResponse = await response.json();
-      setColors(data.results || []);
-      setTotalPages(data.totalPages || 1);
-      setTotalResults(data.totalResults || 0);
+      const response = await yarnColorService.getColors({
+        page: currentPage,
+        limit: itemsPerPage,
+        name: searchQuery.trim() || undefined,
+      });
+      const formattedResults = (response.results || []).map(color => ({
+        ...color,
+        colorCode: color.colorCode ? color.colorCode.toUpperCase() : '#000000',
+      }));
+      setColors(formattedResults);
+      setTotalPages(response.totalPages || 1);
+      setTotalResults(response.totalResults || 0);
+      setSelectedColors([]);
+      setSelectAll(false);
     } catch (error) {
       console.error('Error fetching colors:', error);
-      toast.error('Failed to fetch colors');
+      toast.error(error instanceof Error ? error.message : 'Failed to fetch colors');
       setColors([]);
     } finally {
       setIsLoading(false);
@@ -67,14 +54,11 @@ const ColorPage = () => {
     setIsDeleting(true);
     setDeleteId(colorId);
     try {
-      const response = await fetch(`${API_BASE_URL}/yarn-master/colors/${colorId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to delete color');
+      await yarnColorService.deleteColor(colorId);
       toast.success('Color deleted successfully');
       await fetchColors();
     } catch (error) {
-      toast.error('Failed to delete color');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete color');
     } finally {
       setIsDeleting(false);
       setDeleteId(null);
@@ -181,9 +165,9 @@ const ColorPage = () => {
                             />
                           </th>
                           <th scope="col" className="text-start">Name</th>
-                          <th scope="col" className="text-start">Hex Code</th>
+                          <th scope="col" className="text-start">Color Code</th>
                           <th scope="col" className="text-start">Preview</th>
-                          <th scope="col" className="text-start">Description</th>
+                          <th scope="col" className="text-start">Created At</th>
                           <th scope="col" className="text-start">Status</th>
                           <th scope="col" className="text-start">Action</th>
                         </tr>
@@ -209,16 +193,16 @@ const ColorPage = () => {
                               />
                             </td>
                             <td>{color.name}</td>
-                            <td>{color.hexCode || '-'}</td>
+                            <td>{color.colorCode}</td>
                             <td>
-                              {color.hexCode && (
+                              {color.colorCode ? (
                                 <div 
                                   className="w-8 h-8 rounded border border-gray-300" 
-                                  style={{ backgroundColor: color.hexCode }}
+                                  style={{ backgroundColor: color.colorCode }}
                                 ></div>
-                              )}
+                              ) : '-'}
                             </td>
-                            <td>{color.description || '-'}</td>
+                            <td>{color.createdAt ? new Date(color.createdAt).toLocaleString() : '-'}</td>
                             <td>
                               <span className={`badge ${color.status === 'active' ? 'bg-success' : 'bg-danger'}`}>
                                 {color.status}

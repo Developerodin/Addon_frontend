@@ -4,43 +4,34 @@ import { useRouter } from 'next/navigation';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
-import { API_BASE_URL } from '@/shared/data/utilities/api';
+import yarnCountSizeService from '@/shared/services/yarnCountSizeService';
 
 const AddCountSizePage = () => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    value: '',
-    description: '',
-    status: 'active'
+    status: 'active',
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.value.trim()) {
-      toast.error('Name and value are required');
+    if (!formData.name.trim()) {
+      toast.error('Name is required');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/yarn-master/count-sizes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify(formData)
+      await yarnCountSizeService.createCountSize({
+        name: formData.name.trim(),
+        status: formData.status,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create count/size');
-      }
-
       toast.success('Count/Size created successfully');
       router.push('/yarn-management/yarn-master/count-size');
     } catch (error) {
@@ -70,11 +61,15 @@ const AddCountSizePage = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="form-label">Name <span className="text-red-500">*</span></label>
-                    <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="form-control" placeholder="e.g., 30s, 40s" required />
-                  </div>
-                  <div>
-                    <label className="form-label">Value <span className="text-red-500">*</span></label>
-                    <input type="text" name="value" value={formData.value} onChange={handleInputChange} className="form-control" placeholder="e.g., 30, 40" required />
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="e.g., 40s"
+                      required
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -85,10 +80,6 @@ const AddCountSizePage = () => {
                       <option value="inactive">Inactive</option>
                     </select>
                   </div>
-                </div>
-                <div>
-                  <label className="form-label">Description</label>
-                  <textarea name="description" value={formData.description} onChange={handleInputChange} className="form-control" rows={4} placeholder="Enter description" />
                 </div>
                 <div className="flex justify-end gap-3">
                   <Link href="/yarn-management/yarn-master/count-size" className="ti-btn ti-btn-light">Cancel</Link>

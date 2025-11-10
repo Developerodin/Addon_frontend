@@ -25,7 +25,7 @@ const PurchaseReceivedIcon = <i className="ri ri-inbox-line side-menu__icon" sty
 const InventoryIcon = <i className="ri ri-archive-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const IssueIcon = <i className="ri ri-send-plane-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const BrandIcon = <i className="ri ri-price-tag-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
-const YarnTypeIcon = <i className="ri ri-thread-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const YarnTypeIcon = <i className="ri ri-pantone-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const CountSizeIcon = <i className="ri ri-ruler-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const ColorIcon = <i className="ri ri-palette-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const WarehouseIcon = <i className="bx bx-store side-menu__icon"></i>;
