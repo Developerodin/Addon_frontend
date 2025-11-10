@@ -237,6 +237,16 @@ class OrderService {
       body: JSON.stringify({ orderStatus: status })
     });
   }
+
+  // Update website order status via Medusa actions
+  async updateWebsiteOrderStatus(
+    medusaOrderId: string,
+    action: 'cancel' | 'complete' | 'archive'
+  ): Promise<Order> {
+    return this.makeRequest<Order>(`/website/${medusaOrderId}/${action}`, {
+      method: 'POST'
+    });
+  }
 }
 
 // Export singleton instance

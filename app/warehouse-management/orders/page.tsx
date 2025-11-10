@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -12,6 +12,7 @@ import OrderFiltersPanel from './components/OrderFilters';
 import OrderDetailsModal from './components/OrderDetailsModal';
 import OrderTable from './components/OrderTable';
 import NotificationsSection from './components/NotificationsSection';
+import OrderStatusUpdateModal from './components/OrderStatusUpdateModal';
 
 // Transform API order to UI order format
 const transformApiOrderToUiOrder = (apiOrder: ApiOrder): Order => {
@@ -96,9 +97,20 @@ const OrdersPage = () => {
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [statusModalOrder, setStatusModalOrder] = useState<Order | null>(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
 
   // Use API hook
-  const { orders: apiOrders, loading, error, pagination, fetchOrders, deleteOrder } = useOrders();
+  const {
+    orders: apiOrders,
+    loading,
+    error,
+    pagination,
+    fetchOrders,
+    deleteOrder,
+    updateWebsiteOrderStatus,
+  } = useOrders();
 
   // Transform API orders to UI format
   const allOrders = useMemo(() => {
@@ -136,34 +148,26 @@ const OrdersPage = () => {
     return notifs;
   }, [allOrders]);
 
-  // Fetch orders on mount and when filters/tab change
-  useEffect(() => {
+  const buildApiFilters = useCallback(() => {
     const apiFilters: any = {
       page: 1,
       limit: 100, // Get more orders for filtering
       sortBy: 'createdAt:desc',
     };
 
-    // Map UI filters to API filters
+    const statusMap: Record<OrderStatus, string> = {
+      'pending': 'pending',
+      'in-progress': 'processing',
+      'packed': 'processing',
+      'dispatched': 'completed',
+      'cancelled': 'cancelled',
+    };
+
     if (activeTab !== 'all') {
-      const statusMap: Record<OrderStatus, string> = {
-        'pending': 'pending',
-        'in-progress': 'processing',
-        'packed': 'processing',
-        'dispatched': 'completed',
-        'cancelled': 'cancelled',
-      };
       apiFilters.orderStatus = statusMap[activeTab] || activeTab;
     }
 
     if (filters.status) {
-      const statusMap: Record<OrderStatus, string> = {
-        'pending': 'pending',
-        'in-progress': 'processing',
-        'packed': 'processing',
-        'dispatched': 'completed',
-        'cancelled': 'cancelled',
-      };
       apiFilters.orderStatus = statusMap[filters.status] || filters.status;
     }
 
@@ -186,9 +190,14 @@ const OrdersPage = () => {
       apiFilters.dateTo = filters.dateTo;
     }
 
-    fetchOrders(apiFilters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return apiFilters;
   }, [activeTab, filters]);
+
+  // Fetch orders on mount and when filters/tab change
+  useEffect(() => {
+    const apiFilters = buildApiFilters();
+    fetchOrders(apiFilters);
+  }, [buildApiFilters, fetchOrders]);
 
   // Show error toast if API fails
   useEffect(() => {
@@ -298,25 +307,43 @@ const OrdersPage = () => {
         await deleteOrder(orderId);
         toast.success('Order deleted successfully');
         // Refetch orders
-        const apiFilters: any = {
-          page: 1,
-          limit: 100,
-          sortBy: 'createdAt:desc',
-        };
-        if (activeTab !== 'all') {
-          const statusMap: Record<OrderStatus, string> = {
-            'pending': 'pending',
-            'in-progress': 'processing',
-            'packed': 'processing',
-            'dispatched': 'completed',
-            'cancelled': 'cancelled',
-          };
-          apiFilters.orderStatus = statusMap[activeTab] || activeTab;
-        }
+        const apiFilters = buildApiFilters();
         fetchOrders(apiFilters);
       } catch (error) {
         toast.error('Failed to delete order');
       }
+    }
+  };
+
+  const handleOpenStatusModal = (order: Order) => {
+    if (order.source !== 'Website') {
+      return;
+    }
+    setStatusModalOrder(order);
+    setIsStatusModalOpen(true);
+  };
+
+  const handleCloseStatusModal = () => {
+    setStatusModalOrder(null);
+    setIsStatusModalOpen(false);
+  };
+
+  const handleWebsiteStatusUpdate = async (action: 'cancel' | 'complete' | 'archive') => {
+    if (!statusModalOrder) return;
+
+    setStatusUpdating(true);
+    try {
+      await updateWebsiteOrderStatus(statusModalOrder.orderNumber, action);
+      toast.success(`Order ${statusModalOrder.orderNumber} updated successfully`);
+      const apiFilters = buildApiFilters();
+      await fetchOrders(apiFilters);
+      handleCloseStatusModal();
+    } catch (err: any) {
+      const message = err?.message || 'Failed to update order status';
+      toast.error(message);
+      throw (err instanceof Error ? err : new Error(message));
+    } finally {
+      setStatusUpdating(false);
     }
   };
 
@@ -486,6 +513,7 @@ const OrdersPage = () => {
               onSelectAll={handleSelectAll}
               onEdit={handleEditOrder}
               onDelete={handleDeleteOrder}
+              onUpdateWebsiteStatus={handleOpenStatusModal}
             />
           )}
         </div>
@@ -499,6 +527,14 @@ const OrdersPage = () => {
           setSelectedOrder(null);
         }}
         order={selectedOrder}
+      />
+
+      <OrderStatusUpdateModal
+        isOpen={isStatusModalOpen}
+        order={statusModalOrder}
+        isSubmitting={statusUpdating}
+        onClose={handleCloseStatusModal}
+        onSubmit={handleWebsiteStatusUpdate}
       />
     </div>
   );
