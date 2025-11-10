@@ -94,11 +94,21 @@ const EditUserPage = () => {
     };
 
     // Navigation handlers
-    const handleNavigationChange = (section: string, subsection: string | null, value: boolean) => {
+    const handleNavigationChange = (section: string, subsection: string | null, subsubsection: string | null, value: boolean) => {
         setNavigation(prev => {
             const newNav = { ...prev };
             
-            if (subsection) {
+            if (subsubsection) {
+                // Handle triple-nested sections like Yarn Management -> Yarn Master -> Brand
+                if (!newNav[section as keyof typeof newNav]) {
+                    newNav[section as keyof typeof newNav] = {} as any;
+                }
+                const sectionObj = (newNav[section as keyof typeof newNav] as any);
+                if (!sectionObj[subsection]) {
+                    sectionObj[subsection] = {} as any;
+                }
+                sectionObj[subsection][subsubsection] = value;
+            } else if (subsection) {
                 // Handle nested sections like Catalog.Items
                 if (!newNav[section as keyof typeof newNav]) {
                     newNav[section as keyof typeof newNav] = {} as any;
@@ -370,7 +380,7 @@ const EditUserPage = () => {
                                                         <input
                                                             type="checkbox"
                                                             checked={(navigation as any)[section.key] === true}
-                                                            onChange={(e) => handleNavigationChange(section.key, null, e.target.checked)}
+                                                            onChange={(e) => handleNavigationChange(section.key, null, null, e.target.checked)}
                                                             className="rounded border-gray-300 text-primary focus:ring-primary"
                                                         />
                                                         <span className="ml-2 text-sm text-gray-700">{section.label}</span>
@@ -395,7 +405,7 @@ const EditUserPage = () => {
                                                         <input
                                                             type="checkbox"
                                                             checked={(navigation.Catalog as any)?.[subsection.key] === true}
-                                                            onChange={(e) => handleNavigationChange('Catalog', subsection.key, e.target.checked)}
+                                                            onChange={(e) => handleNavigationChange('Catalog', subsection.key, null, e.target.checked)}
                                                             className="rounded border-gray-300 text-primary focus:ring-primary"
                                                         />
                                                         <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
@@ -416,7 +426,7 @@ const EditUserPage = () => {
                                                         <input
                                                             type="checkbox"
                                                             checked={(navigation.Sales as any)?.[subsection.key] === true}
-                                                            onChange={(e) => handleNavigationChange('Sales', subsection.key, e.target.checked)}
+                                                            onChange={(e) => handleNavigationChange('Sales', subsection.key, null, e.target.checked)}
                                                             className="rounded border-gray-300 text-primary focus:ring-primary"
                                                         />
                                                         <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
@@ -445,7 +455,7 @@ const EditUserPage = () => {
                                                         <input
                                                             type="checkbox"
                                                             checked={(navigation['Production Planning'] as any)?.[subsection.key] === true}
-                                                            onChange={(e) => handleNavigationChange('Production Planning', subsection.key, e.target.checked)}
+                                                            onChange={(e) => handleNavigationChange('Production Planning', subsection.key, null, e.target.checked)}
                                                             className="rounded border-gray-300 text-primary focus:ring-primary"
                                                         />
                                                         <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
@@ -468,12 +478,35 @@ const EditUserPage = () => {
                                                         <input
                                                             type="checkbox"
                                                             checked={(navigation['Yarn Management'] as any)?.[subsection.key] === true}
-                                                            onChange={(e) => handleNavigationChange('Yarn Management', subsection.key, e.target.checked)}
+                                                            onChange={(e) => handleNavigationChange('Yarn Management', subsection.key, null, e.target.checked)}
                                                             className="rounded border-gray-300 text-primary focus:ring-primary"
                                                         />
                                                         <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
                                                     </label>
                                                 ))}
+                                            </div>
+                                            
+                                            {/* Yarn Master Subsection */}
+                                            <div className="mt-4 ml-8">
+                                                <h5 className="text-sm font-medium text-gray-800 mb-2">Yarn Master</h5>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+                                                    {[
+                                                        { key: 'Brand', label: 'Brand' },
+                                                        { key: 'Yarn Type', label: 'Yarn Type' },
+                                                        { key: 'Count/Size', label: 'Count/Size' },
+                                                        { key: 'Color', label: 'Color' }
+                                                    ].map(subsubsection => (
+                                                        <label key={subsubsection.key} className="flex items-center">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={(navigation['Yarn Management'] as any)?.['Yarn Master']?.[subsubsection.key] === true}
+                                                                onChange={(e) => handleNavigationChange('Yarn Management', 'Yarn Master', subsubsection.key, e.target.checked)}
+                                                                className="rounded border-gray-300 text-primary focus:ring-primary"
+                                                            />
+                                                            <span className="ml-2 text-sm text-gray-700">{subsubsection.label}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
 
@@ -492,7 +525,7 @@ const EditUserPage = () => {
                                                         <input
                                                             type="checkbox"
                                                             checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
-                                                            onChange={(e) => handleNavigationChange('Warehouse Management', subsection.key, e.target.checked)}
+                                                            onChange={(e) => handleNavigationChange('Warehouse Management', subsection.key, null, e.target.checked)}
                                                             className="rounded border-gray-300 text-primary focus:ring-primary"
                                                         />
                                                         <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>

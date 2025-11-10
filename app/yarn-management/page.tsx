@@ -35,6 +35,13 @@ const YarnManagementPage = () => {
       icon: "ri-send-plane-line",
       path: "/yarn-management/yarn-issue",
       permission: "Yarn Issue"
+    },
+    {
+      title: "Yarn Master",
+      description: "Manage yarn master data (Brand, Type, Count/Size, Color)",
+      icon: "ri-database-line",
+      path: "/yarn-management/yarn-master",
+      permission: "Yarn Master"
     }
   ];
 

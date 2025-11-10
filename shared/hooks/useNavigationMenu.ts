@@ -13,7 +13,16 @@ interface MenuItem {
 }
 
 export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
-  const { hasPermission, hasSubPermission, isLoading } = useNavigation();
+  const { hasPermission, hasSubPermission, isLoading, permissions } = useNavigation();
+  
+  // Debug: Log permissions
+  if (permissions) {
+    console.log('Navigation permissions:', permissions);
+    console.log('Yarn Management permissions:', permissions['Yarn Management']);
+    if (permissions['Yarn Management']) {
+      console.log('Yarn Master permissions:', (permissions['Yarn Management'] as any)['Yarn Master']);
+    }
+  }
 
   const filteredMenuItems = useMemo(() => {
     if (isLoading) {
@@ -44,6 +53,30 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
       if (item.type === 'sub' && item.children) {
         // Filter children based on permissions
         const filteredChildren = item.children.filter(child => {
+          // Handle nested submenus (e.g., Yarn Master within Yarn Management)
+          if (child.type === 'sub' && child.children) {
+            // First check if user has permission to see the Yarn Master submenu itself
+            if (child.path === '/yarn-management/yarn-master') {
+              const hasYarnMasterPermission = hasSubPermission('/yarn-management', 'Yarn Master');
+              if (!hasYarnMasterPermission) {
+                return false;
+              }
+            }
+            
+            // Check if nested submenu has any visible children
+            const hasVisibleChildren = child.children.some(nestedChild => {
+              if (nestedChild.type === 'link' && nestedChild.path) {
+                if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
+                  return hasSubPermission('/yarn-management/yarn-master', nestedChild.title);
+                }
+              }
+              return false;
+            });
+            
+            // Only show nested submenu if it has visible children
+            return hasVisibleChildren;
+          }
+          
           if (child.type === 'link' && child.path) {
             // Map paths to parent/child structure
             if (child.path.startsWith('/catalog/')) {
@@ -60,6 +93,15 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             }
             if (child.path.startsWith('/yarn-management/')) {
               const childName = child.title;
+              // Handle nested Yarn Master permissions
+              // If path is exactly /yarn-management/yarn-master, check Yarn Master permission
+              if (child.path === '/yarn-management/yarn-master') {
+                return hasSubPermission('/yarn-management', 'Yarn Master');
+              }
+              // If path starts with /yarn-management/yarn-master/, check nested permissions
+              if (child.path.startsWith('/yarn-management/yarn-master/')) {
+                return hasSubPermission('/yarn-management/yarn-master', childName);
+              }
               return hasSubPermission('/yarn-management', childName);
             }
             if (child.path.startsWith('/warehouse-management/')) {
@@ -72,9 +114,31 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
 
         // Only show parent if it has visible children
         if (filteredChildren.length > 0) {
+          // Process filtered children to handle nested submenus
+          const processedChildren = filteredChildren.map(child => {
+            // Handle nested submenus (e.g., Yarn Master within Yarn Management)
+            if (child.type === 'sub' && child.children) {
+              // Filter nested children
+              const nestedFilteredChildren = child.children.filter(nestedChild => {
+                if (nestedChild.type === 'link' && nestedChild.path) {
+                  if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
+                    return hasSubPermission('/yarn-management/yarn-master', nestedChild.title);
+                  }
+                }
+                return false;
+              });
+              
+              return {
+                ...child,
+                children: nestedFilteredChildren
+              };
+            }
+            return child;
+          });
+          
           return {
             ...item,
-            children: filteredChildren
+            children: processedChildren
           };
         }
         return false;
@@ -85,6 +149,30 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
       // For sub-menu items, return the filtered version
       if (item.type === 'sub' && item.children) {
         const filteredChildren = item.children.filter(child => {
+          // Handle nested submenus (e.g., Yarn Master within Yarn Management)
+          if (child.type === 'sub' && child.children) {
+            // First check if user has permission to see the Yarn Master submenu itself
+            if (child.path === '/yarn-management/yarn-master') {
+              const hasYarnMasterPermission = hasSubPermission('/yarn-management', 'Yarn Master');
+              if (!hasYarnMasterPermission) {
+                return false;
+              }
+            }
+            
+            // Check if nested submenu has any visible children
+            const hasVisibleChildren = child.children.some(nestedChild => {
+              if (nestedChild.type === 'link' && nestedChild.path) {
+                if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
+                  return hasSubPermission('/yarn-management/yarn-master', nestedChild.title);
+                }
+              }
+              return false;
+            });
+            
+            // Only show nested submenu if it has visible children
+            return hasVisibleChildren;
+          }
+          
           if (child.type === 'link' && child.path) {
             if (child.path.startsWith('/catalog/')) {
               const childName = child.title;
@@ -100,6 +188,15 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             }
             if (child.path.startsWith('/yarn-management/')) {
               const childName = child.title;
+              // Handle nested Yarn Master permissions
+              // If path is exactly /yarn-management/yarn-master, check Yarn Master permission
+              if (child.path === '/yarn-management/yarn-master') {
+                return hasSubPermission('/yarn-management', 'Yarn Master');
+              }
+              // If path starts with /yarn-management/yarn-master/, check nested permissions
+              if (child.path.startsWith('/yarn-management/yarn-master/')) {
+                return hasSubPermission('/yarn-management/yarn-master', childName);
+              }
               return hasSubPermission('/yarn-management', childName);
             }
             if (child.path.startsWith('/warehouse-management/')) {
@@ -110,9 +207,31 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
           return false;
         });
 
+        // Process filtered children to handle nested submenus
+        const processedChildren = filteredChildren.map(child => {
+          // Handle nested submenus (e.g., Yarn Master within Yarn Management)
+          if (child.type === 'sub' && child.children) {
+            // Filter nested children
+            const nestedFilteredChildren = child.children.filter(nestedChild => {
+              if (nestedChild.type === 'link' && nestedChild.path) {
+                if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
+                  return hasSubPermission('/yarn-management/yarn-master', nestedChild.title);
+                }
+              }
+              return false;
+            });
+            
+            return {
+              ...child,
+              children: nestedFilteredChildren
+            };
+          }
+          return child;
+        });
+
         return {
           ...item,
-          children: filteredChildren
+          children: processedChildren
         };
       }
 

@@ -23,6 +23,10 @@ const CataloguingIcon = <i className="ri ri-book-open-line side-menu__icon" styl
 const PurchaseIcon = <i className="ri ri-shopping-cart-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const InventoryIcon = <i className="ri ri-archive-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const IssueIcon = <i className="ri ri-send-plane-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const BrandIcon = <i className="ri ri-price-tag-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const YarnTypeIcon = <i className="ri ri-thread-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const CountSizeIcon = <i className="ri ri-ruler-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const ColorIcon = <i className="ri ri-palette-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const WarehouseIcon = <i className="bx bx-store side-menu__icon"></i>;
 const OrdersIcon = <i className="ri ri-file-list-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const PickPackIcon = <i className="ri ri-handbag-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
@@ -298,6 +302,48 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Yarn Issue",
+      },
+      {
+        icon: YarnIcon,
+        title: "Yarn Master",
+        type: "sub",
+        active: false,
+        selected: false,
+        path: "/yarn-management/yarn-master",
+        children: [
+          {
+            icon: BrandIcon,
+            path: "/yarn-management/yarn-master/brand",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Brand",
+          },
+          {
+            icon: YarnTypeIcon,
+            path: "/yarn-management/yarn-master/yarn-type",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Yarn Type",
+          },
+          {
+            icon: CountSizeIcon,
+            path: "/yarn-management/yarn-master/count-size",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Count/Size",
+          },
+          {
+            icon: ColorIcon,
+            path: "/yarn-management/yarn-master/color",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Color",
+          },
+        ],
       },
     ],
   },

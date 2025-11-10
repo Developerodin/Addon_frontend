@@ -40,6 +40,12 @@ interface NavigationPermissions {
     'Purchase': boolean;
     'Inventory': boolean;
     'Yarn Issue': boolean;
+    'Yarn Master': {
+      'Brand': boolean;
+      'Yarn Type': boolean;
+      'Count/Size': boolean;
+      'Color': boolean;
+    };
   };
   'Warehouse Management': {
     'Orders': boolean;
@@ -96,6 +102,12 @@ const defaultPermissions: NavigationPermissions = {
     'Purchase': false,
     'Inventory': false,
     'Yarn Issue': false,
+    'Yarn Master': {
+      'Brand': false,
+      'Yarn Type': false,
+      'Count/Size': false,
+      'Color': false,
+    },
   },
   'Warehouse Management': {
     'Orders': false,
@@ -172,7 +184,11 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         },
         'Yarn Management': {
           ...defaultPermissions['Yarn Management'],
-          ...(user.navigation['Yarn Management'] || {})
+          ...(user.navigation['Yarn Management'] || {}),
+          'Yarn Master': {
+            ...defaultPermissions['Yarn Management']['Yarn Master'],
+            ...(user.navigation['Yarn Management']?.['Yarn Master'] || {})
+          }
         },
         'Warehouse Management': {
           ...defaultPermissions['Warehouse Management'],
@@ -242,6 +258,18 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       return permissions[permissionKey] as boolean;
     }
 
+    // Special handling for yarn-master path
+    if (path === '/yarn-management/yarn-master') {
+      const yarnManagement = permissions['Yarn Management'];
+      if (yarnManagement && typeof yarnManagement === 'object') {
+        const yarnMaster = (yarnManagement as any)['Yarn Master'];
+        if (yarnMaster && typeof yarnMaster === 'object') {
+          return Object.values(yarnMaster).some((permission: any) => permission === true);
+        }
+      }
+      return false;
+    }
+
     // Special handling for sub-menus - check if user has any permission for the sub-menu
     if (path === '/catalog' || path === '/sales' || path === '/production' || path === '/yarn-management' || path === '/warehouse-management') {
       let subMenuKey: keyof NavigationPermissions;
@@ -255,6 +283,22 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       const subMenuPermissions = permissions[subMenuKey];
       if (subMenuPermissions && typeof subMenuPermissions === 'object') {
         // Check if user has any permission for this sub-menu
+        // For Yarn Management, also check nested Yarn Master permissions
+        if (subMenuKey === 'Yarn Management') {
+          const yarnMgmt = subMenuPermissions as any;
+          // Check direct permissions (Cataloguing, Purchase, etc.)
+          const hasDirectPermission = Object.entries(yarnMgmt)
+            .filter(([key]) => key !== 'Yarn Master')
+            .some(([, value]) => value === true);
+          
+          // Check Yarn Master permissions
+          const yarnMaster = yarnMgmt['Yarn Master'];
+          const hasYarnMasterPermission = yarnMaster && typeof yarnMaster === 'object' 
+            ? Object.values(yarnMaster).some((permission: any) => permission === true)
+            : false;
+          
+          return hasDirectPermission || hasYarnMasterPermission;
+        }
         return Object.values(subMenuPermissions).some(permission => permission === true);
       }
     }
@@ -265,6 +309,18 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
   // Check if user has permission for a sub-menu item
   const hasSubPermission = (parent: string, child: string): boolean => {
     if (!permissions) return false;
+
+    // Handle Yarn Master sub-items (Brand, Yarn Type, etc.) - nested permissions
+    if (parent === '/yarn-management/yarn-master') {
+      const yarnManagement = permissions['Yarn Management'];
+      if (yarnManagement && typeof yarnManagement === 'object') {
+        const yarnMaster = (yarnManagement as any)['Yarn Master'];
+        if (yarnMaster && typeof yarnMaster === 'object') {
+          return yarnMaster[child] === true;
+        }
+      }
+      return false;
+    }
 
     // Map parent paths to permission objects
     const parentMap: { [key: string]: keyof NavigationPermissions } = {
@@ -278,6 +334,17 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     const parentKey = parentMap[parent];
     if (parentKey && permissions[parentKey] && typeof permissions[parentKey] === 'object') {
       const subPermissions = permissions[parentKey] as any;
+      
+      // Handle nested permissions (e.g., Yarn Master)
+      if (parent === '/yarn-management' && child === 'Yarn Master') {
+        // Check if user has any Yarn Master permission
+        const yarnMaster = subPermissions['Yarn Master'];
+        if (yarnMaster && typeof yarnMaster === 'object') {
+          return Object.values(yarnMaster).some((permission: any) => permission === true);
+        }
+        return false;
+      }
+      
       return subPermissions[child] === true;
     }
 
