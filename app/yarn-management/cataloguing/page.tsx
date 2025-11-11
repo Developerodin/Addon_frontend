@@ -1,10 +1,11 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast, Toaster } from "react-hot-toast";
-import yarnCatalogService, { YarnCatalog } from "@/shared/services/yarnCatalogService";
+import yarnCatalogService, { BulkImportYarnCatalogRequest, YarnCatalog } from "@/shared/services/yarnCatalogService";
+import * as XLSX from "xlsx";
 
 const CataloguingPage = () => {
   const { hasSubPermission } = useNavigation();
@@ -17,6 +18,10 @@ const CataloguingPage = () => {
   const [totalResults, setTotalResults] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasPermission = hasSubPermission('/yarn-management', 'Cataloguing');
 
@@ -83,6 +88,344 @@ const CataloguingPage = () => {
     return pages;
   }
 
+  const handleDownloadTemplate = () => {
+    try {
+      const workbook = XLSX.utils.book_new();
+      const sheetData = [
+        {
+          ID: "",
+          "Yarn Type ID": "65f1a2b3c4d5e6f7g8h9i0a1",
+          "Yarn Subtype ID": "65f1a2b3c4d5e6f7g8h9i0b2",
+          "Count Size ID": "65f1a2b3c4d5e6f7g8h9i0c3",
+          "Blend ID": "65f1a2b3c4d5e6f7g8h9i0d4",
+          "Color Family ID": "65f1a2b3c4d5e6f7g8h9i0e5",
+          "Pantone Shade": "PMS 186 C",
+          "Pantone Name": "Bright Red",
+          Season: "SS24",
+          GST: 12,
+          Remark: "Sample remark",
+          "HSN Code": "5509",
+          Status: "active",
+        },
+        {
+          ID: "",
+          "Yarn Type ID": "65f1a2b3c4d5e6f7g8h9i0f6",
+          "Yarn Subtype ID": "",
+          "Count Size ID": "65f1a2b3c4d5e6f7g8h9i0g7",
+          "Blend ID": "65f1a2b3c4d5e6f7g8h9i0h8",
+          "Color Family ID": "",
+          "Pantone Shade": "",
+          "Pantone Name": "",
+          Season: "",
+          GST: 5,
+          Remark: "",
+          "HSN Code": "",
+          Status: "inactive",
+        },
+      ];
+      const worksheet = XLSX.utils.json_to_sheet(sheetData);
+      worksheet["!cols"] = [
+        { wch: 20 },
+        { wch: 26 },
+        { wch: 28 },
+        { wch: 26 },
+        { wch: 24 },
+        { wch: 28 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 24 },
+        { wch: 14 },
+        { wch: 10 },
+      ];
+      XLSX.utils.book_append_sheet(workbook, worksheet, "YarnCatalogs");
+      XLSX.writeFile(workbook, "yarn-catalog-template.xlsx");
+      toast.success("Template downloaded successfully");
+    } catch (error) {
+      console.error("Error downloading yarn catalog template:", error);
+      toast.error("Failed to download template");
+    }
+  };
+
+  const handleImportClick = () => {
+    if (isImporting) return;
+    fileInputRef.current?.click();
+  };
+
+  type CatalogImportRow = {
+    ID?: string;
+    "Yarn Name"?: string;
+    "Yarn Type ID"?: string;
+    "Yarn Subtype ID"?: string;
+    "Count Size ID"?: string;
+    "Blend ID"?: string;
+    "Color Family ID"?: string;
+    "Pantone Shade"?: string;
+    "Pantone Name"?: string;
+    Season?: string;
+    GST?: string | number;
+    Remark?: string;
+    "HSN Code"?: string;
+    Status?: string;
+    "Batch Size"?: string | number;
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportProgress(0);
+
+    const reader = new FileReader();
+
+    reader.onload = async (loadEvent) => {
+      try {
+        const data = loadEvent.target?.result;
+        if (!data) {
+          throw new Error("Unable to read file");
+        }
+
+        const workbook = XLSX.read(data, { type: "binary" });
+        if (workbook.SheetNames.length === 0) {
+          throw new Error("Import file is empty");
+        }
+
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<CatalogImportRow>(worksheet, { defval: "" });
+
+        if (rows.length === 0) {
+          throw new Error("Import file is empty");
+        }
+
+        const errors: string[] = [];
+        const catalogs: BulkImportYarnCatalogRequest["yarnCatalogs"] = [];
+        let resolvedBatchSize: number | undefined;
+
+        const isRowEmpty = (row: CatalogImportRow) =>
+          Object.values(row).every((value) => `${value ?? ""}`.trim().length === 0);
+
+        rows.forEach((row, index) => {
+          const rowNumber = index + 2;
+          if (isRowEmpty(row)) {
+            return;
+          }
+
+          let rowHasError = false;
+          const registerError = (message: string) => {
+            rowHasError = true;
+            errors.push(message);
+          };
+          const updateRowProgress = () => {
+            if (rows.length > 0) {
+              setImportProgress(Math.min(80, Math.round(((index + 1) / rows.length) * 75)));
+            }
+          };
+
+          const rawBatchSize = row["Batch Size"];
+          if (rawBatchSize !== undefined && rawBatchSize !== null && `${rawBatchSize}`.trim() !== "") {
+            const parsedBatch = Number(`${rawBatchSize}`.trim());
+            if (Number.isNaN(parsedBatch) || parsedBatch < 1 || parsedBatch > 100) {
+              registerError(`Row ${rowNumber}: Batch Size must be a number between 1 and 100`);
+            } else if (resolvedBatchSize === undefined) {
+              resolvedBatchSize = parsedBatch;
+            } else if (resolvedBatchSize !== parsedBatch) {
+              registerError(`Row ${rowNumber}: Batch Size must match previously defined value (${resolvedBatchSize})`);
+            }
+          }
+
+          const id = row.ID?.toString().trim();
+          const yarnName = row["Yarn Name"]?.toString().trim();
+          const yarnTypeId = row["Yarn Type ID"]?.toString().trim();
+          const yarnSubtypeId = row["Yarn Subtype ID"]?.toString().trim();
+          const countSizeId = row["Count Size ID"]?.toString().trim();
+          const blendId = row["Blend ID"]?.toString().trim();
+          const colorFamilyId = row["Color Family ID"]?.toString().trim();
+          const pantoneShade = row["Pantone Shade"]?.toString().trim();
+          const pantoneName = row["Pantone Name"]?.toString().trim();
+          const season = row.Season?.toString().trim();
+          const remark = row.Remark?.toString().trim();
+          const hsnCode = row["HSN Code"]?.toString().trim();
+          const statusRaw = row.Status?.toString().trim().toLowerCase();
+
+          if (!yarnTypeId) {
+            registerError(`Row ${rowNumber}: Yarn Type ID is required`);
+          }
+          if (!countSizeId) {
+            registerError(`Row ${rowNumber}: Count Size ID is required`);
+          }
+          if (!blendId) {
+            registerError(`Row ${rowNumber}: Blend ID is required`);
+          }
+          if (!yarnName) {
+            registerError(`Row ${rowNumber}: Yarn Name is required`);
+          }
+
+          let gstValue: number | undefined;
+          const gstRaw = row.GST;
+          if (gstRaw !== undefined && gstRaw !== null && `${gstRaw}`.trim() !== "") {
+            const parsedGst = Number(`${gstRaw}`.trim());
+            if (Number.isNaN(parsedGst) || parsedGst < 0 || parsedGst > 100) {
+              registerError(`Row ${rowNumber}: GST must be a number between 0 and 100`);
+            } else {
+              gstValue = parsedGst;
+            }
+          }
+
+          if (rowHasError) {
+            updateRowProgress();
+            return;
+          }
+
+          const status: "active" | "inactive" | "suspended" =
+            statusRaw === "inactive" ? "inactive" : statusRaw === "suspended" ? "suspended" : "active";
+
+          const catalogEntry: BulkImportYarnCatalogRequest["yarnCatalogs"][number] = {
+            yarnType: yarnTypeId!,
+            countSize: countSizeId!,
+            blend: blendId!,
+            status,
+            ...(id ? { id } : {}),
+            ...(yarnName ? { yarnName } : {}),
+            ...(yarnSubtypeId ? { yarnSubtype: yarnSubtypeId } : {}),
+            ...(colorFamilyId ? { colorFamily: colorFamilyId } : {}),
+            ...(pantoneShade ? { pantonShade: pantoneShade } : {}),
+            ...(pantoneName ? { pantonName: pantoneName } : {}),
+            ...(season ? { season } : {}),
+            ...(gstValue !== undefined ? { gst: gstValue } : {}),
+            ...(remark ? { remark } : {}),
+            ...(hsnCode ? { hsnCode } : {}),
+          };
+
+          catalogs.push(catalogEntry);
+          updateRowProgress();
+        });
+
+        if (catalogs.length === 0) {
+          throw new Error("No valid yarn catalog rows found in the import file");
+        }
+
+        if (catalogs.length > 1000) {
+          throw new Error("A maximum of 1000 yarn catalogs can be imported at once");
+        }
+
+        if (errors.length > 0) {
+          throw new Error(errors.join(" | "));
+        }
+
+        const payload: BulkImportYarnCatalogRequest = {
+          yarnCatalogs: catalogs,
+          ...(resolvedBatchSize ? { batchSize: resolvedBatchSize } : {}),
+        };
+
+        setImportProgress(90);
+        await yarnCatalogService.bulkImportYarnCatalogs(payload);
+
+        setImportProgress(100);
+        await fetchYarnCatalogs();
+        toast.success("Yarn catalogs imported successfully");
+      } catch (error) {
+        console.error("Error processing yarn catalog import file:", error);
+        toast.error(error instanceof Error ? error.message : "Failed to process import file");
+      } finally {
+        setImportProgress(null);
+        setIsImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error("Failed to read import file");
+      setImportProgress(null);
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const response = await yarnCatalogService.getYarnCatalogs({
+        page: 1,
+        limit: 10000,
+        yarnName: searchTerm.trim() || undefined,
+      });
+      const exportSource = response.results || [];
+
+      if (exportSource.length === 0) {
+        toast.error("No yarn catalogs available for export");
+        return;
+      }
+
+      const sheetData = exportSource.map((catalog) => ({
+        ID: catalog.id,
+        "Yarn Name": catalog.yarnName || "",
+        "Yarn Type ID": catalog.yarnType?.id || "",
+        "Yarn Type Name": catalog.yarnType?.name || "",
+        "Yarn Subtype ID": catalog.yarnSubtype?.id || "",
+        "Yarn Subtype Name":
+          (catalog.yarnSubtype && ("subtype" in catalog.yarnSubtype ? (catalog.yarnSubtype as { subtype?: string }).subtype : catalog.yarnSubtype?.name)) ||
+          "",
+        "Count Size ID": catalog.countSize?.id || "",
+        "Count Size Name": catalog.countSize?.name || "",
+        "Blend ID": catalog.blend?.id || "",
+        "Blend Name": catalog.blend?.name || (catalog.blend as { brandName?: string })?.brandName || "",
+        "Color Family ID": catalog.colorFamily?.id || "",
+        "Color Family Name": catalog.colorFamily?.name || "",
+        "Pantone Shade": catalog.pantonShade || "",
+        "Pantone Name": catalog.pantonName || "",
+        Season: catalog.season || "",
+        GST: catalog.gst ?? "",
+        Remark: catalog.remark || "",
+        "HSN Code": catalog.hsnCode || "",
+        Status: catalog.status || "",
+        "Created At": catalog.createdAt ? new Date(catalog.createdAt).toLocaleString() : "",
+        "Updated At": catalog.updatedAt ? new Date(catalog.updatedAt).toLocaleString() : "",
+      }));
+
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(sheetData);
+      worksheet["!cols"] = [
+        { wch: 20 },
+        { wch: 30 },
+        { wch: 26 },
+        { wch: 28 },
+        { wch: 26 },
+        { wch: 28 },
+        { wch: 26 },
+        { wch: 24 },
+        { wch: 28 },
+        { wch: 24 },
+        { wch: 28 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 24 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 24 },
+        { wch: 24 },
+      ];
+      XLSX.utils.book_append_sheet(workbook, worksheet, "YarnCatalogs");
+      XLSX.writeFile(workbook, "yarn-catalogs.xlsx");
+      toast.success("Yarn catalogs exported successfully");
+    } catch (error) {
+      console.error("Error exporting yarn catalogs:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to export yarn catalogs");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (!hasPermission) {
     return (
       <div className="main-content">
@@ -115,7 +458,58 @@ const CataloguingPage = () => {
                 <h1 className="box-title text-2xl font-semibold">Yarn Cataloguing</h1>
                 <p className="text-gray-600 mt-1">Manage yarn specifications and catalog</p>
               </div>
-              <div className="box-tools">
+              <div className="box-tools flex flex-wrap items-center gap-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileUpload}
+                />
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-secondary"
+                  onClick={handleDownloadTemplate}
+                >
+                  <i className="ri-download-line me-2"></i>
+                  Download Template
+                </button>
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-success"
+                  onClick={handleImportClick}
+                  disabled={isImporting}
+                >
+                  {isImporting ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-file-excel-2-line me-2"></i>
+                      Import
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-info"
+                  onClick={handleExport}
+                  disabled={isExporting}
+                >
+                  {isExporting ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-download-2-line me-2"></i>
+                      Export
+                    </>
+                  )}
+                </button>
                 <Link 
                   href="/yarn-management/cataloguing/add"
                   className="ti-btn ti-btn-primary"
@@ -171,6 +565,17 @@ const CataloguingPage = () => {
               <h3 className="box-title">Yarn Catalogs ({totalResults})</h3>
             </div>
             <div className="box-body">
+              {importProgress !== null && (
+                <div className="mb-4">
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className="bg-primary h-3 rounded-full transition-all duration-200"
+                      style={{ width: `${importProgress}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
+                </div>
+              )}
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
