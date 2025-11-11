@@ -186,7 +186,6 @@ const YarnTypePage = () => {
                             />
                           </th>
                           <th scope="col" className="text-start">Name</th>
-                          <th scope="col" className="text-start">Yarn Name</th>
                           <th scope="col" className="text-start">Details</th>
                           <th scope="col" className="text-start">Status</th>
                           <th scope="col" className="text-start">Action</th>
@@ -207,7 +206,6 @@ const YarnTypePage = () => {
                               />
                             </td>
                             <td>{type.name}</td>
-                            <td>{type.yarnName || '-'}</td>
                             <td>
                               {type.details && type.details.length > 0 ? (
                                 <div className="space-y-1">
