@@ -6,10 +6,11 @@ import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
 import yarnTypeService from '@/shared/services/yarnTypeService';
 import yarnCountSizeService, { CountSize } from '@/shared/services/yarnCountSizeService';
+import CountSizeMultiSelect from '../components/CountSizeMultiSelect';
 
 type DetailFormState = {
   subtype: string;
-  countSize: string;
+  countSize: string[];
   tearWeight: string;
 };
 
@@ -22,7 +23,7 @@ const AddYarnTypePage = () => {
     name: '',
     status: 'active'
   });
-  const [details, setDetails] = useState<DetailFormState[]>([{ subtype: '', countSize: '', tearWeight: '' }]);
+  const [details, setDetails] = useState<DetailFormState[]>([{ subtype: '', countSize: [], tearWeight: '' }]);
 
   useEffect(() => {
     const fetchCountSizes = async () => {
@@ -45,7 +46,7 @@ const AddYarnTypePage = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleDetailChange = (index: number, field: keyof DetailFormState, value: string) => {
+  const handleDetailInputChange = (index: number, field: 'subtype' | 'tearWeight', value: string) => {
     setDetails(prev => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
@@ -53,8 +54,16 @@ const AddYarnTypePage = () => {
     });
   };
 
+  const handleCountSizeChange = (index: number, selectedIds: string[]) => {
+    setDetails(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], countSize: selectedIds };
+      return updated;
+    });
+  };
+
   const addDetailRow = () => {
-    setDetails(prev => [...prev, { subtype: '', countSize: '', tearWeight: '' }]);
+    setDetails(prev => [...prev, { subtype: '', countSize: [], tearWeight: '' }]);
   };
 
   const removeDetailRow = (index: number) => {
@@ -72,12 +81,14 @@ const AddYarnTypePage = () => {
     const normalizedDetails = details
       .map(detail => {
         const trimmedSubtype = detail.subtype.trim();
-        const trimmedTearWeight = detail.tearWeight.trim();
-        const countSizeId = detail.countSize.trim();
+        const trimmedTearWeight = detail.tearWeight?.trim() ?? '';
+        const countSizeIds = detail.countSize
+          .map(countSizeId => countSizeId.trim())
+          .filter(id => id.length > 0);
 
         return {
           subtype: trimmedSubtype,
-          ...(countSizeId ? { countSize: [countSizeId] } : {}),
+          ...(countSizeIds.length > 0 ? { countSize: countSizeIds } : {}),
           ...(trimmedTearWeight ? { tearWeight: trimmedTearWeight } : {})
         };
       })
@@ -167,7 +178,7 @@ const AddYarnTypePage = () => {
                           <input
                             type="text"
                             value={detail.subtype}
-                            onChange={(e) => handleDetailChange(index, 'subtype', e.target.value)}
+                            onChange={(e) => handleDetailInputChange(index, 'subtype', e.target.value)}
                             className="form-control"
                             placeholder="Enter subtype"
                           />
@@ -177,31 +188,20 @@ const AddYarnTypePage = () => {
                           <input
                             type="text"
                             value={detail.tearWeight}
-                            onChange={(e) => handleDetailChange(index, 'tearWeight', e.target.value)}
+                            onChange={(e) => handleDetailInputChange(index, 'tearWeight', e.target.value)}
                             className="form-control"
                             placeholder="Enter tear weight"
                           />
                         </div>
                         <div className="md:col-span-2">
                           <label className="form-label">Count Size</label>
-                          {isCountSizeLoading ? (
-                            <div className="text-sm text-gray-500">Loading count sizes...</div>
-                          ) : countSizes.length > 0 ? (
-                            <select
-                              className="form-select"
-                              value={detail.countSize}
-                              onChange={(e) => handleDetailChange(index, 'countSize', e.target.value)}
-                            >
-                              <option value="">Select count size</option>
-                              {countSizes.map(countSize => (
-                                <option key={countSize.id} value={countSize.id}>
-                                  {countSize.name}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <div className="text-sm text-gray-500">No count sizes available.</div>
-                          )}
+                          <CountSizeMultiSelect
+                            options={countSizes}
+                            selected={detail.countSize}
+                            onChange={selectedIds => handleCountSizeChange(index, selectedIds)}
+                            isLoading={isCountSizeLoading}
+                            placeholder="Select count sizes"
+                          />
                         </div>
                       </div>
                     </div>
