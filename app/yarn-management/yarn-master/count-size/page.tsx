@@ -1,9 +1,10 @@
 "use client"
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
 import yarnCountSizeService, { CountSize } from '@/shared/services/yarnCountSizeService';
+import * as XLSX from 'xlsx';
 
 const CountSizePage = () => {
   const [countSizes, setCountSizes] = useState<CountSize[]>([]);
@@ -17,6 +18,9 @@ const CountSizePage = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
 
   useEffect(() => {
     fetchCountSizes();
@@ -70,6 +74,166 @@ const CountSizePage = () => {
     setSelectAll(!selectAll);
   };
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleExport = async () => {
+    try {
+      const response = await yarnCountSizeService.getCountSizes({
+        page: 1,
+        limit: 10000,
+      });
+      const allCountSizes = response.results || [];
+      const exportSource =
+        selectedItems.length > 0
+          ? allCountSizes.filter(item => selectedItems.includes(item.id))
+          : allCountSizes;
+
+      if (exportSource.length === 0) {
+        toast.error('No count/size records available for export');
+        return;
+      }
+
+      const exportData = exportSource.map(item => ({
+        ID: item.id,
+        Name: item.name,
+        Status: item.status,
+        'Created At': item.createdAt ? new Date(item.createdAt).toLocaleString() : '',
+        'Updated At': item.updatedAt ? new Date(item.updatedAt).toLocaleString() : '',
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      worksheet['!cols'] = [
+        { wch: 20 },
+        { wch: 30 },
+        { wch: 10 },
+        { wch: 22 },
+        { wch: 22 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'CountSizes');
+      XLSX.writeFile(workbook, 'yarn-count-sizes.xlsx');
+      toast.success('Count/Size records exported successfully');
+    } catch (error) {
+      console.error('Error exporting count/size records:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to export count/size records');
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportProgress(0);
+
+    const reader = new FileReader();
+
+    reader.onload = async event => {
+      try {
+        const data = event.target?.result;
+        if (!data) {
+          throw new Error('Unable to read file');
+        }
+
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData: Array<{ ID?: string; Name?: string; Status?: string }> =
+          XLSX.utils.sheet_to_json(worksheet);
+
+        if (jsonData.length === 0) {
+          throw new Error('Import file is empty');
+        }
+
+        const existingResponse = await yarnCountSizeService.getCountSizes({ page: 1, limit: 10000 });
+        const existingItems = existingResponse.results || [];
+        const itemsById = new Map(existingItems.map(item => [item.id, item]));
+        const itemsByName = new Map(
+          existingItems.map(item => [item.name.trim().toLowerCase(), item]),
+        );
+
+        const validStatuses: Array<'active' | 'inactive'> = ['active', 'inactive'];
+
+        let processed = 0;
+        for (const row of jsonData) {
+          try {
+            const rawName = row.Name?.toString().trim() ?? '';
+            const rawStatus = row.Status?.toString().trim().toLowerCase() ?? 'active';
+
+            if (!rawName) {
+              throw new Error('Name is required');
+            }
+
+            const status = validStatuses.includes(rawStatus as 'active' | 'inactive')
+              ? (rawStatus as 'active' | 'inactive')
+              : 'active';
+
+            const payload = {
+              name: rawName,
+              status,
+            };
+
+            const id = row.ID?.toString().trim();
+            let targetItem: CountSize | undefined;
+
+            if (id && itemsById.has(id)) {
+              targetItem = itemsById.get(id);
+              await yarnCountSizeService.updateCountSize(id, payload);
+            } else {
+              const existingByName = itemsByName.get(rawName.toLowerCase());
+              if (existingByName) {
+                await yarnCountSizeService.updateCountSize(existingByName.id, payload);
+                targetItem = existingByName;
+              } else {
+                const created = await yarnCountSizeService.createCountSize(payload);
+                itemsById.set(created.id, created);
+                itemsByName.set(created.name.trim().toLowerCase(), created);
+              }
+            }
+
+            if (targetItem) {
+              const updatedItem = { ...targetItem, ...payload };
+              itemsById.set(updatedItem.id, updatedItem);
+              itemsByName.delete(targetItem.name.trim().toLowerCase());
+              itemsByName.set(updatedItem.name.trim().toLowerCase(), updatedItem);
+            }
+          } catch (rowError) {
+            console.error('Error importing count/size row:', rowError);
+          } finally {
+            processed += 1;
+            setImportProgress(Math.round((processed / jsonData.length) * 100));
+          }
+        }
+
+        await fetchCountSizes();
+        toast.success('Count/Size records imported successfully');
+      } catch (error) {
+        console.error('Error processing count/size import file:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to process import file');
+      } finally {
+        setImportProgress(null);
+        setIsImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error('Failed to read import file');
+      setImportProgress(null);
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
   function getPagination(currentPage: number, totalPages: number) {
     const pages = [];
     if (totalPages <= 7) {
@@ -96,9 +260,38 @@ const CountSizePage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <h1 className="box-title text-2xl font-semibold">Count/Size</h1>
-              <Link href="/yarn-management/yarn-master/count-size/add" className="ti-btn ti-btn-primary">
-                <i className="ri-add-line me-2"></i> Add Count/Size
-              </Link>
+              <div className="box-tools flex items-center space-x-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileUpload}
+                />
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-success"
+                  onClick={handleImportClick}
+                  disabled={isImporting}
+                >
+                  {isImporting ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-file-excel-2-line me-2"></i> Import
+                    </>
+                  )}
+                </button>
+                <button type="button" className="ti-btn ti-btn-info" onClick={handleExport}>
+                  <i className="ri-download-2-line me-2"></i> Export
+                </button>
+                <Link href="/yarn-management/yarn-master/count-size/add" className="ti-btn ti-btn-primary">
+                  <i className="ri-add-line me-2"></i> Add Count/Size
+                </Link>
+              </div>
             </div>
           </div>
 
@@ -133,6 +326,16 @@ const CountSizePage = () => {
                   </button>
                 </div>
               </div>
+
+              {importProgress !== null && (
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                  <div
+                    className="bg-primary h-3 rounded-full transition-all duration-200"
+                    style={{ width: `${importProgress}%` }}
+                  ></div>
+                  <div className="text-xs text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
+                </div>
+              )}
 
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">

@@ -1,9 +1,10 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
 import yarnColorService, { YarnColor } from '@/shared/services/yarnColorService';
+import * as XLSX from 'xlsx';
 
 const ColorPage = () => {
   const [colors, setColors] = useState<YarnColor[]>([]);
@@ -17,6 +18,9 @@ const ColorPage = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
 
   useEffect(() => {
     fetchColors();
@@ -74,6 +78,188 @@ const ColorPage = () => {
     setSelectAll(!selectAll);
   };
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleExport = async () => {
+    try {
+      const response = await yarnColorService.getColors({
+        page: 1,
+        limit: 10000,
+      });
+      const allColors = (response.results || []).map(color => ({
+        ...color,
+        colorCode: color.colorCode ? color.colorCode.toUpperCase() : '#000000',
+      }));
+      const exportSource =
+        selectedColors.length > 0
+          ? allColors.filter(color => selectedColors.includes(color.id))
+          : allColors;
+
+      if (exportSource.length === 0) {
+        toast.error('No colors available for export');
+        return;
+      }
+
+      const exportData = exportSource.map(color => ({
+        ID: color.id,
+        Name: color.name,
+        'Color Code': color.colorCode,
+        Status: color.status,
+        'Created At': color.createdAt ? new Date(color.createdAt).toLocaleString() : '',
+        'Updated At': color.updatedAt ? new Date(color.updatedAt).toLocaleString() : '',
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      worksheet['!cols'] = [
+        { wch: 20 },
+        { wch: 30 },
+        { wch: 15 },
+        { wch: 10 },
+        { wch: 22 },
+        { wch: 22 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Colors');
+      XLSX.writeFile(workbook, 'yarn-colors.xlsx');
+      toast.success('Colors exported successfully');
+    } catch (error) {
+      console.error('Error exporting colors:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to export colors');
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportProgress(0);
+
+    const reader = new FileReader();
+
+    reader.onload = async event => {
+      try {
+        const data = event.target?.result;
+        if (!data) {
+          throw new Error('Unable to read file');
+        }
+
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData: Array<
+          {
+            ID?: string;
+            Name?: string;
+            'Color Code'?: string;
+            Status?: string;
+          }
+        > = XLSX.utils.sheet_to_json(worksheet);
+
+        if (jsonData.length === 0) {
+          throw new Error('Import file is empty');
+        }
+
+        const existingResponse = await yarnColorService.getColors({ page: 1, limit: 10000 });
+        const existingColors = existingResponse.results || [];
+        const colorsById = new Map(existingColors.map(color => [color.id, color]));
+        const colorsByName = new Map(
+          existingColors.map(color => [color.name.trim().toLowerCase(), color]),
+        );
+
+        const isValidHex = (value: string) => /^#([0-9A-F]{6})$/i.test(value);
+        const validStatuses: Array<'active' | 'inactive'> = ['active', 'inactive'];
+
+        let processed = 0;
+        for (const row of jsonData) {
+          try {
+            const rawName = row.Name?.toString().trim() ?? '';
+            const rawColorCode = row['Color Code']?.toString().trim() ?? '';
+            const rawStatus = row.Status?.toString().trim().toLowerCase() ?? 'active';
+
+            if (!rawName) {
+              throw new Error('Name is required');
+            }
+
+            let normalizedColorCode = rawColorCode.startsWith('#')
+              ? rawColorCode.toUpperCase()
+              : `#${rawColorCode.toUpperCase()}`;
+
+            if (!isValidHex(normalizedColorCode)) {
+              throw new Error(`Invalid color code for ${rawName}: ${rawColorCode}`);
+            }
+
+            const status = validStatuses.includes(rawStatus as 'active' | 'inactive')
+              ? (rawStatus as 'active' | 'inactive')
+              : 'active';
+
+            const payload = {
+              name: rawName,
+              colorCode: normalizedColorCode,
+              status,
+            };
+
+            const id = row.ID?.toString().trim();
+            let targetColor: YarnColor | undefined;
+
+            if (id && colorsById.has(id)) {
+              targetColor = colorsById.get(id);
+              await yarnColorService.updateColor(id, payload);
+            } else {
+              const existingByName = colorsByName.get(rawName.toLowerCase());
+              if (existingByName) {
+                await yarnColorService.updateColor(existingByName.id, payload);
+                targetColor = existingByName;
+              } else {
+                const created = await yarnColorService.createColor(payload);
+                colorsById.set(created.id, created);
+                colorsByName.set(created.name.trim().toLowerCase(), created);
+              }
+            }
+
+            if (targetColor) {
+              const updatedColor = { ...targetColor, ...payload };
+              colorsById.set(updatedColor.id, updatedColor);
+              colorsByName.delete(targetColor.name.trim().toLowerCase());
+              colorsByName.set(updatedColor.name.trim().toLowerCase(), updatedColor);
+            }
+          } catch (rowError) {
+            console.error('Error importing color row:', rowError);
+          } finally {
+            processed += 1;
+            setImportProgress(Math.round((processed / jsonData.length) * 100));
+          }
+        }
+
+        await fetchColors();
+        toast.success('Colors imported successfully');
+      } catch (error) {
+        console.error('Error processing import file:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to process import file');
+      } finally {
+        setImportProgress(null);
+        setIsImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error('Failed to read import file');
+      setImportProgress(null);
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
   function getPagination(currentPage: number, totalPages: number) {
     const pages = [];
     if (totalPages <= 7) {
@@ -100,9 +286,38 @@ const ColorPage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <h1 className="box-title text-2xl font-semibold">Colors</h1>
-              <Link href="/yarn-management/yarn-master/color/add" className="ti-btn ti-btn-primary">
-                <i className="ri-add-line me-2"></i> Add Color
-              </Link>
+              <div className="box-tools flex items-center space-x-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileUpload}
+                />
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-success"
+                  onClick={handleImportClick}
+                  disabled={isImporting}
+                >
+                  {isImporting ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-file-excel-2-line me-2"></i> Import
+                    </>
+                  )}
+                </button>
+                <button type="button" className="ti-btn ti-btn-info" onClick={handleExport}>
+                  <i className="ri-download-2-line me-2"></i> Export
+                </button>
+                <Link href="/yarn-management/yarn-master/color/add" className="ti-btn ti-btn-primary">
+                  <i className="ri-add-line me-2"></i> Add Color
+                </Link>
+              </div>
             </div>
           </div>
 
@@ -137,6 +352,16 @@ const ColorPage = () => {
                   </button>
                 </div>
               </div>
+
+              {importProgress !== null && (
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                  <div
+                    className="bg-primary h-3 rounded-full transition-all duration-200"
+                    style={{ width: `${importProgress}%` }}
+                  ></div>
+                  <div className="text-xs text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
+                </div>
+              )}
 
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
