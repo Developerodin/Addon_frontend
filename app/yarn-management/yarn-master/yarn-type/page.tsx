@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
-import yarnTypeService, { YarnType } from '@/shared/services/yarnTypeService';
+import yarnTypeService, { YarnType, YarnTypeDetail } from '@/shared/services/yarnTypeService';
 
 const YarnTypePage = () => {
   const [yarnTypes, setYarnTypes] = useState<YarnType[]>([]);
@@ -17,6 +17,22 @@ const YarnTypePage = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const formatCountSize = (countSize?: YarnTypeDetail['countSize']) => {
+    if (!countSize || countSize.length === 0) return '';
+
+    const firstItem = countSize[0];
+
+    if (typeof firstItem === 'string') {
+      return firstItem;
+    }
+
+    if (firstItem && typeof firstItem === 'object') {
+      return firstItem.name || firstItem.id || firstItem._id || '';
+    }
+
+    return '';
+  };
 
   useEffect(() => {
     fetchYarnTypes();
@@ -170,6 +186,7 @@ const YarnTypePage = () => {
                             />
                           </th>
                           <th scope="col" className="text-start">Name</th>
+                          <th scope="col" className="text-start">Yarn Name</th>
                           <th scope="col" className="text-start">Details</th>
                           <th scope="col" className="text-start">Status</th>
                           <th scope="col" className="text-start">Action</th>
@@ -190,24 +207,28 @@ const YarnTypePage = () => {
                               />
                             </td>
                             <td>{type.name}</td>
+                            <td>{type.yarnName || '-'}</td>
                             <td>
                               {type.details && type.details.length > 0 ? (
                                 <div className="space-y-1">
-                                  {type.details.map((detail, detailIdx) => (
-                                    <div key={`${type.id}-detail-${detailIdx}`}>
-                                      <span className="font-medium">{detail.subtype}</span>
-                                      {detail.countSize && detail.countSize.length > 0 && (
-                                        <span className="ml-2 text-xs text-gray-500">
-                                          Sizes: {detail.countSize.join(', ')}
-                                        </span>
-                                      )}
-                                      {detail.weight && (
-                                        <span className="ml-2 text-xs text-gray-500">
-                                          Weight: {detail.weight}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ))}
+                                  {type.details.map((detail, detailIdx) => {
+                                    const countSizeDisplay = formatCountSize(detail.countSize);
+                                    return (
+                                      <div key={`${type.id}-detail-${detailIdx}`}>
+                                        <span className="font-medium">{detail.subtype}</span>
+                                        {countSizeDisplay && (
+                                          <span className="ml-2 text-xs text-gray-500">
+                                            Count Size: {countSizeDisplay}
+                                          </span>
+                                        )}
+                                        {detail.tearWeight && (
+                                          <span className="ml-2 text-xs text-gray-500">
+                                            Tear Weight: {detail.tearWeight}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               ) : (
                                 '-'

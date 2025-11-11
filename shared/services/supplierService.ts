@@ -1,52 +1,69 @@
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import Cookies from 'js-cookie';
 
-export type YarnTypeCountSizeRef = string | { id?: string; _id?: string; name?: string };
-
-export interface YarnTypeDetail {
-  subtype: string;
-  countSize?: YarnTypeCountSizeRef[];
-  tearWeight?: string;
+export interface SupplierYarnReference {
+  id: string;
+  name?: string;
+  status?: string;
 }
 
-export interface YarnType {
+export interface SupplierYarnDetail {
+  yarnType: string | SupplierYarnReference;
+  color: string | SupplierYarnReference;
+  shadeNumber: string;
+}
+
+export interface Supplier {
   id: string;
-  name: string;
-  yarnName?: string;
-  details?: YarnTypeDetail[];
-  status: 'active' | 'inactive';
+  brandName: string;
+  contactPersonName: string;
+  contactNumber: string;
+  email: string;
+  address: string;
+  gstNo?: string;
+  yarnDetails?: SupplierYarnDetail[];
+  status: 'active' | 'inactive' | 'suspended';
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface YarnTypeListResponse {
-  results: YarnType[];
+export interface SupplierListResponse {
+  results: Supplier[];
   page: number;
   limit: number;
   totalPages: number;
   totalResults: number;
 }
 
-export interface YarnTypeQueryParams {
-  name?: string;
-  status?: 'active' | 'inactive';
+export interface SupplierQueryParams {
+  brandName?: string;
+  email?: string;
+  status?: 'active' | 'inactive' | 'suspended';
   sortBy?: string;
   limit?: number;
   page?: number;
 }
 
-export interface CreateYarnTypeRequest {
-  name: string;
-  status?: 'active' | 'inactive';
-  details?: YarnTypeDetail[];
-  yarnName?: string;
+export interface CreateSupplierRequest {
+  brandName: string;
+  contactPersonName: string;
+  contactNumber: string;
+  email: string;
+  address: string;
+  gstNo?: string;
+  yarnDetails?: SupplierYarnDetail[];
+  status?: 'active' | 'inactive' | 'suspended';
 }
 
-export interface UpdateYarnTypeRequest {
-  name?: string;
-  status?: 'active' | 'inactive';
-  details?: YarnTypeDetail[];
-  yarnName?: string;
+export interface UpdateSupplierRequest {
+  brandName?: string;
+  contactPersonName?: string;
+  contactNumber?: string;
+  email?: string;
+  address?: string;
+  gstNo?: string;
+  yarnDetails?: SupplierYarnDetail[];
+  status?: 'active' | 'inactive' | 'suspended';
 }
 
 const getAccessToken = (): string | null => {
@@ -70,8 +87,8 @@ const getAccessToken = (): string | null => {
   }
 };
 
-class YarnTypeService {
-  private baseURL = `${API_BASE_URL}/yarn-management/yarn-types`;
+class SupplierService {
+  private baseURL = `${API_BASE_URL}/yarn-management/suppliers`;
 
   private buildHeaders(additional?: HeadersInit): HeadersInit {
     const token = getAccessToken();
@@ -114,12 +131,12 @@ class YarnTypeService {
 
       return (await response.json()) as T;
     } catch (error) {
-      console.error('Yarn Type API Error:', error);
+      console.error('Supplier API Error:', error);
       throw error;
     }
   }
 
-  async getTypes(params: YarnTypeQueryParams = {}): Promise<YarnTypeListResponse> {
+  async getSuppliers(params: SupplierQueryParams = {}): Promise<SupplierListResponse> {
     const searchParams = new URLSearchParams();
 
     Object.entries(params).forEach(([key, value]) => {
@@ -131,48 +148,48 @@ class YarnTypeService {
     const query = searchParams.toString();
     const endpoint = query ? `?${query}` : '';
 
-    return this.makeRequest<YarnTypeListResponse>(endpoint);
+    return this.makeRequest<SupplierListResponse>(endpoint);
   }
 
-  async getTypeById(yarnTypeId: string): Promise<YarnType> {
-    if (!yarnTypeId) {
-      throw new Error('Yarn type ID is required');
+  async getSupplierById(supplierId: string): Promise<Supplier> {
+    if (!supplierId) {
+      throw new Error('Supplier ID is required');
     }
 
-    return this.makeRequest<YarnType>(`/${yarnTypeId}`);
+    return this.makeRequest<Supplier>(`/${supplierId}`);
   }
 
-  async createType(payload: CreateYarnTypeRequest): Promise<YarnType> {
-    return this.makeRequest<YarnType>('', {
+  async createSupplier(payload: CreateSupplierRequest): Promise<Supplier> {
+    return this.makeRequest<Supplier>('', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   }
 
-  async updateType(yarnTypeId: string, payload: UpdateYarnTypeRequest): Promise<YarnType> {
-    if (!yarnTypeId) {
-      throw new Error('Yarn type ID is required');
+  async updateSupplier(supplierId: string, payload: UpdateSupplierRequest): Promise<Supplier> {
+    if (!supplierId) {
+      throw new Error('Supplier ID is required');
     }
 
-    return this.makeRequest<YarnType>(`/${yarnTypeId}`, {
+    return this.makeRequest<Supplier>(`/${supplierId}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
   }
 
-  async deleteType(yarnTypeId: string): Promise<void> {
-    if (!yarnTypeId) {
-      throw new Error('Yarn type ID is required');
+  async deleteSupplier(supplierId: string): Promise<void> {
+    if (!supplierId) {
+      throw new Error('Supplier ID is required');
     }
 
-    await this.makeRequest<void>(`/${yarnTypeId}`, {
+    await this.makeRequest<void>(`/${supplierId}`, {
       method: 'DELETE',
     });
   }
 }
 
-const yarnTypeService = new YarnTypeService();
+const supplierService = new SupplierService();
 
-export default yarnTypeService;
+export default supplierService;
 
 
