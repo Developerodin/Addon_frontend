@@ -1,10 +1,11 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
 import { useNavigation } from '@/shared/contextapi/navigationContext';
 import yarnBlendService, { YarnBlend } from '@/shared/services/yarnBlendService';
+import * as XLSX from 'xlsx';
 
 const BlendPage = () => {
   const { hasSubPermission } = useNavigation();
@@ -19,6 +20,9 @@ const BlendPage = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
 
   const hasPermission = hasSubPermission('/yarn-management/yarn-master', 'Blend');
 
@@ -76,6 +80,166 @@ const BlendPage = () => {
     setSelectAll(!selectAll);
   };
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleExport = async () => {
+    try {
+      const response = await yarnBlendService.getBlends({
+        page: 1,
+        limit: 10000,
+      });
+      const allBlends = response.results || [];
+      const exportSource =
+        selectedBlends.length > 0
+          ? allBlends.filter(blend => selectedBlends.includes(blend.id))
+          : allBlends;
+
+      if (exportSource.length === 0) {
+        toast.error('No blend records available for export');
+        return;
+      }
+
+      const exportData = exportSource.map(blend => ({
+        ID: blend.id,
+        Name: blend.name,
+        Status: blend.status,
+        'Created At': blend.createdAt ? new Date(blend.createdAt).toLocaleString() : '',
+        'Updated At': blend.updatedAt ? new Date(blend.updatedAt).toLocaleString() : '',
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      worksheet['!cols'] = [
+        { wch: 20 },
+        { wch: 30 },
+        { wch: 10 },
+        { wch: 22 },
+        { wch: 22 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Blends');
+      XLSX.writeFile(workbook, 'yarn-blends.xlsx');
+      toast.success('Blend records exported successfully');
+    } catch (error) {
+      console.error('Error exporting blend records:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to export blend records');
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportProgress(0);
+
+    const reader = new FileReader();
+
+    reader.onload = async event => {
+      try {
+        const data = event.target?.result;
+        if (!data) {
+          throw new Error('Unable to read file');
+        }
+
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData: Array<{ ID?: string; Name?: string; Status?: string }> =
+          XLSX.utils.sheet_to_json(worksheet);
+
+        if (jsonData.length === 0) {
+          throw new Error('Import file is empty');
+        }
+
+        const existingResponse = await yarnBlendService.getBlends({ page: 1, limit: 10000 });
+        const existingBlends = existingResponse.results || [];
+        const blendsById = new Map(existingBlends.map(blend => [blend.id, blend]));
+        const blendsByName = new Map(
+          existingBlends.map(blend => [blend.name.trim().toLowerCase(), blend]),
+        );
+
+        const validStatuses: Array<'active' | 'inactive'> = ['active', 'inactive'];
+
+        let processed = 0;
+        for (const row of jsonData) {
+          try {
+            const rawName = row.Name?.toString().trim() ?? '';
+            const rawStatus = row.Status?.toString().trim().toLowerCase() ?? 'active';
+
+            if (!rawName) {
+              throw new Error('Name is required');
+            }
+
+            const status = validStatuses.includes(rawStatus as 'active' | 'inactive')
+              ? (rawStatus as 'active' | 'inactive')
+              : 'active';
+
+            const payload = {
+              name: rawName,
+              status,
+            };
+
+            const id = row.ID?.toString().trim();
+            let targetBlend: YarnBlend | undefined;
+
+            if (id && blendsById.has(id)) {
+              targetBlend = blendsById.get(id);
+              await yarnBlendService.updateBlend(id, payload);
+            } else {
+              const existingByName = blendsByName.get(rawName.toLowerCase());
+              if (existingByName) {
+                await yarnBlendService.updateBlend(existingByName.id, payload);
+                targetBlend = existingByName;
+              } else {
+                const created = await yarnBlendService.createBlend(payload);
+                blendsById.set(created.id, created);
+                blendsByName.set(created.name.trim().toLowerCase(), created);
+              }
+            }
+
+            if (targetBlend) {
+              const updatedBlend = { ...targetBlend, ...payload };
+              blendsById.set(updatedBlend.id, updatedBlend);
+              blendsByName.delete(targetBlend.name.trim().toLowerCase());
+              blendsByName.set(updatedBlend.name.trim().toLowerCase(), updatedBlend);
+            }
+          } catch (rowError) {
+            console.error('Error importing blend row:', rowError);
+          } finally {
+            processed += 1;
+            setImportProgress(Math.round((processed / jsonData.length) * 100));
+          }
+        }
+
+        await fetchBlends();
+        toast.success('Blend records imported successfully');
+      } catch (error) {
+        console.error('Error processing blend import file:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to process import file');
+      } finally {
+        setImportProgress(null);
+        setIsImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error('Failed to read import file');
+      setImportProgress(null);
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
   function getPagination(currentPage: number, totalPages: number) {
     const pages = [];
     if (totalPages <= 7) {
@@ -120,9 +284,38 @@ const BlendPage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <h1 className="box-title text-2xl font-semibold">Blends</h1>
-              <Link href="/yarn-management/yarn-master/blend/add" className="ti-btn ti-btn-primary">
-                <i className="ri-add-line me-2"></i> Add Blend
-              </Link>
+              <div className="box-tools flex items-center space-x-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileUpload}
+                />
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-success"
+                  onClick={handleImportClick}
+                  disabled={isImporting}
+                >
+                  {isImporting ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-file-excel-2-line me-2"></i> Import
+                    </>
+                  )}
+                </button>
+                <button type="button" className="ti-btn ti-btn-info" onClick={handleExport}>
+                  <i className="ri-download-2-line me-2"></i> Export
+                </button>
+                <Link href="/yarn-management/yarn-master/blend/add" className="ti-btn ti-btn-primary">
+                  <i className="ri-add-line me-2"></i> Add Blend
+                </Link>
+              </div>
             </div>
           </div>
 
@@ -157,6 +350,16 @@ const BlendPage = () => {
                   </button>
                 </div>
               </div>
+
+              {importProgress !== null && (
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                  <div
+                    className="bg-primary h-3 rounded-full transition-all duration-200"
+                    style={{ width: `${importProgress}%` }}
+                  ></div>
+                  <div className="text-xs text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
+                </div>
+              )}
 
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
