@@ -31,7 +31,7 @@ const AddPurchasePage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Check permission
-  const hasPermission = hasSubPermission('/yarn-management', 'Purchase');
+  const hasPermission = hasSubPermission('/yarn-management', 'Purchase Order');
 
   if (!hasPermission) {
     return (
