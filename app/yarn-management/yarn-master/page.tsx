@@ -35,6 +35,13 @@ const YarnMasterPage = () => {
       icon: "ri-palette-line",
       path: "/yarn-management/yarn-master/color",
       permission: "Color"
+    },
+    {
+      title: "Blend",
+      description: "Manage yarn blends",
+      icon: "ri-mix-line",
+      path: "/yarn-management/yarn-master/blend",
+      permission: "Blend"
     }
   ];
 
@@ -48,7 +55,7 @@ const YarnMasterPage = () => {
             <div className="box-header">
               <h1 className="box-title text-2xl font-semibold">Yarn Master</h1>
               <p className="text-gray-600 mt-2">
-                Manage yarn master data including brands, types, count/sizes, and colors.
+                Manage yarn master data including brands, types, count/sizes, colors, and blends.
               </p>
             </div>
           </div>

@@ -28,6 +28,7 @@ const BrandIcon = <i className="ri ri-price-tag-line side-menu__icon" style={{ m
 const YarnTypeIcon = <i className="ri ri-pantone-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const CountSizeIcon = <i className="ri ri-ruler-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const ColorIcon = <i className="ri ri-palette-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const BlendIcon = <i className="ri ri-mix-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const WarehouseIcon = <i className="bx bx-store side-menu__icon"></i>;
 const OrdersIcon = <i className="ri ri-file-list-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const PickPackIcon = <i className="ri ri-handbag-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
@@ -311,6 +312,14 @@ const BaseMenuItems: any = [
             active: false,
             selected: false,
             title: "Color",
+          },
+          {
+            icon: BlendIcon,
+            path: "/yarn-management/yarn-master/blend",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Blend",
           },
         ],
       },
