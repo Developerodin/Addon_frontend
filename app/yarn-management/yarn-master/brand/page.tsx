@@ -26,6 +26,7 @@ const BrandPage = () => {
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [yarnTypeMap, setYarnTypeMap] = useState<Record<string, string>>({});
+  const [yarnSubtypeMap, setYarnSubtypeMap] = useState<Record<string, string>>({});
   const [yarnColorMap, setYarnColorMap] = useState<Record<string, string>>({});
 
   const getYarnTypeLabel = (yarnType: SupplierYarnDetail['yarnType']) => {
@@ -60,6 +61,19 @@ const BrandPage = () => {
     return 'Unknown color';
   };
 
+  const getYarnSubtypeLabel = (subtype: SupplierYarnDetail['yarnsubtype']) => {
+    if (!subtype) return '';
+    if (typeof subtype === 'string') {
+      return yarnSubtypeMap[subtype] || subtype;
+    }
+    if (typeof subtype === 'object') {
+      if ('name' in subtype && subtype.name) return subtype.name;
+      if ('id' in subtype && subtype.id) return yarnSubtypeMap[subtype.id] || subtype.id;
+      return yarnSubtypeMap[(subtype as { _id?: string })._id || ''] || '';
+    }
+    return '';
+  };
+
   useEffect(() => {
     const loadLookups = async () => {
       try {
@@ -69,9 +83,22 @@ const BrandPage = () => {
         ]);
 
         const typeEntries = (typesResponse.results || []).map((type: YarnType) => [type.id, type.name]);
+        const subtypeEntries = (typesResponse.results || []).flatMap((type: YarnType) => {
+          if (!type.details || type.details.length === 0) {
+            return [];
+          }
+          return type.details
+            .map((detail) => {
+              const subtypeId = detail.id || detail._id;
+              if (!subtypeId) return null;
+              return [subtypeId, detail.subtype] as const;
+            })
+            .filter(Boolean) as Array<readonly [string, string]>;
+        });
         const colorEntries = (colorsResponse.results || []).map((color: YarnColor) => [color.id, color.name]);
 
         setYarnTypeMap(Object.fromEntries(typeEntries));
+        setYarnSubtypeMap(Object.fromEntries(subtypeEntries));
         setYarnColorMap(Object.fromEntries(colorEntries));
       } catch (error) {
         console.error('Error loading yarn metadata:', error);
@@ -292,6 +319,17 @@ const BrandPage = () => {
                             <td className="align-top">
                               <div className="font-semibold">{brand.brandName}</div>
                               <div className="text-xs text-gray-500 mt-1">{brand.address}</div>
+                              {(brand.city || brand.state) && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {[brand.city, brand.state].filter(Boolean).join(', ')}
+                                </div>
+                              )}
+                              {brand.pincode ? (
+                                <div className="text-xs text-gray-500 mt-1">Pincode: {brand.pincode}</div>
+                              ) : null}
+                              {brand.country ? (
+                                <div className="text-xs text-gray-500 mt-1">Country: {brand.country}</div>
+                              ) : null}
                               {brand.gstNo ? (
                                 <div className="text-xs text-gray-500 mt-1">GST: {brand.gstNo}</div>
                               ) : null}
@@ -309,6 +347,7 @@ const BrandPage = () => {
                                   {brand.yarnDetails.map((detail, detailIndex) => {
                                     const yarnTypeLabel = getYarnTypeLabel(detail.yarnType);
                                     const yarnColorLabel = getYarnColorLabel(detail.color);
+                                    const yarnSubtypeLabel = getYarnSubtypeLabel(detail.yarnsubtype);
                                     const shadeLabel =
                                       typeof detail.shadeNumber === 'string' && detail.shadeNumber.trim().length > 0
                                         ? detail.shadeNumber
@@ -318,11 +357,21 @@ const BrandPage = () => {
                                         key={`${brand.id}-yarn-${detailIndex}`}
                                         className="px-2 py-1 rounded bg-primary/10 text-primary text-xs"
                                       >
-                                        <span className="font-semibold">{yarnTypeLabel}</span>
-                                        <span className="mx-2">•</span>
-                                        <span>{yarnColorLabel}</span>
-                                        <span className="mx-2">•</span>
-                                        <span>{shadeLabel}</span>
+                                <span className="font-semibold">{yarnTypeLabel}</span>
+                                        {yarnSubtypeLabel ? (
+                                  <>
+                                    <span className="mx-2">•</span>
+                                            <span>{yarnSubtypeLabel}</span>
+                                  </>
+                                ) : null}
+                                <span className="mx-2">•</span>
+                                <span>{yarnColorLabel}</span>
+                                {shadeLabel !== 'N/A' ? (
+                                  <>
+                                    <span className="mx-2">•</span>
+                                    <span>{shadeLabel}</span>
+                                  </>
+                                ) : null}
                                       </div>
                                     );
                                   })}

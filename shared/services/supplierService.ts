@@ -9,8 +9,9 @@ export interface SupplierYarnReference {
 
 export interface SupplierYarnDetail {
   yarnType: string | SupplierYarnReference;
+  yarnsubtype?: string | SupplierYarnReference;
   color: string | SupplierYarnReference;
-  shadeNumber: string;
+  shadeNumber?: string;
 }
 
 export interface Supplier {
@@ -20,6 +21,10 @@ export interface Supplier {
   contactNumber: string;
   email: string;
   address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
   gstNo?: string;
   yarnDetails?: SupplierYarnDetail[];
   status: 'active' | 'inactive' | 'suspended';
@@ -50,6 +55,10 @@ export interface CreateSupplierRequest {
   contactNumber: string;
   email: string;
   address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
   gstNo?: string;
   yarnDetails?: SupplierYarnDetail[];
   status?: 'active' | 'inactive' | 'suspended';
@@ -61,6 +70,10 @@ export interface UpdateSupplierRequest {
   contactNumber?: string;
   email?: string;
   address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
   gstNo?: string;
   yarnDetails?: SupplierYarnDetail[];
   status?: 'active' | 'inactive' | 'suspended';

@@ -5,6 +5,8 @@ export type YarnTypeCountSizeRef = string | { id?: string; _id?: string; name?: 
 
 export interface YarnTypeDetail {
   subtype: string;
+  id?: string;
+  _id?: string;
   countSize?: YarnTypeCountSizeRef[];
   tearWeight?: string;
 }

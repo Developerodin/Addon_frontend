@@ -1,5 +1,5 @@
 "use client"
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
@@ -13,6 +13,7 @@ import yarnColorService, { YarnColor } from '@/shared/services/yarnColorService'
 
 interface YarnDetailForm {
   yarnType: string;
+  yarnsubtype: string;
   color: string;
   shadeNumber: string;
 }
@@ -25,6 +26,10 @@ interface BrandFormState {
   contactNumber: string;
   email: string;
   address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
   gstNo: string;
   status: SupplierStatus;
   yarnDetails: YarnDetailForm[];
@@ -32,6 +37,7 @@ interface BrandFormState {
 
 const defaultYarnDetail: YarnDetailForm = {
   yarnType: '',
+  yarnsubtype: '',
   color: '',
   shadeNumber: '',
 };
@@ -42,12 +48,17 @@ const AddBrandPage = () => {
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [yarnTypes, setYarnTypes] = useState<YarnType[]>([]);
   const [yarnColors, setYarnColors] = useState<YarnColor[]>([]);
+  const [yarnSubtypeMap, setYarnSubtypeMap] = useState<Record<string, { id: string; name: string }[]>>({});
   const [formData, setFormData] = useState<BrandFormState>({
     brandName: '',
     contactPersonName: '',
     contactNumber: '',
     email: '',
     address: '',
+    city: '',
+    state: '',
+    pincode: '',
+    country: '',
     gstNo: '',
     status: 'active',
     yarnDetails: [],
@@ -61,7 +72,24 @@ const AddBrandPage = () => {
           yarnTypeService.getTypes({ status: 'active', limit: 1000, page: 1 }),
           yarnColorService.getColors({ status: 'active', limit: 1000, page: 1 }),
         ]);
-        setYarnTypes(typesResponse.results || []);
+        const types = typesResponse.results || [];
+        setYarnTypes(types);
+        const subtypeEntries = types.reduce<Record<string, { id: string; name: string }[]>>((acc, type) => {
+          if (type.id && Array.isArray(type.details) && type.details.length > 0) {
+            const options = type.details
+              .map((detail) => {
+                const subtypeId = detail.id || detail._id;
+                if (!subtypeId || !detail.subtype) return null;
+                return { id: subtypeId, name: detail.subtype };
+              })
+              .filter(Boolean) as { id: string; name: string }[];
+            if (options.length > 0) {
+              acc[type.id] = options;
+            }
+          }
+          return acc;
+        }, {});
+        setYarnSubtypeMap(subtypeEntries);
         setYarnColors(colorsResponse.results || []);
       } catch (error) {
         console.error('Error loading yarn data:', error);
@@ -92,33 +120,88 @@ const AddBrandPage = () => {
     }));
   };
 
-  const handleYarnDetailChange = (
-    index: number,
-    field: keyof YarnDetailForm,
-    value: string,
-  ) => {
+  const updateYarnDetail = useCallback((index: number, updates: Partial<YarnDetailForm>) => {
     setFormData((prev) => {
       const nextDetails = [...prev.yarnDetails];
       nextDetails[index] = {
         ...nextDetails[index],
-        [field]: value,
+        ...updates,
       };
       return {
         ...prev,
         yarnDetails: nextDetails,
       };
     });
-  };
+  }, []);
+
+  const getSubtypeOptions = useCallback(
+    (yarnTypeId: string) => {
+      if (!yarnTypeId) return [];
+      return yarnSubtypeMap[yarnTypeId] || [];
+    },
+    [yarnSubtypeMap],
+  );
+
+  const handleYarnTypeChange = useCallback(
+    async (index: number, value: string) => {
+      updateYarnDetail(index, { yarnType: value, yarnsubtype: '' });
+
+      if (!value) {
+        return;
+      }
+
+      const existingSubtypes = yarnSubtypeMap[value];
+      if (!existingSubtypes) {
+        try {
+          const type = await yarnTypeService.getTypeById(value);
+          const details = (type.details || []).filter((detail) => detail?.subtype);
+          const options = details
+            .map((detail) => {
+              const subtypeId = detail.id || detail._id;
+              if (!subtypeId || !detail.subtype) return null;
+              return { id: subtypeId, name: detail.subtype };
+            })
+            .filter(Boolean) as { id: string; name: string }[];
+          setYarnSubtypeMap((prev) => ({
+            ...prev,
+            [value]: options,
+          }));
+          if (options.length === 1) {
+            updateYarnDetail(index, { yarnsubtype: options[0].id });
+          }
+        } catch (error) {
+          console.error('Error loading yarn subtypes:', error);
+          toast.error(error instanceof Error ? error.message : 'Failed to load yarn subtypes');
+        }
+      } else if (existingSubtypes.length === 1) {
+        updateYarnDetail(index, { yarnsubtype: existingSubtypes[0].id });
+      }
+    },
+    [updateYarnDetail, yarnSubtypeMap],
+  );
+
+  const handleYarnDetailChange = useCallback(
+    (index: number, field: keyof YarnDetailForm, value: string) => {
+      updateYarnDetail(index, { [field]: value } as Partial<YarnDetailForm>);
+    },
+    [updateYarnDetail],
+  );
 
   const addYarnDetail = () => {
+    const autoTypeId = yarnTypeOptions.length === 1 ? yarnTypeOptions[0].id : '';
+    const subtypeOptions = autoTypeId ? getSubtypeOptions(autoTypeId) : [];
+    const autoSubtype = subtypeOptions.length === 1 ? subtypeOptions[0].id : '';
+    const autoColorId = yarnColorOptions.length === 1 ? yarnColorOptions[0].id : '';
+
     setFormData((prev) => ({
       ...prev,
       yarnDetails: [
         ...prev.yarnDetails,
         {
           ...defaultYarnDetail,
-          yarnType: yarnTypes.length === 1 ? yarnTypes[0].id : '',
-          color: yarnColors.length === 1 ? yarnColors[0].id : '',
+          yarnType: autoTypeId,
+          yarnsubtype: autoSubtype,
+          color: autoColorId,
         },
       ],
     }));
@@ -132,8 +215,12 @@ const AddBrandPage = () => {
   };
 
   const validateContactNumber = (value: string) => {
-    const contactRegex = /^[+\d\s()-]{10,20}$/;
+    const contactRegex = /^\+?[\d\s()-]{10,15}$/;
     return contactRegex.test(value.trim());
+  };
+
+  const validatePincode = (value: string) => {
+    return /^[0-9]{6}$/.test(value.trim());
   };
 
   const validateForm = () => {
@@ -161,10 +248,39 @@ const AddBrandPage = () => {
       toast.error('Address is required');
       return false;
     }
+    if (!formData.city.trim()) {
+      toast.error('City is required');
+      return false;
+    }
+    if (!formData.state.trim()) {
+      toast.error('State is required');
+      return false;
+    }
+    if (!formData.pincode.trim()) {
+      toast.error('Pincode is required');
+      return false;
+    }
+    if (!validatePincode(formData.pincode)) {
+      toast.error('Invalid pincode format. Must be 6 digits');
+      return false;
+    }
+    if (!formData.country.trim()) {
+      toast.error('Country is required');
+      return false;
+    }
 
     for (const detail of formData.yarnDetails) {
-      if (!detail.yarnType.trim() || !detail.color.trim() || !detail.shadeNumber.trim()) {
-        toast.error('All yarn detail fields are required');
+      if (!detail.yarnType.trim()) {
+        toast.error('Yarn type is required for each yarn detail');
+        return false;
+      }
+      if (!detail.color.trim()) {
+        toast.error('Color is required for each yarn detail');
+        return false;
+      }
+      const subtypeOptions = getSubtypeOptions(detail.yarnType);
+      if (subtypeOptions.length > 0 && !detail.yarnsubtype.trim()) {
+        toast.error('Yarn sub type is required when available');
         return false;
       }
     }
@@ -185,14 +301,26 @@ const AddBrandPage = () => {
         contactNumber: formData.contactNumber.trim(),
         email: formData.email.trim().toLowerCase(),
         address: formData.address.trim(),
+        city: formData.city.trim(),
+        state: formData.state.trim(),
+        pincode: formData.pincode.trim(),
+        country: formData.country.trim(),
         status: formData.status,
         gstNo: formData.gstNo.trim() || undefined,
         yarnDetails: formData.yarnDetails.length
-          ? formData.yarnDetails.map<SupplierYarnDetail>((detail) => ({
-              yarnType: detail.yarnType,
-              color: detail.color,
-              shadeNumber: detail.shadeNumber.trim(),
-            }))
+          ? formData.yarnDetails.map<SupplierYarnDetail>((detail) => {
+              const normalizedDetail: SupplierYarnDetail = {
+                yarnType: detail.yarnType,
+                color: detail.color,
+              };
+              if (detail.yarnsubtype.trim()) {
+                normalizedDetail.yarnsubtype = detail.yarnsubtype.trim();
+              }
+              if (detail.shadeNumber.trim()) {
+                normalizedDetail.shadeNumber = detail.shadeNumber.trim();
+              }
+              return normalizedDetail;
+            })
           : undefined,
       };
 
@@ -330,6 +458,64 @@ const AddBrandPage = () => {
                       <option value="suspended">Suspended</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="form-label">
+                      City <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter city"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label">
+                      State <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter state"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">
+                      Pincode <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="pincode"
+                      value={formData.pincode}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter 6 digit pincode"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label">
+                      Country <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="country"
+                      value={formData.country}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter country"
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -373,72 +559,99 @@ const AddBrandPage = () => {
                       No yarn details added. Use "Add Yarn Detail" to include yarn information.
                     </p>
                   ) : (
-                    formData.yarnDetails.map((detail, index) => (
-                      <div key={`yarn-detail-${index}`} className="border border-gray-200 rounded-lg p-4 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                            <label className="form-label">
-                              Yarn Type <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={detail.yarnType}
-                              onChange={(e) => handleYarnDetailChange(index, 'yarnType', e.target.value)}
-                              className="form-select"
-                              required
-                              disabled={isLoadingOptions}
-                            >
-                              <option value="">Select yarn type</option>
-                              {yarnTypeOptions.map((type) => (
-                                <option key={type.id} value={type.id}>
-                                  {type.name}
-                                </option>
-                              ))}
-                            </select>
+                    formData.yarnDetails.map((detail, index) => {
+                      const subtypeOptions = getSubtypeOptions(detail.yarnType);
+                      return (
+                        <div
+                          key={`yarn-detail-${index}`}
+                          className="border border-gray-200 rounded-lg p-4 space-y-4"
+                        >
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                              <label className="form-label">
+                                Yarn Type <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                value={detail.yarnType}
+                                onChange={(e) => handleYarnTypeChange(index, e.target.value)}
+                                className="form-select"
+                                required
+                                disabled={isLoadingOptions}
+                              >
+                                <option value="">Select yarn type</option>
+                                {yarnTypeOptions.map((type) => (
+                                  <option key={type.id} value={type.id}>
+                                    {type.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label">
+                                Yarn Sub Type{' '}
+                                {subtypeOptions.length > 0 ? (
+                                  <span className="text-red-500">*</span>
+                                ) : (
+                                  <span className="text-xs text-gray-400 ms-1">(Optional)</span>
+                                )}
+                              </label>
+                              <select
+                                value={detail.yarnsubtype}
+                                onChange={(e) => handleYarnDetailChange(index, 'yarnsubtype', e.target.value)}
+                                className="form-select"
+                                disabled={isLoadingOptions || subtypeOptions.length === 0}
+                                required={subtypeOptions.length > 0}
+                              >
+                                <option value="">Select yarn sub type</option>
+                                {subtypeOptions.map((subtype) => (
+                                  <option key={subtype.id} value={subtype.id}>
+                                    {subtype.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label">
+                                Color <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                value={detail.color}
+                                onChange={(e) => handleYarnDetailChange(index, 'color', e.target.value)}
+                                className="form-select"
+                                required
+                                disabled={isLoadingOptions}
+                              >
+                                <option value="">Select color</option>
+                                {yarnColorOptions.map((color) => (
+                                  <option key={color.id} value={color.id}>
+                                    {color.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label">Shade Number</label>
+                              <input
+                                type="text"
+                                value={detail.shadeNumber}
+                                onChange={(e) => handleYarnDetailChange(index, 'shadeNumber', e.target.value)}
+                                className="form-control"
+                                placeholder="Enter shade number"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="form-label">
-                              Color <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={detail.color}
-                              onChange={(e) => handleYarnDetailChange(index, 'color', e.target.value)}
-                              className="form-select"
-                              required
-                              disabled={isLoadingOptions}
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              className="ti-btn ti-btn-danger ti-btn-sm"
+                              onClick={() => removeYarnDetail(index)}
                             >
-                              <option value="">Select color</option>
-                              {yarnColorOptions.map((color) => (
-                                <option key={color.id} value={color.id}>
-                                  {color.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="form-label">
-                              Shade Number <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={detail.shadeNumber}
-                              onChange={(e) => handleYarnDetailChange(index, 'shadeNumber', e.target.value)}
-                              className="form-control"
-                              placeholder="Enter shade number"
-                              required
-                            />
+                              <i className="ri-delete-bin-line me-1"></i> Remove
+                            </button>
                           </div>
                         </div>
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            className="ti-btn ti-btn-danger ti-btn-sm"
-                            onClick={() => removeYarnDetail(index)}
-                          >
-                            <i className="ri-delete-bin-line me-1"></i> Remove
-                          </button>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
 
