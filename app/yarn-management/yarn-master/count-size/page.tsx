@@ -78,6 +78,22 @@ const CountSizePage = () => {
     fileInputRef.current?.click();
   };
 
+  const handleDownloadTemplate = () => {
+    try {
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet([
+        { Name: '40s', Status: 'active' },
+        { Name: '44s', Status: 'inactive' },
+      ]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'CountSizes');
+      XLSX.writeFile(workbook, 'yarn-count-sizes-template.xlsx');
+      toast.success('Template downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading count/size template:', error);
+      toast.error('Failed to download template');
+    }
+  };
+
   const handleExport = async () => {
     try {
       const response = await yarnCountSizeService.getCountSizes({
@@ -155,7 +171,14 @@ const CountSizePage = () => {
           existingItems.map(item => [item.name.trim().toLowerCase(), item]),
         );
 
-        const validStatuses: Array<'active' | 'inactive'> = ['active', 'inactive'];
+        const normalizedCountSizes = new Map<
+          string,
+          {
+            id?: string;
+            name: string;
+            status: 'active' | 'inactive';
+          }
+        >();
 
         let processed = 0;
         for (const row of jsonData) {
@@ -167,46 +190,40 @@ const CountSizePage = () => {
               throw new Error('Name is required');
             }
 
-            const status = validStatuses.includes(rawStatus as 'active' | 'inactive')
-              ? (rawStatus as 'active' | 'inactive')
-              : 'active';
+            const status: 'active' | 'inactive' = rawStatus === 'inactive' ? 'inactive' : 'active';
 
-            const payload = {
+            const idFromRow = row.ID?.toString().trim();
+            const normalizedNameKey = rawName.toLowerCase();
+            const existingById = idFromRow ? itemsById.get(idFromRow) : undefined;
+            const existingByName = itemsByName.get(normalizedNameKey);
+            const finalId = existingById?.id ?? existingByName?.id;
+            const key = finalId ?? normalizedNameKey;
+
+            normalizedCountSizes.set(key, {
+              ...(finalId ? { id: finalId } : {}),
               name: rawName,
               status,
-            };
-
-            const id = row.ID?.toString().trim();
-            let targetItem: CountSize | undefined;
-
-            if (id && itemsById.has(id)) {
-              targetItem = itemsById.get(id);
-              await yarnCountSizeService.updateCountSize(id, payload);
-            } else {
-              const existingByName = itemsByName.get(rawName.toLowerCase());
-              if (existingByName) {
-                await yarnCountSizeService.updateCountSize(existingByName.id, payload);
-                targetItem = existingByName;
-              } else {
-                const created = await yarnCountSizeService.createCountSize(payload);
-                itemsById.set(created.id, created);
-                itemsByName.set(created.name.trim().toLowerCase(), created);
-              }
-            }
-
-            if (targetItem) {
-              const updatedItem = { ...targetItem, ...payload };
-              itemsById.set(updatedItem.id, updatedItem);
-              itemsByName.delete(targetItem.name.trim().toLowerCase());
-              itemsByName.set(updatedItem.name.trim().toLowerCase(), updatedItem);
-            }
+            });
           } catch (rowError) {
             console.error('Error importing count/size row:', rowError);
           } finally {
             processed += 1;
-            setImportProgress(Math.round((processed / jsonData.length) * 100));
+            setImportProgress(Math.min(95, Math.round((processed / jsonData.length) * 90)));
           }
         }
+
+        const countSizesPayload = Array.from(normalizedCountSizes.values());
+
+        if (countSizesPayload.length === 0) {
+          throw new Error('No valid count/size records found in the import file');
+        }
+
+        if (countSizesPayload.length > 1000) {
+          throw new Error('A maximum of 1000 count/size records can be imported at once');
+        }
+
+        await yarnCountSizeService.bulkImportCountSizes({ countSizes: countSizesPayload });
+        setImportProgress(100);
 
         await fetchCountSizes();
         toast.success('Count/Size records imported successfully');
@@ -268,6 +285,13 @@ const CountSizePage = () => {
                   accept=".xlsx,.xls"
                   onChange={handleFileUpload}
                 />
+                  <button
+                    type="button"
+                    className="ti-btn ti-btn-secondary"
+                    onClick={handleDownloadTemplate}
+                  >
+                    <i className="ri-download-line me-2"></i> Download Template
+                  </button>
                 <button
                   type="button"
                   className="ti-btn ti-btn-success"
@@ -477,4 +501,5 @@ const CountSizePage = () => {
 };
 
 export default CountSizePage;
+
 

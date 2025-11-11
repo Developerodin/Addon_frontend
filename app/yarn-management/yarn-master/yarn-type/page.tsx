@@ -1,9 +1,11 @@
 "use client"
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
-import yarnTypeService, { YarnType, YarnTypeDetail } from '@/shared/services/yarnTypeService';
+import yarnTypeService, { BulkImportYarnType, YarnType, YarnTypeDetail } from '@/shared/services/yarnTypeService';
+import yarnCountSizeService from '@/shared/services/yarnCountSizeService';
+import * as XLSX from 'xlsx';
 
 const YarnTypePage = () => {
   const [yarnTypes, setYarnTypes] = useState<YarnType[]>([]);
@@ -17,6 +19,9 @@ const YarnTypePage = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
 
   const formatCountSize = (countSize?: YarnTypeDetail['countSize']) => {
     if (!countSize || countSize.length === 0) return '';
@@ -52,6 +57,8 @@ const YarnTypePage = () => {
       setYarnTypes(data.results || []);
       setTotalPages(data.totalPages || 1);
       setTotalResults(data.totalResults || 0);
+      setSelectedTypes([]);
+      setSelectAll(false);
     } catch (error) {
       console.error('Error fetching yarn types:', error);
       toast.error('Failed to fetch yarn types');
@@ -59,6 +66,372 @@ const YarnTypePage = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  type YarnTypeImportRow = {
+    ID?: string;
+    Name?: string;
+    Status?: string;
+  };
+
+  type YarnTypeDetailImportRow = {
+    'Type Identifier'?: string;
+    Subtype?: string;
+    'Tear Weight'?: string | number;
+    'Count Size Names'?: string;
+    'Count Size IDs'?: string;
+  };
+
+  const handleDownloadTemplate = () => {
+    try {
+      const workbook = XLSX.utils.book_new();
+
+      const yarnTypesSheet = XLSX.utils.json_to_sheet([
+        { ID: '', Name: 'Combed Cotton', Status: 'active' },
+        { ID: '', Name: 'Carded Cotton', Status: 'inactive' },
+      ]);
+
+      const detailsSheet = XLSX.utils.json_to_sheet([
+        {
+          'Type Identifier': 'Combed Cotton',
+          Subtype: 'Combed 40s',
+          'Tear Weight': '2.5',
+          'Count Size Names': '40s, 44s',
+        },
+        {
+          'Type Identifier': 'Carded Cotton',
+          Subtype: 'Carded 20s',
+          'Tear Weight': '',
+          'Count Size Names': '20s',
+        },
+      ]);
+
+      XLSX.utils.book_append_sheet(workbook, yarnTypesSheet, 'YarnTypes');
+      XLSX.utils.book_append_sheet(workbook, detailsSheet, 'YarnTypeDetails');
+
+      XLSX.writeFile(workbook, 'yarn-types-template.xlsx');
+      toast.success('Template downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading yarn type template:', error);
+      toast.error('Failed to download template');
+    }
+  };
+
+  const handleImportClick = () => {
+    if (isImporting) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleExport = async () => {
+    try {
+      const [typesResponse, countSizeResponse] = await Promise.all([
+        yarnTypeService.getTypes({ page: 1, limit: 10000 }),
+        yarnCountSizeService.getCountSizes({ page: 1, limit: 10000 }),
+      ]);
+
+      const allTypes = typesResponse.results || [];
+      const exportSource =
+        selectedTypes.length > 0 ? allTypes.filter(type => selectedTypes.includes(type.id)) : allTypes;
+
+      if (exportSource.length === 0) {
+        toast.error('No yarn types available for export');
+        return;
+      }
+
+      const countSizeById = new Map(
+        (countSizeResponse.results || []).map(countSize => [countSize.id, countSize.name]),
+      );
+
+      const yarnTypesSheetData = exportSource.map(type => ({
+        ID: type.id,
+        Name: type.name,
+        Status: type.status,
+      }));
+
+      const detailsSheetData = exportSource.flatMap(type => {
+        if (!type.details || type.details.length === 0) {
+          return [];
+        }
+
+        return type.details.map(detail => {
+          const countSizeNames = (detail.countSize || [])
+            .map(item => {
+              if (typeof item === 'string') {
+                return countSizeById.get(item) || item;
+              }
+              if (typeof item === 'object') {
+                if (item.name) return item.name;
+                const id = item.id || item._id;
+                return id ? countSizeById.get(id) || id : '';
+              }
+              return '';
+            })
+            .filter(Boolean)
+            .join(', ');
+
+          return {
+            'Type Identifier': type.id,
+            Subtype: detail.subtype,
+            'Tear Weight': detail.tearWeight || '',
+            'Count Size Names': countSizeNames,
+          };
+        });
+      });
+
+      const workbook = XLSX.utils.book_new();
+      const yarnTypesSheet = XLSX.utils.json_to_sheet(yarnTypesSheetData);
+      XLSX.utils.book_append_sheet(workbook, yarnTypesSheet, 'YarnTypes');
+
+      const detailsSheet =
+        detailsSheetData.length > 0
+          ? XLSX.utils.json_to_sheet(detailsSheetData)
+          : XLSX.utils.json_to_sheet([
+              {
+                'Type Identifier': '',
+                Subtype: '',
+                'Tear Weight': '',
+                'Count Size Names': '',
+              },
+            ]);
+      XLSX.utils.book_append_sheet(workbook, detailsSheet, 'YarnTypeDetails');
+
+      XLSX.writeFile(workbook, 'yarn-types.xlsx');
+      toast.success('Yarn types exported successfully');
+    } catch (error) {
+      console.error('Error exporting yarn types:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to export yarn types');
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportProgress(0);
+
+    const reader = new FileReader();
+
+    reader.onload = async event => {
+      try {
+        const data = event.target?.result;
+        if (!data) {
+          throw new Error('Unable to read file');
+        }
+
+        const workbook = XLSX.read(data, { type: 'binary' });
+        if (workbook.SheetNames.length === 0) {
+          throw new Error('Import file is empty');
+        }
+
+        const yarnTypesSheetName =
+          workbook.SheetNames.find(name => name.toLowerCase() === 'yarntypes') || workbook.SheetNames[0];
+        const yarnTypesSheet = workbook.Sheets[yarnTypesSheetName];
+        const detailSheetName = workbook.SheetNames.find(name => name.toLowerCase() === 'yarntypedetails');
+        const detailSheet = detailSheetName ? workbook.Sheets[detailSheetName] : undefined;
+
+        const yarnTypeRows = XLSX.utils.sheet_to_json<YarnTypeImportRow>(yarnTypesSheet, { defval: '' });
+        const detailRows = detailSheet
+          ? XLSX.utils.sheet_to_json<YarnTypeDetailImportRow>(detailSheet, { defval: '' })
+          : [];
+
+        if (yarnTypeRows.length === 0) {
+          throw new Error('Yarn types sheet is empty');
+        }
+
+        const [existingTypesResponse, countSizeResponse] = await Promise.all([
+          yarnTypeService.getTypes({ page: 1, limit: 10000 }),
+          yarnCountSizeService.getCountSizes({ page: 1, limit: 10000 }),
+        ]);
+
+        const existingTypes = existingTypesResponse.results || [];
+        const countSizes = countSizeResponse.results || [];
+
+        const typesById = new Map(existingTypes.map(type => [type.id, type]));
+        const typesByName = new Map(existingTypes.map(type => [type.name.trim().toLowerCase(), type]));
+
+        const countSizeById = new Map(countSizes.map(countSize => [countSize.id, countSize]));
+        const countSizeByName = new Map(
+          countSizes.map(countSize => [countSize.name.trim().toLowerCase(), countSize]),
+        );
+
+        const detailMap = new Map<
+          string,
+          Array<{ subtype: string; tearWeight?: string; countSizeTokens: string[] }>
+        >();
+        const yarnTypePayloads: BulkImportYarnType[] = [];
+        const rowErrors: string[] = [];
+
+        const appendDetail = (key: string, detail: { subtype: string; tearWeight?: string; countSizeTokens: string[] }) => {
+          const existing = detailMap.get(key) || [];
+          detailMap.set(key, [...existing, detail]);
+        };
+
+        detailRows.forEach(detailRow => {
+          const identifierRaw = detailRow['Type Identifier']?.toString().trim();
+          const subtypeRaw = detailRow.Subtype?.toString().trim();
+          if (!identifierRaw || !subtypeRaw) {
+            return;
+          }
+
+          const tearWeightRaw = detailRow['Tear Weight']?.toString().trim() ?? '';
+          const countSizeTokensRaw =
+            detailRow['Count Size Names']?.toString() || detailRow['Count Size IDs']?.toString() || '';
+          const tokens = countSizeTokensRaw
+            ? countSizeTokensRaw
+                .split(/[,;]+/)
+                .map(token => token.trim())
+                .filter(Boolean)
+            : [];
+
+          appendDetail(`name:${identifierRaw.toLowerCase()}`, {
+            subtype: subtypeRaw,
+            tearWeight: tearWeightRaw,
+            countSizeTokens: tokens,
+          });
+
+          if (typesById.has(identifierRaw)) {
+            appendDetail(`id:${identifierRaw}`, {
+              subtype: subtypeRaw,
+              tearWeight: tearWeightRaw,
+              countSizeTokens: tokens,
+            });
+          }
+        });
+
+        let processed = 0;
+        for (const row of yarnTypeRows) {
+          try {
+            const rawId = row.ID?.toString().trim() ?? '';
+            const rawName = row.Name?.toString().trim() ?? '';
+            if (!rawName) {
+              throw new Error('Name is required');
+            }
+
+            const rawStatus = row.Status?.toString().trim().toLowerCase() ?? 'active';
+            const status: 'active' | 'inactive' =
+              rawStatus === 'inactive' ? 'inactive' : 'active';
+
+            const detailKeys: string[] = [];
+            if (rawId) detailKeys.push(`id:${rawId}`);
+            detailKeys.push(`name:${rawName.toLowerCase()}`);
+
+            const detailEntries = detailKeys.flatMap(key => detailMap.get(key) || []);
+
+            const detailPayload: YarnTypeDetail[] = detailEntries
+              .map(detail => {
+                const uniqueCountSizeIds = new Set<string>();
+                const missingTokens: string[] = [];
+
+                detail.countSizeTokens.forEach(token => {
+                  if (!token) return;
+                  if (countSizeById.has(token)) {
+                    uniqueCountSizeIds.add(token);
+                    return;
+                  }
+                  const match = countSizeByName.get(token.toLowerCase());
+                  if (match) {
+                    uniqueCountSizeIds.add(match.id);
+                  } else {
+                    missingTokens.push(token);
+                  }
+                });
+
+                if (missingTokens.length > 0) {
+                  console.warn(
+                    `Count size(s) not found for "${rawName || rawId}": ${missingTokens.join(', ')}`,
+                  );
+                }
+
+                return {
+                  subtype: detail.subtype,
+                  ...(uniqueCountSizeIds.size > 0 ? { countSize: Array.from(uniqueCountSizeIds) } : {}),
+                  ...(detail.tearWeight ? { tearWeight: detail.tearWeight } : {}),
+                } as YarnTypeDetail;
+              })
+              .filter((detail): detail is YarnTypeDetail => Boolean(detail?.subtype));
+
+            let targetTypeId: string | undefined;
+            if (rawId && typesById.has(rawId)) {
+              targetTypeId = rawId;
+            } else {
+              const existingByName = typesByName.get(rawName.toLowerCase());
+              if (existingByName) {
+                targetTypeId = existingByName.id;
+              }
+            }
+
+            const payload: BulkImportYarnType = {
+              ...(targetTypeId ? { id: targetTypeId } : {}),
+              name: rawName,
+              status,
+              ...(detailPayload.length > 0 ? { details: detailPayload } : {}),
+            };
+
+            yarnTypePayloads.push(payload);
+          } catch (rowError) {
+            const errorMessage =
+              rowError instanceof Error ? rowError.message : 'Unknown error importing row';
+            console.error('Error importing yarn type row:', rowError);
+            rowErrors.push(errorMessage);
+          } finally {
+            processed += 1;
+            setImportProgress(Math.round((processed / yarnTypeRows.length) * 100));
+          }
+        }
+
+        if (yarnTypePayloads.length === 0) {
+          throw new Error('No valid yarn types found for bulk import');
+        }
+
+        const response = await yarnTypeService.bulkImport({
+          yarnTypes: yarnTypePayloads,
+          batchSize: Math.min(50, Math.max(1, yarnTypePayloads.length)),
+        });
+
+        await fetchYarnTypes();
+
+        const hasRowErrors = rowErrors.length > 0;
+        const hasResponseErrors = Boolean(response?.errors && response.errors.length > 0);
+
+        if (hasResponseErrors) {
+          console.warn('Bulk import completed with errors:', response.errors);
+        }
+        if (hasRowErrors) {
+          console.warn('Rows skipped during bulk import:', rowErrors);
+        }
+
+        if (hasResponseErrors || hasRowErrors) {
+          const totalErrors =
+            (response?.errors?.length || 0) + rowErrors.length;
+          toast.error(
+            `Import completed with ${totalErrors} error${totalErrors === 1 ? '' : 's'}. Check console for details.`,
+          );
+        } else {
+          toast.success(response?.message ?? 'Yarn types imported successfully');
+        }
+      } catch (error) {
+        console.error('Error processing yarn type import file:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to process import file');
+      } finally {
+        setImportProgress(null);
+        setIsImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error('Failed to read import file');
+      setImportProgress(null);
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
+    reader.readAsBinaryString(file);
   };
 
   const handleDelete = async (typeId: string) => {
@@ -121,9 +494,45 @@ const YarnTypePage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <h1 className="box-title text-2xl font-semibold">Yarn Types</h1>
-              <Link href="/yarn-management/yarn-master/yarn-type/add" className="ti-btn ti-btn-primary">
-                <i className="ri-add-line me-2"></i> Add Yarn Type
-              </Link>
+              <div className="box-tools flex items-center space-x-2">
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-secondary"
+                  onClick={handleDownloadTemplate}
+                >
+                  <i className="ri-download-line me-2"></i> Download Template
+                </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileUpload}
+                />
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-success"
+                  onClick={handleImportClick}
+                  disabled={isImporting}
+                >
+                  {isImporting ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-file-excel-2-line me-2"></i> Import
+                    </>
+                  )}
+                </button>
+                <button type="button" className="ti-btn ti-btn-info" onClick={handleExport}>
+                  <i className="ri-download-2-line me-2"></i> Export
+                </button>
+                <Link href="/yarn-management/yarn-master/yarn-type/add" className="ti-btn ti-btn-primary">
+                  <i className="ri-add-line me-2"></i> Add Yarn Type
+                </Link>
+              </div>
             </div>
           </div>
 
@@ -158,6 +567,16 @@ const YarnTypePage = () => {
                   </button>
                 </div>
               </div>
+
+              {importProgress !== null && (
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                  <div
+                    className="bg-primary h-3 rounded-full transition-all duration-200"
+                    style={{ width: `${importProgress}%` }}
+                  ></div>
+                  <div className="text-xs text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
+                </div>
+              )}
 
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">

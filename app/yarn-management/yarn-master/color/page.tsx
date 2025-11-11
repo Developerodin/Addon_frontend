@@ -82,6 +82,22 @@ const ColorPage = () => {
     fileInputRef.current?.click();
   };
 
+  const handleDownloadTemplate = () => {
+    try {
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet([
+        { Name: 'Ocean Blue', 'Color Code': '#1E90FF', Status: 'active' },
+        { Name: 'Sunset Orange', 'Color Code': '#FF4500', Status: 'inactive' },
+      ]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Colors');
+      XLSX.writeFile(workbook, 'yarn-colors-template.xlsx');
+      toast.success('Template downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading color template:', error);
+      toast.error('Failed to download template');
+    }
+  };
+
   const handleExport = async () => {
     try {
       const response = await yarnColorService.getColors({
@@ -171,7 +187,16 @@ const ColorPage = () => {
         );
 
         const isValidHex = (value: string) => /^#([0-9A-F]{6})$/i.test(value);
-        const validStatuses: Array<'active' | 'inactive'> = ['active', 'inactive'];
+
+        const normalizedColors = new Map<
+          string,
+          {
+            id?: string;
+            name: string;
+            colorCode: string;
+            status: 'active' | 'inactive';
+          }
+        >();
 
         let processed = 0;
         for (const row of jsonData) {
@@ -184,55 +209,50 @@ const ColorPage = () => {
               throw new Error('Name is required');
             }
 
-            let normalizedColorCode = rawColorCode.startsWith('#')
+            const candidateColorCode = rawColorCode.startsWith('#')
               ? rawColorCode.toUpperCase()
               : `#${rawColorCode.toUpperCase()}`;
 
-            if (!isValidHex(normalizedColorCode)) {
+            if (!isValidHex(candidateColorCode)) {
               throw new Error(`Invalid color code for ${rawName}: ${rawColorCode}`);
             }
 
-            const status = validStatuses.includes(rawStatus as 'active' | 'inactive')
-              ? (rawStatus as 'active' | 'inactive')
-              : 'active';
+            const status: 'active' | 'inactive' =
+              rawStatus === 'inactive' ? 'inactive' : 'active';
 
-            const payload = {
+            const idFromRow = row.ID?.toString().trim();
+            const normalizedNameKey = rawName.toLowerCase();
+            const existingById = idFromRow ? colorsById.get(idFromRow) : undefined;
+            const existingByName = colorsByName.get(normalizedNameKey);
+            const finalId = existingById?.id ?? existingByName?.id;
+            const key = finalId ?? normalizedNameKey;
+
+            normalizedColors.set(key, {
+              ...(finalId ? { id: finalId } : {}),
               name: rawName,
-              colorCode: normalizedColorCode,
+              colorCode: candidateColorCode,
               status,
-            };
-
-            const id = row.ID?.toString().trim();
-            let targetColor: YarnColor | undefined;
-
-            if (id && colorsById.has(id)) {
-              targetColor = colorsById.get(id);
-              await yarnColorService.updateColor(id, payload);
-            } else {
-              const existingByName = colorsByName.get(rawName.toLowerCase());
-              if (existingByName) {
-                await yarnColorService.updateColor(existingByName.id, payload);
-                targetColor = existingByName;
-              } else {
-                const created = await yarnColorService.createColor(payload);
-                colorsById.set(created.id, created);
-                colorsByName.set(created.name.trim().toLowerCase(), created);
-              }
-            }
-
-            if (targetColor) {
-              const updatedColor = { ...targetColor, ...payload };
-              colorsById.set(updatedColor.id, updatedColor);
-              colorsByName.delete(targetColor.name.trim().toLowerCase());
-              colorsByName.set(updatedColor.name.trim().toLowerCase(), updatedColor);
-            }
+            });
           } catch (rowError) {
             console.error('Error importing color row:', rowError);
           } finally {
             processed += 1;
-            setImportProgress(Math.round((processed / jsonData.length) * 100));
+            setImportProgress(Math.min(95, Math.round((processed / jsonData.length) * 90)));
           }
         }
+
+        const colorsPayload = Array.from(normalizedColors.values());
+
+        if (colorsPayload.length === 0) {
+          throw new Error('No valid color records found in the import file');
+        }
+
+        if (colorsPayload.length > 1000) {
+          throw new Error('A maximum of 1000 colors can be imported at once');
+        }
+
+        await yarnColorService.bulkImportColors({ colors: colorsPayload });
+        setImportProgress(100);
 
         await fetchColors();
         toast.success('Colors imported successfully');
@@ -294,6 +314,13 @@ const ColorPage = () => {
                   accept=".xlsx,.xls"
                   onChange={handleFileUpload}
                 />
+                  <button
+                    type="button"
+                    className="ti-btn ti-btn-secondary"
+                    onClick={handleDownloadTemplate}
+                  >
+                    <i className="ri-download-line me-2"></i> Download Template
+                  </button>
                 <button
                   type="button"
                   className="ti-btn ti-btn-success"
@@ -514,4 +541,5 @@ const ColorPage = () => {
 };
 
 export default ColorPage;
+
 

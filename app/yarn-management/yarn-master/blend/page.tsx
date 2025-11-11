@@ -84,6 +84,22 @@ const BlendPage = () => {
     fileInputRef.current?.click();
   };
 
+  const handleDownloadTemplate = () => {
+    try {
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet([
+        { Name: 'Cotton Blend', Status: 'active' },
+        { Name: 'Poly-Cotton Blend', Status: 'inactive' },
+      ]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Blends');
+      XLSX.writeFile(workbook, 'yarn-blends-template.xlsx');
+      toast.success('Template downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading blend template:', error);
+      toast.error('Failed to download template');
+    }
+  };
+
   const handleExport = async () => {
     try {
       const response = await yarnBlendService.getBlends({
@@ -161,7 +177,14 @@ const BlendPage = () => {
           existingBlends.map(blend => [blend.name.trim().toLowerCase(), blend]),
         );
 
-        const validStatuses: Array<'active' | 'inactive'> = ['active', 'inactive'];
+        const normalizedBlends = new Map<
+          string,
+          {
+            id?: string;
+            name: string;
+            status: 'active' | 'inactive';
+          }
+        >();
 
         let processed = 0;
         for (const row of jsonData) {
@@ -173,46 +196,40 @@ const BlendPage = () => {
               throw new Error('Name is required');
             }
 
-            const status = validStatuses.includes(rawStatus as 'active' | 'inactive')
-              ? (rawStatus as 'active' | 'inactive')
-              : 'active';
+            const status: 'active' | 'inactive' = rawStatus === 'inactive' ? 'inactive' : 'active';
 
-            const payload = {
+            const idFromRow = row.ID?.toString().trim();
+            const normalizedNameKey = rawName.toLowerCase();
+            const existingById = idFromRow ? blendsById.get(idFromRow) : undefined;
+            const existingByName = blendsByName.get(normalizedNameKey);
+            const finalId = existingById?.id ?? existingByName?.id;
+            const key = finalId ?? normalizedNameKey;
+
+            normalizedBlends.set(key, {
+              ...(finalId ? { id: finalId } : {}),
               name: rawName,
               status,
-            };
-
-            const id = row.ID?.toString().trim();
-            let targetBlend: YarnBlend | undefined;
-
-            if (id && blendsById.has(id)) {
-              targetBlend = blendsById.get(id);
-              await yarnBlendService.updateBlend(id, payload);
-            } else {
-              const existingByName = blendsByName.get(rawName.toLowerCase());
-              if (existingByName) {
-                await yarnBlendService.updateBlend(existingByName.id, payload);
-                targetBlend = existingByName;
-              } else {
-                const created = await yarnBlendService.createBlend(payload);
-                blendsById.set(created.id, created);
-                blendsByName.set(created.name.trim().toLowerCase(), created);
-              }
-            }
-
-            if (targetBlend) {
-              const updatedBlend = { ...targetBlend, ...payload };
-              blendsById.set(updatedBlend.id, updatedBlend);
-              blendsByName.delete(targetBlend.name.trim().toLowerCase());
-              blendsByName.set(updatedBlend.name.trim().toLowerCase(), updatedBlend);
-            }
+            });
           } catch (rowError) {
             console.error('Error importing blend row:', rowError);
           } finally {
             processed += 1;
-            setImportProgress(Math.round((processed / jsonData.length) * 100));
+            setImportProgress(Math.min(95, Math.round((processed / jsonData.length) * 90)));
           }
         }
+
+        const blendsPayload = Array.from(normalizedBlends.values());
+
+        if (blendsPayload.length === 0) {
+          throw new Error('No valid blend records found in the import file');
+        }
+
+        if (blendsPayload.length > 1000) {
+          throw new Error('A maximum of 1000 blends can be imported at once');
+        }
+
+        await yarnBlendService.bulkImportBlends({ blends: blendsPayload });
+        setImportProgress(100);
 
         await fetchBlends();
         toast.success('Blend records imported successfully');
@@ -292,6 +309,13 @@ const BlendPage = () => {
                   accept=".xlsx,.xls"
                   onChange={handleFileUpload}
                 />
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-secondary"
+                  onClick={handleDownloadTemplate}
+                >
+                  <i className="ri-download-line me-2"></i> Download Template
+                </button>
                 <button
                   type="button"
                   className="ti-btn ti-btn-success"
@@ -501,4 +525,5 @@ const BlendPage = () => {
 };
 
 export default BlendPage;
+
 

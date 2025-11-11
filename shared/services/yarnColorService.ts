@@ -38,6 +38,23 @@ export interface UpdateYarnColorRequest {
   status?: 'active' | 'inactive';
 }
 
+export interface BulkImportColorRequest {
+  colors: Array<{
+    id?: string;
+    name: string;
+    colorCode: string;
+    status?: 'active' | 'inactive';
+  }>;
+  batchSize?: number;
+}
+
+export interface BulkImportColorResponse {
+  message?: string;
+  insertedCount?: number;
+  updatedCount?: number;
+  [key: string]: unknown;
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === 'undefined') return null;
 
@@ -155,6 +172,17 @@ class YarnColorService {
 
     await this.makeRequest<void>(`/${colorId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async bulkImportColors(payload: BulkImportColorRequest): Promise<BulkImportColorResponse> {
+    if (!payload?.colors || payload.colors.length === 0) {
+      throw new Error('At least one color is required for bulk import');
+    }
+
+    return this.makeRequest<BulkImportColorResponse>('/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   }
 }

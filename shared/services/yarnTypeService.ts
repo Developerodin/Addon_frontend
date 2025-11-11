@@ -51,6 +51,23 @@ export interface UpdateYarnTypeRequest {
   yarnName?: string;
 }
 
+export interface BulkImportYarnType extends CreateYarnTypeRequest {
+  id?: string;
+}
+
+export interface BulkImportYarnTypeRequest {
+  yarnTypes: BulkImportYarnType[];
+  batchSize?: number;
+}
+
+export interface BulkImportYarnTypeResponse {
+  message?: string;
+  createdCount?: number;
+  updatedCount?: number;
+  failedCount?: number;
+  errors?: Array<{ id?: string; name?: string; message: string }>;
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === 'undefined') return null;
 
@@ -169,6 +186,17 @@ class YarnTypeService {
 
     await this.makeRequest<void>(`/${yarnTypeId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async bulkImport(payload: BulkImportYarnTypeRequest): Promise<BulkImportYarnTypeResponse> {
+    if (!payload || !Array.isArray(payload.yarnTypes) || payload.yarnTypes.length === 0) {
+      throw new Error('At least one yarn type is required for bulk import');
+    }
+
+    return this.makeRequest<BulkImportYarnTypeResponse>('/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   }
 }

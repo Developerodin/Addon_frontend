@@ -1,5 +1,5 @@
 "use client"
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
@@ -11,6 +11,7 @@ import supplierService, {
 } from '@/shared/services/supplierService';
 import yarnTypeService, { YarnType } from '@/shared/services/yarnTypeService';
 import yarnColorService, { YarnColor } from '@/shared/services/yarnColorService';
+import * as XLSX from 'xlsx';
 
 const BrandPage = () => {
   const [brands, setBrands] = useState<Supplier[]>([]);
@@ -28,6 +29,9 @@ const BrandPage = () => {
   const [yarnTypeMap, setYarnTypeMap] = useState<Record<string, string>>({});
   const [yarnSubtypeMap, setYarnSubtypeMap] = useState<Record<string, string>>({});
   const [yarnColorMap, setYarnColorMap] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
 
   const getYarnTypeLabel = (yarnType: SupplierYarnDetail['yarnType']) => {
     if (!yarnType) return 'Unknown type';
@@ -147,6 +151,490 @@ const BrandPage = () => {
     }
   };
 
+  type BrandImportRow = {
+    ID?: string;
+    Brand?: string;
+    'Brand Name'?: string;
+    'Contact Person'?: string;
+    'Contact Number'?: string;
+    Email?: string;
+    Address?: string;
+    City?: string;
+    State?: string;
+    Pincode?: string;
+    Country?: string;
+    'GST No'?: string;
+    Status?: string;
+  };
+
+  type BrandDetailImportRow = {
+    'Brand Identifier'?: string;
+    'Yarn Type'?: string;
+    'Yarn Subtype'?: string;
+    Color?: string;
+    'Shade Number'?: string;
+  };
+
+  const handleDownloadTemplate = () => {
+    try {
+      const workbook = XLSX.utils.book_new();
+
+      const brandsSheet = XLSX.utils.json_to_sheet([
+        {
+          ID: '',
+          Brand: 'Premier Threads',
+          'Contact Person': 'John Doe',
+          'Contact Number': '+91-9876543210',
+          Email: 'john@example.com',
+          Address: '123 Textile Park',
+          City: 'Coimbatore',
+          State: 'Tamil Nadu',
+          Pincode: '641001',
+          Country: 'India',
+          'GST No': '29ABCDE1234F2Z5',
+          Status: 'active',
+        },
+      ]);
+
+      const detailsSheet = XLSX.utils.json_to_sheet([
+        {
+          'Brand Identifier': 'Premier Threads',
+          'Yarn Type': 'Combed Cotton',
+          'Yarn Subtype': 'Combed 40s',
+          Color: 'Ocean Blue',
+          'Shade Number': 'Shade-21',
+        },
+      ]);
+
+      XLSX.utils.book_append_sheet(workbook, brandsSheet, 'Brands');
+      XLSX.utils.book_append_sheet(workbook, detailsSheet, 'BrandYarnDetails');
+
+      XLSX.writeFile(workbook, 'yarn-brands-template.xlsx');
+      toast.success('Template downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading brand template:', error);
+      toast.error('Failed to download template');
+    }
+  };
+
+  const handleImportClick = () => {
+    if (isImporting) return;
+    fileInputRef.current?.click();
+  };
+
+  const buildSubtypeMaps = (types: YarnType[]) => {
+    const subtypeById = new Map<
+      string,
+      { id: string; name: string; parentTypeId: string }
+    >();
+    const subtypeByTypeAndName = new Map<string, { id: string; name: string }>();
+
+    types.forEach(type => {
+      (type.details || []).forEach(detail => {
+        const subtypeId = detail.id || detail._id;
+        if (!subtypeId || !detail.subtype) return;
+
+        const entry = { id: subtypeId, name: detail.subtype, parentTypeId: type.id };
+        subtypeById.set(subtypeId, entry);
+        subtypeByTypeAndName.set(`${type.id}|${detail.subtype.trim().toLowerCase()}`, entry);
+      });
+    });
+
+    return { subtypeById, subtypeByTypeAndName };
+  };
+
+  const handleExport = async () => {
+    try {
+      const [brandResponse, typesResponse, colorsResponse] = await Promise.all([
+        supplierService.getSuppliers({ page: 1, limit: 10000 }),
+        yarnTypeService.getTypes({ page: 1, limit: 10000 }),
+        yarnColorService.getColors({ page: 1, limit: 10000 }),
+      ]);
+
+      const allBrands = brandResponse.results || [];
+      const exportSource =
+        selectedBrands.length > 0 ? allBrands.filter(brand => selectedBrands.includes(brand.id)) : allBrands;
+
+      if (exportSource.length === 0) {
+        toast.error('No brands available for export');
+        return;
+      }
+
+      const types = typesResponse.results || [];
+      const colors = colorsResponse.results || [];
+
+      const yarnTypeNameById = new Map(types.map(type => [type.id, type.name]));
+      const colorNameById = new Map(colors.map(color => [color.id, color.name]));
+
+      const { subtypeById } = buildSubtypeMaps(types);
+
+      const brandsSheetData = exportSource.map(brand => ({
+        ID: brand.id,
+        Brand: brand.brandName,
+        'Contact Person': brand.contactPersonName,
+        'Contact Number': brand.contactNumber,
+        Email: brand.email,
+        Address: brand.address,
+        City: brand.city,
+        State: brand.state,
+        Pincode: brand.pincode,
+        Country: brand.country,
+        'GST No': brand.gstNo || '',
+        Status: brand.status,
+      }));
+
+      const detailsSheetData = exportSource.flatMap(brand => {
+        if (!brand.yarnDetails || brand.yarnDetails.length === 0) {
+          return [];
+        }
+
+        return brand.yarnDetails.map(detail => {
+          const yarnTypeId =
+            typeof detail.yarnType === 'string' ? detail.yarnType : detail.yarnType?.id || '';
+          const yarnTypeName =
+            typeof detail.yarnType === 'object' && detail.yarnType?.name
+              ? detail.yarnType.name
+              : yarnTypeNameById.get(yarnTypeId) || yarnTypeMap[yarnTypeId] || yarnTypeId;
+
+          const yarnSubtypeId =
+            typeof detail.yarnsubtype === 'string'
+              ? detail.yarnsubtype
+              : detail.yarnsubtype?.id || '';
+          const yarnSubtypeName =
+            typeof detail.yarnsubtype === 'object' && detail.yarnsubtype?.name
+              ? detail.yarnsubtype.name
+              : yarnSubtypeId
+              ? subtypeById.get(yarnSubtypeId)?.name || yarnSubtypeMap[yarnSubtypeId] || yarnSubtypeId
+              : '';
+
+          const colorId = typeof detail.color === 'string' ? detail.color : detail.color?.id || '';
+          const colorName =
+            typeof detail.color === 'object' && detail.color?.name
+              ? detail.color.name
+              : colorNameById.get(colorId) || yarnColorMap[colorId] || colorId;
+
+          return {
+            'Brand Identifier': brand.id,
+            'Yarn Type': yarnTypeName,
+            'Yarn Subtype': yarnSubtypeName,
+            Color: colorName,
+            'Shade Number': detail.shadeNumber || '',
+          };
+        });
+      });
+
+      const workbook = XLSX.utils.book_new();
+      const brandsSheet = XLSX.utils.json_to_sheet(brandsSheetData);
+      XLSX.utils.book_append_sheet(workbook, brandsSheet, 'Brands');
+
+      const detailsSheet =
+        detailsSheetData.length > 0
+          ? XLSX.utils.json_to_sheet(detailsSheetData)
+          : XLSX.utils.json_to_sheet([
+              {
+                'Brand Identifier': '',
+                'Yarn Type': '',
+                'Yarn Subtype': '',
+                Color: '',
+                'Shade Number': '',
+              },
+            ]);
+      XLSX.utils.book_append_sheet(workbook, detailsSheet, 'BrandYarnDetails');
+
+      XLSX.writeFile(workbook, 'yarn-brands.xlsx');
+      toast.success('Brands exported successfully');
+    } catch (error) {
+      console.error('Error exporting brands:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to export brands');
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportProgress(0);
+
+    const reader = new FileReader();
+
+    reader.onload = async event => {
+      try {
+        const data = event.target?.result;
+        if (!data) {
+          throw new Error('Unable to read file');
+        }
+
+        const workbook = XLSX.read(data, { type: 'binary' });
+        if (workbook.SheetNames.length === 0) {
+          throw new Error('Import file is empty');
+        }
+
+        const brandsSheetName =
+          workbook.SheetNames.find(name => name.toLowerCase() === 'brands') || workbook.SheetNames[0];
+        const brandsSheet = workbook.Sheets[brandsSheetName];
+        const detailsSheetName = workbook.SheetNames.find(name => name.toLowerCase() === 'brandyarndetails');
+        const detailsSheet = detailsSheetName ? workbook.Sheets[detailsSheetName] : undefined;
+
+        const brandRows = XLSX.utils.sheet_to_json<BrandImportRow>(brandsSheet, { defval: '' });
+        const detailRows = detailsSheet
+          ? XLSX.utils.sheet_to_json<BrandDetailImportRow>(detailsSheet, { defval: '' })
+          : [];
+
+        if (brandRows.length === 0) {
+          throw new Error('Brands sheet is empty');
+        }
+
+        const [existingBrandsResponse, typesResponse, colorsResponse] = await Promise.all([
+          supplierService.getSuppliers({ page: 1, limit: 10000 }),
+          yarnTypeService.getTypes({ page: 1, limit: 10000 }),
+          yarnColorService.getColors({ page: 1, limit: 10000 }),
+        ]);
+
+        const existingBrands = existingBrandsResponse.results || [];
+        const brandsById = new Map(existingBrands.map(brand => [brand.id, brand]));
+        const brandsByName = new Map(existingBrands.map(brand => [brand.brandName.trim().toLowerCase(), brand]));
+
+        const types = typesResponse.results || [];
+        const colors = colorsResponse.results || [];
+
+        const yarnTypeById = new Map(types.map(type => [type.id, type]));
+        const yarnTypeByName = new Map(types.map(type => [type.name.trim().toLowerCase(), type]));
+
+        const { subtypeById, subtypeByTypeAndName } = buildSubtypeMaps(types);
+
+        const colorById = new Map(colors.map(color => [color.id, color]));
+        const colorByName = new Map(colors.map(color => [color.name.trim().toLowerCase(), color]));
+
+        const detailMap = new Map<
+          string,
+          Array<{ yarnTypeId: string; yarnSubtypeId?: string; colorId: string; shadeNumber?: string }>
+        >();
+
+        const appendDetail = (
+          key: string,
+          detail: { yarnTypeId: string; yarnSubtypeId?: string; colorId: string; shadeNumber?: string },
+        ) => {
+          const existingDetails = detailMap.get(key) || [];
+          detailMap.set(key, [...existingDetails, detail]);
+        };
+
+        detailRows.forEach(detailRow => {
+          const identifierRaw = detailRow['Brand Identifier']?.toString().trim();
+          const yarnTypeRaw = detailRow['Yarn Type']?.toString().trim();
+          const colorRaw = detailRow.Color?.toString().trim();
+
+          if (!identifierRaw || !yarnTypeRaw || !colorRaw) {
+            return;
+          }
+
+          let yarnTypeId: string | undefined;
+          if (yarnTypeById.has(yarnTypeRaw)) {
+            yarnTypeId = yarnTypeRaw;
+          } else {
+            yarnTypeId = yarnTypeByName.get(yarnTypeRaw.toLowerCase())?.id;
+          }
+
+          if (!yarnTypeId) {
+            console.warn(`Yarn type not found for brand detail: ${yarnTypeRaw}`);
+            return;
+          }
+
+          let colorId: string | undefined;
+          if (colorById.has(colorRaw)) {
+            colorId = colorRaw;
+          } else {
+            colorId = colorByName.get(colorRaw.toLowerCase())?.id;
+          }
+
+          if (!colorId) {
+            console.warn(`Color not found for brand detail: ${colorRaw}`);
+            return;
+          }
+
+          const subtypeRaw = detailRow['Yarn Subtype']?.toString().trim();
+          let yarnSubtypeId: string | undefined;
+          if (subtypeRaw) {
+            if (subtypeById.has(subtypeRaw)) {
+              const entry = subtypeById.get(subtypeRaw);
+              if (entry && entry.parentTypeId === yarnTypeId) {
+                yarnSubtypeId = entry.id;
+              }
+            } else {
+              yarnSubtypeId = subtypeByTypeAndName.get(`${yarnTypeId}|${subtypeRaw.toLowerCase()}`)?.id;
+              if (!yarnSubtypeId) {
+                console.warn(`Yarn subtype not found for ${subtypeRaw} under type ${yarnTypeRaw}`);
+              }
+            }
+          }
+
+          const detailPayload = {
+            yarnTypeId,
+            yarnSubtypeId,
+            colorId,
+            shadeNumber: detailRow['Shade Number']?.toString().trim() || '',
+          };
+
+          appendDetail(`name:${identifierRaw.toLowerCase()}`, detailPayload);
+          appendDetail(`id:${identifierRaw}`, detailPayload);
+        });
+
+        let processed = 0;
+        for (const row of brandRows) {
+          try {
+            const rawId = row.ID?.toString().trim() ?? '';
+            const rawBrandName =
+              row.Brand?.toString().trim() ?? row['Brand Name']?.toString().trim() ?? '';
+            if (!rawBrandName) {
+              throw new Error('Brand is required');
+            }
+
+            const contactPerson = row['Contact Person']?.toString().trim() ?? '';
+            if (!contactPerson) {
+              throw new Error('Contact person is required');
+            }
+
+            const contactNumber = row['Contact Number']?.toString().trim() ?? '';
+            if (!contactNumber) {
+              throw new Error('Contact number is required');
+            }
+
+            const emailRaw = row.Email?.toString().trim() ?? '';
+            if (!emailRaw) {
+              throw new Error('Email is required');
+            }
+
+            const address = row.Address?.toString().trim() ?? '';
+            if (!address) {
+              throw new Error('Address is required');
+            }
+
+            const city = row.City?.toString().trim() ?? '';
+            if (!city) {
+              throw new Error('City is required');
+            }
+
+            const state = row.State?.toString().trim() ?? '';
+            if (!state) {
+              throw new Error('State is required');
+            }
+
+            const pincode = row.Pincode?.toString().trim() ?? '';
+            if (!pincode) {
+              throw new Error('Pincode is required');
+            }
+
+            const country = row.Country?.toString().trim() ?? '';
+            if (!country) {
+              throw new Error('Country is required');
+            }
+
+            const gstNo = row['GST No']?.toString().trim() ?? '';
+            const statusRaw = row.Status?.toString().trim().toLowerCase() ?? 'active';
+            const status: Supplier['status'] =
+              statusRaw === 'inactive'
+                ? 'inactive'
+                : statusRaw === 'suspended'
+                ? 'suspended'
+                : 'active';
+
+            const detailKeys: string[] = [];
+            if (rawId) detailKeys.push(`id:${rawId}`);
+            detailKeys.push(`name:${rawBrandName.toLowerCase()}`);
+
+            const detailEntries = detailKeys.flatMap(key => detailMap.get(key) || []);
+            const uniqueDetails = new Map<string, SupplierYarnDetail>();
+
+            detailEntries.forEach(detail => {
+              const detailKey = `${detail.yarnTypeId}|${detail.yarnSubtypeId || ''}|${detail.colorId}|${detail.shadeNumber || ''}`;
+              if (uniqueDetails.has(detailKey)) return;
+              const normalizedDetail: SupplierYarnDetail = {
+                yarnType: detail.yarnTypeId,
+                color: detail.colorId,
+              };
+              if (detail.yarnSubtypeId) {
+                normalizedDetail.yarnsubtype = detail.yarnSubtypeId;
+              }
+              if (detail.shadeNumber) {
+                normalizedDetail.shadeNumber = detail.shadeNumber;
+              }
+              uniqueDetails.set(detailKey, normalizedDetail);
+            });
+
+            const payload = {
+              brandName: rawBrandName,
+              contactPersonName: contactPerson,
+              contactNumber,
+              email: emailRaw.toLowerCase(),
+              address,
+              city,
+              state,
+              pincode,
+              country,
+              status,
+              ...(gstNo ? { gstNo } : {}),
+              ...(uniqueDetails.size > 0 ? { yarnDetails: Array.from(uniqueDetails.values()) } : {}),
+            };
+
+            let targetBrand: Supplier | undefined;
+            if (rawId && brandsById.has(rawId)) {
+              targetBrand = brandsById.get(rawId);
+            } else {
+              targetBrand = brandsByName.get(rawBrandName.toLowerCase());
+            }
+
+            if (targetBrand) {
+              await supplierService.updateSupplier(targetBrand.id, payload);
+              const updatedSnapshot: Supplier = {
+                ...targetBrand,
+                ...payload,
+                id: targetBrand.id,
+              };
+              brandsById.set(updatedSnapshot.id, updatedSnapshot);
+              const previousKey = targetBrand.brandName.trim().toLowerCase();
+              if (previousKey !== updatedSnapshot.brandName.trim().toLowerCase()) {
+                brandsByName.delete(previousKey);
+              }
+              brandsByName.set(updatedSnapshot.brandName.trim().toLowerCase(), updatedSnapshot);
+            } else {
+              const created = await supplierService.createSupplier(payload);
+              brandsById.set(created.id, created);
+              brandsByName.set(created.brandName.trim().toLowerCase(), created);
+            }
+          } catch (rowError) {
+            console.error('Error importing brand row:', rowError);
+          } finally {
+            processed += 1;
+            setImportProgress(Math.round((processed / brandRows.length) * 100));
+          }
+        }
+
+        await fetchBrands();
+        toast.success('Brands imported successfully');
+      } catch (error) {
+        console.error('Error processing brand import file:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to process import file');
+      } finally {
+        setImportProgress(null);
+        setIsImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error('Failed to read import file');
+      setImportProgress(null);
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
   const handleDelete = async (brandId: string) => {
     if (!window.confirm('Are you sure you want to delete this brand?')) return;
 
@@ -208,9 +696,45 @@ const BrandPage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <h1 className="box-title text-2xl font-semibold">Yarn Brands</h1>
-              <Link href="/yarn-management/yarn-master/brand/add" className="ti-btn ti-btn-primary">
-                <i className="ri-add-line me-2"></i> Add Brand
-              </Link>
+              <div className="box-tools flex items-center space-x-2">
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-secondary"
+                  onClick={handleDownloadTemplate}
+                >
+                  <i className="ri-download-line me-2"></i> Download Template
+                </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileUpload}
+                />
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-success"
+                  onClick={handleImportClick}
+                  disabled={isImporting}
+                >
+                  {isImporting ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-file-excel-2-line me-2"></i> Import
+                    </>
+                  )}
+                </button>
+                <button type="button" className="ti-btn ti-btn-info" onClick={handleExport}>
+                  <i className="ri-download-2-line me-2"></i> Export
+                </button>
+                <Link href="/yarn-management/yarn-master/brand/add" className="ti-btn ti-btn-primary">
+                  <i className="ri-add-line me-2"></i> Add Brand
+                </Link>
+              </div>
             </div>
           </div>
 
@@ -267,6 +791,16 @@ const BrandPage = () => {
                   </button>
                 </div>
               </div>
+
+              {importProgress !== null && (
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                  <div
+                    className="bg-primary h-3 rounded-full transition-all duration-200"
+                    style={{ width: `${importProgress}%` }}
+                  ></div>
+                  <div className="text-xs text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
+                </div>
+              )}
 
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">

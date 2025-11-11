@@ -35,6 +35,22 @@ export interface UpdateCountSizeRequest {
   status?: 'active' | 'inactive';
 }
 
+export interface BulkImportCountSizeRequest {
+  countSizes: Array<{
+    id?: string;
+    name: string;
+    status?: 'active' | 'inactive';
+  }>;
+  batchSize?: number;
+}
+
+export interface BulkImportCountSizeResponse {
+  message?: string;
+  insertedCount?: number;
+  updatedCount?: number;
+  [key: string]: unknown;
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === 'undefined') return null;
 
@@ -152,6 +168,17 @@ class YarnCountSizeService {
 
     await this.makeRequest<void>(`/${countSizeId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async bulkImportCountSizes(payload: BulkImportCountSizeRequest): Promise<BulkImportCountSizeResponse> {
+    if (!payload?.countSizes || payload.countSizes.length === 0) {
+      throw new Error('At least one count size is required for bulk import');
+    }
+
+    return this.makeRequest<BulkImportCountSizeResponse>('/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   }
 }

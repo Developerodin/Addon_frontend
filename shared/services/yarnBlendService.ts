@@ -35,6 +35,22 @@ export interface UpdateYarnBlendRequest {
   status?: 'active' | 'inactive';
 }
 
+export interface BulkImportBlendRequest {
+  blends: Array<{
+    id?: string;
+    name: string;
+    status?: 'active' | 'inactive';
+  }>;
+  batchSize?: number;
+}
+
+export interface BulkImportBlendResponse {
+  message?: string;
+  insertedCount?: number;
+  updatedCount?: number;
+  [key: string]: unknown;
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === 'undefined') return null;
 
@@ -152,6 +168,17 @@ class YarnBlendService {
 
     await this.makeRequest<void>(`/${blendId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async bulkImportBlends(payload: BulkImportBlendRequest): Promise<BulkImportBlendResponse> {
+    if (!payload?.blends || payload.blends.length === 0) {
+      throw new Error('At least one blend is required for bulk import');
+    }
+
+    return this.makeRequest<BulkImportBlendResponse>('/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   }
 }
