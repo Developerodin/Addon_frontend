@@ -72,25 +72,76 @@ const AddBrandPage = () => {
           yarnTypeService.getTypes({ status: 'active', limit: 1000, page: 1 }),
           yarnColorService.getColors({ status: 'active', limit: 1000, page: 1 }),
         ]);
-        const types = typesResponse.results || [];
-        setYarnTypes(types);
-        const subtypeEntries = types.reduce<Record<string, { id: string; name: string }[]>>((acc, type) => {
-          if (type.id && Array.isArray(type.details) && type.details.length > 0) {
-            const options = type.details
-              .map((detail) => {
-                const subtypeId = detail.id || detail._id;
-                if (!subtypeId || !detail.subtype) return null;
-                return { id: subtypeId, name: detail.subtype };
-              })
-              .filter(Boolean) as { id: string; name: string }[];
+        const rawTypes = typesResponse.results || [];
+        const normalizedTypes = rawTypes
+          .map((type) => {
+            const normalizedTypeId = type.id || type._id || '';
+            const normalizedDetails = Array.isArray(type.details)
+              ? type.details
+                  .map((detail) => {
+                    const detailId = detail?.id || detail?._id || '';
+                    if (!detailId || !detail?.subtype) {
+                      return null;
+                    }
+                    return {
+                      ...detail,
+                      id: detailId,
+                      subtype: detail.subtype,
+                    };
+                  })
+                  .filter(Boolean)
+              : [];
+
+            if (!normalizedTypeId) {
+              console.warn('[AddBrandPage] Yarn type missing id/_id', type);
+            }
+
+            return {
+              ...type,
+              id: normalizedTypeId,
+              details: normalizedDetails,
+            };
+          })
+          .filter((type): type is YarnType & { id: string } => Boolean(type.id));
+
+        setYarnTypes(normalizedTypes);
+
+        const subtypeEntries = normalizedTypes.reduce<Record<string, { id: string; name: string }[]>>((acc, type) => {
+          if (Array.isArray(type.details) && type.details.length > 0) {
+            const options = type.details.map((detail) => ({
+              id: detail.id,
+              name: detail.subtype ?? detail.name ?? '',
+            }));
             if (options.length > 0) {
-              acc[type.id] = options;
+              acc[type.id] = options.filter((option) => option.id && option.name);
             }
           }
           return acc;
         }, {});
+
         setYarnSubtypeMap(subtypeEntries);
-        setYarnColors(colorsResponse.results || []);
+
+        const rawColors = colorsResponse.results || [];
+        const normalizedColors = rawColors
+          .map((color) => {
+            const normalizedColorId = color.id || color._id || '';
+            if (!normalizedColorId) {
+              console.warn('[AddBrandPage] Yarn color missing id/_id', color);
+            }
+            return {
+              ...color,
+              id: normalizedColorId,
+            };
+          })
+          .filter((color): color is YarnColor & { id: string } => Boolean(color.id));
+
+        setYarnColors(normalizedColors);
+
+        console.debug('[AddBrandPage] Loaded yarn metadata', {
+          typeCount: normalizedTypes.length,
+          colorCount: normalizedColors.length,
+          subtypeParentCount: Object.keys(subtypeEntries).length,
+        });
       } catch (error) {
         console.error('Error loading yarn data:', error);
         toast.error(error instanceof Error ? error.message : 'Failed to load yarn data');
@@ -188,14 +239,27 @@ const AddBrandPage = () => {
   );
 
   const addYarnDetail = () => {
-    const autoTypeId = yarnTypeOptions.length === 1 ? yarnTypeOptions[0].id : '';
-    const subtypeOptions = autoTypeId ? getSubtypeOptions(autoTypeId) : [];
-    const autoSubtype = subtypeOptions.length === 1 ? subtypeOptions[0].id : '';
-    const autoColorId = yarnColorOptions.length === 1 ? yarnColorOptions[0].id : '';
+    console.debug('[AddBrandPage] Add Yarn Detail clicked', {
+      isLoadingOptions,
+      yarnTypeCount: yarnTypeOptions.length,
+      yarnColorCount: yarnColorOptions.length,
+      existingDetails: formData.yarnDetails.length,
+    });
 
-    setFormData((prev) => ({
-      ...prev,
-      yarnDetails: [
+    if (!isLoadingOptions && (yarnTypeOptions.length === 0 || yarnColorOptions.length === 0)) {
+      console.warn('[AddBrandPage] Yarn detail options missing when adding detail', {
+        yarnTypeCount: yarnTypeOptions.length,
+        yarnColorCount: yarnColorOptions.length,
+      });
+    }
+
+    setFormData((prev) => {
+      const autoTypeId = yarnTypeOptions.length === 1 ? yarnTypeOptions[0].id : '';
+      const subtypeOptions = autoTypeId ? getSubtypeOptions(autoTypeId) : [];
+      const autoSubtype = subtypeOptions.length === 1 ? subtypeOptions[0].id : '';
+      const autoColorId = yarnColorOptions.length === 1 ? yarnColorOptions[0].id : '';
+
+      const updatedDetails = [
         ...prev.yarnDetails,
         {
           ...defaultYarnDetail,
@@ -203,11 +267,19 @@ const AddBrandPage = () => {
           yarnsubtype: autoSubtype,
           color: autoColorId,
         },
-      ],
-    }));
+      ];
+
+      console.debug('[AddBrandPage] Yarn detail list updated', updatedDetails);
+
+      return {
+        ...prev,
+        yarnDetails: updatedDetails,
+      };
+    });
   };
 
   const removeYarnDetail = (index: number) => {
+    console.debug('[AddBrandPage] Removing yarn detail', { index, totalDetails: formData.yarnDetails.length });
     setFormData((prev) => ({
       ...prev,
       yarnDetails: prev.yarnDetails.filter((_, idx) => idx !== index),
@@ -351,7 +423,7 @@ const AddBrandPage = () => {
       }),
     [yarnColors],
   );
-  const isAddDisabled = isLoadingOptions || yarnTypeOptions.length === 0 || yarnColorOptions.length === 0;
+  const isAddDisabled = isLoadingOptions;
 
   return (
     <div className="main-content">

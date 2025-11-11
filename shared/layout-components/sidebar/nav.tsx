@@ -314,7 +314,7 @@ const BaseMenuItems: any = [
             title: "Color",
           },
           {
-            icon: BlendIcon,
+            icon: LayoutIcon,
             path: "/yarn-management/yarn-master/blend",
             type: "link",
             active: false,
