@@ -4,24 +4,9 @@ import { useRouter, useParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
-import { toast } from "react-hot-toast";
+import { toast, Toaster } from "react-hot-toast";
 import YarnForm from "../../components/YarnForm";
-
-interface YarnData {
-  id: string;
-  yarnName: string;
-  yarnType: string;
-  countDenier: string;
-  color: string;
-  lotNo: string;
-  supplier: string;
-  unitOfMeasurement: string;
-  ratePerUnit: number;
-  remarks: string;
-  referenceDocuments?: File[];
-  createdAt: string;
-  updatedAt: string;
-}
+import yarnCatalogService, { UpdateYarnCatalogRequest, YarnCatalog } from "@/shared/services/yarnCatalogService";
 
 const EditYarnPage = () => {
   const router = useRouter();
@@ -29,47 +14,33 @@ const EditYarnPage = () => {
   const { hasSubPermission } = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [yarnData, setYarnData] = useState<YarnData | null>(null);
+  const [yarnData, setYarnData] = useState<YarnCatalog | null>(null);
 
   const yarnId = params.yarnId as string;
 
-  // Check permission
   const hasPermission = hasSubPermission('/yarn-management', 'Cataloguing');
 
   useEffect(() => {
     const fetchYarnData = async () => {
+      if (!yarnId) return;
+      
+      setIsLoading(true);
       try {
-        // TODO: Implement API call to fetch yarn data
-        // For now, using mock data
-        const mockYarnData: YarnData = {
-          id: yarnId,
-          yarnName: "Premium Cotton Yarn",
-          yarnType: "Cotton",
-          countDenier: "30s",
-          color: "#ffffff",
-          lotNo: "LOT-2024-001",
-          supplier: "Cotton Mills Ltd",
-          unitOfMeasurement: "kg",
-          ratePerUnit: 250.50,
-          remarks: "High quality cotton yarn suitable for premium garments",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        
-        setYarnData(mockYarnData);
+        const data = await yarnCatalogService.getYarnCatalogById(yarnId);
+        setYarnData(data);
       } catch (error) {
-        console.error('Failed to fetch yarn data:', error);
-        toast.error('Failed to load yarn data');
+        console.error('Failed to fetch yarn catalog:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to load yarn catalog');
         router.push('/yarn-management/cataloguing');
       } finally {
         setIsLoading(false);
       }
     };
 
-    if (yarnId) {
+    if (yarnId && hasPermission) {
       fetchYarnData();
     }
-  }, [yarnId, router]);
+  }, [yarnId, router, hasPermission]);
 
   if (!hasPermission) {
     return (
@@ -121,56 +92,55 @@ const EditYarnPage = () => {
     );
   }
 
-  const handleSubmit = async (data: Omit<YarnData, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const handleSubmit = async (data: UpdateYarnCatalogRequest) => {
+    if (!yarnId) return;
+    
     setIsSubmitting(true);
     try {
-      // TODO: Implement API call to update yarn
-      console.log("Updating yarn:", { ...data, id: yarnId });
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast.success('Yarn specification updated successfully');
+      await yarnCatalogService.updateYarnCatalog(yarnId, data);
+      toast.success('Yarn catalog updated successfully');
       router.push('/yarn-management/cataloguing');
     } catch (error) {
-      console.error('Failed to update yarn:', error);
-      toast.error('Failed to update yarn specification');
+      console.error('Failed to update yarn catalog:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update yarn catalog');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleCancel = () => {
-    router.push('/yarn-management/cataloguing');
-  };
-
   return (
     <div className="main-content">
-      <Seo title={`Edit Yarn: ${yarnData.yarnName}`} />
+      <Toaster position="top-right" />
+      <Seo title={`Edit Yarn Catalog: ${yarnData?.yarnName || ''}`} />
       
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
-          {/* Page Header */}
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <div>
-                <h1 className="box-title text-2xl font-semibold">Edit Yarn Specification</h1>
-                <p className="text-gray-600 mt-1">Update yarn specification details</p>
-                <div className="flex items-center mt-2 text-sm text-gray-500">
-                  <span className="me-4">
-                    <i className="ri-calendar-line me-1"></i>
-                    Created: {new Date(yarnData.createdAt).toLocaleDateString()}
-                  </span>
-                  <span>
-                    <i className="ri-time-line me-1"></i>
-                    Updated: {new Date(yarnData.updatedAt).toLocaleDateString()}
-                  </span>
-                </div>
+                <h1 className="box-title text-2xl font-semibold">Edit Yarn Catalog</h1>
+                <p className="text-gray-600 mt-1">Update yarn catalog details</p>
+                {yarnData && (
+                  <div className="flex items-center mt-2 text-sm text-gray-500">
+                    {yarnData.createdAt && (
+                      <span className="me-4">
+                        <i className="ri-calendar-line me-1"></i>
+                        Created: {new Date(yarnData.createdAt).toLocaleDateString()}
+                      </span>
+                    )}
+                    {yarnData.updatedAt && (
+                      <span>
+                        <i className="ri-time-line me-1"></i>
+                        Updated: {new Date(yarnData.updatedAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="box-tools">
                 <Link 
                   href="/yarn-management/cataloguing" 
-                  className="ti-btn ti-btn-secondary "
+                  className="ti-btn ti-btn-light"
                   title="Back to Cataloguing"
                 >
                   <i className="ri-arrow-left-line me-2"></i>
@@ -180,22 +150,28 @@ const EditYarnPage = () => {
             </div>
           </div>
 
-          {/* Form Container */}
           <div className="box">
             <div className="box-header">
-              <h3 className="box-title">Yarn Details</h3>
+              <h3 className="box-title">Yarn Catalog Details</h3>
               <p className="text-sm text-gray-600 mt-1">
                 Update the details below. Fields marked with * are required.
               </p>
             </div>
             <div className="box-body">
-              <YarnForm
-                initialData={yarnData}
-                onSubmit={handleSubmit}
-                onCancel={handleCancel}
-                isSubmitting={isSubmitting}
-                submitButtonText="Update Yarn"
-              />
+              {yarnData ? (
+                <YarnForm
+                  initialData={yarnData}
+                  onSubmit={handleSubmit}
+                  onCancel={() => router.push('/yarn-management/cataloguing')}
+                  isSubmitting={isSubmitting}
+                  submitButtonText="Update Yarn Catalog"
+                />
+              ) : (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                  <p className="text-gray-500 mt-4">Loading yarn catalog data...</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
