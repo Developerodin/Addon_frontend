@@ -68,14 +68,11 @@ const YarnTypePage = () => {
     }
   };
 
-  type YarnTypeImportRow = {
+  type YarnTypeSheetRow = {
     ID?: string;
     Name?: string;
+    'Yarn Name'?: string;
     Status?: string;
-  };
-
-  type YarnTypeDetailImportRow = {
-    'Type Identifier'?: string;
     Subtype?: string;
     'Tear Weight'?: string | number;
     'Count Size Names'?: string;
@@ -86,28 +83,36 @@ const YarnTypePage = () => {
     try {
       const workbook = XLSX.utils.book_new();
 
-      const yarnTypesSheet = XLSX.utils.json_to_sheet([
-        { ID: '', Name: 'Combed Cotton', Status: 'active' },
-        { ID: '', Name: 'Carded Cotton', Status: 'inactive' },
-      ]);
-
-      const detailsSheet = XLSX.utils.json_to_sheet([
+      const templateRows = [
         {
-          'Type Identifier': 'Combed Cotton',
+          ID: '',
+          Name: 'Combed Cotton',
+          Status: 'active',
           Subtype: 'Combed 40s',
           'Tear Weight': '2.5',
-          'Count Size Names': '40s, 44s',
+          'Count Size IDs': '',
         },
         {
-          'Type Identifier': 'Carded Cotton',
-          Subtype: 'Carded 20s',
+          ID: '',
+          Name: 'Combed Cotton',
+          Status: 'active',
+          Subtype: 'Combed 44s',
           'Tear Weight': '',
-          'Count Size Names': '20s',
+          'Count Size IDs': '',
         },
-      ]);
+        {
+          ID: '',
+          Name: 'Carded Cotton',
+          Status: 'inactive',
+          Subtype: '',
+          'Tear Weight': '',
+          'Count Size IDs': '',
+        },
+      ];
 
+      const yarnTypesSheet = XLSX.utils.json_to_sheet(templateRows);
       XLSX.utils.book_append_sheet(workbook, yarnTypesSheet, 'YarnTypes');
-      XLSX.utils.book_append_sheet(workbook, detailsSheet, 'YarnTypeDetails');
+      workbook.SheetNames = ['YarnTypes'];
 
       XLSX.writeFile(workbook, 'yarn-types-template.xlsx');
       toast.success('Template downloaded successfully');
@@ -142,58 +147,74 @@ const YarnTypePage = () => {
         (countSizeResponse.results || []).map(countSize => [countSize.id, countSize.name]),
       );
 
-      const yarnTypesSheetData = exportSource.map(type => ({
-        ID: type.id,
-        Name: type.name,
-        Status: type.status,
-      }));
+      const singleSheetData = exportSource.flatMap(type => {
+        const baseRow = {
+          ID: type.id,
+          Name: type.name,
+          'Yarn Name': type.yarnName || '',
+          Status: type.status,
+        };
 
-      const detailsSheetData = exportSource.flatMap(type => {
         if (!type.details || type.details.length === 0) {
-          return [];
+          return baseRow;
         }
 
         return type.details.map(detail => {
-          const countSizeNames = (detail.countSize || [])
+          const countSizeRefs = detail.countSize || [];
+          const countSizeIds = countSizeRefs
             .map(item => {
-              if (typeof item === 'string') {
-                return countSizeById.get(item) || item;
-              }
+              if (typeof item === 'string') return item;
               if (typeof item === 'object') {
-                if (item.name) return item.name;
-                const id = item.id || item._id;
-                return id ? countSizeById.get(id) || id : '';
+                return item.id || item._id || '';
               }
               return '';
             })
-            .filter(Boolean)
-            .join(', ');
+            .filter(Boolean);
+
+          const countSizeNames = countSizeRefs
+            .map(item => {
+              if (typeof item === 'object' && item.name) {
+                return item.name;
+              }
+              const id =
+                typeof item === 'string'
+                  ? item
+                  : typeof item === 'object'
+                  ? item.id || item._id || ''
+                  : '';
+              if (!id) return '';
+              return countSizeById.get(id) || id;
+            })
+            .filter(Boolean);
 
           return {
-            'Type Identifier': type.id,
+            ...baseRow,
             Subtype: detail.subtype,
             'Tear Weight': detail.tearWeight || '',
-            'Count Size Names': countSizeNames,
+            'Count Size Names': countSizeNames.join(', '),
+            'Count Size IDs': countSizeIds.join(', '),
           };
         });
       });
 
       const workbook = XLSX.utils.book_new();
-      const yarnTypesSheet = XLSX.utils.json_to_sheet(yarnTypesSheetData);
-      XLSX.utils.book_append_sheet(workbook, yarnTypesSheet, 'YarnTypes');
-
-      const detailsSheet =
-        detailsSheetData.length > 0
-          ? XLSX.utils.json_to_sheet(detailsSheetData)
+      const yarnTypesSheet =
+        singleSheetData.length > 0
+          ? XLSX.utils.json_to_sheet(singleSheetData)
           : XLSX.utils.json_to_sheet([
               {
-                'Type Identifier': '',
+                ID: '',
+                Name: '',
+                'Yarn Name': '',
+                Status: '',
                 Subtype: '',
                 'Tear Weight': '',
                 'Count Size Names': '',
+                'Count Size IDs': '',
               },
             ]);
-      XLSX.utils.book_append_sheet(workbook, detailsSheet, 'YarnTypeDetails');
+      XLSX.utils.book_append_sheet(workbook, yarnTypesSheet, 'YarnTypes');
+      workbook.SheetNames = ['YarnTypes'];
 
       XLSX.writeFile(workbook, 'yarn-types.xlsx');
       toast.success('Yarn types exported successfully');
@@ -224,16 +245,10 @@ const YarnTypePage = () => {
           throw new Error('Import file is empty');
         }
 
-        const yarnTypesSheetName =
-          workbook.SheetNames.find(name => name.toLowerCase() === 'yarntypes') || workbook.SheetNames[0];
+        const yarnTypesSheetName = workbook.SheetNames[0];
         const yarnTypesSheet = workbook.Sheets[yarnTypesSheetName];
-        const detailSheetName = workbook.SheetNames.find(name => name.toLowerCase() === 'yarntypedetails');
-        const detailSheet = detailSheetName ? workbook.Sheets[detailSheetName] : undefined;
 
-        const yarnTypeRows = XLSX.utils.sheet_to_json<YarnTypeImportRow>(yarnTypesSheet, { defval: '' });
-        const detailRows = detailSheet
-          ? XLSX.utils.sheet_to_json<YarnTypeDetailImportRow>(detailSheet, { defval: '' })
-          : [];
+        const yarnTypeRows = XLSX.utils.sheet_to_json<YarnTypeSheetRow>(yarnTypesSheet, { defval: '' });
 
         if (yarnTypeRows.length === 0) {
           throw new Error('Yarn types sheet is empty');
@@ -255,101 +270,44 @@ const YarnTypePage = () => {
           countSizes.map(countSize => [countSize.name.trim().toLowerCase(), countSize]),
         );
 
-        const detailMap = new Map<
-          string,
-          Array<{ subtype: string; tearWeight?: string; countSizeTokens: string[] }>
-        >();
-        const yarnTypePayloads: BulkImportYarnType[] = [];
+        const typeEntries = new Map<string, BulkImportYarnType>();
+        const aliasMap = new Map<string, string>();
         const rowErrors: string[] = [];
-
-        const appendDetail = (key: string, detail: { subtype: string; tearWeight?: string; countSizeTokens: string[] }) => {
-          const existing = detailMap.get(key) || [];
-          detailMap.set(key, [...existing, detail]);
-        };
-
-        detailRows.forEach(detailRow => {
-          const identifierRaw = detailRow['Type Identifier']?.toString().trim();
-          const subtypeRaw = detailRow.Subtype?.toString().trim();
-          if (!identifierRaw || !subtypeRaw) {
-            return;
-          }
-
-          const tearWeightRaw = detailRow['Tear Weight']?.toString().trim() ?? '';
-          const countSizeTokensRaw =
-            detailRow['Count Size Names']?.toString() || detailRow['Count Size IDs']?.toString() || '';
-          const tokens = countSizeTokensRaw
-            ? countSizeTokensRaw
-                .split(/[,;]+/)
-                .map(token => token.trim())
-                .filter(Boolean)
-            : [];
-
-          appendDetail(`name:${identifierRaw.toLowerCase()}`, {
-            subtype: subtypeRaw,
-            tearWeight: tearWeightRaw,
-            countSizeTokens: tokens,
-          });
-
-          if (typesById.has(identifierRaw)) {
-            appendDetail(`id:${identifierRaw}`, {
-              subtype: subtypeRaw,
-              tearWeight: tearWeightRaw,
-              countSizeTokens: tokens,
-            });
-          }
-        });
 
         let processed = 0;
         for (const row of yarnTypeRows) {
           try {
             const rawId = row.ID?.toString().trim() ?? '';
             const rawName = row.Name?.toString().trim() ?? '';
+            const rawYarnName = row['Yarn Name']?.toString().trim() ?? '';
+            const rawStatusValue = row.Status?.toString().trim() ?? '';
+            const subtypeRaw = row.Subtype?.toString().trim() ?? '';
+            const tearWeightRaw = row['Tear Weight']?.toString().trim() ?? '';
+            const countSizeNamesRaw = row['Count Size Names']?.toString() ?? '';
+            const countSizeIdsRaw = row['Count Size IDs']?.toString() ?? '';
+
+            const hasContent = [
+              rawId,
+              rawName,
+              rawYarnName,
+              rawStatusValue,
+              subtypeRaw,
+              tearWeightRaw,
+              countSizeNamesRaw?.trim?.(),
+              countSizeIdsRaw?.trim?.(),
+            ].some(value => Boolean(value && value.toString().trim()));
+
+            if (!hasContent) {
+              continue;
+            }
+
             if (!rawName) {
               throw new Error('Name is required');
             }
 
-            const rawStatus = row.Status?.toString().trim().toLowerCase() ?? 'active';
+            const rawStatus = rawStatusValue.toLowerCase() || 'active';
             const status: 'active' | 'inactive' =
               rawStatus === 'inactive' ? 'inactive' : 'active';
-
-            const detailKeys: string[] = [];
-            if (rawId) detailKeys.push(`id:${rawId}`);
-            detailKeys.push(`name:${rawName.toLowerCase()}`);
-
-            const detailEntries = detailKeys.flatMap(key => detailMap.get(key) || []);
-
-            const detailPayload: YarnTypeDetail[] = detailEntries
-              .map(detail => {
-                const uniqueCountSizeIds = new Set<string>();
-                const missingTokens: string[] = [];
-
-                detail.countSizeTokens.forEach(token => {
-                  if (!token) return;
-                  if (countSizeById.has(token)) {
-                    uniqueCountSizeIds.add(token);
-                    return;
-                  }
-                  const match = countSizeByName.get(token.toLowerCase());
-                  if (match) {
-                    uniqueCountSizeIds.add(match.id);
-                  } else {
-                    missingTokens.push(token);
-                  }
-                });
-
-                if (missingTokens.length > 0) {
-                  console.warn(
-                    `Count size(s) not found for "${rawName || rawId}": ${missingTokens.join(', ')}`,
-                  );
-                }
-
-                return {
-                  subtype: detail.subtype,
-                  ...(uniqueCountSizeIds.size > 0 ? { countSize: Array.from(uniqueCountSizeIds) } : {}),
-                  ...(detail.tearWeight ? { tearWeight: detail.tearWeight } : {}),
-                } as YarnTypeDetail;
-              })
-              .filter((detail): detail is YarnTypeDetail => Boolean(detail?.subtype));
 
             let targetTypeId: string | undefined;
             if (rawId && typesById.has(rawId)) {
@@ -361,14 +319,110 @@ const YarnTypePage = () => {
               }
             }
 
-            const payload: BulkImportYarnType = {
-              ...(targetTypeId ? { id: targetTypeId } : {}),
-              name: rawName,
-              status,
-              ...(detailPayload.length > 0 ? { details: detailPayload } : {}),
-            };
+            const candidateKeys = [
+              ...(targetTypeId ? [`id:${targetTypeId}`] : []),
+              ...(rawId ? [`id:${rawId}`] : []),
+              `name:${rawName.toLowerCase()}`,
+            ];
 
-            yarnTypePayloads.push(payload);
+            let entryKey: string | undefined;
+            for (const candidate of candidateKeys) {
+              const resolved = aliasMap.get(candidate) || candidate;
+              if (resolved && typeEntries.has(resolved)) {
+                entryKey = resolved;
+                break;
+              }
+            }
+
+            if (!entryKey) {
+              entryKey = candidateKeys[0] || `name:${rawName.toLowerCase()}`;
+              typeEntries.set(entryKey, {
+                ...(targetTypeId ? { id: targetTypeId } : {}),
+                name: rawName,
+                status,
+                ...(rawYarnName ? { yarnName: rawYarnName } : {}),
+                details: [],
+              });
+            }
+
+            const entry = typeEntries.get(entryKey)!;
+
+            if (targetTypeId && !entry.id) {
+              entry.id = targetTypeId;
+            }
+
+            if (entry.status !== status) {
+              rowErrors.push(
+                `Conflicting status for yarn type "${rawName}" detected. Using "${entry.status}".`,
+              );
+            }
+
+            if (rawYarnName) {
+              if (!entry.yarnName) {
+                entry.yarnName = rawYarnName;
+              } else if (entry.yarnName.trim().toLowerCase() !== rawYarnName.toLowerCase()) {
+                rowErrors.push(
+                  `Conflicting yarn name for yarn type "${rawName}" detected. Using "${entry.yarnName}".`,
+                );
+              }
+            }
+
+            candidateKeys.forEach(candidate => aliasMap.set(candidate, entryKey!));
+
+            if (subtypeRaw) {
+              const countSizeIdTokens = countSizeIdsRaw
+                ? countSizeIdsRaw
+                    .split(/[,;]+/)
+                    .map(token => token.trim())
+                    .filter(Boolean)
+                : [];
+              const countSizeNameTokens = countSizeNamesRaw
+                ? countSizeNamesRaw
+                    .split(/[,;]+/)
+                    .map(token => token.trim())
+                    .filter(Boolean)
+                : [];
+
+              const uniqueCountSizeIds = new Set<string>(countSizeIdTokens);
+
+              const missingNameTokens: string[] = [];
+              countSizeNameTokens.forEach(token => {
+                const match = countSizeByName.get(token.toLowerCase());
+                if (match) {
+                  uniqueCountSizeIds.add(match.id);
+                } else {
+                  missingNameTokens.push(token);
+                }
+              });
+
+              const invalidIdTokens = countSizeIdTokens.filter(idToken => !countSizeById.has(idToken));
+
+              if (missingNameTokens.length > 0) {
+                console.warn(
+                  `Count size name(s) not found for "${rawName || rawId}": ${missingNameTokens.join(', ')}`,
+                );
+                rowErrors.push(
+                  `Count size name(s) not found for "${rawName}": ${missingNameTokens.join(', ')}`,
+                );
+              }
+
+              if (invalidIdTokens.length > 0) {
+                console.warn(
+                  `Count size ID(s) not found for "${rawName || rawId}": ${invalidIdTokens.join(', ')}`,
+                );
+                rowErrors.push(
+                  `Count size ID(s) not found for "${rawName}": ${invalidIdTokens.join(', ')}`,
+                );
+              }
+
+              const detailPayload: YarnTypeDetail = {
+                subtype: subtypeRaw,
+                ...(uniqueCountSizeIds.size > 0 ? { countSize: Array.from(uniqueCountSizeIds) } : {}),
+                ...(tearWeightRaw ? { tearWeight: tearWeightRaw } : {}),
+              };
+
+              entry.details = [...(entry.details || []), detailPayload];
+            }
           } catch (rowError) {
             const errorMessage =
               rowError instanceof Error ? rowError.message : 'Unknown error importing row';
@@ -379,6 +433,17 @@ const YarnTypePage = () => {
             setImportProgress(Math.round((processed / yarnTypeRows.length) * 100));
           }
         }
+
+        const yarnTypePayloads = Array.from(typeEntries.values()).map(entry => {
+          const payload: BulkImportYarnType = {
+            ...(entry.id ? { id: entry.id } : {}),
+            name: entry.name,
+            status: entry.status,
+            ...(entry.yarnName ? { yarnName: entry.yarnName } : {}),
+            ...(entry.details && entry.details.length > 0 ? { details: entry.details } : {}),
+          };
+          return payload;
+        });
 
         if (yarnTypePayloads.length === 0) {
           throw new Error('No valid yarn types found for bulk import');

@@ -79,6 +79,29 @@ export interface UpdateSupplierRequest {
   status?: 'active' | 'inactive' | 'suspended';
 }
 
+export interface BulkImportSupplierPayload extends CreateSupplierRequest {
+  id?: string;
+}
+
+export interface BulkImportSuppliersRequest {
+  suppliers: BulkImportSupplierPayload[];
+  batchSize?: number;
+}
+
+export interface BulkImportSuppliersResponse {
+  success?: boolean;
+  message?: string;
+  createdCount?: number;
+  updatedCount?: number;
+  failedCount?: number;
+  errors?: Array<{
+    index: number;
+    message: string;
+    brandName?: string;
+    id?: string;
+  }>;
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === 'undefined') return null;
 
@@ -197,6 +220,19 @@ class SupplierService {
 
     await this.makeRequest<void>(`/${supplierId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async bulkImportSuppliers(
+    payload: BulkImportSuppliersRequest,
+  ): Promise<BulkImportSuppliersResponse> {
+    if (!payload?.suppliers || payload.suppliers.length === 0) {
+      throw new Error('At least one supplier is required for bulk import');
+    }
+
+    return this.makeRequest<BulkImportSuppliersResponse>('/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   }
 }

@@ -4,10 +4,13 @@ import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { toast, Toaster } from 'react-hot-toast';
 import supplierService, {
+  BulkImportSupplierPayload,
+  BulkImportSuppliersRequest,
   Supplier,
   SupplierListResponse,
   SupplierQueryParams,
   SupplierYarnDetail,
+  SupplierYarnReference,
 } from '@/shared/services/supplierService';
 import yarnTypeService, { YarnType } from '@/shared/services/yarnTypeService';
 import yarnColorService, { YarnColor } from '@/shared/services/yarnColorService';
@@ -165,21 +168,18 @@ const BrandPage = () => {
     Country?: string;
     'GST No'?: string;
     Status?: string;
-  };
-
-  type BrandDetailImportRow = {
-    'Brand Identifier'?: string;
-    'Yarn Type'?: string;
-    'Yarn Subtype'?: string;
-    Color?: string;
+    'Yarn Type ID'?: string;
+    'Yarn Subtype ID'?: string;
+    'Color ID'?: string;
     'Shade Number'?: string;
+    'Batch Size'?: string | number;
   };
 
   const handleDownloadTemplate = () => {
     try {
       const workbook = XLSX.utils.book_new();
 
-      const brandsSheet = XLSX.utils.json_to_sheet([
+      const suppliersSheet = XLSX.utils.json_to_sheet([
         {
           ID: '',
           Brand: 'Premier Threads',
@@ -193,23 +193,36 @@ const BrandPage = () => {
           Country: 'India',
           'GST No': '29ABCDE1234F2Z5',
           Status: 'active',
-        },
-      ]);
-
-      const detailsSheet = XLSX.utils.json_to_sheet([
-        {
-          'Brand Identifier': 'Premier Threads',
-          'Yarn Type': 'Combed Cotton',
-          'Yarn Subtype': 'Combed 40s',
-          Color: 'Ocean Blue',
+          'Yarn Type ID': '65f1a2b3c4d5e6f7g8h9i0a1',
+          'Yarn Subtype ID': '65f1a2b3c4d5e6f7g8h9i0a2',
+          'Color ID': '65f1a2b3c4d5e6f7g8h9i0a3',
           'Shade Number': 'Shade-21',
+          'Batch Size': '50 (optional, read from first row)',
+        },
+        {
+          ID: '',
+          Brand: 'Premier Threads',
+          'Contact Person': 'John Doe',
+          'Contact Number': '+91-9876543210',
+          Email: 'john@example.com',
+          Address: '123 Textile Park',
+          City: 'Coimbatore',
+          State: 'Tamil Nadu',
+          Pincode: '641001',
+          Country: 'India',
+          'GST No': '29ABCDE1234F2Z5',
+          Status: 'active',
+          'Yarn Type ID': '65f1a2b3c4d5e6f7g8h9i0b1',
+          'Yarn Subtype ID': '65f1a2b3c4d5e6f7g8h9i0b2',
+          'Color ID': '65f1a2b3c4d5e6f7g8h9i0b3',
+          'Shade Number': 'Shade-45',
         },
       ]);
 
-      XLSX.utils.book_append_sheet(workbook, brandsSheet, 'Brands');
-      XLSX.utils.book_append_sheet(workbook, detailsSheet, 'BrandYarnDetails');
+      XLSX.utils.book_append_sheet(workbook, suppliersSheet, 'Suppliers');
+      workbook.SheetNames = ['Suppliers'];
 
-      XLSX.writeFile(workbook, 'yarn-brands-template.xlsx');
+      XLSX.writeFile(workbook, 'yarn-suppliers-template.xlsx');
       toast.success('Template downloaded successfully');
     } catch (error) {
       console.error('Error downloading brand template:', error);
@@ -263,85 +276,109 @@ const BrandPage = () => {
       const types = typesResponse.results || [];
       const colors = colorsResponse.results || [];
 
-      const yarnTypeNameById = new Map(types.map(type => [type.id, type.name]));
-      const colorNameById = new Map(colors.map(color => [color.id, color.name]));
+      const typeNameToId = new Map(
+        types
+          .filter(type => type?.name && type?.id)
+          .map(type => [type.name.trim().toLowerCase(), type.id] as const),
+      );
+      const colorNameToId = new Map(
+        colors
+          .filter(color => color?.name && color?.id)
+          .map(color => [color.name.trim().toLowerCase(), color.id] as const),
+      );
 
-      const { subtypeById } = buildSubtypeMaps(types);
+      const { subtypeById, subtypeByTypeAndName } = buildSubtypeMaps(types);
+      const subtypeNameToId = new Map(
+        Array.from(subtypeById.values()).map(entry => [entry.name.trim().toLowerCase(), entry.id] as const),
+      );
 
-      const brandsSheetData = exportSource.map(brand => ({
-        ID: brand.id,
-        Brand: brand.brandName,
-        'Contact Person': brand.contactPersonName,
-        'Contact Number': brand.contactNumber,
-        Email: brand.email,
-        Address: brand.address,
-        City: brand.city,
-        State: brand.state,
-        Pincode: brand.pincode,
-        Country: brand.country,
-        'GST No': brand.gstNo || '',
-        Status: brand.status,
-      }));
+      const normalizeReferenceId = (
+        value: string | SupplierYarnReference | undefined,
+        fallback?: Map<string, string>,
+      ) => {
+        if (!value) return '';
+        if (typeof value === 'string') return value;
+        if (value.id) return value.id;
+        const candidate = (value as { _id?: string })._id;
+        if (candidate) return candidate;
+        const name = value.name?.trim().toLowerCase();
+        if (name && fallback) {
+          return fallback.get(name) || '';
+        }
+        return '';
+      };
 
-      const detailsSheetData = exportSource.flatMap(brand => {
+      const sheetData = exportSource.flatMap(brand => {
+        const baseRow = {
+          ID: brand.id,
+          Brand: brand.brandName,
+          'Contact Person': brand.contactPersonName,
+          'Contact Number': brand.contactNumber,
+          Email: brand.email,
+          Address: brand.address,
+          City: brand.city,
+          State: brand.state,
+          Pincode: brand.pincode,
+          Country: brand.country,
+          'GST No': brand.gstNo || '',
+          Status: brand.status,
+        };
+
         if (!brand.yarnDetails || brand.yarnDetails.length === 0) {
-          return [];
+          return [
+            {
+              ...baseRow,
+              'Yarn Type ID': '',
+              'Yarn Subtype ID': '',
+              'Color ID': '',
+              'Shade Number': '',
+              'Batch Size': '',
+            },
+          ];
         }
 
         return brand.yarnDetails.map(detail => {
-          const yarnTypeId =
-            typeof detail.yarnType === 'string' ? detail.yarnType : detail.yarnType?.id || '';
+          let yarnTypeId = normalizeReferenceId(detail.yarnType, typeNameToId);
           const yarnTypeName =
-            typeof detail.yarnType === 'object' && detail.yarnType?.name
-              ? detail.yarnType.name
-              : yarnTypeNameById.get(yarnTypeId) || yarnTypeMap[yarnTypeId] || yarnTypeId;
+            typeof detail.yarnType === 'object' ? detail.yarnType?.name?.trim().toLowerCase() : '';
+          if (!yarnTypeId && yarnTypeName) {
+            yarnTypeId = typeNameToId.get(yarnTypeName) || '';
+          }
 
-          const yarnSubtypeId =
-            typeof detail.yarnsubtype === 'string'
-              ? detail.yarnsubtype
-              : detail.yarnsubtype?.id || '';
+          let yarnSubtypeId = normalizeReferenceId(detail.yarnsubtype, subtypeNameToId);
           const yarnSubtypeName =
-            typeof detail.yarnsubtype === 'object' && detail.yarnsubtype?.name
-              ? detail.yarnsubtype.name
-              : yarnSubtypeId
-              ? subtypeById.get(yarnSubtypeId)?.name || yarnSubtypeMap[yarnSubtypeId] || yarnSubtypeId
-              : '';
+            typeof detail.yarnsubtype === 'object' ? detail.yarnsubtype?.name?.trim().toLowerCase() : '';
+          if ((!yarnSubtypeId || yarnSubtypeId === '') && yarnSubtypeName && yarnTypeId) {
+            const match = subtypeByTypeAndName.get(`${yarnTypeId}|${yarnSubtypeName}`);
+            if (match) {
+              yarnSubtypeId = match.id;
+            }
+          }
 
-          const colorId = typeof detail.color === 'string' ? detail.color : detail.color?.id || '';
+          let colorId = normalizeReferenceId(detail.color, colorNameToId);
           const colorName =
-            typeof detail.color === 'object' && detail.color?.name
-              ? detail.color.name
-              : colorNameById.get(colorId) || yarnColorMap[colorId] || colorId;
+            typeof detail.color === 'object' ? detail.color?.name?.trim().toLowerCase() : '';
+          if (!colorId && colorName) {
+            colorId = colorNameToId.get(colorName) || '';
+          }
 
           return {
-            'Brand Identifier': brand.id,
-            'Yarn Type': yarnTypeName,
-            'Yarn Subtype': yarnSubtypeName,
-            Color: colorName,
+            ...baseRow,
+            'Yarn Type ID': yarnTypeId,
+            'Yarn Subtype ID': yarnSubtypeId,
+            'Color ID': colorId,
             'Shade Number': detail.shadeNumber || '',
+            'Batch Size': '',
           };
         });
       });
 
       const workbook = XLSX.utils.book_new();
-      const brandsSheet = XLSX.utils.json_to_sheet(brandsSheetData);
-      XLSX.utils.book_append_sheet(workbook, brandsSheet, 'Brands');
+      const suppliersSheet = XLSX.utils.json_to_sheet(sheetData);
+      XLSX.utils.book_append_sheet(workbook, suppliersSheet, 'Suppliers');
+      workbook.SheetNames = ['Suppliers'];
 
-      const detailsSheet =
-        detailsSheetData.length > 0
-          ? XLSX.utils.json_to_sheet(detailsSheetData)
-          : XLSX.utils.json_to_sheet([
-              {
-                'Brand Identifier': '',
-                'Yarn Type': '',
-                'Yarn Subtype': '',
-                Color: '',
-                'Shade Number': '',
-              },
-            ]);
-      XLSX.utils.book_append_sheet(workbook, detailsSheet, 'BrandYarnDetails');
-
-      XLSX.writeFile(workbook, 'yarn-brands.xlsx');
+      XLSX.writeFile(workbook, 'yarn-suppliers.xlsx');
       toast.success('Brands exported successfully');
     } catch (error) {
       console.error('Error exporting brands:', error);
@@ -370,198 +407,119 @@ const BrandPage = () => {
           throw new Error('Import file is empty');
         }
 
-        const brandsSheetName =
-          workbook.SheetNames.find(name => name.toLowerCase() === 'brands') || workbook.SheetNames[0];
-        const brandsSheet = workbook.Sheets[brandsSheetName];
-        const detailsSheetName = workbook.SheetNames.find(name => name.toLowerCase() === 'brandyarndetails');
-        const detailsSheet = detailsSheetName ? workbook.Sheets[detailsSheetName] : undefined;
+        const suppliersSheetName =
+          workbook.SheetNames.find(name => name.toLowerCase() === 'suppliers') || workbook.SheetNames[0];
+        const suppliersSheet = workbook.Sheets[suppliersSheetName];
 
-        const brandRows = XLSX.utils.sheet_to_json<BrandImportRow>(brandsSheet, { defval: '' });
-        const detailRows = detailsSheet
-          ? XLSX.utils.sheet_to_json<BrandDetailImportRow>(detailsSheet, { defval: '' })
-          : [];
+        const rows = XLSX.utils.sheet_to_json<BrandImportRow>(suppliersSheet, { defval: '' });
 
-        if (brandRows.length === 0) {
-          throw new Error('Brands sheet is empty');
+        if (rows.length === 0) {
+          throw new Error('Suppliers sheet is empty');
         }
 
-        const [existingBrandsResponse, typesResponse, colorsResponse] = await Promise.all([
-          supplierService.getSuppliers({ page: 1, limit: 10000 }),
-          yarnTypeService.getTypes({ page: 1, limit: 10000 }),
-          yarnColorService.getColors({ page: 1, limit: 10000 }),
-        ]);
-
-        const existingBrands = existingBrandsResponse.results || [];
-        const brandsById = new Map(existingBrands.map(brand => [brand.id, brand]));
-        const brandsByName = new Map(existingBrands.map(brand => [brand.brandName.trim().toLowerCase(), brand]));
-
-        const types = typesResponse.results || [];
-        const colors = colorsResponse.results || [];
-
-        const yarnTypeById = new Map(types.map(type => [type.id, type]));
-        const yarnTypeByName = new Map(types.map(type => [type.name.trim().toLowerCase(), type]));
-
-        const { subtypeById, subtypeByTypeAndName } = buildSubtypeMaps(types);
-
-        const colorById = new Map(colors.map(color => [color.id, color]));
-        const colorByName = new Map(colors.map(color => [color.name.trim().toLowerCase(), color]));
-
-        const detailMap = new Map<
-          string,
-          Array<{ yarnTypeId: string; yarnSubtypeId?: string; colorId: string; shadeNumber?: string }>
-        >();
-
-        const appendDetail = (
-          key: string,
-          detail: { yarnTypeId: string; yarnSubtypeId?: string; colorId: string; shadeNumber?: string },
-        ) => {
-          const existingDetails = detailMap.get(key) || [];
-          detailMap.set(key, [...existingDetails, detail]);
+        type SupplierAccumulator = {
+          supplier: BulkImportSupplierPayload;
+          detailKeys: Set<string>;
         };
 
-        detailRows.forEach(detailRow => {
-          const identifierRaw = detailRow['Brand Identifier']?.toString().trim();
-          const yarnTypeRaw = detailRow['Yarn Type']?.toString().trim();
-          const colorRaw = detailRow.Color?.toString().trim();
+        const aliasMap = new Map<string, SupplierAccumulator>();
+        const accumulators: SupplierAccumulator[] = [];
+        const rowErrors: string[] = [];
+        let resolvedBatchSize: number | undefined;
 
-          if (!identifierRaw || !yarnTypeRaw || !colorRaw) {
-            return;
+        const isRowEmpty = (row: BrandImportRow) =>
+          Object.values(row).every(value => `${value ?? ''}`.trim().length === 0);
+
+        for (let index = 0; index < rows.length; index++) {
+          const row = rows[index];
+          if (isRowEmpty(row)) {
+            continue;
           }
 
-          let yarnTypeId: string | undefined;
-          if (yarnTypeById.has(yarnTypeRaw)) {
-            yarnTypeId = yarnTypeRaw;
-          } else {
-            yarnTypeId = yarnTypeByName.get(yarnTypeRaw.toLowerCase())?.id;
-          }
+          const rowNumber = index + 2;
 
-          if (!yarnTypeId) {
-            console.warn(`Yarn type not found for brand detail: ${yarnTypeRaw}`);
-            return;
-          }
-
-          let colorId: string | undefined;
-          if (colorById.has(colorRaw)) {
-            colorId = colorRaw;
-          } else {
-            colorId = colorByName.get(colorRaw.toLowerCase())?.id;
-          }
-
-          if (!colorId) {
-            console.warn(`Color not found for brand detail: ${colorRaw}`);
-            return;
-          }
-
-          const subtypeRaw = detailRow['Yarn Subtype']?.toString().trim();
-          let yarnSubtypeId: string | undefined;
-          if (subtypeRaw) {
-            if (subtypeById.has(subtypeRaw)) {
-              const entry = subtypeById.get(subtypeRaw);
-              if (entry && entry.parentTypeId === yarnTypeId) {
-                yarnSubtypeId = entry.id;
-              }
-            } else {
-              yarnSubtypeId = subtypeByTypeAndName.get(`${yarnTypeId}|${subtypeRaw.toLowerCase()}`)?.id;
-              if (!yarnSubtypeId) {
-                console.warn(`Yarn subtype not found for ${subtypeRaw} under type ${yarnTypeRaw}`);
-              }
+          const batchSizeRaw = row['Batch Size'];
+          if (batchSizeRaw !== undefined && batchSizeRaw !== null && `${batchSizeRaw}`.trim().length > 0) {
+            const parsedBatch = Number(`${batchSizeRaw}`.trim());
+            if (Number.isNaN(parsedBatch) || parsedBatch < 1 || parsedBatch > 100) {
+              rowErrors.push(`Row ${rowNumber}: Batch Size must be a number between 1 and 100`);
+            } else if (resolvedBatchSize === undefined) {
+              resolvedBatchSize = parsedBatch;
+            } else if (resolvedBatchSize !== parsedBatch) {
+              rowErrors.push(
+                `Row ${rowNumber}: Batch Size must match previously defined value (${resolvedBatchSize})`,
+              );
             }
           }
 
-          const detailPayload = {
-            yarnTypeId,
-            yarnSubtypeId,
-            colorId,
-            shadeNumber: detailRow['Shade Number']?.toString().trim() || '',
+          const rawId = row.ID?.toString().trim() ?? '';
+          const rawBrandName =
+            row.Brand?.toString().trim() ?? row['Brand Name']?.toString().trim() ?? '';
+          if (!rawBrandName) {
+            rowErrors.push(`Row ${rowNumber}: Brand name is required`);
+            if (rows.length > 0) {
+              setImportProgress(Math.round(((index + 1) / rows.length) * 60));
+            }
+            continue;
+          }
+
+          const idKey = rawId ? `id:${rawId}` : null;
+          const nameKey = `name:${rawBrandName.toLowerCase()}`;
+
+          let accumulator: SupplierAccumulator | undefined;
+          if (idKey) {
+            accumulator = aliasMap.get(idKey);
+          }
+          if (!accumulator) {
+            accumulator = aliasMap.get(nameKey);
+          }
+
+          const contactPerson = row['Contact Person']?.toString().trim() ?? '';
+          const contactNumber = row['Contact Number']?.toString().trim() ?? '';
+          const emailRaw = row.Email?.toString().trim() ?? '';
+          const address = row.Address?.toString().trim() ?? '';
+          const city = row.City?.toString().trim() ?? '';
+          const state = row.State?.toString().trim() ?? '';
+          const pincode = row.Pincode?.toString().trim() ?? '';
+          const country = row.Country?.toString().trim() ?? '';
+          const gstNo = row['GST No']?.toString().trim() ?? '';
+          const statusRaw = row.Status?.toString().trim().toLowerCase() ?? 'active';
+          const status: Supplier['status'] =
+            statusRaw === 'inactive'
+              ? 'inactive'
+              : statusRaw === 'suspended'
+              ? 'suspended'
+              : 'active';
+
+          const brandIssues: string[] = [];
+
+          const requireField = (value: string, label: string) => {
+            if (!value) {
+              brandIssues.push(`${label} is required`);
+            }
           };
 
-          appendDetail(`name:${identifierRaw.toLowerCase()}`, detailPayload);
-          appendDetail(`id:${identifierRaw}`, detailPayload);
-        });
+          if (!accumulator) {
+            requireField(contactPerson, 'Contact person');
+            requireField(contactNumber, 'Contact number');
+            requireField(emailRaw, 'Email');
+            requireField(address, 'Address');
+            requireField(city, 'City');
+            requireField(state, 'State');
+            requireField(pincode, 'Pincode');
+            requireField(country, 'Country');
+          }
 
-        let processed = 0;
-        for (const row of brandRows) {
-          try {
-            const rawId = row.ID?.toString().trim() ?? '';
-            const rawBrandName =
-              row.Brand?.toString().trim() ?? row['Brand Name']?.toString().trim() ?? '';
-            if (!rawBrandName) {
-              throw new Error('Brand is required');
+          if (brandIssues.length > 0) {
+            rowErrors.push(`Row ${rowNumber}: ${brandIssues.join(', ')}`);
+            if (rows.length > 0) {
+              setImportProgress(Math.round(((index + 1) / rows.length) * 60));
             }
+            continue;
+          }
 
-            const contactPerson = row['Contact Person']?.toString().trim() ?? '';
-            if (!contactPerson) {
-              throw new Error('Contact person is required');
-            }
-
-            const contactNumber = row['Contact Number']?.toString().trim() ?? '';
-            if (!contactNumber) {
-              throw new Error('Contact number is required');
-            }
-
-            const emailRaw = row.Email?.toString().trim() ?? '';
-            if (!emailRaw) {
-              throw new Error('Email is required');
-            }
-
-            const address = row.Address?.toString().trim() ?? '';
-            if (!address) {
-              throw new Error('Address is required');
-            }
-
-            const city = row.City?.toString().trim() ?? '';
-            if (!city) {
-              throw new Error('City is required');
-            }
-
-            const state = row.State?.toString().trim() ?? '';
-            if (!state) {
-              throw new Error('State is required');
-            }
-
-            const pincode = row.Pincode?.toString().trim() ?? '';
-            if (!pincode) {
-              throw new Error('Pincode is required');
-            }
-
-            const country = row.Country?.toString().trim() ?? '';
-            if (!country) {
-              throw new Error('Country is required');
-            }
-
-            const gstNo = row['GST No']?.toString().trim() ?? '';
-            const statusRaw = row.Status?.toString().trim().toLowerCase() ?? 'active';
-            const status: Supplier['status'] =
-              statusRaw === 'inactive'
-                ? 'inactive'
-                : statusRaw === 'suspended'
-                ? 'suspended'
-                : 'active';
-
-            const detailKeys: string[] = [];
-            if (rawId) detailKeys.push(`id:${rawId}`);
-            detailKeys.push(`name:${rawBrandName.toLowerCase()}`);
-
-            const detailEntries = detailKeys.flatMap(key => detailMap.get(key) || []);
-            const uniqueDetails = new Map<string, SupplierYarnDetail>();
-
-            detailEntries.forEach(detail => {
-              const detailKey = `${detail.yarnTypeId}|${detail.yarnSubtypeId || ''}|${detail.colorId}|${detail.shadeNumber || ''}`;
-              if (uniqueDetails.has(detailKey)) return;
-              const normalizedDetail: SupplierYarnDetail = {
-                yarnType: detail.yarnTypeId,
-                color: detail.colorId,
-              };
-              if (detail.yarnSubtypeId) {
-                normalizedDetail.yarnsubtype = detail.yarnSubtypeId;
-              }
-              if (detail.shadeNumber) {
-                normalizedDetail.shadeNumber = detail.shadeNumber;
-              }
-              uniqueDetails.set(detailKey, normalizedDetail);
-            });
-
-            const payload = {
+          if (!accumulator) {
+            const supplierEntry: BulkImportSupplierPayload = {
               brandName: rawBrandName,
               contactPersonName: contactPerson,
               contactNumber,
@@ -573,42 +531,139 @@ const BrandPage = () => {
               country,
               status,
               ...(gstNo ? { gstNo } : {}),
-              ...(uniqueDetails.size > 0 ? { yarnDetails: Array.from(uniqueDetails.values()) } : {}),
+              ...(rawId ? { id: rawId } : {}),
+              yarnDetails: [],
             };
 
-            let targetBrand: Supplier | undefined;
-            if (rawId && brandsById.has(rawId)) {
-              targetBrand = brandsById.get(rawId);
-            } else {
-              targetBrand = brandsByName.get(rawBrandName.toLowerCase());
+            accumulator = {
+              supplier: supplierEntry,
+              detailKeys: new Set<string>(),
+            };
+
+            accumulators.push(accumulator);
+            aliasMap.set(nameKey, accumulator);
+            if (idKey) {
+              aliasMap.set(idKey, accumulator);
+            }
+          } else {
+            const supplier = accumulator.supplier;
+            const updateFieldIfMissing = (
+              key: keyof BulkImportSupplierPayload,
+              value: string,
+              label: string,
+              transform?: (input: string) => string,
+            ) => {
+              if (!value) return;
+              const existing = supplier[key];
+              const normalizedValue = transform ? transform(value) : value;
+              if (!existing) {
+                (supplier as unknown as Record<string, unknown>)[key as string] = normalizedValue;
+              } else if (
+                typeof existing === 'string' &&
+                existing.trim().toLowerCase() !== normalizedValue.trim().toLowerCase()
+              ) {
+                rowErrors.push(`Row ${rowNumber}: Conflicting value for ${label}`);
+              }
+            };
+
+            updateFieldIfMissing('contactPersonName', contactPerson, 'Contact person');
+            updateFieldIfMissing('contactNumber', contactNumber, 'Contact number');
+            updateFieldIfMissing('email', emailRaw, 'Email', value => value.toLowerCase());
+            updateFieldIfMissing('address', address, 'Address');
+            updateFieldIfMissing('city', city, 'City');
+            updateFieldIfMissing('state', state, 'State');
+            updateFieldIfMissing('pincode', pincode, 'Pincode');
+            updateFieldIfMissing('country', country, 'Country');
+            if (gstNo) {
+              updateFieldIfMissing('gstNo', gstNo, 'GST No');
+            }
+            if (supplier.status !== status) {
+              rowErrors.push(`Row ${rowNumber}: Conflicting value for Status`);
+            }
+            if (rawId && !supplier.id) {
+              supplier.id = rawId;
+              aliasMap.set(`id:${rawId}`, accumulator);
+            } else if (rawId && supplier.id && supplier.id !== rawId) {
+              rowErrors.push(`Row ${rowNumber}: Conflicting supplier ID detected`);
+            }
+          }
+
+          const errorsBeforeDetails = rowErrors.length;
+
+          const yarnTypeId = row['Yarn Type ID']?.toString().trim() ?? '';
+          const yarnSubtypeId = row['Yarn Subtype ID']?.toString().trim() ?? '';
+          const colorId = row['Color ID']?.toString().trim() ?? '';
+          const shadeNumber = row['Shade Number']?.toString().trim() ?? '';
+          const hasDetailFields = [yarnTypeId, yarnSubtypeId, colorId, shadeNumber].some(field => field.length > 0);
+
+          if (hasDetailFields) {
+            const detailIssues: string[] = [];
+            if (!yarnTypeId) {
+              detailIssues.push('Yarn Type ID is required when yarn details are provided');
+            }
+            if (!colorId) {
+              detailIssues.push('Color ID is required when yarn details are provided');
             }
 
-            if (targetBrand) {
-              await supplierService.updateSupplier(targetBrand.id, payload);
-              const updatedSnapshot: Supplier = {
-                ...targetBrand,
-                ...payload,
-                id: targetBrand.id,
-              };
-              brandsById.set(updatedSnapshot.id, updatedSnapshot);
-              const previousKey = targetBrand.brandName.trim().toLowerCase();
-              if (previousKey !== updatedSnapshot.brandName.trim().toLowerCase()) {
-                brandsByName.delete(previousKey);
+            if (detailIssues.length > 0) {
+              rowErrors.push(`Row ${rowNumber}: ${detailIssues.join(', ')}`);
+            } else if (rowErrors.length === errorsBeforeDetails) {
+              const detailKey = `${yarnTypeId}|${yarnSubtypeId || ''}|${colorId}|${shadeNumber || ''}`;
+              if (!accumulator.detailKeys.has(detailKey)) {
+                const detailPayload: SupplierYarnDetail = {
+                  yarnType: yarnTypeId,
+                  color: colorId,
+                };
+                if (yarnSubtypeId) {
+                  detailPayload.yarnsubtype = yarnSubtypeId;
+                }
+                if (shadeNumber) {
+                  detailPayload.shadeNumber = shadeNumber;
+                }
+
+                accumulator.detailKeys.add(detailKey);
+                if (!accumulator.supplier.yarnDetails) {
+                  accumulator.supplier.yarnDetails = [];
+                }
+                accumulator.supplier.yarnDetails.push(detailPayload);
               }
-              brandsByName.set(updatedSnapshot.brandName.trim().toLowerCase(), updatedSnapshot);
-            } else {
-              const created = await supplierService.createSupplier(payload);
-              brandsById.set(created.id, created);
-              brandsByName.set(created.brandName.trim().toLowerCase(), created);
             }
-          } catch (rowError) {
-            console.error('Error importing brand row:', rowError);
-          } finally {
-            processed += 1;
-            setImportProgress(Math.round((processed / brandRows.length) * 100));
+          }
+
+          if (rows.length > 0) {
+            setImportProgress(Math.round(((index + 1) / rows.length) * 60));
           }
         }
 
+        if (accumulators.length === 0) {
+          throw new Error('No valid suppliers found in the import file');
+        }
+
+        if (rowErrors.length > 0) {
+          throw new Error(rowErrors.join(' | '));
+        }
+
+        const suppliersPayload = accumulators.map(({ supplier }) => {
+          const payloadSupplier: BulkImportSupplierPayload = {
+            ...supplier,
+          };
+
+          if (!payloadSupplier.yarnDetails || payloadSupplier.yarnDetails.length === 0) {
+            delete (payloadSupplier as { yarnDetails?: SupplierYarnDetail[] }).yarnDetails;
+          }
+
+          return payloadSupplier;
+        });
+
+        const payload: BulkImportSuppliersRequest = {
+          suppliers: suppliersPayload,
+          ...(resolvedBatchSize ? { batchSize: resolvedBatchSize } : {}),
+        };
+
+        setImportProgress(85);
+        await supplierService.bulkImportSuppliers(payload);
+
+        setImportProgress(100);
         await fetchBrands();
         toast.success('Brands imported successfully');
       } catch (error) {
