@@ -271,3 +271,4 @@ const AddStockPage: React.FC<AddStockPageProps> = ({ onBack, onSave }) => {
 
 export default AddStockPage;
 
+

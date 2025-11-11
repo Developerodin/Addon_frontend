@@ -214,3 +214,4 @@ const QRCodeViewer: React.FC<QRCodeViewerProps> = ({ baskets, onScan }) => {
 
 export default QRCodeViewer;
 
+

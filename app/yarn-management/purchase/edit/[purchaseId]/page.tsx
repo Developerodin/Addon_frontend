@@ -39,7 +39,7 @@ const EditPurchasePage: React.FC<EditPurchasePageProps> = ({ params }) => {
   const [purchaseData, setPurchaseData] = useState<PurchaseData | null>(null);
 
   // Check permission
-  const hasPermission = hasSubPermission('/yarn-management', 'Purchase');
+  const hasPermission = hasSubPermission('/yarn-management', 'Purchase Order');
 
   useEffect(() => {
     const fetchPurchaseData = async () => {

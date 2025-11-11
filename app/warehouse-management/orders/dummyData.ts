@@ -124,3 +124,4 @@ export const generateDummyNotifications = (orders: Order[]): Notification[] => {
   return notifications.slice(0, 20); // Limit to 20 notifications
 };
 
+

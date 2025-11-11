@@ -196,3 +196,4 @@ const StockOutDashboard: React.FC<StockOutDashboardProps> = ({
 
 export default StockOutDashboard;
 
+

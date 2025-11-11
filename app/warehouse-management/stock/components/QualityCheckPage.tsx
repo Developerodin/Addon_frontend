@@ -252,3 +252,4 @@ const QualityCheckPage: React.FC<QualityCheckPageProps> = ({
 
 export default QualityCheckPage;
 
+

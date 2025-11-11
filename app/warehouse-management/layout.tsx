@@ -9,3 +9,4 @@ export default function WarehouseManagementLayout({
   return <ContentLayout>{children}</ContentLayout>;
 }
 
+
