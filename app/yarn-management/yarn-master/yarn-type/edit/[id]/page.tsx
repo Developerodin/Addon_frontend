@@ -206,7 +206,7 @@ const EditYarnTypePage = () => {
                 <div className="space-y-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-lg font-semibold">Details</h2>
-                    <button type="button" className="ti-btn ti-btn-primary ti-btn-sm flex items-center gap-1" onClick={addDetailRow}>
+                    <button type="button" className="ti-btn ti-btn-primary flex items-center gap-1 whitespace-nowrap px-4 py-2" onClick={addDetailRow}>
                       <i className="ri-add-line"></i>
                       Add Detail
                     </button>
@@ -225,7 +225,7 @@ const EditYarnTypePage = () => {
                         </div>
                         <button
                           type="button"
-                          className="ti-btn ti-btn-outline-danger ti-btn-sm flex items-center gap-1 disabled:opacity-40"
+                          className="ti-btn ti-btn-danger flex items-center gap-1 whitespace-nowrap px-4 py-2"
                           onClick={() => removeDetailRow(index)}
                           disabled={details.length === 1}
                           title={details.length === 1 ? 'At least one detail is required' : 'Remove detail'}

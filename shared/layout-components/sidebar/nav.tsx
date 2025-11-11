@@ -18,7 +18,7 @@ const UsersIcon = <i className="ri ri-user-line side-menu__icon" style={{ margin
 const SupervisorIcon = <i className="bx bx-user-check side-menu__icon"></i>;
 const ProductionIcon = <i className="bx bx-cog side-menu__icon"></i>;
 const FloorIcon = <i className="bx bx-building side-menu__icon"></i>;
-const YarnIcon = <i className="ri ri-thread-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const YarnIcon = <i className="ri ri-threads-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const CataloguingIcon = <i className="ri ri-book-open-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const PurchaseIcon = <i className="ri ri-shopping-cart-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const PurchaseReceivedIcon = <i className="ri ri-inbox-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
@@ -273,46 +273,6 @@ const BaseMenuItems: any = [
     path: "/yarn-management",
     children: [
       {
-        icon: CataloguingIcon,
-        path: "/yarn-management/cataloguing",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Cataloguing",
-      },
-      {
-        icon: PurchaseIcon,
-        path: "/yarn-management/purchase",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Purchase Order",
-      },
-      {
-        icon: PurchaseReceivedIcon,
-        path: "/yarn-management/purchase-order-received",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Purchase Order Received",
-      },
-      {
-        icon: InventoryIcon,
-        path: "/yarn-management/inventory",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Inventory",
-      },
-      {
-        icon: IssueIcon,
-        path: "/yarn-management/yarn-issue",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Yarn Issue",
-      },
-      {
         icon: YarnIcon,
         title: "Yarn Master",
         type: "sub",
@@ -353,6 +313,46 @@ const BaseMenuItems: any = [
             title: "Color",
           },
         ],
+      },
+      {
+        icon: CataloguingIcon,
+        path: "/yarn-management/cataloguing",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Cataloguing",
+      },
+      {
+        icon: PurchaseIcon,
+        path: "/yarn-management/purchase",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Purchase Order",
+      },
+      {
+        icon: PurchaseReceivedIcon,
+        path: "/yarn-management/purchase-order-received",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Purchase Order Received",
+      },
+      {
+        icon: InventoryIcon,
+        path: "/yarn-management/inventory",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Inventory",
+      },
+      {
+        icon: IssueIcon,
+        path: "/yarn-management/yarn-issue",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Yarn Issue",
       },
     ],
   },

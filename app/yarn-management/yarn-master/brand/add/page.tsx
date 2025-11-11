@@ -545,7 +545,7 @@ const AddBrandPage = () => {
                       )}
                       <button
                         type="button"
-                        className="ti-btn ti-btn-primary ti-btn-sm"
+                        className="ti-btn ti-btn-primary flex items-center gap-1 whitespace-nowrap px-4 py-2"
                         onClick={addYarnDetail}
                         disabled={isAddDisabled}
                       >
@@ -643,7 +643,7 @@ const AddBrandPage = () => {
                           <div className="flex justify-end">
                             <button
                               type="button"
-                              className="ti-btn ti-btn-danger ti-btn-sm"
+                              className="ti-btn ti-btn-danger flex items-center gap-1 whitespace-nowrap px-4 py-2"
                               onClick={() => removeYarnDetail(index)}
                             >
                               <i className="ri-delete-bin-line me-1"></i> Remove
