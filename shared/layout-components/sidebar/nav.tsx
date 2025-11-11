@@ -287,7 +287,7 @@ const BaseMenuItems: any = [
             type: "link",
             active: false,
             selected: false,
-            title: "Brand",
+            title: "Brand/Supplier",
           },
           {
             icon: YarnTypeIcon,
