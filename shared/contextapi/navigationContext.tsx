@@ -46,6 +46,7 @@ interface NavigationPermissions {
       'Yarn Type': boolean;
       'Count/Size': boolean;
       'Color': boolean;
+      'Blend': boolean;
     };
   };
   'Warehouse Management': {
@@ -109,6 +110,7 @@ const defaultPermissions: NavigationPermissions = {
       'Yarn Type': false,
       'Count/Size': false,
       'Color': false,
+      'Blend': false,
     },
   },
   'Warehouse Management': {

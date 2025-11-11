@@ -495,7 +495,8 @@ const EditUserPage = () => {
                                                         { key: 'Brand', label: 'Brand' },
                                                         { key: 'Yarn Type', label: 'Yarn Type' },
                                                         { key: 'Count/Size', label: 'Count/Size' },
-                                                        { key: 'Color', label: 'Color' }
+                                                        { key: 'Color', label: 'Color' },
+                                                        { key: 'Blend', label: 'Blend' }
                                                     ].map(subsubsection => (
                                                         <label key={subsubsection.key} className="flex items-center">
                                                             <input
