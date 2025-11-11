@@ -15,6 +15,19 @@ interface MenuItem {
 export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
   const { hasPermission, hasSubPermission, isLoading, permissions } = useNavigation();
   
+  // Map display titles to permission keys for yarn master items
+  const getPermissionKey = (displayTitle: string, path: string): string => {
+    // For yarn master items, map display titles to permission keys
+    if (path.startsWith('/yarn-management/yarn-master/')) {
+      const titleMap: { [key: string]: string } = {
+        'Brand/Supplier': 'Brand',
+        'Brand': 'Brand', // Fallback for backward compatibility
+      };
+      return titleMap[displayTitle] || displayTitle;
+    }
+    return displayTitle;
+  };
+  
   // Debug: Log permissions
   if (permissions) {
     console.log('Navigation permissions:', permissions);
@@ -67,7 +80,8 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             const hasVisibleChildren = child.children.some(nestedChild => {
               if (nestedChild.type === 'link' && nestedChild.path) {
                 if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
-                  return hasSubPermission('/yarn-management/yarn-master', nestedChild.title);
+                  const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
+                  return hasSubPermission('/yarn-management/yarn-master', permissionKey);
                 }
               }
               return false;
@@ -100,7 +114,8 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               }
               // If path starts with /yarn-management/yarn-master/, check nested permissions
               if (child.path.startsWith('/yarn-management/yarn-master/')) {
-                return hasSubPermission('/yarn-management/yarn-master', childName);
+                const permissionKey = getPermissionKey(childName, child.path);
+                return hasSubPermission('/yarn-management/yarn-master', permissionKey);
               }
               return hasSubPermission('/yarn-management', childName);
             }
@@ -122,7 +137,8 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               const nestedFilteredChildren = child.children.filter(nestedChild => {
                 if (nestedChild.type === 'link' && nestedChild.path) {
                   if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
-                    return hasSubPermission('/yarn-management/yarn-master', nestedChild.title);
+                    const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
+                    return hasSubPermission('/yarn-management/yarn-master', permissionKey);
                   }
                 }
                 return false;
@@ -163,7 +179,8 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             const hasVisibleChildren = child.children.some(nestedChild => {
               if (nestedChild.type === 'link' && nestedChild.path) {
                 if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
-                  return hasSubPermission('/yarn-management/yarn-master', nestedChild.title);
+                  const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
+                  return hasSubPermission('/yarn-management/yarn-master', permissionKey);
                 }
               }
               return false;
@@ -195,7 +212,8 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               }
               // If path starts with /yarn-management/yarn-master/, check nested permissions
               if (child.path.startsWith('/yarn-management/yarn-master/')) {
-                return hasSubPermission('/yarn-management/yarn-master', childName);
+                const permissionKey = getPermissionKey(childName, child.path);
+                return hasSubPermission('/yarn-management/yarn-master', permissionKey);
               }
               return hasSubPermission('/yarn-management', childName);
             }
@@ -215,7 +233,8 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             const nestedFilteredChildren = child.children.filter(nestedChild => {
               if (nestedChild.type === 'link' && nestedChild.path) {
                 if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
-                  return hasSubPermission('/yarn-management/yarn-master', nestedChild.title);
+                  const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
+                  return hasSubPermission('/yarn-management/yarn-master', permissionKey);
                 }
               }
               return false;
