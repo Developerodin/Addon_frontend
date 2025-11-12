@@ -1,118 +1,140 @@
 "use client";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 
-interface Requisition {
+interface YarnInventory {
   id: string;
-  requisitionNumber: string;
-  requestedBy: string;
-  requestDate: string;
-  requiredDate: string;
-  status: 'Pending' | 'Approved' | 'Rejected' | 'In Process' | 'Completed';
-  items: RequisitionItem[];
-  notes: string;
-  createdAt: string;
-  updatedAt: string;
+  yarnName: string;
+  minimumQty: number;
+  availableQty: number;
+  blockedQty: number;
+  lastUpdated: string;
 }
 
-interface RequisitionItem {
-  id: string;
-  yarnCode: string;
-  yarnName: string;
-  quantity: number;
-  unit: string;
-  purpose: string;
-}
+const headerCellClass =
+  "whitespace-nowrap border border-slate-600 bg-slate-800 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-white";
+const sortableHeaderButtonClass =
+  "flex w-full items-center justify-between gap-2 text-slate-100 transition-colors hover:text-white";
+const dataCellClass = "whitespace-nowrap border border-slate-500 px-3 py-2 text-xs font-medium text-gray-900";
 
 const RequisitionListPage = () => {
   const { hasSubPermission } = useNavigation();
-  
-  // Static requisitions data
-  const staticRequisitions: Requisition[] = [
+
+  const staticYarnInventory: YarnInventory[] = [
     {
       id: "1",
-      requisitionNumber: "REQ-2024-001",
-      requestedBy: "John Doe",
-      requestDate: "2024-01-15T10:30:00Z",
-      requiredDate: "2024-01-25T10:30:00Z",
-      status: "Approved",
-      items: [
-        {
-          id: "1",
-          yarnCode: "CT40-001",
-          yarnName: "Cotton Count 40",
-          quantity: 200,
-          unit: "kg",
-          purpose: "Production order #1234"
-        }
-      ],
-      notes: "Urgent requirement for production",
-      createdAt: "2024-01-15T10:30:00Z",
-      updatedAt: "2024-01-16T09:15:00Z"
+      yarnName: "Cotton Count 40",
+      minimumQty: 250,
+      availableQty: 180,
+      blockedQty: 60,
+      lastUpdated: "2024-01-16T09:15:00Z"
     },
     {
       id: "2",
-      requisitionNumber: "REQ-2024-002",
-      requestedBy: "Jane Smith",
-      requestDate: "2024-01-16T09:15:00Z",
-      requiredDate: "2024-01-26T09:15:00Z",
-      status: "Pending",
-      items: [
-        {
-          id: "2",
-          yarnCode: "PE150-002",
-          yarnName: "Polyester DTY 150",
-          quantity: 150,
-          unit: "kg",
-          purpose: "New product line"
-        }
-      ],
-      notes: "Standard requisition",
-      createdAt: "2024-01-16T09:15:00Z",
-      updatedAt: "2024-01-16T09:15:00Z"
+      yarnName: "Polyester DTY 150",
+      minimumQty: 200,
+      availableQty: 90,
+      blockedQty: 120,
+      lastUpdated: "2024-01-16T11:45:00Z"
     },
     {
       id: "3",
-      requisitionNumber: "REQ-2024-003",
-      requestedBy: "Mike Johnson",
-      requestDate: "2024-01-17T14:20:00Z",
-      requiredDate: "2024-01-27T14:20:00Z",
-      status: "In Process",
-      items: [
-        {
-          id: "3",
-          yarnCode: "VR30-003",
-          yarnName: "Viscose Rayon 30",
-          quantity: 180,
-          unit: "kg",
-          purpose: "Replacement stock"
-        }
-      ],
-      notes: "Processing purchase order",
-      createdAt: "2024-01-17T14:20:00Z",
-      updatedAt: "2024-01-18T10:15:00Z"
+      yarnName: "Viscose Rayon 30",
+      minimumQty: 150,
+      availableQty: 140,
+      blockedQty: 60,
+      lastUpdated: "2024-01-18T10:15:00Z"
+    },
+    {
+      id: "4",
+      yarnName: "Linen Blend 24",
+      minimumQty: 100,
+      availableQty: 80,
+      blockedQty: 30,
+      lastUpdated: "2024-01-18T12:05:00Z"
+    },
+    {
+      id: "5",
+      yarnName: "Bamboo Fiber 20",
+      minimumQty: 120,
+      availableQty: 190,
+      blockedQty: 210,
+      lastUpdated: "2024-01-18T12:15:00Z"
     }
   ];
 
-  const [requisitions, setRequisitions] = useState<Requisition[]>(staticRequisitions);
+  const [yarns, setYarns] = useState<YarnInventory[]>(staticYarnInventory);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "belowMin" | "overblocked">("all");
+  const [sortConfig, setSortConfig] = useState<{ key: keyof YarnInventory; direction: "asc" | "desc" } | null>(null);
 
-  // Check permission
-  const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Requisition list');
+  const hasPermission = hasSubPermission("/yarn-management/purchase-management", "Requisition list");
+
+  const isBelowMinimum = (yarn: YarnInventory) => yarn.availableQty < yarn.minimumQty;
+  const isOverblocked = (yarn: YarnInventory) => yarn.blockedQty > yarn.availableQty;
+
+  const filteredYarns = useMemo(() => {
+    const lowerSearch = searchTerm.toLowerCase().trim();
+
+    return yarns.filter((yarn) => {
+      const matchesSearch = yarn.yarnName.toLowerCase().includes(lowerSearch);
+      const belowMin = isBelowMinimum(yarn);
+      const overBlocked = isOverblocked(yarn);
+      const isAlert = belowMin || overBlocked;
+
+      if (!isAlert) {
+        return false;
+      }
+
+      if (statusFilter === "belowMin" && !belowMin) {
+        return false;
+      }
+
+      if (statusFilter === "overblocked" && !overBlocked) {
+        return false;
+      }
+
+      return matchesSearch;
+    });
+  }, [yarns, searchTerm, statusFilter]);
+
+  const sortedYarns = useMemo(() => {
+    if (!sortConfig) {
+      return filteredYarns;
+    }
+
+    const sorted = [...filteredYarns].sort((a, b) => {
+      const { key, direction } = sortConfig;
+      const multiplier = direction === "asc" ? 1 : -1;
+      const aValue = a[key];
+      const bValue = b[key];
+
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        return aValue.localeCompare(bValue) * multiplier;
+      }
+
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return (aValue - bValue) * multiplier;
+      }
+
+      return 0;
+    });
+
+    return sorted;
+  }, [filteredYarns, sortConfig]);
 
   if (!hasPermission) {
     return (
       <div className="main-content">
-        <div className="text-center py-12">
-          <div className="text-gray-400 mb-4">
+        <div className="py-12 text-center">
+          <div className="mb-4 text-gray-400">
             <i className="ri-lock-line text-6xl"></i>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
-          <p className="text-gray-500 mb-4">You don't have permission to access Requisition list.</p>
+          <h3 className="mb-2 text-lg font-medium text-gray-900">Access Restricted</h3>
+          <p className="mb-4 text-gray-500">You don't have permission to access this screen.</p>
           <Link href="/yarn-management/purchase-management" className="ti-btn ti-btn-primary">
             <i className="ri-arrow-left-line me-2"></i>
             Back to Purchase Management
@@ -122,185 +144,266 @@ const RequisitionListPage = () => {
     );
   }
 
-  const filteredRequisitions = requisitions.filter(req => {
-    const matchesSearch = 
-      req.requisitionNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.requestedBy.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === "all" || req.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  const handleSort = (key: keyof YarnInventory) => {
+    setSortConfig((prev) => {
+      if (prev?.key === key) {
+        const nextDirection = prev.direction === "asc" ? "desc" : "asc";
+        return { key, direction: nextDirection };
+      }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      case 'Approved': return 'bg-green-100 text-green-800';
-      case 'Rejected': return 'bg-red-100 text-red-800';
-      case 'In Process': return 'bg-blue-100 text-blue-800';
-      case 'Completed': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+      return { key, direction: "asc" };
+    });
+  };
+
+  const renderSortIcon = (key: keyof YarnInventory) => {
+    if (sortConfig?.key !== key) {
+      return <i className="ri-arrow-up-down-line text-xs text-gray-400" />;
     }
+
+    return sortConfig.direction === "asc" ? (
+      <i className="ri-arrow-up-s-line text-xs text-primary" />
+    ) : (
+      <i className="ri-arrow-down-s-line text-xs text-primary" />
+    );
+  };
+
+  const getStatusBadges = (yarn: YarnInventory) => {
+    const badges: { label: string; className: string }[] = [];
+
+    if (isBelowMinimum(yarn)) {
+      badges.push({ label: "Below Minimum", className: "border border-slate-500 bg-transparent text-slate-900" });
+    }
+
+    if (isOverblocked(yarn)) {
+      badges.push({ label: "Overblocked", className: "border border-slate-500 bg-transparent text-slate-900" });
+    }
+
+    if (badges.length === 0) {
+      badges.push({ label: "Healthy", className: "border border-slate-500 bg-transparent text-slate-900" });
+    }
+
+    return badges;
+  };
+
+  const handleMarkPoSent = (id: string) => {
+    const yarn = yarns.find((item) => item.id === id);
+
+    if (!yarn) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to mark ${yarn.yarnName} as PO Sent? This will remove it from the list.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setYarns((prev) => prev.filter((item) => item.id !== id));
+    toast.success(`${yarn.yarnName} marked as PO sent and removed from the list.`);
+  };
+
+  const handleExport = () => {
+    if (sortedYarns.length === 0) {
+      toast.error("No data available to export.");
+      return;
+    }
+
+    const headers = ["Yarn Name", "Minimum Qty", "Available Qty", "Blocked Qty", "Status"];
+    const rows = sortedYarns.map((yarn) => {
+      const badges = getStatusBadges(yarn).map((badge) => badge.label).join(" | ") || "Healthy";
+
+      return [
+        yarn.yarnName,
+        yarn.minimumQty.toString(),
+        yarn.availableQty.toString(),
+        yarn.blockedQty.toString(),
+        badges
+      ];
+    });
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((value) => `"${value.replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `critical-yarn-levels-${new Date().toISOString()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Export started.");
   };
 
   return (
     <div className="main-content">
-      <Seo title="Requisition list" />
-      
+      <Seo title="Critical Yarn Levels" />
+
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
+          {/* <div className="box !bg-transparent border-0 shadow-none">
+            <div className="box-header flex items-center justify-between">
               <div>
-                <h1 className="box-title text-2xl font-semibold">Requisition list</h1>
-                <p className="text-gray-600 mt-1">Manage yarn requisition requests</p>
+                <h1 className="box-title text-lg font-semibold">Critical Yarn Levels</h1>
+                <p className="mt-1 text-sm text-gray-600">
+                  Monitor yarns that have fallen below their minimum levels or are overblocked in production.
+                </p>
               </div>
               <div className="box-tools">
-                <Link 
-                  href="/yarn-management/purchase-management/requisition-list/add"
-                  className="ti-btn ti-btn-primary"
+                <Link
+                  href="/yarn-management/purchase-management"
+                  className="ti-btn ti-btn-light !px-3 !py-1 text-sm"
                 >
-                  <i className="ri-add-line me-1"></i>
-                  New Requisition
+                  <i className="ri-arrow-left-line me-1"></i>
+                  Back to Purchase Management
                 </Link>
               </div>
             </div>
-          </div>
+          </div> */}
 
-          {/* Search and Filters */}
-          <div className="box">
-            <div className="box-body">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search by requisition number or requester..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <select
-                    className="form-select"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="all">All Status</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Rejected">Rejected</option>
-                    <option value="In Process">In Process</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                  <button className="ti-btn ti-btn-light">
-                    <i className="ri-download-line me-1"></i>
-                    Export
-                  </button>
-                </div>
+          <div className="box mt-2">
+            <div className="box-header flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <h3 className="box-title text-base font-semibold">
+                Tracked Yarns ({sortedYarns.length})
+              </h3>
+              <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:justify-end">
+                <input
+                  type="text"
+                  className="form-control md:h-10 md:w-56"
+                  placeholder="Search by yarn name..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <select
+                  className="form-select md:h-10 md:w-40"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                >
+                  <option value="all">All alerts</option>
+                  <option value="belowMin">Below minimum</option>
+                  <option value="overblocked">Overblocked</option>
+                </select>
+                <button
+                  className="ti-btn ti-btn-primary flex items-center gap-2 whitespace-nowrap !px-2 text-xs font-semibold md:h-10"
+                  onClick={handleExport}
+                >
+                  <i className="ri-download-line"></i>
+                  Export
+                </button>
               </div>
             </div>
-          </div>
-
-          {/* Requisitions Table */}
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">Requisitions ({filteredRequisitions.length})</h3>
-            </div>
             <div className="box-body">
-              {filteredRequisitions.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-gray-400 mb-4">
-                    <i className="ri-file-list-3-line text-4xl"></i>
+              {sortedYarns.length === 0 ? (
+                <div className="py-8 text-center">
+                  <div className="mb-4 text-gray-400">
+                    <i className="ri-check-double-line text-4xl"></i>
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Requisitions</h3>
-                  <p className="text-gray-500 mb-4">Start by creating your first requisition.</p>
-                  <Link 
-                    href="/yarn-management/purchase-management/requisition-list/add"
-                    className="ti-btn ti-btn-primary"
-                  >
-                    <i className="ri-add-line me-2"></i>
-                    Create First Requisition
-                  </Link>
+                  <h3 className="mb-2 text-lg font-medium text-gray-900">All yarns are healthy</h3>
+                  <p className="mb-0 text-gray-500">
+                    No yarn is currently below the minimum or overblocked threshold.
+                  </p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Requisition Number
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Requested By
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Request Date
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Required Date
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Items
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredRequisitions.map((req) => (
-                        <tr key={req.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {req.requisitionNumber}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {req.requestedBy}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(req.requestDate).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(req.requiredDate).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(req.status)}`}>
-                              {req.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {req.items.length} item(s)
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => {
-                                  toast.info('View details functionality coming soon');
-                                }}
-                                className="text-blue-600 hover:text-blue-900"
-                                title="View Details"
-                              >
-                                <i className="ri-eye-line"></i>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  toast.info('Edit functionality coming soon');
-                                }}
-                                className="text-green-600 hover:text-green-900"
-                                title="Edit"
-                              >
-                                <i className="ri-edit-line"></i>
-                              </button>
-                            </div>
-                          </td>
+                  <div className="max-h-[60vh] overflow-auto rounded-lg border border-gray-200 shadow-sm">
+                    <table className="min-w-full border-collapse border border-slate-600 bg-white text-sm">
+                      <thead className="sticky top-0 z-10 bg-slate-800 shadow-sm">
+                        <tr>
+                          <th className={headerCellClass}>
+                            <button
+                              type="button"
+                              onClick={() => handleSort("yarnName")}
+                              className={sortableHeaderButtonClass}
+                            >
+                              <span>Yarn Name</span>
+                              {renderSortIcon("yarnName")}
+                            </button>
+                          </th>
+                          <th className={headerCellClass}>
+                            <button
+                              type="button"
+                              onClick={() => handleSort("minimumQty")}
+                              className={sortableHeaderButtonClass}
+                            >
+                              <span>Min Qty</span>
+                              {renderSortIcon("minimumQty")}
+                            </button>
+                          </th>
+                          <th className={headerCellClass}>
+                            <button
+                              type="button"
+                              onClick={() => handleSort("availableQty")}
+                              className={sortableHeaderButtonClass}
+                            >
+                              <span>Available Qty</span>
+                              {renderSortIcon("availableQty")}
+                            </button>
+                          </th>
+                          <th className={headerCellClass}>
+                            <button
+                              type="button"
+                              onClick={() => handleSort("blockedQty")}
+                              className={sortableHeaderButtonClass}
+                            >
+                              <span>Blocked Qty</span>
+                              {renderSortIcon("blockedQty")}
+                            </button>
+                          </th>
+                          <th className={headerCellClass}>
+                            <span className="text-slate-100 hover:text-white">Alert Status</span>
+                          </th>
+                          <th className={headerCellClass}>
+                            <span className="text-slate-100 hover:text-white">Last Updated</span>
+                          </th>
+                          <th className={headerCellClass}>
+                            <span className="text-slate-100 hover:text-white">Action</span>
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {sortedYarns.map((yarn, index) => (
+                          <tr
+                            key={yarn.id}
+                            className={`transition-colors ${index % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-sky-50`}
+                          >
+                            <td className={`${dataCellClass} font-semibold`}>{yarn.yarnName}</td>
+                            <td className={dataCellClass}>{yarn.minimumQty.toLocaleString()}</td>
+                            <td className={dataCellClass}>
+                              {yarn.availableQty.toLocaleString()}
+                            </td>
+                            <td className={dataCellClass}>
+                              {yarn.blockedQty.toLocaleString()}
+                            </td>
+                            <td className={dataCellClass}>
+                              <div className="flex flex-wrap gap-2">
+                                {getStatusBadges(yarn).map((badge) => (
+                                  <span
+                                    key={badge.label}
+                                    className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${badge.className}`}
+                                  >
+                                    {badge.label}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className={dataCellClass}>{new Date(yarn.lastUpdated).toLocaleString()}</td>
+                            <td className={dataCellClass}>
+                              <button
+                                type="button"
+                                onClick={() => handleMarkPoSent(yarn.id)}
+                                className="flex items-center gap-2 whitespace-nowrap rounded border border-slate-500 bg-transparent px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+                              >
+                                <i className="ri-mail-send-line"></i>
+                                Mark PO Sent
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -312,4 +415,3 @@ const RequisitionListPage = () => {
 };
 
 export default RequisitionListPage;
-
