@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { YarnInventory } from "../types";
 
 interface LiveInventoryTableProps {
   inventory: YarnInventory[];
-  onViewFull: () => void;
 }
 
 type SortField = keyof YarnInventory;
@@ -12,8 +12,8 @@ type SortDirection = "asc" | "desc";
 
 const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
   inventory,
-  onViewFull,
 }) => {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField>("yarnName");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -91,7 +91,7 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
       <div className="box-header flex justify-between items-center">
         <h3 className="box-title">Live Inventory ({filteredAndSorted.length})</h3>
         <button
-          onClick={onViewFull}
+          onClick={() => router.push("/yarn-management/dashboard/full-inventory")}
           className="ti-btn ti-btn-primary ti-btn-outline"
         >
           <i className="ri-eye-line me-1"></i>

@@ -147,6 +147,8 @@ const RequisitionListPage = () => {
     );
   }
 
+  const buttonBaseClasses = "flex items-center gap-2 whitespace-nowrap !h-9 !px-3 text-xs font-semibold";
+
   const handleSort = (key: keyof YarnInventory) => {
     setSortConfig((prev) => {
       if (prev?.key === key) {
@@ -296,7 +298,7 @@ const RequisitionListPage = () => {
                   />
                   <button
                     type="button"
-                    className="ti-btn ti-btn-light whitespace-nowrap !px-2 text-xs font-semibold md:h-10"
+                  className={`ti-btn ti-btn-light ${buttonBaseClasses}`}
                     onClick={() => setDateFilter({ from: "", to: "" })}
                     disabled={!dateFilter.from && !dateFilter.to}
                   >
@@ -312,10 +314,7 @@ const RequisitionListPage = () => {
                   <option value="belowMin">Below minimum</option>
                   <option value="overblocked">Overblocked</option>
                 </select>
-                <button
-                  className="ti-btn ti-btn-primary flex items-center gap-2 whitespace-nowrap !px-2 text-xs font-semibold md:h-10"
-                  onClick={handleExport}
-                >
+                <button className={`ti-btn ti-btn-primary ${buttonBaseClasses}`} onClick={handleExport}>
                   <i className="ri-download-line"></i>
                   Export
                 </button>
@@ -419,7 +418,7 @@ const RequisitionListPage = () => {
                               <button
                                 type="button"
                                 onClick={() => handleMarkPoSent(yarn.id)}
-                                className="ti-btn ti-btn-primary ti-btn-outline flex items-center gap-2 whitespace-nowrap !px-4 !py-2 text-sm font-semibold"
+                                className={`ti-btn ti-btn-primary ti-btn-outline ${buttonBaseClasses}`}
                               >
                                 <i className="ri-mail-send-line"></i>
                                 Mark PO Sent

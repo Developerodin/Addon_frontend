@@ -179,6 +179,21 @@ const YarnQCPage = () => {
     }
   };
 
+  const handleQCStatusUpdate = (recordId: string, action: 'Accepted' | 'Rejected') => {
+    setQCRecords(prev =>
+      prev.map(record =>
+        record.id === recordId
+          ? {
+              ...record,
+              status: action === 'Accepted' ? 'Passed' : 'Failed',
+              updatedAt: new Date().toISOString(),
+            }
+          : record
+      )
+    );
+    toast.success(`QC record ${action === 'Accepted' ? 'marked as Passed' : 'marked as Failed'}`);
+  };
+
   return (
     <div className="main-content">
       <Seo title="Yarn QC" />
@@ -261,39 +276,39 @@ const YarnQCPage = () => {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
+                  <table className="min-w-full border-collapse border border-gray-300">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           QC Number
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           PO Number
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Supplier
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           QC Date
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Tested By
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white">
                       {filteredQCRecords.map((qc) => (
                         <tr key={qc.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {qc.qcNumber}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             <Link 
                               href={`/yarn-management/purchase-management/purchase/${qc.purchaseOrderNumber}`}
                               className="text-primary hover:underline"
@@ -301,41 +316,36 @@ const YarnQCPage = () => {
                               {qc.purchaseOrderNumber}
                             </Link>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {qc.supplier}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {new Date(qc.qcDate).toLocaleDateString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {qc.testedBy}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(qc.status)}`}>
                               {qc.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => {
-                                  toast.info('View details functionality coming soon');
-                                }}
-                                className="text-blue-600 hover:text-blue-900"
-                                title="View Details"
-                              >
-                                <i className="ri-eye-line"></i>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  toast.info('Edit functionality coming soon');
-                                }}
-                                className="text-green-600 hover:text-green-900"
-                                title="Edit"
-                              >
-                                <i className="ri-edit-line"></i>
-                              </button>
-                            </div>
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleQCStatusUpdate(qc.id, e.target.value as 'Accepted' | 'Rejected');
+                                  e.target.value = "";
+                                }
+                              }}
+                              className="text-xs border border-gray-300 rounded px-2 py-1 h-7"
+                              title="Update QC Status"
+                            >
+                              <option value="">Update Status</option>
+                              <option value="Accepted">Mark as Accepted</option>
+                              <option value="Rejected">Mark as Rejected</option>
+                            </select>
                           </td>
                         </tr>
                       ))}
