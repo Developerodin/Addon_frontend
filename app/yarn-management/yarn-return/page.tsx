@@ -5,37 +5,40 @@ import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 
-interface YarnIssue {
+interface YarnReturn {
   id: string;
-  issueNumber: string;
-  issueDate: string;
+  returnNumber: string;
+  returnDate: string;
   floor: string;
+  issueNumber?: string;
   productionOrder?: string;
-  status: 'Pending' | 'Issued' | 'Received' | 'Cancelled';
-  items: IssueItem[];
-  issuedBy: string;
+  status: 'Pending' | 'Received' | 'Verified' | 'Rejected' | 'Cancelled';
+  items: ReturnItem[];
+  returnedBy: string;
   receivedBy?: string;
+  verifiedBy?: string;
+  reason: string;
   notes: string;
   createdAt: string;
   updatedAt: string;
 }
 
-interface IssueItem {
+interface ReturnItem {
   id: string;
   yarnCode: string;
   yarnName: string;
   yarnType: string;
-  bomQuantity: number;
-  requestedQuantity: number;
   issuedQuantity: number;
+  returnedQuantity: number;
+  condition: 'Good' | 'Damaged' | 'Waste';
   unitPrice: number;
   totalValue: number;
   remarks?: string;
 }
 
-const YarnIssuePage = () => {
+const YarnReturnPage = () => {
   const { hasSubPermission, isLoading } = useNavigation();
-  const [issues, setIssues] = useState<YarnIssue[]>([]);
+  const [returns, setReturns] = useState<YarnReturn[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [floorFilter, setFloorFilter] = useState<string>("all");
@@ -52,41 +55,53 @@ const YarnIssuePage = () => {
     'Warehouse Floor'
   ];
 
+  const returnReasons = [
+    'Excess Quantity',
+    'Quality Issue',
+    'Wrong Yarn Type',
+    'Production Cancelled',
+    'Damaged Material',
+    'Other'
+  ];
+
   // Sample data for demonstration
   useEffect(() => {
-    const sampleIssues: YarnIssue[] = [
+    const sampleReturns: YarnReturn[] = [
       {
         id: "1",
-        issueNumber: "YI-2024-001",
-        issueDate: "2024-01-15",
+        returnNumber: "YR-2024-001",
+        returnDate: "2024-01-20",
         floor: "Knitting Floor",
+        issueNumber: "YI-2024-001",
         productionOrder: "PO-2024-001",
-        status: "Issued",
+        status: "Received",
         items: [
           {
             id: "1",
             yarnCode: "COT-001",
             yarnName: "Cotton Yarn Premium",
             yarnType: "Cotton",
-            bomQuantity: 100,
-            requestedQuantity: 100,
-            issuedQuantity: 95,
+            issuedQuantity: 100,
+            returnedQuantity: 5,
+            condition: "Good",
             unitPrice: 250,
-            totalValue: 23750,
-            remarks: "High quality cotton"
+            totalValue: 1250,
+            remarks: "Excess quantity returned"
           }
         ],
-        issuedBy: "John Doe",
-        receivedBy: "Jane Smith",
-        notes: "Urgent production requirement",
-        createdAt: "2024-01-15T10:00:00Z",
-        updatedAt: "2024-01-15T10:00:00Z"
+        returnedBy: "Jane Smith",
+        receivedBy: "John Doe",
+        reason: "Excess Quantity",
+        notes: "Returned unused excess yarn",
+        createdAt: "2024-01-20T10:00:00Z",
+        updatedAt: "2024-01-20T10:30:00Z"
       },
       {
         id: "2",
-        issueNumber: "YI-2024-002",
-        issueDate: "2024-01-14",
+        returnNumber: "YR-2024-002",
+        returnDate: "2024-01-19",
         floor: "Linking Floor",
+        issueNumber: "YI-2024-002",
         productionOrder: "PO-2024-002",
         status: "Pending",
         items: [
@@ -95,25 +110,55 @@ const YarnIssuePage = () => {
             yarnCode: "POL-002",
             yarnName: "Polyester Blend",
             yarnType: "Polyester",
-            bomQuantity: 50,
-            requestedQuantity: 50,
-            issuedQuantity: 0,
+            issuedQuantity: 50,
+            returnedQuantity: 10,
+            condition: "Damaged",
             unitPrice: 180,
-            totalValue: 0,
-            remarks: "Durable polyester"
+            totalValue: 1800,
+            remarks: "Damaged during production"
           }
         ],
-        issuedBy: "Mike Johnson",
-        notes: "Standard production order",
-        createdAt: "2024-01-14T14:30:00Z",
-        updatedAt: "2024-01-14T14:30:00Z"
+        returnedBy: "Mike Johnson",
+        reason: "Damaged Material",
+        notes: "Material damaged during production process",
+        createdAt: "2024-01-19T14:30:00Z",
+        updatedAt: "2024-01-19T14:30:00Z"
+      },
+      {
+        id: "3",
+        returnNumber: "YR-2024-003",
+        returnDate: "2024-01-18",
+        floor: "Checking Floor",
+        issueNumber: "YI-2024-003",
+        status: "Verified",
+        items: [
+          {
+            id: "3",
+            yarnCode: "VR-003",
+            yarnName: "Viscose Rayon",
+            yarnType: "Viscose",
+            issuedQuantity: 75,
+            returnedQuantity: 20,
+            condition: "Good",
+            unitPrice: 320,
+            totalValue: 6400,
+            remarks: "Quality issue - wrong shade"
+          }
+        ],
+        returnedBy: "Sarah Wilson",
+        receivedBy: "John Doe",
+        verifiedBy: "Quality Team",
+        reason: "Quality Issue",
+        notes: "Wrong shade received, returned for replacement",
+        createdAt: "2024-01-18T09:15:00Z",
+        updatedAt: "2024-01-18T16:45:00Z"
       }
     ];
-    setIssues(sampleIssues);
+    setReturns(sampleReturns);
   }, []);
 
   // Check permission (after all hooks)
-  const hasPermission = hasSubPermission('/yarn-management', 'Yarn Issue');
+  const hasPermission = hasSubPermission('/yarn-management', 'Yarn Return');
 
   // Show loading state while permissions are being loaded
   if (isLoading) {
@@ -137,7 +182,7 @@ const YarnIssuePage = () => {
             <i className="ri-lock-line text-6xl"></i>
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
-          <p className="text-gray-500 mb-4">You don't have permission to access Yarn Issue.</p>
+          <p className="text-gray-500 mb-4">You don't have permission to access Yarn Return.</p>
           <Link href="/yarn-management" className="ti-btn ti-btn-primary">
             <i className="ri-arrow-left-line me-2"></i>
             Back to Yarn Management
@@ -147,27 +192,28 @@ const YarnIssuePage = () => {
     );
   }
 
-  const handleDeleteIssue = async (issueId: string) => {
-    if (!confirm('Are you sure you want to delete this yarn issue?')) return;
+  const handleDeleteReturn = async (returnId: string) => {
+    if (!confirm('Are you sure you want to delete this yarn return?')) return;
     
     try {
-      // TODO: Implement API call to delete yarn issue
-      setIssues(prev => prev.filter(issue => issue.id !== issueId));
-      toast.success('Yarn issue deleted successfully');
+      // TODO: Implement API call to delete yarn return
+      setReturns(prev => prev.filter(ret => ret.id !== returnId));
+      toast.success('Yarn return deleted successfully');
     } catch (error) {
-      console.error('Failed to delete yarn issue:', error);
-      toast.error('Failed to delete yarn issue');
+      console.error('Failed to delete yarn return:', error);
+      toast.error('Failed to delete yarn return');
     }
   };
 
-  const filteredIssues = issues.filter(issue => {
+  const filteredReturns = returns.filter(ret => {
     const matchesSearch = 
-      issue.issueNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      issue.floor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (issue.productionOrder && issue.productionOrder.toLowerCase().includes(searchTerm.toLowerCase()));
+      ret.returnNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ret.floor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (ret.issueNumber && ret.issueNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (ret.productionOrder && ret.productionOrder.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    const matchesStatus = statusFilter === "all" || issue.status === statusFilter;
-    const matchesFloor = floorFilter === "all" || issue.floor === floorFilter;
+    const matchesStatus = statusFilter === "all" || ret.status === statusFilter;
+    const matchesFloor = floorFilter === "all" || ret.floor === floorFilter;
     
     return matchesSearch && matchesStatus && matchesFloor;
   });
@@ -175,20 +221,30 @@ const YarnIssuePage = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      case 'Issued': return 'bg-blue-100 text-blue-800';
-      case 'Received': return 'bg-green-100 text-green-800';
-      case 'Cancelled': return 'bg-red-100 text-red-800';
+      case 'Received': return 'bg-blue-100 text-blue-800';
+      case 'Verified': return 'bg-green-100 text-green-800';
+      case 'Rejected': return 'bg-red-100 text-red-800';
+      case 'Cancelled': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const totalIssuedValue = issues.reduce((sum, issue) => 
-    sum + issue.items.reduce((itemSum, item) => itemSum + item.totalValue, 0), 0
+  const getConditionColor = (condition: string) => {
+    switch (condition) {
+      case 'Good': return 'bg-green-100 text-green-800';
+      case 'Damaged': return 'bg-red-100 text-red-800';
+      case 'Waste': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const totalReturnedValue = returns.reduce((sum, ret) => 
+    sum + ret.items.reduce((itemSum, item) => itemSum + item.totalValue, 0), 0
   );
 
   return (
     <div className="main-content">
-      <Seo title="Yarn Issue" />
+      <Seo title="Yarn Return" />
       
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
@@ -196,17 +252,16 @@ const YarnIssuePage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <div>
-                <h1 className="box-title text-2xl font-semibold">Yarn Issue</h1>
-                <p className="text-gray-600 mt-1">Issue yarn to production floors</p>
+                <h1 className="box-title text-2xl font-semibold">Yarn Return</h1>
+                <p className="text-gray-600 mt-1">Manage yarn returns from production floors</p>
               </div>
               <div className="box-tools">
-              
                 <Link 
-                  href="/yarn-management/yarn-issue/add"
+                  href="/yarn-management/yarn-return/add"
                   className="ti-btn ti-btn-primary"
                 >
                   <i className="ri-add-line me-1"></i>
-                  New Issue
+                  New Return
                 </Link>
               </div>
             </div>
@@ -216,30 +271,30 @@ const YarnIssuePage = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div className="box">
               <div className="box-body text-center">
-                <div className="text-2xl font-bold text-blue-600">{issues.length}</div>
-                <div className="text-sm text-gray-600">Total Issues</div>
+                <div className="text-2xl font-bold text-blue-600">{returns.length}</div>
+                <div className="text-sm text-gray-600">Total Returns</div>
               </div>
             </div>
             <div className="box">
               <div className="box-body text-center">
                 <div className="text-2xl font-bold text-yellow-600">
-                  {issues.filter(i => i.status === 'Pending').length}
+                  {returns.filter(r => r.status === 'Pending').length}
                 </div>
-                <div className="text-sm text-gray-600">Pending Issues</div>
+                <div className="text-sm text-gray-600">Pending Returns</div>
               </div>
             </div>
             <div className="box">
               <div className="box-body text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {issues.filter(i => i.status === 'Issued').length}
+                  {returns.filter(r => r.status === 'Verified').length}
                 </div>
-                <div className="text-sm text-gray-600">Issued</div>
+                <div className="text-sm text-gray-600">Verified</div>
               </div>
             </div>
             <div className="box">
               <div className="box-body text-center">
                 <div className="text-2xl font-bold text-purple-600">
-                  ₹{totalIssuedValue.toLocaleString()}
+                  ₹{totalReturnedValue.toLocaleString()}
                 </div>
                 <div className="text-sm text-gray-600">Total Value</div>
               </div>
@@ -250,11 +305,11 @@ const YarnIssuePage = () => {
           <div className="box">
             <div className="box-body">
               <div className="flex flex-col md:flex-row gap-4">
-                <div >
+                <div className="flex-1">
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="Search by issue number, floor, or production order..."
+                    placeholder="Search by return number, floor, issue number, or production order..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -267,8 +322,9 @@ const YarnIssuePage = () => {
                   >
                     <option value="all">All Status</option>
                     <option value="Pending">Pending</option>
-                    <option value="Issued">Issued</option>
                     <option value="Received">Received</option>
+                    <option value="Verified">Verified</option>
+                    <option value="Rejected">Rejected</option>
                     <option value="Cancelled">Cancelled</option>
                   </select>
                   <select
@@ -281,7 +337,7 @@ const YarnIssuePage = () => {
                       <option key={floor} value={floor}>{floor}</option>
                     ))}
                   </select>
-                  <button className="ti-btn ti-btn-light ">
+                  <button className="ti-btn ti-btn-light">
                     <i className="ri-download-line me-1"></i>
                     Export
                   </button>
@@ -290,25 +346,25 @@ const YarnIssuePage = () => {
             </div>
           </div>
 
-          {/* Issues Table */}
+          {/* Returns Table */}
           <div className="box">
             <div className="box-header">
-              <h3 className="box-title">Yarn Issues ({filteredIssues.length})</h3>
+              <h3 className="box-title">Yarn Returns ({filteredReturns.length})</h3>
             </div>
             <div className="box-body">
-              {filteredIssues.length === 0 ? (
+              {filteredReturns.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-gray-400 mb-4">
-                    <i className="ri-send-plane-line text-4xl"></i>
+                    <i className="ri-arrow-go-back-line text-4xl"></i>
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Yarn Issues</h3>
-                  <p className="text-gray-500 mb-4">Start by creating your first yarn issue.</p>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Yarn Returns</h3>
+                  <p className="text-gray-500 mb-4">Start by creating your first yarn return.</p>
                   <Link 
-                    href="/yarn-management/yarn-issue/add"
+                    href="/yarn-management/yarn-return/add"
                     className="ti-btn ti-btn-primary"
                   >
                     <i className="ri-add-line me-2"></i>
-                    Create First Issue
+                    Create First Return
                   </Link>
                 </div>
               ) : (
@@ -317,25 +373,25 @@ const YarnIssuePage = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Issue Number
+                          Return Number
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Floor
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Production Order
+                          Issue Number
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Issue Date
+                          Return Date
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Items
+                          Reason
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          BOM Qty
+                          Items
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Value
@@ -346,45 +402,52 @@ const YarnIssuePage = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredIssues.map((issue) => (
-                        <tr key={issue.id} className="hover:bg-gray-50">
+                      {filteredReturns.map((ret) => (
+                        <tr key={ret.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {issue.issueNumber}
+                            {ret.returnNumber}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {issue.floor}
+                            {ret.floor}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {issue.productionOrder || '-'}
+                            {ret.issueNumber ? (
+                              <Link 
+                                href={`/yarn-management/yarn-issue/${ret.issueNumber}`}
+                                className="text-primary hover:underline"
+                              >
+                                {ret.issueNumber}
+                              </Link>
+                            ) : '-'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(issue.issueDate).toLocaleDateString()}
+                            {new Date(ret.returnDate).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(issue.status)}`}>
-                              {issue.status}
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(ret.status)}`}>
+                              {ret.status}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {issue.items.length}
+                            {ret.reason}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {issue.items.reduce((sum, item) => sum + item.bomQuantity, 0)}
+                            {ret.items.length}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            ₹{issue.items.reduce((sum, item) => sum + item.totalValue, 0).toLocaleString()}
+                            ₹{ret.items.reduce((sum, item) => sum + item.totalValue, 0).toLocaleString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex space-x-2">
                               <Link
-                                href={`/yarn-management/yarn-issue/edit/${issue.id}`}
+                                href={`/yarn-management/yarn-return/edit/${ret.id}`}
                                 className="text-blue-600 hover:text-blue-900"
                                 title="Edit"
                               >
                                 <i className="ri-edit-line"></i>
                               </Link>
                               <button
-                                onClick={() => handleDeleteIssue(issue.id)}
+                                onClick={() => handleDeleteReturn(ret.id)}
                                 className="text-red-600 hover:text-red-900"
                                 title="Delete"
                               >
@@ -402,9 +465,9 @@ const YarnIssuePage = () => {
           </div>
         </div>
       </div>
-
     </div>
   );
 };
 
-export default YarnIssuePage;
+export default YarnReturnPage;
+

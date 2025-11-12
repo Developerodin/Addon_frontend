@@ -24,6 +24,7 @@ export interface YarnCatalog {
   gst?: number;
   remark?: string;
   hsnCode?: string;
+  minQuantity?: number;
   status: 'active' | 'inactive' | 'suspended';
   createdAt?: string;
   updatedAt?: string;
@@ -62,6 +63,7 @@ export interface CreateYarnCatalogRequest {
   gst?: number;
   remark?: string;
   hsnCode?: string;
+  minQuantity?: number;
   status?: 'active' | 'inactive' | 'suspended';
 }
 
@@ -78,6 +80,7 @@ export interface UpdateYarnCatalogRequest {
   gst?: number;
   remark?: string;
   hsnCode?: string;
+  minQuantity?: number;
   status?: 'active' | 'inactive' | 'suspended';
 }
 
@@ -95,6 +98,7 @@ export interface BulkImportYarnCatalogRequest {
     gst?: number;
     remark?: string;
     hsnCode?: string;
+    minQuantity?: number;
     status?: 'active' | 'inactive' | 'suspended';
   }>;
   batchSize?: number;

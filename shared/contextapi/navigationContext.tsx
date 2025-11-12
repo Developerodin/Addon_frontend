@@ -36,17 +36,26 @@ interface NavigationPermissions {
     'Machine Floor': boolean;
   };
   'Yarn Management': {
+    'Dashboard': boolean;
     'Cataloguing': boolean;
     'Purchase Order': boolean;
     'Purchase Order Received': boolean;
     'Inventory': boolean;
     'Yarn Issue': boolean;
+    'Yarn Return': boolean;
     'Yarn Master': {
       'Brand': boolean;
       'Yarn Type': boolean;
       'Count/Size': boolean;
       'Color': boolean;
       'Blend': boolean;
+    };
+    'Purchase Management': {
+      'Requisition list': boolean;
+      'Purchase Order': boolean;
+      'Purchase Order Recevied': boolean;
+      'Yarn QC': boolean;
+      'Yarn Storage': boolean;
     };
   };
   'Warehouse Management': {
@@ -100,17 +109,26 @@ const defaultPermissions: NavigationPermissions = {
     'Machine Floor': false,
   },
   'Yarn Management': {
+    'Dashboard': false,
     'Cataloguing': false,
     'Purchase Order': false,
     'Purchase Order Received': false,
     'Inventory': false,
     'Yarn Issue': false,
+    'Yarn Return': false,
     'Yarn Master': {
       'Brand': false,
       'Yarn Type': false,
       'Count/Size': false,
       'Color': false,
       'Blend': false,
+    },
+    'Purchase Management': {
+      'Requisition list': false,
+      'Purchase Order': false,
+      'Purchase Order Recevied': false,
+      'Yarn QC': false,
+      'Yarn Storage': false,
     },
   },
   'Warehouse Management': {
@@ -192,6 +210,10 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
           'Yarn Master': {
             ...defaultPermissions['Yarn Management']['Yarn Master'],
             ...(user.navigation['Yarn Management']?.['Yarn Master'] || {})
+          },
+          'Purchase Management': {
+            ...defaultPermissions['Yarn Management']['Purchase Management'],
+            ...(user.navigation['Yarn Management']?.['Purchase Management'] || {})
           }
         },
         'Warehouse Management': {
@@ -274,6 +296,18 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       return false;
     }
 
+    // Special handling for purchase-management path
+    if (path === '/yarn-management/purchase-management') {
+      const yarnManagement = permissions['Yarn Management'];
+      if (yarnManagement && typeof yarnManagement === 'object') {
+        const purchaseManagement = (yarnManagement as any)['Purchase Management'];
+        if (purchaseManagement && typeof purchaseManagement === 'object') {
+          return Object.values(purchaseManagement).some((permission: any) => permission === true);
+        }
+      }
+      return false;
+    }
+
     // Special handling for sub-menus - check if user has any permission for the sub-menu
     if (path === '/catalog' || path === '/sales' || path === '/production' || path === '/yarn-management' || path === '/warehouse-management') {
       let subMenuKey: keyof NavigationPermissions;
@@ -301,7 +335,13 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
             ? Object.values(yarnMaster).some((permission: any) => permission === true)
             : false;
           
-          return hasDirectPermission || hasYarnMasterPermission;
+          // Check Purchase Management permissions
+          const purchaseManagement = yarnMgmt['Purchase Management'];
+          const hasPurchaseManagementPermission = purchaseManagement && typeof purchaseManagement === 'object' 
+            ? Object.values(purchaseManagement).some((permission: any) => permission === true)
+            : false;
+          
+          return hasDirectPermission || hasYarnMasterPermission || hasPurchaseManagementPermission;
         }
         return Object.values(subMenuPermissions).some(permission => permission === true);
       }
@@ -326,6 +366,33 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       return false;
     }
 
+    // Handle Purchase Management sub-items - nested permissions
+    if (parent === '/yarn-management/purchase-management') {
+      const yarnManagement = permissions['Yarn Management'];
+      if (yarnManagement && typeof yarnManagement === 'object') {
+        const purchaseManagement = (yarnManagement as any)['Purchase Management'];
+        if (purchaseManagement && typeof purchaseManagement === 'object') {
+          const hasPermission = purchaseManagement[child] === true;
+          // Debug logging
+          if (!hasPermission) {
+            console.log('Purchase Management permission check:', {
+              parent,
+              child,
+              purchaseManagement,
+              hasPermission: purchaseManagement[child]
+            });
+          }
+          return hasPermission;
+        }
+      }
+      console.log('Purchase Management structure not found:', {
+        parent,
+        child,
+        yarnManagement: permissions['Yarn Management']
+      });
+      return false;
+    }
+
     // Map parent paths to permission objects
     const parentMap: { [key: string]: keyof NavigationPermissions } = {
       '/catalog': 'Catalog',
@@ -339,12 +406,21 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     if (parentKey && permissions[parentKey] && typeof permissions[parentKey] === 'object') {
       const subPermissions = permissions[parentKey] as any;
       
-      // Handle nested permissions (e.g., Yarn Master)
+      // Handle nested permissions (e.g., Yarn Master, Purchase Management)
       if (parent === '/yarn-management' && child === 'Yarn Master') {
         // Check if user has any Yarn Master permission
         const yarnMaster = subPermissions['Yarn Master'];
         if (yarnMaster && typeof yarnMaster === 'object') {
           return Object.values(yarnMaster).some((permission: any) => permission === true);
+        }
+        return false;
+      }
+      
+      if (parent === '/yarn-management' && child === 'Purchase Management') {
+        // Check if user has any Purchase Management permission
+        const purchaseManagement = subPermissions['Purchase Management'];
+        if (purchaseManagement && typeof purchaseManagement === 'object') {
+          return Object.values(purchaseManagement).some((permission: any) => permission === true);
         }
         return false;
       }

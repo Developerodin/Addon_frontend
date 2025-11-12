@@ -5,151 +5,247 @@ import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 
-interface ReceivedOrder {
+interface PurchaseOrder {
   id: string;
   orderNumber: string;
-  purchaseOrderNumber: string;
   supplier: string;
-  receivedDate: string;
-  receivedBy: string;
-  status: 'Partial' | 'Complete' | 'Pending Inspection';
+  orderDate: string;
+  expectedDelivery: string;
+  status: 'Pending' | 'Confirmed' | 'In Transit' | 'Delivered' | 'Cancelled';
   totalAmount: number;
-  items: ReceivedItem[];
+  items: PurchaseItem[];
   notes: string;
   createdAt: string;
   updatedAt: string;
 }
 
-interface ReceivedItem {
+interface PurchaseItem {
   id: string;
   yarnCode: string;
   yarnName: string;
-  orderedQuantity: number;
-  receivedQuantity: number;
+  quantity: number;
   unitPrice: number;
   totalPrice: number;
-  qualityStatus: 'Approved' | 'Rejected' | 'Pending';
+  receivedQuantity?: number;
 }
 
-const PurchaseOrderReceivedPage = () => {
-  const { hasSubPermission } = useNavigation();
+const PurchasePage = () => {
+  const { hasSubPermission, isLoading } = useNavigation();
   
-  // Static received orders data
-  const staticReceivedOrders: ReceivedOrder[] = [
+  // Static purchase orders data
+  const staticOrders: PurchaseOrder[] = [
     {
       id: "1",
-      orderNumber: "RCP-2024-001",
-      purchaseOrderNumber: "PO-2024-001",
+      orderNumber: "PO-2024-001",
       supplier: "Reliance Industries",
-      receivedDate: "2024-01-25T10:30:00Z",
-      receivedBy: "John Doe",
-      status: "Complete",
+      orderDate: "2024-01-15T10:30:00Z",
+      expectedDelivery: "2024-01-25T10:30:00Z",
+      status: "Delivered",
       totalAmount: 125000,
       items: [
         {
           id: "1",
           yarnCode: "CT40-001",
           yarnName: "Cotton Count 40",
-          orderedQuantity: 200,
-          receivedQuantity: 200,
+          quantity: 200,
           unitPrice: 450,
           totalPrice: 90000,
-          qualityStatus: "Approved"
+          receivedQuantity: 200
         },
         {
           id: "2",
           yarnCode: "CT60-004",
           yarnName: "Cotton Count 60",
-          orderedQuantity: 100,
-          receivedQuantity: 100,
+          quantity: 100,
           unitPrice: 520,
           totalPrice: 52000,
-          qualityStatus: "Approved"
+          receivedQuantity: 100
         }
       ],
-      notes: "All items received in good condition",
-      createdAt: "2024-01-25T10:30:00Z",
+      notes: "Priority order for production",
+      createdAt: "2024-01-15T10:30:00Z",
       updatedAt: "2024-01-25T10:30:00Z"
     },
     {
       id: "2",
-      orderNumber: "RCP-2024-002",
-      purchaseOrderNumber: "PO-2024-002",
+      orderNumber: "PO-2024-002",
       supplier: "Aditya Birla Group",
-      receivedDate: "2024-01-20T14:30:00Z",
-      receivedBy: "Jane Smith",
-      status: "Partial",
-      totalAmount: 48000,
+      orderDate: "2024-01-16T09:15:00Z",
+      expectedDelivery: "2024-01-26T09:15:00Z",
+      status: "In Transit",
+      totalAmount: 85000,
       items: [
         {
           id: "3",
           yarnCode: "PE150-002",
           yarnName: "Polyester DTY 150",
-          orderedQuantity: 150,
-          receivedQuantity: 120,
+          quantity: 150,
           unitPrice: 320,
-          totalPrice: 38400,
-          qualityStatus: "Approved"
+          totalPrice: 48000,
+          receivedQuantity: 0
         },
         {
           id: "4",
           yarnCode: "PE100-007",
           yarnName: "Polyester POY 100",
-          orderedQuantity: 200,
-          receivedQuantity: 0,
+          quantity: 200,
           unitPrice: 290,
-          totalPrice: 0,
-          qualityStatus: "Pending"
+          totalPrice: 58000,
+          receivedQuantity: 0
         }
       ],
-      notes: "Partial delivery, remaining items expected next week",
-      createdAt: "2024-01-20T14:30:00Z",
+      notes: "Standard delivery",
+      createdAt: "2024-01-16T09:15:00Z",
       updatedAt: "2024-01-20T14:30:00Z"
     },
     {
       id: "3",
-      orderNumber: "RCP-2024-003",
-      purchaseOrderNumber: "PO-2024-003",
+      orderNumber: "PO-2024-003",
       supplier: "Grasim Industries",
-      receivedDate: "2024-01-22T09:15:00Z",
-      receivedBy: "Mike Johnson",
-      status: "Pending Inspection",
+      orderDate: "2024-01-17T14:20:00Z",
+      expectedDelivery: "2024-01-27T14:20:00Z",
+      status: "Confirmed",
       totalAmount: 95000,
       items: [
         {
           id: "5",
           yarnCode: "VR30-003",
           yarnName: "Viscose Rayon 30",
-          orderedQuantity: 180,
-          receivedQuantity: 180,
+          quantity: 180,
           unitPrice: 380,
           totalPrice: 68400,
-          qualityStatus: "Pending"
+          receivedQuantity: 0
         },
         {
           id: "6",
           yarnCode: "VR40-008",
           yarnName: "Viscose Rayon 40",
-          orderedQuantity: 100,
-          receivedQuantity: 100,
+          quantity: 100,
           unitPrice: 400,
           totalPrice: 40000,
-          qualityStatus: "Pending"
+          receivedQuantity: 0
         }
       ],
-      notes: "Awaiting quality inspection",
-      createdAt: "2024-01-22T09:15:00Z",
-      updatedAt: "2024-01-22T09:15:00Z"
+      notes: "Quality check required",
+      createdAt: "2024-01-17T14:20:00Z",
+      updatedAt: "2024-01-18T10:15:00Z"
+    },
+    {
+      id: "4",
+      orderNumber: "PO-2024-004",
+      supplier: "SRF Limited",
+      orderDate: "2024-01-19T16:30:00Z",
+      expectedDelivery: "2024-01-29T16:30:00Z",
+      status: "Pending",
+      totalAmount: 42000,
+      items: [
+        {
+          id: "7",
+          yarnCode: "NY70-005",
+          yarnName: "Nylon FDY 70",
+          quantity: 150,
+          unitPrice: 280,
+          totalPrice: 42000,
+          receivedQuantity: 0
+        }
+      ],
+      notes: "Awaiting approval",
+      createdAt: "2024-01-19T16:30:00Z",
+      updatedAt: "2024-01-19T16:30:00Z"
+    },
+    {
+      id: "5",
+      orderNumber: "PO-2024-005",
+      supplier: "Welspun India",
+      orderDate: "2024-01-20T08:15:00Z",
+      expectedDelivery: "2024-01-30T08:15:00Z",
+      status: "Cancelled",
+      totalAmount: 76000,
+      items: [
+        {
+          id: "8",
+          yarnCode: "CT20-006",
+          yarnName: "Cotton Count 20",
+          quantity: 200,
+          unitPrice: 380,
+          totalPrice: 76000,
+          receivedQuantity: 0
+        }
+      ],
+      notes: "Cancelled due to quality issues",
+      createdAt: "2024-01-20T08:15:00Z",
+      updatedAt: "2024-01-22T11:45:00Z"
+    },
+    {
+      id: "6",
+      orderNumber: "PO-2024-006",
+      supplier: "Reliance Industries",
+      orderDate: "2024-01-23T15:40:00Z",
+      expectedDelivery: "2024-02-02T15:40:00Z",
+      status: "Confirmed",
+      totalAmount: 136000,
+      items: [
+        {
+          id: "9",
+          yarnCode: "CT80-009",
+          yarnName: "Cotton Count 80",
+          quantity: 200,
+          unitPrice: 680,
+          totalPrice: 136000,
+          receivedQuantity: 0
+        }
+      ],
+      notes: "Premium quality required",
+      createdAt: "2024-01-23T15:40:00Z",
+      updatedAt: "2024-01-24T09:20:00Z"
+    },
+    {
+      id: "7",
+      orderNumber: "PO-2024-007",
+      supplier: "Aditya Birla Group",
+      orderDate: "2024-01-24T12:55:00Z",
+      expectedDelivery: "2024-02-03T12:55:00Z",
+      status: "Pending",
+      totalAmount: 70000,
+      items: [
+        {
+          id: "10",
+          yarnCode: "PE200-010",
+          yarnName: "Polyester DTY 200",
+          quantity: 200,
+          unitPrice: 350,
+          totalPrice: 70000,
+          receivedQuantity: 0
+        }
+      ],
+      notes: "Bulk order discount applied",
+      createdAt: "2024-01-24T12:55:00Z",
+      updatedAt: "2024-01-24T12:55:00Z"
     }
   ];
 
-  const [receivedOrders, setReceivedOrders] = useState<ReceivedOrder[]>(staticReceivedOrders);
+  const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
+  const [orders, setOrders] = useState<PurchaseOrder[]>(staticOrders);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Check permission
-  const hasPermission = hasSubPermission('/yarn-management', 'Purchase Order Received');
+  const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
+
+  // Show loading state while permissions are being loaded
+  if (isLoading) {
+    return (
+      <div className="main-content">
+        <div className="flex justify-center items-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading permissions...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!hasPermission) {
     return (
@@ -159,7 +255,7 @@ const PurchaseOrderReceivedPage = () => {
             <i className="ri-lock-line text-6xl"></i>
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
-          <p className="text-gray-500 mb-4">You don't have permission to access Purchase Order Received.</p>
+          <p className="text-gray-500 mb-4">You don't have permission to access Purchase Order.</p>
           <Link href="/yarn-management" className="ti-btn ti-btn-primary">
             <i className="ri-arrow-left-line me-2"></i>
             Back to Yarn Management
@@ -169,39 +265,40 @@ const PurchaseOrderReceivedPage = () => {
     );
   }
 
-  const handleUpdateReceivedOrder = async (orderData: ReceivedOrder) => {
+
+  const handleUpdateOrder = async (orderData: PurchaseOrder) => {
     setIsSubmitting(true);
     try {
-      // TODO: Implement API call to update received order
-      setReceivedOrders(prev => prev.map(order => 
+      // TODO: Implement API call to update purchase order
+      setOrders(prev => prev.map(order => 
         order.id === orderData.id ? { ...orderData, updatedAt: new Date().toISOString() } : order
       ));
-      toast.success('Received order updated successfully');
+      setEditingOrder(null);
+      toast.success('Purchase order updated successfully');
     } catch (error) {
-      console.error('Failed to update received order:', error);
-      toast.error('Failed to update received order');
+      console.error('Failed to update purchase order:', error);
+      toast.error('Failed to update purchase order');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDeleteReceivedOrder = async (orderId: string) => {
-    if (!confirm('Are you sure you want to delete this received order?')) return;
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!confirm('Are you sure you want to delete this purchase order?')) return;
     
     try {
-      // TODO: Implement API call to delete received order
-      setReceivedOrders(prev => prev.filter(order => order.id !== orderId));
-      toast.success('Received order deleted successfully');
+      // TODO: Implement API call to delete purchase order
+      setOrders(prev => prev.filter(order => order.id !== orderId));
+      toast.success('Purchase order deleted successfully');
     } catch (error) {
-      console.error('Failed to delete received order:', error);
-      toast.error('Failed to delete received order');
+      console.error('Failed to delete purchase order:', error);
+      toast.error('Failed to delete purchase order');
     }
   };
 
-  const filteredOrders = receivedOrders.filter(order => {
+  const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.purchaseOrderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.supplier.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === "all" || order.status === statusFilter;
@@ -211,25 +308,18 @@ const PurchaseOrderReceivedPage = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Partial': return 'bg-yellow-100 text-yellow-800';
-      case 'Complete': return 'bg-green-100 text-green-800';
-      case 'Pending Inspection': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getQualityStatusColor = (status: string) => {
-    switch (status) {
-      case 'Approved': return 'bg-green-100 text-green-800';
-      case 'Rejected': return 'bg-red-100 text-red-800';
       case 'Pending': return 'bg-yellow-100 text-yellow-800';
+      case 'Confirmed': return 'bg-blue-100 text-blue-800';
+      case 'In Transit': return 'bg-purple-100 text-purple-800';
+      case 'Delivered': return 'bg-green-100 text-green-800';
+      case 'Cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   return (
     <div className="main-content">
-      <Seo title="Purchase Order Received" />
+      <Seo title="Purchase Order" />
       
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
@@ -237,16 +327,17 @@ const PurchaseOrderReceivedPage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <div>
-                <h1 className="box-title text-2xl font-semibold">Purchase Order Received</h1>
-                <p className="text-gray-600 mt-1">Track and manage received purchase orders</p>
+                <h1 className="box-title text-2xl font-semibold">Purchase Order</h1>
+                <p className="text-gray-600 mt-1">Manage yarn procurement and purchase orders</p>
               </div>
               <div className="box-tools">
+               
                 <Link 
-                  href="/yarn-management/purchase-order-received/add"
-                  className="ti-btn ti-btn-primary"
+                  href="/yarn-management/purchase-management/purchase/add"
+                  className="ti-btn ti-btn-primary  "
                 >
                   <i className="ri-add-line me-1"></i>
-                  Record Receipt
+                  New Order
                 </Link>
               </div>
             </div>
@@ -256,11 +347,11 @@ const PurchaseOrderReceivedPage = () => {
           <div className="box">
             <div className="box-body">
               <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
+                <div >
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="Search by order number, PO number or supplier..."
+                    placeholder="Search by order number or supplier..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -272,11 +363,13 @@ const PurchaseOrderReceivedPage = () => {
                     onChange={(e) => setStatusFilter(e.target.value)}
                   >
                     <option value="all">All Status</option>
-                    <option value="Partial">Partial</option>
-                    <option value="Complete">Complete</option>
-                    <option value="Pending Inspection">Pending Inspection</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="In Transit">In Transit</option>
+                    <option value="Delivered">Delivered</option>
+                    <option value="Cancelled">Cancelled</option>
                   </select>
-                  <button className="ti-btn ti-btn-light">
+                  <button className="ti-btn ti-btn-light  ">
                     <i className="ri-download-line me-1"></i>
                     Export
                   </button>
@@ -285,25 +378,25 @@ const PurchaseOrderReceivedPage = () => {
             </div>
           </div>
 
-          {/* Received Orders Table */}
+          {/* Purchase Orders Table */}
           <div className="box">
             <div className="box-header">
-              <h3 className="box-title">Received Orders ({filteredOrders.length})</h3>
+              <h3 className="box-title">Purchase Orders ({filteredOrders.length})</h3>
             </div>
             <div className="box-body">
               {filteredOrders.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-gray-400 mb-4">
-                    <i className="ri-inbox-line text-4xl"></i>
+                    <i className="ri-shopping-cart-line text-4xl"></i>
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Received Orders</h3>
-                  <p className="text-gray-500 mb-4">Start by recording your first order receipt.</p>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Purchase Orders</h3>
+                  <p className="text-gray-500 mb-4">Start by creating your first purchase order.</p>
                   <Link 
-                    href="/yarn-management/purchase-order-received/add"
+                    href="/yarn-management/purchase-management/purchase/add"
                     className="ti-btn ti-btn-primary"
                   >
                     <i className="ri-add-line me-2"></i>
-                    Record First Receipt
+                    Create First Order
                   </Link>
                 </div>
               ) : (
@@ -312,19 +405,16 @@ const PurchaseOrderReceivedPage = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Receipt Number
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          PO Number
+                          Order Number
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Supplier
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Received Date
+                          Order Date
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Received By
+                          Expected Delivery
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
@@ -344,21 +434,13 @@ const PurchaseOrderReceivedPage = () => {
                             {order.orderNumber}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <Link 
-                              href={`/yarn-management/purchase/${order.purchaseOrderNumber}`}
-                              className="text-primary hover:underline"
-                            >
-                              {order.purchaseOrderNumber}
-                            </Link>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {order.supplier}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(order.receivedDate).toLocaleDateString()}
+                            {new Date(order.orderDate).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {order.receivedBy}
+                            {new Date(order.expectedDelivery).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
@@ -371,17 +453,14 @@ const PurchaseOrderReceivedPage = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex space-x-2">
                               <button
-                                onClick={() => {
-                                  // TODO: Implement view details modal
-                                  toast.info('View details functionality coming soon');
-                                }}
+                                onClick={() => setEditingOrder(order)}
                                 className="text-blue-600 hover:text-blue-900"
-                                title="View Details"
+                                title="Edit"
                               >
-                                <i className="ri-eye-line"></i>
+                                <i className="ri-edit-line"></i>
                               </button>
                               <button
-                                onClick={() => handleDeleteReceivedOrder(order.id)}
+                                onClick={() => handleDeleteOrder(order.id)}
                                 className="text-red-600 hover:text-red-900"
                                 title="Delete"
                               >
@@ -399,9 +478,9 @@ const PurchaseOrderReceivedPage = () => {
           </div>
         </div>
       </div>
+
     </div>
   );
 };
 
-export default PurchaseOrderReceivedPage;
-
+export default PurchasePage;

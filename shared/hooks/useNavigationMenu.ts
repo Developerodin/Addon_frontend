@@ -25,6 +25,13 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
       };
       return titleMap[displayTitle] || displayTitle;
     }
+    // For purchase management items, map display titles to permission keys
+    if (path.startsWith('/yarn-management/purchase-management/')) {
+      const titleMap: { [key: string]: string } = {
+        'Purchase Order Recevied': 'Purchase Order Recevied', // Keep typo as per user's permission structure
+      };
+      return titleMap[displayTitle] || displayTitle;
+    }
     return displayTitle;
   };
   
@@ -66,12 +73,19 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
       if (item.type === 'sub' && item.children) {
         // Filter children based on permissions
         const filteredChildren = item.children.filter(child => {
-          // Handle nested submenus (e.g., Yarn Master within Yarn Management)
+          // Handle nested submenus (e.g., Yarn Master, Purchase Management within Yarn Management)
           if (child.type === 'sub' && child.children) {
             // First check if user has permission to see the Yarn Master submenu itself
             if (child.path === '/yarn-management/yarn-master') {
               const hasYarnMasterPermission = hasSubPermission('/yarn-management', 'Yarn Master');
               if (!hasYarnMasterPermission) {
+                return false;
+              }
+            }
+            // First check if user has permission to see the Purchase Management submenu itself
+            if (child.path === '/yarn-management/purchase-management') {
+              const hasPurchaseManagementPermission = hasSubPermission('/yarn-management', 'Purchase Management');
+              if (!hasPurchaseManagementPermission) {
                 return false;
               }
             }
@@ -82,6 +96,17 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                   return hasSubPermission('/yarn-management/yarn-master', permissionKey);
+                }
+                if (nestedChild.path.startsWith('/yarn-management/purchase-management/')) {
+                  const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
+                  return hasSubPermission('/yarn-management/purchase-management', permissionKey);
+                }
+                // Handle Purchase Order and Purchase Order Received which are direct links
+                if (nestedChild.path === '/yarn-management/purchase') {
+                  return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
+                }
+                if (nestedChild.path === '/yarn-management/purchase-order-received') {
+                  return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
                 }
               }
               return false;
@@ -107,15 +132,35 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             }
             if (child.path.startsWith('/yarn-management/')) {
               const childName = child.title;
+              // Handle Dashboard permission
+              if (child.path === '/yarn-management/dashboard') {
+                return hasSubPermission('/yarn-management', 'Dashboard');
+              }
               // Handle nested Yarn Master permissions
               // If path is exactly /yarn-management/yarn-master, check Yarn Master permission
               if (child.path === '/yarn-management/yarn-master') {
                 return hasSubPermission('/yarn-management', 'Yarn Master');
               }
+              // If path is exactly /yarn-management/purchase-management, check Purchase Management permission
+              if (child.path === '/yarn-management/purchase-management') {
+                return hasSubPermission('/yarn-management', 'Purchase Management');
+              }
               // If path starts with /yarn-management/yarn-master/, check nested permissions
               if (child.path.startsWith('/yarn-management/yarn-master/')) {
                 const permissionKey = getPermissionKey(childName, child.path);
                 return hasSubPermission('/yarn-management/yarn-master', permissionKey);
+              }
+              // If path starts with /yarn-management/purchase-management/, check nested permissions
+              if (child.path.startsWith('/yarn-management/purchase-management/')) {
+                const permissionKey = getPermissionKey(childName, child.path);
+                return hasSubPermission('/yarn-management/purchase-management', permissionKey);
+              }
+              // Handle Purchase Order and Purchase Order Received which are direct links
+              if (child.path === '/yarn-management/purchase') {
+                return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
+              }
+              if (child.path === '/yarn-management/purchase-order-received') {
+                return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
               }
               return hasSubPermission('/yarn-management', childName);
             }
@@ -131,7 +176,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
         if (filteredChildren.length > 0) {
           // Process filtered children to handle nested submenus
           const processedChildren = filteredChildren.map(child => {
-            // Handle nested submenus (e.g., Yarn Master within Yarn Management)
+            // Handle nested submenus (e.g., Yarn Master, Purchase Management within Yarn Management)
             if (child.type === 'sub' && child.children) {
               // Filter nested children
               const nestedFilteredChildren = child.children.filter(nestedChild => {
@@ -139,6 +184,17 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                     return hasSubPermission('/yarn-management/yarn-master', permissionKey);
+                  }
+                  if (nestedChild.path.startsWith('/yarn-management/purchase-management/')) {
+                    const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
+                    return hasSubPermission('/yarn-management/purchase-management', permissionKey);
+                  }
+                  // Handle Purchase Order and Purchase Order Received which are direct links
+                  if (nestedChild.path === '/yarn-management/purchase') {
+                    return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
+                  }
+                  if (nestedChild.path === '/yarn-management/purchase-order-received') {
+                    return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
                   }
                 }
                 return false;
@@ -165,12 +221,19 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
       // For sub-menu items, return the filtered version
       if (item.type === 'sub' && item.children) {
         const filteredChildren = item.children.filter(child => {
-          // Handle nested submenus (e.g., Yarn Master within Yarn Management)
+          // Handle nested submenus (e.g., Yarn Master, Purchase Management within Yarn Management)
           if (child.type === 'sub' && child.children) {
             // First check if user has permission to see the Yarn Master submenu itself
             if (child.path === '/yarn-management/yarn-master') {
               const hasYarnMasterPermission = hasSubPermission('/yarn-management', 'Yarn Master');
               if (!hasYarnMasterPermission) {
+                return false;
+              }
+            }
+            // First check if user has permission to see the Purchase Management submenu itself
+            if (child.path === '/yarn-management/purchase-management') {
+              const hasPurchaseManagementPermission = hasSubPermission('/yarn-management', 'Purchase Management');
+              if (!hasPurchaseManagementPermission) {
                 return false;
               }
             }
@@ -181,6 +244,17 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                   return hasSubPermission('/yarn-management/yarn-master', permissionKey);
+                }
+                if (nestedChild.path.startsWith('/yarn-management/purchase-management/')) {
+                  const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
+                  return hasSubPermission('/yarn-management/purchase-management', permissionKey);
+                }
+                // Handle Purchase Order and Purchase Order Received which are direct links
+                if (nestedChild.path === '/yarn-management/purchase') {
+                  return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
+                }
+                if (nestedChild.path === '/yarn-management/purchase-order-received') {
+                  return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
                 }
               }
               return false;
@@ -205,15 +279,35 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             }
             if (child.path.startsWith('/yarn-management/')) {
               const childName = child.title;
+              // Handle Dashboard permission
+              if (child.path === '/yarn-management/dashboard') {
+                return hasSubPermission('/yarn-management', 'Dashboard');
+              }
               // Handle nested Yarn Master permissions
               // If path is exactly /yarn-management/yarn-master, check Yarn Master permission
               if (child.path === '/yarn-management/yarn-master') {
                 return hasSubPermission('/yarn-management', 'Yarn Master');
               }
+              // If path is exactly /yarn-management/purchase-management, check Purchase Management permission
+              if (child.path === '/yarn-management/purchase-management') {
+                return hasSubPermission('/yarn-management', 'Purchase Management');
+              }
               // If path starts with /yarn-management/yarn-master/, check nested permissions
               if (child.path.startsWith('/yarn-management/yarn-master/')) {
                 const permissionKey = getPermissionKey(childName, child.path);
                 return hasSubPermission('/yarn-management/yarn-master', permissionKey);
+              }
+              // If path starts with /yarn-management/purchase-management/, check nested permissions
+              if (child.path.startsWith('/yarn-management/purchase-management/')) {
+                const permissionKey = getPermissionKey(childName, child.path);
+                return hasSubPermission('/yarn-management/purchase-management', permissionKey);
+              }
+              // Handle Purchase Order and Purchase Order Received which are direct links
+              if (child.path === '/yarn-management/purchase') {
+                return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
+              }
+              if (child.path === '/yarn-management/purchase-order-received') {
+                return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
               }
               return hasSubPermission('/yarn-management', childName);
             }
@@ -227,18 +321,29 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
 
         // Process filtered children to handle nested submenus
         const processedChildren = filteredChildren.map(child => {
-          // Handle nested submenus (e.g., Yarn Master within Yarn Management)
-          if (child.type === 'sub' && child.children) {
-            // Filter nested children
-            const nestedFilteredChildren = child.children.filter(nestedChild => {
-              if (nestedChild.type === 'link' && nestedChild.path) {
-                if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
-                  const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
-                  return hasSubPermission('/yarn-management/yarn-master', permissionKey);
+            // Handle nested submenus (e.g., Yarn Master, Purchase Management within Yarn Management)
+            if (child.type === 'sub' && child.children) {
+              // Filter nested children
+              const nestedFilteredChildren = child.children.filter(nestedChild => {
+                if (nestedChild.type === 'link' && nestedChild.path) {
+                  if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
+                    const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
+                    return hasSubPermission('/yarn-management/yarn-master', permissionKey);
+                  }
+                  if (nestedChild.path.startsWith('/yarn-management/purchase-management/')) {
+                    const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
+                    return hasSubPermission('/yarn-management/purchase-management', permissionKey);
+                  }
+                  // Handle Purchase Order and Purchase Order Received which are direct links
+                  if (nestedChild.path === '/yarn-management/purchase') {
+                    return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
+                  }
+                  if (nestedChild.path === '/yarn-management/purchase-order-received') {
+                    return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
+                  }
                 }
-              }
-              return false;
-            });
+                return false;
+              });
             
             return {
               ...child,

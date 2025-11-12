@@ -20,6 +20,7 @@ interface YarnCatalogFormData {
   gst?: number;
   remark?: string;
   hsnCode?: string;
+  minQuantity?: number;
   status: 'active' | 'inactive' | 'suspended';
 }
 
@@ -58,6 +59,7 @@ const YarnForm: React.FC<YarnFormProps> = ({
     gst: initialData.gst,
     remark: initialData.remark || "",
     hsnCode: initialData.hsnCode || "",
+    minQuantity: initialData.minQuantity,
     status: initialData.status || 'active',
   });
 
@@ -151,6 +153,15 @@ const YarnForm: React.FC<YarnFormProps> = ({
       setFormData((prev) => ({
         ...prev,
         gst: numValue,
+      }));
+      return;
+    }
+
+    if (name === 'minQuantity') {
+      const numValue = value === '' ? undefined : parseFloat(value);
+      setFormData((prev) => ({
+        ...prev,
+        minQuantity: numValue,
       }));
       return;
     }
@@ -273,6 +284,7 @@ const YarnForm: React.FC<YarnFormProps> = ({
         gst: formData.gst,
         remark: formData.remark?.trim() || undefined,
         hsnCode: formData.hsnCode?.trim() || undefined,
+        minQuantity: formData.minQuantity,
         status: formData.status,
       };
 
@@ -500,6 +512,24 @@ const YarnForm: React.FC<YarnFormProps> = ({
               onChange={handleInputChange}
               className="form-control"
               placeholder="e.g., 52051200"
+              disabled={isLoadingOptions}
+            />
+          </div>
+
+          {/* Min Quantity */}
+          <div>
+            <label className="form-label">
+              Min Quantity in kg <span className="text-xs text-gray-400">(Optional)</span>
+            </label>
+            <input
+              type="number"
+              name="minQuantity"
+              value={formData.minQuantity || ""}
+              onChange={handleInputChange}
+              className="form-control"
+              placeholder="Minimum quantity in kg"
+              min="0"
+              step="0.01"
               disabled={isLoadingOptions}
             />
           </div>
