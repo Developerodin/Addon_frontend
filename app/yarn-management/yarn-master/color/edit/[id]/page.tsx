@@ -17,7 +17,7 @@ const EditColorPage = () => {
     colorCode: string;
     pantoneName: string;
     status: 'active' | 'inactive';
-  }>({ name: '', colorCode: '#000000', pantoneName: '', status: 'active' });
+  }>({ name: '', colorCode: '', pantoneName: '', status: 'active' });
 
   useEffect(() => {
     if (id) fetchColor();
@@ -47,11 +47,12 @@ const EditColorPage = () => {
   };
 
   const handleColorCodeChange = (value: string) => {
-    if (!value) {
-      setFormData(prev => ({ ...prev, colorCode: '#000000' }));
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setFormData(prev => ({ ...prev, colorCode: '' }));
       return;
     }
-    let normalized = value.startsWith('#') ? value : `#${value}`;
+    let normalized = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
     normalized = normalized.slice(0, 7).toUpperCase();
     setFormData(prev => ({ ...prev, colorCode: normalized }));
   };
@@ -123,8 +124,9 @@ const EditColorPage = () => {
                       value={formData.colorCode}
                       onChange={(e) => handleColorCodeChange(e.target.value)}
                       onBlur={(e) => {
-                        if (!e.target.value.startsWith('#')) {
-                          handleColorCodeChange(`#${e.target.value}`);
+                        const value = e.target.value.trim();
+                        if (value && !value.startsWith('#')) {
+                          handleColorCodeChange(`#${value}`);
                         }
                       }}
                       className="form-control uppercase"
