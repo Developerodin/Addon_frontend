@@ -1,314 +1,238 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Purchase Invoice Template</title>
-    <style>
-      :root {
-        color-scheme: light;
-      }
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Purchase Invoice</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      margin: 20px;
+      color: #000;
+    }
 
-      * {
-        box-sizing: border-box;
-      }
+    .invoice-box {
+      border: 2px solid #000;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 5px;
+    }
 
-      body {
-        margin: 0;
-        font-family: "Arial", "Helvetica", sans-serif;
-        background-color: #f4f4f4;
-        padding: 24px;
-      }
+    .header-title {
+      text-align: center;
+      font-weight: bold;
+      font-size: 15px;
+      text-transform: uppercase;
+      margin: 5px 0 8px 0;
+    }
 
-      .invoice-wrapper {
-        max-width: 900px;
-        margin: 0 auto;
-        background-color: #ffffff;
-        padding: 28px 32px 36px;
-        border: 1px solid #c7c7c7;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-      }
+    .main-table, .product-table, .tax-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
 
-      .invoice-title {
-        text-align: center;
-        font-size: 20px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        margin-bottom: 20px;
-        text-transform: uppercase;
-      }
+    /* keep bold borders for main content */
+    .main-table td, .product-table td, .product-table th, .tax-table td, .tax-table th {
+      border: 2px solid #000;
+      padding: 6px;
+      vertical-align: top;
+    }
 
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 12px;
-      }
+    .product-table th {
+      text-align: center;
+      font-weight: bold;
+    }
 
-      .col-7 {
-        grid-column: span 7;
-      }
+    .summary-row td {
+      border: none;
+      font-weight: bold;
+      text-align: right;
+      padding-right: 10px;
+    }
 
-      .col-5 {
-        grid-column: span 5;
-      }
+    .tax-total {
+      font-weight: bold;
+      text-align: right;
+      padding: 6px;
+    }
 
-      .section {
-        border: 1px solid #9b9b9b;
-        padding: 12px 14px;
-        font-size: 13px;
-        line-height: 1.5;
-        min-height: 150px;
-      }
+    /* Bottom area: no dividing borders between left declaration area and right signatures */
+    .bottom-wrap {
+      width: 100%;
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
 
-      .section-heading {
-        font-weight: 600;
-        text-transform: uppercase;
-        margin-bottom: 10px;
-        font-size: 13px;
-      }
+    .bottom-left {
+      flex: 1 1 60%;
+      padding: 6px 8px;
+      box-sizing: border-box;
+      border-top: 2px solid #000; /* top border to separate from above */
+    }
 
-      .details-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 16px;
-        font-size: 13px;
-      }
+    .bottom-right {
+      flex: 1 1 40%;
+      padding: 6px 8px;
+      box-sizing: border-box;
+      border-top: 2px solid #000; /* top border only */
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+    }
 
-      .details-table th,
-      .details-table td {
-        border: 1px solid #9b9b9b;
-        padding: 8px 10px;
-        text-align: left;
-      }
+    .declaration-title { font-weight: bold; margin-bottom: 4px; }
+    .declaration-text { line-height: 1.25; }
 
-      .details-table th {
-        text-transform: uppercase;
-        font-size: 12px;
-        letter-spacing: 0.05em;
-        background-color: #f5f5f5;
-      }
+    .sign-boxes {
+      display: flex;
+      gap: 6px;
+      align-items: flex-end;
+    }
 
-      .details-table td.numeric,
-      .details-table th.numeric {
-        text-align: right;
-      }
+    .sign-box {
+      border: 2px solid #000;
+      padding: 6px 10px;
+      width: 140px;
+      height: 58px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: center;
+      font-weight: bold;
+      text-align: center;
+    }
 
-      .totals-row td {
-        font-weight: 600;
-      }
+    .sign-label { font-size: 11px; margin-top: 6px; }
 
-      .summary {
-        margin-top: 18px;
-        border: 1px solid #9b9b9b;
-        padding: 12px 14px;
-        font-size: 13px;
-      }
+    .footer-note {
+      text-align: center;
+      font-size: 11px;
+      margin-top: 8px;
+    }
 
-      .summary-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 6px 0;
-        border-bottom: 1px solid #d9d9d9;
-      }
+  </style>
+</head>
+<body>
+  <div class="invoice-box">
 
-      .summary-row:last-child {
-        border-bottom: none;
-      }
+    <!-- Header -->
+    <div class="header-title">PURCHASE INVOICE</div>
 
-      .amount-words {
-        margin-top: 18px;
-        font-size: 13px;
-        font-weight: 600;
-      }
+    <table class="main-table">
+      <tr>
+        <td style="width: 50%;">
+          <b>Valson Polyester Pvt Ltd</b><br>
+          Survey No 24/6/2, 24/7 & 24/8/1, Demni Village,<br>
+          Dadra - 396193<br><br>
+          <b>PHON :</b><br>
+          <b>MOB :</b> 7819801379<br>
+          <b>GST :</b> 26AAACV4941Q1ZS
+          <div style="border-top:2px solid #000; margin-top:8px; padding-top:6px;">
+            <b>Consignee:</b><br>
+            <b>ADDON HOLDINGS PRIVATE LIMITED</b><br>
+            B/7, GF Asmeeta Textile Park Addl Kalyan,<br>
+            Bhiwandi MIDC Area, Village Kon, Bhiwandi, Pin - 421302 MAHARASHTRA<br>
+            <b>State Code:</b> 27<br>
+            <b>Contact No:</b> 02522-297432<br>
+            <b>E-Mail:</b>
+          </div>
+        </td>
+        <td style="width: 50%; padding: 0;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr><td style="border:2px solid #000; padding:6px;"><b>Invoice No :</b><br>P/25-26/00478</td><td style="border:2px solid #000; padding:6px;"><b>Dated :</b><br>30-10-2025</td></tr>
+            <tr><td style="border:2px solid #000; padding:6px;"><b>Delivery Note :</b><br></td><td style="border:2px solid #000; padding:6px;"><b>Mode/Terms of Payment :</b><br></td></tr>
+            <tr><td style="border:2px solid #000; padding:6px;"><b>Suppliers Ref :</b><br></td><td style="border:2px solid #000; padding:6px;"><b>Other References/PO No :</b><br></td></tr>
+            <tr><td style="border:2px solid #000; padding:6px;"><b>Buyers Order No :</b><br></td><td style="border:2px solid #000; padding:6px;"><b>Dated :</b><br></td></tr>
+            <tr><td style="border:2px solid #000; padding:6px;"><b>Despatch Document No :</b><br></td><td style="border:2px solid #000; padding:6px;"><b>Delivery Note Date :</b><br></td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
 
-      .narration {
-        margin-top: 10px;
-        font-size: 13px;
-      }
+    <!-- Product Table -->
+    <table class="product-table">
+      <tr>
+        <th>SR. No</th>
+        <th>COLOR</th>
+        <th>DESCRIPTION OF GOODS</th>
+        <th>QTY</th>
+        <th>RATE</th>
+        <th>PER</th>
+        <th>AMOUNT</th>
+      </tr>
+      <tr>
+        <td>1</td><td>N/A</td><td>70/1 Nylon - Burnt Orange - Valson (VNY813)</td><td>41.17</td><td>383.00</td><td>KGS</td><td>15,768.11</td>
+      </tr>
+      <tr>
+        <td>2</td><td>N/A</td><td>70/1 Nylon - Lt. Green - Valson (VNY8130)</td><td>34.255</td><td>383.00</td><td>KGS</td><td>13,119.66</td>
+      </tr>
+      <tr>
+        <td>3</td><td>N/A</td><td>70/1 Nylon - Pista Green Mel - Valson (VNY8)</td><td>39.01</td><td>383.00</td><td>KGS</td><td>14,940.83</td>
+      </tr>
+      <tr>
+        <td>4</td><td>N/A</td><td>70/1 Nylon - Dk. Purple - Valson (VNY8132)</td><td>36.795</td><td>383.00</td><td>KGS</td><td>14,092.48</td>
+      </tr>
+      <tr>
+        <td>5</td><td>N/A</td><td>70/1 Nylon - Lime Yellow - Valson (VNY8131)</td><td>39.34</td><td>383.00</td><td>KGS</td><td>15,067.22</td>
+      </tr>
+      <tr class="summary-row">
+        <td colspan="3"></td>
+        <td>TOTAL QTY : 190.5700</td>
+        <td colspan="2"></td>
+        <td>TOTAL AMOUNT : 72,988.30</td>
+      </tr>
+      <tr class="summary-row">
+        <td colspan="6">SHIPPING</td>
+        <td>572.00</td>
+      </tr>
+      <tr class="summary-row">
+        <td colspan="6">Round Off Minus</td>
+        <td>---</td>
+      </tr>
+    </table>
 
-      .footer {
-        margin-top: 32px;
-        display: flex;
-        justify-content: space-between;
-        font-size: 12px;
-      }
+    <!-- Tax Section -->
+    <table class="tax-table">
+      <tr><th>Rate</th><th>Taxable Value</th><th>SGST</th><th>CGST / IGST</th></tr>
+      <tr><td>IGST 5%</td><td>........</td><td>0.00</td><td>3,678.01</td></tr>
+      <tr><td colspan="3" class="tax-total">TOTAL</td><td>77,238.00</td></tr>
+    </table>
 
-      .signature-block {
-        text-align: center;
-        border-top: 1px solid #9b9b9b;
-        padding-top: 6px;
-        min-width: 140px;
-      }
-
-      .declaration {
-        margin-top: 24px;
-        font-size: 12px;
-        border: 1px solid #9b9b9b;
-        padding: 10px 12px;
-      }
-
-      @media print {
-        body {
-          background-color: #ffffff;
-          padding: 0;
-        }
-
-        .invoice-wrapper {
-          box-shadow: none;
-          border: none;
-          margin: 0;
-          max-width: none;
-        }
-
-        .footer {
-          margin-top: 24px;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="invoice-wrapper">
-      <div class="invoice-title">Purchase Invoice</div>
-
-      <div class="grid">
-        <div class="col-7 section">
-          <div class="section-heading">Supplier</div>
-          <div><strong>{{supplier.name}}</strong></div>
-          <div>{{supplier.address.line1}}</div>
-          <div>{{supplier.address.line2}}</div>
-          <div>{{supplier.address.city}}, {{supplier.address.state}} {{supplier.address.pin}}</div>
-          <div>Phone: {{supplier.phone}}</div>
-          <div>Mobile: {{supplier.mobile}}</div>
-          <div>GST: {{supplier.gst}}</div>
-        </div>
-
-        <div class="col-5 section">
-          <div class="section-heading">Invoice Details</div>
-          <div>Invoice No.: <strong>{{invoice.number}}</strong></div>
-          <div>Dated: {{invoice.date}}</div>
-          <div>Delivery Note: {{delivery.note}}</div>
-          <div>Mode / Terms of Payment: {{invoice.payment_terms}}</div>
-          <div>Supplier Ref.: {{invoice.supplier_ref}}</div>
-          <div>Other References / PO No.: {{invoice.po_number}}</div>
-        </div>
-      </div>
-
-      <div class="grid" style="margin-top: 12px;">
-        <div class="col-7 section">
-          <div class="section-heading">Consignee</div>
-          <div><strong>{{consignee.name}}</strong></div>
-          <div>{{consignee.address.line1}}</div>
-          <div>{{consignee.address.line2}}</div>
-          <div>{{consignee.address.city}}, {{consignee.address.state}} {{consignee.address.pin}}</div>
-          <div>State Code: {{consignee.state_code}}</div>
-          <div>Contact No.: {{consignee.phone}}</div>
-          <div>Email: {{consignee.email}}</div>
-        </div>
-
-        <div class="col-5 section">
-          <div class="section-heading">Order Details</div>
-          <div>Buyer’s Order No.: {{order.number}}</div>
-          <div>Dated: {{order.date}}</div>
-          <div>Despatch Document No.: {{despatch.number}}</div>
-          <div>Delivery Note Date: {{delivery.date}}</div>
-        </div>
-      </div>
-
-      <table class="details-table">
-        <thead>
-          <tr>
-            <th style="width: 40px;">Sr. No.</th>
-            <th style="width: 70px;">Color</th>
-            <th>Description of Goods</th>
-            <th class="numeric" style="width: 90px;">Qty (KGS)</th>
-            <th class="numeric" style="width: 80px;">Rate</th>
-            <th class="numeric" style="width: 90px;">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Repeat this <tr> block for each line item -->
-          <tr>
-            <td>1</td>
-            <td>{{item.color}}</td>
-            <td>{{item.description}}</td>
-            <td class="numeric">{{item.quantity}}</td>
-            <td class="numeric">{{item.rate}}</td>
-            <td class="numeric">{{item.amount}}</td>
-          </tr>
-          <!-- Add additional rows as needed -->
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="3" class="numeric" style="font-weight: 600;">Total Qty</td>
-            <td class="numeric">{{summary.total_quantity}}</td>
-            <td class="numeric" style="font-weight: 600;">Total Amount</td>
-            <td class="numeric">{{summary.subtotal}}</td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <div class="summary">
-        <div class="summary-row">
-          <div>Shipping</div>
-          <div>{{summary.shipping}}</div>
-        </div>
-        <div class="summary-row">
-          <div>Round Off (−/+)</div>
-          <div>{{summary.round_off}}</div>
-        </div>
-        <div class="summary-row">
-          <div><strong>Taxable Value</strong></div>
-          <div>{{summary.taxable_value}}</div>
-        </div>
-        <div class="summary-row">
-          <div>SGST @ {{tax.sgst_rate}}%</div>
-          <div>{{tax.sgst_amount}}</div>
-        </div>
-        <div class="summary-row">
-          <div>CGST @ {{tax.cgst_rate}}%</div>
-          <div>{{tax.cgst_amount}}</div>
-        </div>
-        <div class="summary-row">
-          <div>IGST @ {{tax.igst_rate}}%</div>
-          <div>{{tax.igst_amount}}</div>
-        </div>
-        <div class="summary-row" style="font-weight: 700;">
-          <div>Grand Total</div>
-          <div>{{summary.grand_total}}</div>
+    <!-- Bottom Section: declaration left (no divider) and signatures on right -->
+    <div class="bottom-wrap">
+      <div class="bottom-left">
+        <div><b>Net Amount Total :-</b> Seventy Seven Thousand Two Hundred Thirty Eight Only</div>
+        <div style="margin-top:6px;"><b>NARRATION:</b> Inv No P28345 Dt 29.10.2025 Rcvd 30.10.2025</div>
+        <div style="margin-top:8px;"><b>GSTIN :</b> 27AAACA8827A1ZZ</div>
+        <div style="margin-top:8px;">
+          <div class="declaration-title">Declaration</div>
+          <div class="declaration-text">We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</div>
         </div>
       </div>
 
-      <div class="amount-words">
-        Net Amount Total: {{summary.amount_in_words}}
-      </div>
-
-      <div class="narration">
-        Narration: {{narration}}
-      </div>
-
-      <div style="margin-top: 12px; font-size: 12px;">
-        GSTIN: {{consignee.gstin}}
-      </div>
-
-      <div class="declaration">
-        Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
-      </div>
-
-      <div class="footer">
-        <div class="signature-block">
-          Prepared By<br />
-          {{signatures.prepared_by}}
-        </div>
-        <div class="signature-block">
-          Verified By<br />
-          {{signatures.verified_by}}
-        </div>
-        <div class="signature-block">
-          For {{supplier.name}}<br />
-          Authorised Signatory<br />
-          {{signatures.authorised_date}}
+      <div class="bottom-right">
+        <div class="sign-boxes">
+          <div class="sign-box">
+            Prepared by
+            <div class="sign-label">(Signature)</div>
+          </div>
+          <div class="sign-box">
+            Verified by
+            <div class="sign-label">(Signature)</div>
+          </div>
+          <div class="sign-box">
+            Authorised Signatory
+            <div class="sign-label">(Signature)</div>
+          </div>
         </div>
       </div>
     </div>
-  </body>
-</html>
 
+    <div class="footer-note">This is a Computer Generated Invoice. &nbsp;&nbsp;&nbsp; E.&O.E</div>
+
+  </div>
+</body>
+</html>

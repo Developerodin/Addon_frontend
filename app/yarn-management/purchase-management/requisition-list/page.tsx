@@ -14,12 +14,6 @@ interface YarnInventory {
   lastUpdated: string;
 }
 
-const headerCellClass =
-  "whitespace-nowrap border border-slate-600 bg-slate-800 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-white";
-const sortableHeaderButtonClass =
-  "flex w-full items-center justify-between gap-2 text-slate-100 transition-colors hover:text-white";
-const dataCellClass = "whitespace-nowrap border border-slate-500 px-3 py-2 text-xs font-medium text-gray-900";
-
 const RequisitionListPage = () => {
   const { hasSubPermission } = useNavigation();
 
@@ -70,6 +64,7 @@ const RequisitionListPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "belowMin" | "overblocked">("all");
   const [sortConfig, setSortConfig] = useState<{ key: keyof YarnInventory; direction: "asc" | "desc" } | null>(null);
+  const [dateFilter, setDateFilter] = useState<{ from: string; to: string }>({ from: "", to: "" });
 
   const hasPermission = hasSubPermission("/yarn-management/purchase-management", "Requisition list");
 
@@ -81,6 +76,10 @@ const RequisitionListPage = () => {
 
     return yarns.filter((yarn) => {
       const matchesSearch = yarn.yarnName.toLowerCase().includes(lowerSearch);
+      const lastUpdatedDate = new Date(yarn.lastUpdated);
+      const matchesFromDate = dateFilter.from ? lastUpdatedDate >= new Date(`${dateFilter.from}T00:00:00`) : true;
+      const matchesToDate = dateFilter.to ? lastUpdatedDate <= new Date(`${dateFilter.to}T23:59:59.999`) : true;
+      const matchesDateRange = matchesFromDate && matchesToDate;
       const belowMin = isBelowMinimum(yarn);
       const overBlocked = isOverblocked(yarn);
       const isAlert = belowMin || overBlocked;
@@ -97,9 +96,13 @@ const RequisitionListPage = () => {
         return false;
       }
 
+      if (!matchesDateRange) {
+        return false;
+      }
+
       return matchesSearch;
     });
-  }, [yarns, searchTerm, statusFilter]);
+  }, [yarns, searchTerm, statusFilter, dateFilter]);
 
   const sortedYarns = useMemo(() => {
     if (!sortConfig) {
@@ -155,15 +158,15 @@ const RequisitionListPage = () => {
     });
   };
 
-  const renderSortIcon = (key: keyof YarnInventory) => {
-    if (sortConfig?.key !== key) {
-      return <i className="ri-arrow-up-down-line text-xs text-gray-400" />;
+  const SortIcon = ({ field }: { field: keyof YarnInventory }) => {
+    if (sortConfig?.key !== field) {
+      return <i className="ri-arrow-up-down-line text-gray-400" />;
     }
 
     return sortConfig.direction === "asc" ? (
-      <i className="ri-arrow-up-s-line text-xs text-primary" />
+      <i className="ri-arrow-up-line text-primary" />
     ) : (
-      <i className="ri-arrow-down-s-line text-xs text-primary" />
+      <i className="ri-arrow-down-line text-primary" />
     );
   };
 
@@ -171,15 +174,15 @@ const RequisitionListPage = () => {
     const badges: { label: string; className: string }[] = [];
 
     if (isBelowMinimum(yarn)) {
-      badges.push({ label: "Below Minimum", className: "border border-slate-500 bg-transparent text-slate-900" });
+      badges.push({ label: "Below Minimum", className: "border border-red-200 bg-red-100 text-red-800" });
     }
 
     if (isOverblocked(yarn)) {
-      badges.push({ label: "Overblocked", className: "border border-slate-500 bg-transparent text-slate-900" });
+      badges.push({ label: "Overblocked", className: "border border-amber-200 bg-amber-100 text-amber-800" });
     }
 
     if (badges.length === 0) {
-      badges.push({ label: "Healthy", className: "border border-slate-500 bg-transparent text-slate-900" });
+      badges.push({ label: "Healthy", className: "border border-emerald-200 bg-emerald-100 text-emerald-800" });
     }
 
     return badges;
@@ -276,6 +279,30 @@ const RequisitionListPage = () => {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
+                <div className="flex w-full flex-col gap-2 md:flex-row md:items-center">
+                  <input
+                    type="date"
+                    className="form-control md:h-10 md:w-40"
+                    value={dateFilter.from}
+                    onChange={(e) => setDateFilter((prev) => ({ ...prev, from: e.target.value }))}
+                    placeholder="From date"
+                  />
+                  <input
+                    type="date"
+                    className="form-control md:h-10 md:w-40"
+                    value={dateFilter.to}
+                    onChange={(e) => setDateFilter((prev) => ({ ...prev, to: e.target.value }))}
+                    placeholder="To date"
+                  />
+                  <button
+                    type="button"
+                    className="ti-btn ti-btn-light whitespace-nowrap !px-2 text-xs font-semibold md:h-10"
+                    onClick={() => setDateFilter({ from: "", to: "" })}
+                    disabled={!dateFilter.from && !dateFilter.to}
+                  >
+                    Clear dates
+                  </button>
+                </div>
                 <select
                   className="form-select md:h-10 md:w-40"
                   value={statusFilter}
@@ -308,75 +335,72 @@ const RequisitionListPage = () => {
               ) : (
                 <div className="overflow-x-auto">
                   <div className="max-h-[60vh] overflow-auto rounded-lg border border-gray-200 shadow-sm">
-                    <table className="min-w-full border-collapse border border-slate-600 bg-white text-sm">
-                      <thead className="sticky top-0 z-10 bg-slate-800 shadow-sm">
+                    <table className="min-w-full border border-gray-300 bg-white text-sm">
+                      <thead className="bg-gray-50">
                         <tr>
-                          <th className={headerCellClass}>
-                            <button
-                              type="button"
-                              onClick={() => handleSort("yarnName")}
-                              className={sortableHeaderButtonClass}
-                            >
-                              <span>Yarn Name</span>
-                              {renderSortIcon("yarnName")}
-                            </button>
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300 cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleSort("yarnName")}
+                          >
+                            <div className="flex items-center gap-2">
+                              Yarn Name
+                              <SortIcon field="yarnName" />
+                            </div>
                           </th>
-                          <th className={headerCellClass}>
-                            <button
-                              type="button"
-                              onClick={() => handleSort("minimumQty")}
-                              className={sortableHeaderButtonClass}
-                            >
-                              <span>Min Qty</span>
-                              {renderSortIcon("minimumQty")}
-                            </button>
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300 cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleSort("minimumQty")}
+                          >
+                            <div className="flex items-center gap-2">
+                              Min Qty
+                              <SortIcon field="minimumQty" />
+                            </div>
                           </th>
-                          <th className={headerCellClass}>
-                            <button
-                              type="button"
-                              onClick={() => handleSort("availableQty")}
-                              className={sortableHeaderButtonClass}
-                            >
-                              <span>Available Qty</span>
-                              {renderSortIcon("availableQty")}
-                            </button>
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300 cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleSort("availableQty")}
+                          >
+                            <div className="flex items-center gap-2">
+                              Available Qty
+                              <SortIcon field="availableQty" />
+                            </div>
                           </th>
-                          <th className={headerCellClass}>
-                            <button
-                              type="button"
-                              onClick={() => handleSort("blockedQty")}
-                              className={sortableHeaderButtonClass}
-                            >
-                              <span>Blocked Qty</span>
-                              {renderSortIcon("blockedQty")}
-                            </button>
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300 cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleSort("blockedQty")}
+                          >
+                            <div className="flex items-center gap-2">
+                              Blocked Qty
+                              <SortIcon field="blockedQty" />
+                            </div>
                           </th>
-                          <th className={headerCellClass}>
-                            <span className="text-slate-100 hover:text-white">Alert Status</span>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300">
+                            Alert Status
                           </th>
-                          <th className={headerCellClass}>
-                            <span className="text-slate-100 hover:text-white">Last Updated</span>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300">
+                            Last Updated
                           </th>
-                          <th className={headerCellClass}>
-                            <span className="text-slate-100 hover:text-white">Action</span>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-b border-gray-300">
+                            Action
                           </th>
                         </tr>
                       </thead>
-                      <tbody>
-                        {sortedYarns.map((yarn, index) => (
-                          <tr
-                            key={yarn.id}
-                            className={`transition-colors ${index % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-sky-50`}
-                          >
-                            <td className={`${dataCellClass} font-semibold`}>{yarn.yarnName}</td>
-                            <td className={dataCellClass}>{yarn.minimumQty.toLocaleString()}</td>
-                            <td className={dataCellClass}>
-                              {yarn.availableQty.toLocaleString()}
+                      <tbody className="bg-white">
+                        {sortedYarns.map((yarn) => (
+                          <tr key={yarn.id} className="transition-colors hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
+                              <span className="text-sm font-medium text-gray-900">{yarn.yarnName}</span>
                             </td>
-                            <td className={dataCellClass}>
-                              {yarn.blockedQty.toLocaleString()}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
+                              {yarn.minimumQty.toLocaleString()}
                             </td>
-                            <td className={dataCellClass}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
+                              <span className="text-green-600 font-medium">{yarn.availableQty.toLocaleString()}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
+                              <span className="text-orange-600 font-medium">{yarn.blockedQty.toLocaleString()}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
                               <div className="flex flex-wrap gap-2">
                                 {getStatusBadges(yarn).map((badge) => (
                                   <span
@@ -388,12 +412,14 @@ const RequisitionListPage = () => {
                                 ))}
                               </div>
                             </td>
-                            <td className={dataCellClass}>{new Date(yarn.lastUpdated).toLocaleString()}</td>
-                            <td className={dataCellClass}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
+                              {new Date(yarn.lastUpdated).toLocaleString()}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
                               <button
                                 type="button"
                                 onClick={() => handleMarkPoSent(yarn.id)}
-                                className="flex items-center gap-2 whitespace-nowrap rounded border border-slate-500 bg-transparent px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+                                className="ti-btn ti-btn-primary ti-btn-outline flex items-center gap-2 whitespace-nowrap !px-4 !py-2 text-sm font-semibold"
                               >
                                 <i className="ri-mail-send-line"></i>
                                 Mark PO Sent
