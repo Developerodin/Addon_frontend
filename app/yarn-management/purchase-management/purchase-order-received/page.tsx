@@ -1,9 +1,18 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
+
+interface ReceiptProcessingDetails {
+  processedBy: string;
+  processedDate: string;
+  notes?: string;
+  qcAssignedTo?: string;
+  qcNotes?: string;
+  lastAction?: "Mark as Received" | "Send to QC";
+}
 
 interface ReceivedOrder {
   id: string;
@@ -18,6 +27,7 @@ interface ReceivedOrder {
   notes: string;
   createdAt: string;
   updatedAt: string;
+  processingDetails?: ReceiptProcessingDetails;
 }
 
 interface ReceivedItem {
@@ -180,109 +190,110 @@ const PurchaseOrderReceivedPage = () => {
     },
     {
       id: "4",
-      orderNumber: "RCP-2024-001",
-      purchaseOrderNumber: "PO-2024-001",
-      supplier: "Reliance Industries",
-      receivedDate: "2024-01-25T10:30:00Z",
-      receivedBy: "Rama",
+      orderNumber: "RCP-2024-004",
+      purchaseOrderNumber: "PO-2024-004",
+      supplier: "Raymond Textiles",
+      receivedDate: "2024-02-02T11:00:00Z",
+      receivedBy: "Suresh",
       status: "In Transit",
-      totalAmount: 125000,
+      totalAmount: 142000,
       items: [
         {
-          id: "1",
-          yarnCode: "CT40-001",
-          yarnName: "Cotton Count 40",
-          orderedQuantity: 200,
-          receivedQuantity: 200,
-          unitPrice: 450,
-          totalPrice: 90000,
+          id: "7",
+          yarnCode: "WL50-005",
+          yarnName: "Wool Blend 50s",
+          orderedQuantity: 160,
+          receivedQuantity: 160,
+          unitPrice: 550,
+          totalPrice: 88000,
           qualityStatus: "Approved"
         },
         {
-          id: "2",
-          yarnCode: "CT60-004",
-          yarnName: "Cotton Count 60",
+          id: "8",
+          yarnCode: "WL70-010",
+          yarnName: "Wool Blend 70s",
           orderedQuantity: 100,
           receivedQuantity: 100,
-          unitPrice: 520,
-          totalPrice: 52000,
+          unitPrice: 540,
+          totalPrice: 54000,
           qualityStatus: "Approved"
         }
       ],
-      notes: "All items received in good condition",
-      createdAt: "2024-01-25T10:30:00Z",
-      updatedAt: "2024-01-25T10:30:00Z"
+      notes: "Received on time, excellent packaging",
+      createdAt: "2024-02-02T11:00:00Z",
+      updatedAt: "2024-02-02T11:00:00Z"
     },
     {
       id: "5",
-      orderNumber: "RCP-2024-002",
-      purchaseOrderNumber: "PO-2024-002",
-      supplier: "Aditya Birla Group",
-      receivedDate: "2024-01-20T14:30:00Z",
+      orderNumber: "RCP-2024-005",
+      purchaseOrderNumber: "PO-2024-005",
+      supplier: "Arvind Mills",
+      receivedDate: "2024-02-10T15:45:00Z",
       receivedBy: "Ganesh",
       status: "In Transit",
-      totalAmount: 48000,
+      totalAmount: 76500,
       items: [
         {
-          id: "3",
-          yarnCode: "PE150-002",
-          yarnName: "Polyester DTY 150",
+          id: "9",
+          yarnCode: "DN30-006",
+          yarnName: "Denim Yarn 30s",
           orderedQuantity: 150,
-          receivedQuantity: 120,
-          unitPrice: 320,
-          totalPrice: 38400,
+          receivedQuantity: 140,
+          unitPrice: 350,
+          totalPrice: 49000,
           qualityStatus: "Approved"
         },
         {
-          id: "4",
-          yarnCode: "PE100-007",
-          yarnName: "Polyester POY 100",
-          orderedQuantity: 200,
-          receivedQuantity: 0,
-          unitPrice: 290,
-          totalPrice: 0,
+          id: "10",
+          yarnCode: "DN40-012",
+          yarnName: "Denim Yarn 40s",
+          orderedQuantity: 90,
+          receivedQuantity: 50,
+          unitPrice: 550,
+          totalPrice: 27500,
           qualityStatus: "Pending"
         }
       ],
-      notes: "Partial delivery, remaining items expected next week",
-      createdAt: "2024-01-20T14:30:00Z",
-      updatedAt: "2024-01-20T14:30:00Z"
+      notes: "Partial delivery due to transport delay",
+      createdAt: "2024-02-10T15:45:00Z",
+      updatedAt: "2024-02-10T15:45:00Z"
     },
     {
       id: "6",
       orderNumber: "RCP-2024-006",
       purchaseOrderNumber: "PO-2024-006",
-      supplier: "Grasim Industries",
-      receivedDate: "2024-01-22T09:15:00Z",
+      supplier: "Jindal Textiles",
+      receivedDate: "2024-02-18T08:20:00Z",
       receivedBy: "Rama",
       status: "In Transit",
-      totalAmount: 95000,
+      totalAmount: 158400,
       items: [
         {
-          id: "5",
-          yarnCode: "VR30-003",
-          yarnName: "Viscose Rayon 30",
-          orderedQuantity: 180,
-          receivedQuantity: 180,
-          unitPrice: 380,
-          totalPrice: 68400,
-          qualityStatus: "Pending"
+          id: "11",
+          yarnCode: "NY60-009",
+          yarnName: "Nylon 60 Denier",
+          orderedQuantity: 200,
+          receivedQuantity: 200,
+          unitPrice: 480,
+          totalPrice: 96000,
+          qualityStatus: "Approved"
         },
         {
-          id: "6",
-          yarnCode: "VR40-008",
-          yarnName: "Viscose Rayon 40",
-          orderedQuantity: 100,
-          receivedQuantity: 100,
-          unitPrice: 400,
-          totalPrice: 40000,
-          qualityStatus: "Pending"
+          id: "12",
+          yarnCode: "NY80-011",
+          yarnName: "Nylon 80 Denier",
+          orderedQuantity: 130,
+          receivedQuantity: 130,
+          unitPrice: 480,
+          totalPrice: 62400,
+          qualityStatus: "Approved"
         }
       ],
-      notes: "Awaiting quality inspection",
-      createdAt: "2024-01-22T09:15:00Z",
-      updatedAt: "2024-01-22T09:15:00Z"
+      notes: "All quality parameters met successfully",
+      createdAt: "2024-02-18T08:20:00Z",
+      updatedAt: "2024-02-18T08:20:00Z"
     }
+    
   ];
 
   const [receivedOrders, setReceivedOrders] = useState<ReceivedOrder[]>(staticReceivedOrders);
@@ -300,6 +311,12 @@ const PurchaseOrderReceivedPage = () => {
   const [weightError, setWeightError] = useState<string | null>(null);
   const [sortField, setSortField] = useState<OrderSortField>("receivedDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [isProcessModalOpen, setProcessModalOpen] = useState(false);
+  const [statusModalContext, setStatusModalContext] = useState<{
+    order: ReceivedOrder;
+    targetStatus: ReceivedOrder["status"];
+  } | null>(null);
+  const [isStatusSubmitting, setIsStatusSubmitting] = useState(false);
 
   // Check permission
   const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
@@ -399,6 +416,18 @@ const PurchaseOrderReceivedPage = () => {
     setActiveBox(null);
     setCapturedWeight(null);
     setWeightError(null);
+    setProcessModalOpen(true);
+  };
+
+  const handleCloseProcessModal = () => {
+    setProcessModalOpen(false);
+    setSelectedOrderId(null);
+    setBoxCountInput(0);
+    setScanValue("");
+    setActiveBox(null);
+    setCapturedWeight(null);
+    setWeightError(null);
+    setWeightModalOpen(false);
   };
 
   const handleGenerateBarcodes = () => {
@@ -596,19 +625,6 @@ const PurchaseOrderReceivedPage = () => {
     }
   };
 
-  const handleDeleteReceivedOrder = async (orderId: string) => {
-    if (!confirm('Are you sure you want to delete this received order?')) return;
-    
-    try {
-      // TODO: Implement API call to delete received order
-      setReceivedOrders(prev => prev.filter(order => order.id !== orderId));
-      toast.success('Received order deleted successfully');
-    } catch (error) {
-      console.error('Failed to delete received order:', error);
-      toast.error('Failed to delete received order');
-    }
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'In Transit': return 'bg-purple-100 text-purple-800';
@@ -625,6 +641,83 @@ const PurchaseOrderReceivedPage = () => {
       case 'Rejected': return 'bg-red-100 text-red-800';
       case 'Pending': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getNextStatusOptions = (status: ReceivedOrder["status"]) => {
+    switch (status) {
+      case "In Transit":
+      case "Partial":
+        return [
+          { value: "Complete" as const, label: "Mark as Received" },
+          { value: "Pending Inspection" as const, label: "Send to QC" },
+        ];
+      case "Pending Inspection":
+        return [
+          { value: "Complete" as const, label: "Mark as Received" },
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const handleOpenStatusModal = (order: ReceivedOrder, targetStatus: ReceivedOrder["status"]) => {
+    setStatusModalContext({ order, targetStatus });
+  };
+
+  const handleCloseStatusModal = () => {
+    setStatusModalContext(null);
+  };
+
+  const handleStatusModalSubmit = async (details: ReceiptProcessingDetails) => {
+    if (!statusModalContext) {
+      return;
+    }
+    const { order, targetStatus } = statusModalContext;
+    setIsStatusSubmitting(true);
+    try {
+      // TODO: Implement API call to update received order status
+      setReceivedOrders(prev =>
+        prev.map(item => {
+          if (item.id !== order.id) {
+            return item;
+          }
+
+          const processedDateIso =
+            details.processedDate && details.processedDate.trim().length > 0
+              ? new Date(`${details.processedDate}T00:00:00`).toISOString()
+              : item.receivedDate;
+
+          const updatedOrder: ReceivedOrder = {
+            ...item,
+            status: targetStatus,
+            updatedAt: new Date().toISOString(),
+            processingDetails: {
+              ...details,
+              lastAction: targetStatus === "Complete" ? "Mark as Received" : "Send to QC",
+            },
+          };
+
+          if (targetStatus === "Complete") {
+            if (details.processedBy?.trim()) {
+              updatedOrder.receivedBy = details.processedBy.trim();
+            }
+            if (details.processedDate?.trim()) {
+              updatedOrder.receivedDate = processedDateIso;
+            }
+          }
+
+          return updatedOrder;
+        })
+      );
+
+      toast.success(targetStatus === "Complete" ? "Order marked as received" : "Order sent to QC");
+      setStatusModalContext(null);
+    } catch (error) {
+      console.error("Failed to update received order status:", error);
+      toast.error("Failed to update status");
+    } finally {
+      setIsStatusSubmitting(false);
     }
   };
 
@@ -803,13 +896,15 @@ const PurchaseOrderReceivedPage = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white">
-                      {filteredAndSortedOrders.map((order) => (
-                        <tr
-                          key={order.id}
-                          className={`hover:bg-gray-50 transition-colors ${
-                            selectedOrderId === order.id ? "!bg-primary/5" : ""
-                          }`}
-                        >
+                      {filteredAndSortedOrders.map((order) => {
+                        const nextStatusOptions = getNextStatusOptions(order.status);
+                        return (
+                          <tr
+                            key={order.id}
+                            className={`hover:bg-gray-50 transition-colors ${
+                              selectedOrderId === order.id ? "!bg-primary/5" : ""
+                            }`}
+                          >
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-b border-gray-200">
                             {order.orderNumber}
                           </td>
@@ -839,11 +934,11 @@ const PurchaseOrderReceivedPage = () => {
                             ₹{order.totalAmount.toLocaleString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium border-b border-gray-200">
-                            <div className="flex flex-wrap gap-2">
-                              <button
+                            <div className="flex flex-wrap items-center gap-2">
+                              {/* <button
                                 onClick={() => handleSelectOrder(order.id)}
-                                className={`inline-flex items-center gap-1 rounded-md border px-3 py-1 text-sm transition ${
-                                  selectedOrderId === order.id
+                                className={`inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm transition ${
+                                  selectedOrderId === order.id && isProcessModalOpen
                                     ? "border-primary bg-primary/10 text-primary"
                                     : "border-gray-300 text-gray-600 hover:border-primary hover:text-primary"
                                 }`}
@@ -851,28 +946,33 @@ const PurchaseOrderReceivedPage = () => {
                               >
                                 <i className="ri-box-3-line"></i>
                                 Process
-                              </button>
-                              <button
-                                onClick={() => {
-                                  // TODO: Implement view details modal
-                                  toast('View details functionality coming soon', { icon: 'ℹ️' });
-                                }}
-                                className="text-blue-600 hover:text-blue-900"
-                                title="View Details"
-                              >
-                                <i className="ri-eye-line"></i>
-                              </button>
-                              <button
-                                onClick={() => handleDeleteReceivedOrder(order.id)}
-                                className="text-red-600 hover:text-red-900"
-                                title="Delete"
-                              >
-                                <i className="ri-delete-bin-line"></i>
-                              </button>
+                              </button> */}
+                              {nextStatusOptions.length > 0 && (
+                                <select
+                                  value=""
+                                  onChange={(event) => {
+                                    const selectedValue = event.target.value as ReceivedOrder["status"] | "";
+                                    if (selectedValue) {
+                                      handleOpenStatusModal(order, selectedValue);
+                                      event.target.value = "";
+                                    }
+                                  }}
+                                  className="text-xs border border-gray-300 rounded px-2 py-1 h-8 bg-white"
+                                  title="Update status"
+                                >
+                                  <option value="">Update Status</option>
+                                  {nextStatusOptions.map(option => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
                             </div>
                           </td>
-                        </tr>
-                      ))}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -882,172 +982,38 @@ const PurchaseOrderReceivedPage = () => {
         </div>
       </div>
 
-      {selectedOrder && (
-        <div className="mt-6">
-          <div className="box">
-            <div className="box-header">
-              <div>
-                <h3 className="box-title flex items-center gap-2">
-                  <i className="ri-truck-line text-primary"></i>
-                  Unloading & Verification
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Follow the guided workflow to unload, verify packs, and capture weights for{" "}
-                  <span className="font-medium text-gray-700">{selectedOrder.purchaseOrderNumber}</span>.
-                </p>
-              </div>
-            </div>
-            <div className="box-body space-y-6">
-              <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-                <div className="flex flex-wrap gap-4">
-                  <div>
-                    <p className="text-xs uppercase text-gray-500">Supplier</p>
-                    <p className="text-sm font-semibold text-gray-800">{selectedOrder.supplier}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-gray-500">Receipt Number</p>
-                    <p className="text-sm font-semibold text-gray-800">{selectedOrder.orderNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-gray-500">Received By</p>
-                    <p className="text-sm font-semibold text-gray-800">{selectedOrder.receivedBy}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-gray-500">Status</p>
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedOrder.status)}`}>
-                      {selectedOrder.status}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-lg border border-gray-200 p-3 bg-white">
-                  <p className="text-xs uppercase text-gray-500">Pending</p>
-                  <p className="text-xl font-semibold text-gray-800">{packStatusCounts.pending}</p>
-                </div>
-                <div className="rounded-lg border border-gray-200 p-3 bg-white">
-                  <p className="text-xs uppercase text-gray-500">Scanned</p>
-                  <p className="text-xl font-semibold text-gray-800">{packStatusCounts.scanned}</p>
-                </div>
-                <div className="rounded-lg border border-gray-200 p-3 bg-white">
-                  <p className="text-xs uppercase text-gray-500">Weighed</p>
-                  <p className="text-xl font-semibold text-gray-800">{packStatusCounts.weighed}</p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="form-label">Total Boxes (per supplier pack list)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    className="form-control"
-                    value={boxCountInput}
-                    onChange={(event) => {
-                      const parsed = parseInt(event.target.value, 10);
-                      setBoxCountInput(Number.isNaN(parsed) ? 0 : Math.max(0, parsed));
-                    }}
-                    placeholder="Enter number of boxes unloaded"
-                  />
-                  <button
-                    type="button"
-                    className="ti-btn ti-btn-primary whitespace-nowrap"
-                    onClick={handleGenerateBarcodes}
-                  >
-                    <i className="ri-barcode-line me-1"></i>
-                    Generate Barcodes
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500">
-                  The system creates unique barcodes for each box so they can be scanned during weighing.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <form onSubmit={handleScanSubmit} className="space-y-3">
-                  <div>
-                    <label className="form-label">Scan or Enter Barcode</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Scan box barcode"
-                        value={scanValue}
-                        onChange={(event) => setScanValue(event.target.value)}
-                        disabled={selectedPackList.length === 0}
-                      />
-                      <button
-                        type="submit"
-                        className="ti-btn ti-btn-outline-primary whitespace-nowrap"
-                        disabled={selectedPackList.length === 0 || !scanValue.trim()}
-                      >
-                        <i className="ri-qr-scan-2-line me-1"></i>
-                        Scan
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    After every successful scan, connect to the weighing scale to capture box weight automatically.
-                  </p>
-                </form>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <i className="ri-list-ordered"></i>
-                  Supplier Pack List
-                </h4>
-                {selectedPackList.length === 0 ? (
-                  <p className="text-xs text-gray-500">
-                    Generate barcodes to populate the pack list and begin scanning.
-                  </p>
-                ) : (
-                  <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
-                    <ul className="divide-y divide-gray-200">
-                      {selectedPackList.map((box) => (
-                        <li key={box.id} className="px-4 py-3 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">Box {box.boxNumber}</p>
-                            <p className="text-xs text-gray-500">{box.barcode}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs uppercase text-gray-500">Status</p>
-                            <p
-                              className={`text-sm font-semibold ${
-                                box.status === "weighed"
-                                  ? "text-green-600"
-                                  : box.status === "scanned"
-                                  ? "text-orange-500"
-                                  : "text-gray-500"
-                              }`}
-                            >
-                              {box.status === "weighed"
-                                ? "Weighed"
-                                : box.status === "scanned"
-                                ? "Scanned"
-                                : "Pending"}
-                            </p>
-                            {box.weight && (
-                              <p className="text-xs text-gray-500">
-                                {box.weight.toFixed(2)} kg
-                              </p>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       </div>
 
+      {selectedOrder && (
+        <ProcessModal
+          isOpen={isProcessModalOpen}
+          onClose={handleCloseProcessModal}
+          order={selectedOrder}
+          boxCountInput={boxCountInput}
+          onBoxCountChange={(value) => setBoxCountInput(value)}
+          onGenerateBarcodes={handleGenerateBarcodes}
+          scanValue={scanValue}
+          onScanValueChange={setScanValue}
+          onScanSubmit={handleScanSubmit}
+          selectedPackList={selectedPackList}
+          packStatusCounts={packStatusCounts}
+          getStatusColor={getStatusColor}
+        />
+      )}
+
+      {statusModalContext && (
+        <ReceiptStatusModal
+          isOpen={!!statusModalContext}
+          order={statusModalContext.order}
+          targetStatus={statusModalContext.targetStatus}
+          onClose={handleCloseStatusModal}
+          onSubmit={handleStatusModalSubmit}
+          isSubmitting={isStatusSubmitting}
+        />
+      )}
+
       {weightModalOpen && activeBox ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
             <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
               <div>
@@ -1139,6 +1105,425 @@ const PurchaseOrderReceivedPage = () => {
         </div>
       ) : null}
     </>
+  );
+};
+
+interface ProcessModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  order: ReceivedOrder;
+  boxCountInput: number;
+  onBoxCountChange: (value: number) => void;
+  onGenerateBarcodes: () => void;
+  scanValue: string;
+  onScanValueChange: (value: string) => void;
+  onScanSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  selectedPackList: PackBox[];
+  packStatusCounts: {
+    pending: number;
+    scanned: number;
+    weighed: number;
+  };
+  getStatusColor: (status: string) => string;
+}
+
+const ProcessModal: React.FC<ProcessModalProps> = ({
+  isOpen,
+  onClose,
+  order,
+  boxCountInput,
+  onBoxCountChange,
+  onGenerateBarcodes,
+  scanValue,
+  onScanValueChange,
+  onScanSubmit,
+  selectedPackList,
+  packStatusCounts,
+  getStatusColor,
+}) => {
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <i className="ri-truck-line text-primary"></i>
+              Unloading &amp; Verification
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Follow the guided workflow to unload, verify packs, and capture weights for{" "}
+              <span className="font-medium text-gray-700">{order.purchaseOrderNumber}</span>.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition"
+            aria-label="Close processing modal"
+          >
+            <i className="ri-close-line text-xl"></i>
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-6 overflow-y-auto">
+          <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <p className="text-xs uppercase text-gray-500">Supplier</p>
+                <p className="text-sm font-semibold text-gray-800">{order.supplier}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Receipt Number</p>
+                <p className="text-sm font-semibold text-gray-800">{order.orderNumber}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Received By</p>
+                <p className="text-sm font-semibold text-gray-800">{order.receivedBy}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Status</p>
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
+                  {order.status}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-gray-200 p-3 bg-white">
+              <p className="text-xs uppercase text-gray-500">Pending</p>
+              <p className="text-xl font-semibold text-gray-800">{packStatusCounts.pending}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 p-3 bg-white">
+              <p className="text-xs uppercase text-gray-500">Scanned</p>
+              <p className="text-xl font-semibold text-gray-800">{packStatusCounts.scanned}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 p-3 bg-white">
+              <p className="text-xs uppercase text-gray-500">Weighed</p>
+              <p className="text-xl font-semibold text-gray-800">{packStatusCounts.weighed}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <label className="form-label">Total Boxes (per supplier pack list)</label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="number"
+                min={0}
+                className="form-control"
+                value={boxCountInput}
+                onChange={(event) => {
+                  const parsed = parseInt(event.target.value, 10);
+                  onBoxCountChange(Number.isNaN(parsed) ? 0 : Math.max(0, parsed));
+                }}
+                placeholder="Enter number of boxes unloaded"
+              />
+              <button
+                type="button"
+                className="ti-btn ti-btn-primary whitespace-nowrap"
+                onClick={onGenerateBarcodes}
+              >
+                <i className="ri-barcode-line me-1"></i>
+                Generate Barcodes
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              The system creates unique barcodes for each box so they can be scanned during weighing.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <form onSubmit={onScanSubmit} className="space-y-3">
+              <div>
+                <label className="form-label">Scan or Enter Barcode</label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Scan box barcode"
+                    value={scanValue}
+                    onChange={(event) => onScanValueChange(event.target.value)}
+                    disabled={selectedPackList.length === 0}
+                  />
+                  <button
+                    type="submit"
+                    className="ti-btn ti-btn-outline-primary whitespace-nowrap"
+                    disabled={selectedPackList.length === 0 || !scanValue.trim()}
+                  >
+                    <i className="ri-qr-scan-2-line me-1"></i>
+                    Scan
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                After every successful scan, connect to the weighing scale to capture box weight automatically.
+              </p>
+            </form>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <i className="ri-list-ordered"></i>
+              Supplier Pack List
+            </h4>
+            {selectedPackList.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                Generate barcodes to populate the pack list and begin scanning.
+              </p>
+            ) : (
+              <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
+                <ul className="divide-y divide-gray-200">
+                  {selectedPackList.map((box) => (
+                    <li key={box.id} className="px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">Box {box.boxNumber}</p>
+                        <p className="text-xs text-gray-500">{box.barcode}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs uppercase text-gray-500">Status</p>
+                        <p
+                          className={`text-sm font-semibold ${
+                            box.status === "weighed"
+                              ? "text-green-600"
+                              : box.status === "scanned"
+                              ? "text-orange-500"
+                              : "text-gray-500"
+                          }`}
+                        >
+                          {box.status === "weighed"
+                            ? "Weighed"
+                            : box.status === "scanned"
+                            ? "Scanned"
+                            : "Pending"}
+                        </p>
+                        {typeof box.weight === "number" && (
+                          <p className="text-xs text-gray-500">
+                            {box.weight.toFixed(2)} kg
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-gray-100 px-6 py-4 flex justify-end">
+          <button type="button" className="ti-btn ti-btn-light" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface ReceiptStatusModalProps {
+  isOpen: boolean;
+  order: ReceivedOrder;
+  targetStatus: ReceivedOrder["status"];
+  onClose: () => void;
+  onSubmit: (details: ReceiptProcessingDetails) => Promise<void>;
+  isSubmitting: boolean;
+}
+
+const ReceiptStatusModal: React.FC<ReceiptStatusModalProps> = ({
+  isOpen,
+  order,
+  targetStatus,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}) => {
+  const [processedBy, setProcessedBy] = useState("");
+  const [processedDate, setProcessedDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [notes, setNotes] = useState("");
+  const [qcAssignedTo, setQcAssignedTo] = useState("");
+  const [qcNotes, setQcNotes] = useState("");
+
+  const isSendToQc = targetStatus === "Pending Inspection";
+
+  useEffect(() => {
+    if (isOpen) {
+      const today = new Date().toISOString().split("T")[0];
+      setProcessedBy(order.receivedBy || "");
+      setProcessedDate(today);
+      setNotes("");
+      setQcAssignedTo("");
+      setQcNotes("");
+    }
+  }, [isOpen, order, targetStatus]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!processedBy.trim()) {
+      toast.error("Received by is required");
+      return;
+    }
+    if (!processedDate) {
+      toast.error("Processed date is required");
+      return;
+    }
+    if (isSendToQc && !qcAssignedTo.trim()) {
+      toast.error("Assign QC owner before sending to QC");
+      return;
+    }
+
+    const payload: ReceiptProcessingDetails = {
+      processedBy: processedBy.trim(),
+      processedDate,
+      lastAction: isSendToQc ? "Send to QC" : "Mark as Received",
+    };
+
+    if (notes.trim()) {
+      payload.notes = notes.trim();
+    }
+    if (isSendToQc) {
+      payload.qcAssignedTo = qcAssignedTo.trim();
+      if (qcNotes.trim()) {
+        payload.qcNotes = qcNotes.trim();
+      }
+    }
+
+    await onSubmit(payload);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full">
+        <form onSubmit={handleSubmit}>
+          <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <i className="ri-refresh-line text-primary"></i>
+                {isSendToQc ? "Send to QC" : "Mark as Received"}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {order.orderNumber} &bull; {order.supplier}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition"
+              aria-label="Close status modal"
+              disabled={isSubmitting}
+            >
+              <i className="ri-close-line text-xl"></i>
+            </button>
+          </div>
+
+          <div className="px-6 py-5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="form-label">
+                  Received / Processed By <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={processedBy}
+                  onChange={(event) => setProcessedBy(event.target.value)}
+                  placeholder="Enter receiver name"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div>
+                <label className="form-label">
+                  Processed Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={processedDate}
+                  onChange={(event) => setProcessedDate(event.target.value)}
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label">Notes</label>
+              <textarea
+                className="form-control"
+                rows={3}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Add remarks for this update..."
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {isSendToQc && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label">
+                    QC Owner <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={qcAssignedTo}
+                    onChange={(event) => setQcAssignedTo(event.target.value)}
+                    placeholder="Enter QC owner name"
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">QC Notes</label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    value={qcNotes}
+                    onChange={(event) => setQcNotes(event.target.value)}
+                    placeholder="Share QC instructions..."
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
+            <button
+              type="button"
+              className="ti-btn ti-btn-light"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="ti-btn ti-btn-primary"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <span className="inline-flex items-center gap-2">
+                  <i className="ri-loader-4-line animate-spin"></i>
+                  Updating...
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  <i className="ri-check-line"></i>
+                  {isSendToQc ? "Send to QC" : "Mark as Received"}
+                </span>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 };
 
