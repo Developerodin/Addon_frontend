@@ -51,7 +51,7 @@ interface StockAlert {
   createdAt: string;
 }
 
-const InventoryPage = () => {
+const DashboardPage = () => {
   const { hasSubPermission } = useNavigation();
   const [inventory, setInventory] = useState<YarnInventory[]>([]);
   const [transactionHistory, setTransactionHistory] = useState<TransactionHistory[]>([]);
@@ -213,30 +213,6 @@ const InventoryPage = () => {
         reference: "IS-2024-002",
         remarks: "Urgent production requirement",
         createdBy: "Production Manager"
-      },
-      {
-        id: "T4",
-        yarnId: "4",
-        date: "2024-01-12",
-        transactionType: "Issue",
-        quantityIn: 0,
-        quantityOut: 160,
-        balanceAfterTransaction: 0,
-        reference: "IS-2024-003",
-        remarks: "Complete stock issued",
-        createdBy: "Production Manager"
-      },
-      {
-        id: "T5",
-        yarnId: "2",
-        date: "2024-01-11",
-        transactionType: "Adjustment",
-        quantityIn: 50,
-        quantityOut: 0,
-        balanceAfterTransaction: 850,
-        reference: "ADJ-2024-001",
-        remarks: "Stock correction",
-        createdBy: "Admin"
       }
     ];
 
@@ -267,7 +243,7 @@ const InventoryPage = () => {
   }, []);
 
   // Check permission
-  const hasPermission = hasSubPermission('/yarn-management', 'Inventory');
+  const hasPermission = hasSubPermission('/yarn-management', 'Dashboard');
 
   if (!hasPermission) {
     return (
@@ -277,7 +253,7 @@ const InventoryPage = () => {
             <i className="ri-lock-line text-6xl"></i>
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
-          <p className="text-gray-500 mb-4">You don't have permission to access Yarn Inventory.</p>
+          <p className="text-gray-500 mb-4">You don't have permission to access Yarn Management Dashboard.</p>
           <Link href="/yarn-management" className="ti-btn ti-btn-primary">
             <i className="ri-arrow-left-line me-2"></i>
             Back to Yarn Management
@@ -404,10 +380,13 @@ const InventoryPage = () => {
   const totalValue = filteredInventory.reduce((sum, item) => sum + item.totalValue, 0);
   const lowStockCount = filteredInventory.filter(item => item.status === 'Low Stock').length;
   const outOfStockCount = filteredInventory.filter(item => item.status === 'Out of Stock').length;
+  const inStockCount = filteredInventory.filter(item => item.status === 'In Stock').length;
+  const totalItems = filteredInventory.length;
+  const recentTransactions = transactionHistory.slice(0, 5);
 
   return (
     <div className="main-content">
-      <Seo title="Yarn Inventory Management" />
+      <Seo title="Yarn Management Dashboard" />
       
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
@@ -415,8 +394,8 @@ const InventoryPage = () => {
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header flex justify-between items-center">
               <div>
-                <h1 className="box-title text-2xl font-semibold">Yarn Inventory Management</h1>
-                <p className="text-gray-600 mt-1">Real-time stock tracking, alerts, and transaction history</p>
+                <h1 className="box-title text-2xl font-semibold">Yarn Management Dashboard</h1>
+                <p className="text-gray-600 mt-1">Overview of inventory, stock alerts, and recent transactions</p>
               </div>
               <div className="box-tools flex gap-2">
                 <button 
@@ -434,7 +413,7 @@ const InventoryPage = () => {
                   Generate Report
                 </button>
                 <Link 
-                  href="/yarn-management/inventory/add"
+                  href="/yarn-management/dashboard/add"
                   className="ti-btn ti-btn-primary"
                 >
                   <i className="ri-add-line me-1"></i>
@@ -481,11 +460,11 @@ const InventoryPage = () => {
           )}
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
             <div className="box">
               <div className="box-body text-center">
                 <div className="text-3xl font-bold text-blue-600 mb-2">
-                  {filteredInventory.length}
+                  {totalItems}
                 </div>
                 <div className="text-sm text-gray-600">Total Items</div>
               </div>
@@ -496,6 +475,14 @@ const InventoryPage = () => {
                   ₹{totalValue.toLocaleString()}
                 </div>
                 <div className="text-sm text-gray-600">Total Value</div>
+              </div>
+            </div>
+            <div className="box">
+              <div className="box-body text-center">
+                <div className="text-3xl font-bold text-emerald-600 mb-2">
+                  {inStockCount}
+                </div>
+                <div className="text-sm text-gray-600">In Stock</div>
               </div>
             </div>
             <div className="box">
@@ -512,6 +499,95 @@ const InventoryPage = () => {
                   {outOfStockCount}
                 </div>
                 <div className="text-sm text-gray-600">Out of Stock</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions and Recent Transactions */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* Quick Actions */}
+            <div className="box">
+              <div className="box-header">
+                <h3 className="box-title">Quick Actions</h3>
+              </div>
+              <div className="box-body">
+                <div className="grid grid-cols-2 gap-4">
+                  <Link 
+                    href="/yarn-management/dashboard/add"
+                    className="ti-btn ti-btn-primary w-full"
+                  >
+                    <i className="ri-add-line me-2"></i>
+                    Add Inventory
+                  </Link>
+                  <Link 
+                    href="/yarn-management/purchase-management"
+                    className="ti-btn ti-btn-outline-primary w-full"
+                  >
+                    <i className="ri-shopping-cart-line me-2"></i>
+                    Purchase Order
+                  </Link>
+                  <Link 
+                    href="/yarn-management/yarn-issue"
+                    className="ti-btn ti-btn-outline-success w-full"
+                  >
+                    <i className="ri-send-plane-line me-2"></i>
+                    Yarn Issue
+                  </Link>
+                  <button 
+                    onClick={() => setShowTransactionHistory(true)}
+                    className="ti-btn ti-btn-outline-secondary w-full"
+                  >
+                    <i className="ri-history-line me-2"></i>
+                    Transaction History
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Transactions */}
+            <div className="box">
+              <div className="box-header flex justify-between items-center">
+                <h3 className="box-title">Recent Transactions</h3>
+                <button 
+                  onClick={() => setShowTransactionHistory(true)}
+                  className="text-sm text-primary hover:underline"
+                >
+                  View All
+                </button>
+              </div>
+              <div className="box-body">
+                {recentTransactions.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <i className="ri-file-list-line text-4xl mb-2"></i>
+                    <p>No recent transactions</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {recentTransactions.map((transaction) => {
+                      const yarn = inventory.find(item => item.id === transaction.yarnId);
+                      return (
+                        <div key={transaction.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{yarn?.yarnName || 'Unknown'}</div>
+                            <div className="text-xs text-gray-500">{transaction.date} • {transaction.reference}</div>
+                          </div>
+                          <div className="text-right">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              transaction.transactionType === 'Purchase' ? 'bg-green-100 text-green-800' :
+                              transaction.transactionType === 'Issue' ? 'bg-red-100 text-red-800' :
+                              'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {transaction.transactionType}
+                            </span>
+                            <div className="text-xs text-gray-600 mt-1">
+                              {transaction.quantityIn > 0 ? `+${transaction.quantityIn}` : `-${transaction.quantityOut}`}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -626,7 +702,7 @@ const InventoryPage = () => {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No Inventory Records</h3>
                   <p className="text-gray-500 mb-4">Start by adding your first inventory record.</p>
                   <Link 
-                    href="/yarn-management/inventory/add"
+                    href="/yarn-management/dashboard/add"
                     className="ti-btn ti-btn-primary"
                   >
                     <i className="ri-add-line me-2"></i>
@@ -730,7 +806,7 @@ const InventoryPage = () => {
                                 <i className="ri-add-subtract-line"></i>
                               </button>
                               <Link
-                                href={`/yarn-management/inventory/edit/${item.id}`}
+                                href={`/yarn-management/dashboard/edit/${item.id}`}
                                 className="text-blue-600 hover:text-blue-900"
                                 title="Edit"
                               >
@@ -854,4 +930,6 @@ const InventoryPage = () => {
   );
 };
 
-export default InventoryPage;
+export default DashboardPage;
+
+

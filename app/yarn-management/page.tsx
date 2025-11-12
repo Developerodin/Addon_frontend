@@ -16,18 +16,11 @@ const YarnManagementPage = () => {
       permission: "Cataloguing"
     },
     {
-      title: "Purchase Order",
-      description: "Handle yarn procurement and purchase orders",
-      icon: "ri-shopping-cart-line",
-      path: "/yarn-management/purchase",
-      permission: "Purchase Order"
-    },
-    {
-      title: "Purchase Order Received",
-      description: "Track and manage received purchase orders",
-      icon: "ri-inbox-line",
-      path: "/yarn-management/purchase-order-received",
-      permission: "Purchase Order Received"
+      title: "Purchase Management",
+      description: "Manage yarn procurement, purchase orders, quality control, and storage",
+      icon: "ri-shopping-bag-line",
+      path: "/yarn-management/purchase-management",
+      permission: "Purchase Management"
     },
     {
       title: "Inventory",
@@ -42,6 +35,13 @@ const YarnManagementPage = () => {
       icon: "ri-send-plane-line",
       path: "/yarn-management/yarn-issue",
       permission: "Yarn Issue"
+    },
+    {
+      title: "Yarn Return",
+      description: "Manage yarn returns from production floors",
+      icon: "ri-arrow-go-back-line",
+      path: "/yarn-management/yarn-return",
+      permission: "Yarn Return"
     },
     {
       title: "Yarn Master",

@@ -39,7 +39,7 @@ const EditPurchasePage: React.FC<EditPurchasePageProps> = ({ params }) => {
   const [purchaseData, setPurchaseData] = useState<PurchaseData | null>(null);
 
   // Check permission
-  const hasPermission = hasSubPermission('/yarn-management', 'Purchase Order');
+  const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
 
   useEffect(() => {
     const fetchPurchaseData = async () => {
@@ -96,7 +96,7 @@ const EditPurchasePage: React.FC<EditPurchasePageProps> = ({ params }) => {
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
           <p className="text-gray-500 mb-4">You don't have permission to edit purchase entries.</p>
-          <Link href="/yarn-management/purchase" className="ti-btn ti-btn-primary">
+          <Link href="/yarn-management/purchase-management/purchase" className="ti-btn ti-btn-primary">
             <i className="ri-arrow-left-line me-2"></i>
             Back to Purchase
           </Link>
@@ -128,7 +128,7 @@ const EditPurchasePage: React.FC<EditPurchasePageProps> = ({ params }) => {
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">Purchase Entry Not Found</h3>
           <p className="text-gray-500 mb-4">The requested purchase entry could not be found.</p>
-          <Link href="/yarn-management/purchase" className="ti-btn ti-btn-primary">
+          <Link href="/yarn-management/purchase-management/purchase" className="ti-btn ti-btn-primary">
             <i className="ri-arrow-left-line me-2"></i>
             Back to Purchase
           </Link>
@@ -147,7 +147,7 @@ const EditPurchasePage: React.FC<EditPurchasePageProps> = ({ params }) => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       toast.success('Purchase entry updated successfully');
-      router.push('/yarn-management/purchase');
+      router.push('/yarn-management/purchase-management/purchase');
     } catch (error) {
       console.error('Failed to update purchase entry:', error);
       toast.error('Failed to update purchase entry');
@@ -157,7 +157,7 @@ const EditPurchasePage: React.FC<EditPurchasePageProps> = ({ params }) => {
   };
 
   const handleCancel = () => {
-    router.push('/yarn-management/purchase');
+    router.push('/yarn-management/purchase-management/purchase');
   };
 
   return (
@@ -175,7 +175,7 @@ const EditPurchasePage: React.FC<EditPurchasePageProps> = ({ params }) => {
               </div>
               <div className="box-tools">
                 <Link 
-                  href="/yarn-management/purchase" 
+                  href="/yarn-management/purchase-management/purchase" 
                   className="ti-btn ti-btn-secondary"
                   title="Back to Purchase"
                 >

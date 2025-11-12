@@ -469,11 +469,11 @@ const EditUserPage = () => {
                                             <h4 className="text-md font-medium text-gray-900 mb-3">Yarn Management</h4>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
                                                 {[
-                                                    { key: 'Cataloguing', label: 'Cataloguing' },
-                                                    { key: 'Purchase Order', label: 'Purchase Order' },
-                                                    { key: 'Purchase Order Received', label: 'Purchase Order Received' },
+                                                    { key: 'Dashboard', label: 'Dashboard' },
                                                     { key: 'Inventory', label: 'Inventory' },
-                                                    { key: 'Yarn Issue', label: 'Yarn Issue' }
+                                                    { key: 'Cataloguing', label: 'Cataloguing' },
+                                                    { key: 'Yarn Issue', label: 'Yarn Issue' },
+                                                    { key: 'Yarn Return', label: 'Yarn Return' }
                                                 ].map(subsection => (
                                                     <label key={subsection.key} className="flex items-center">
                                                         <input
@@ -485,6 +485,30 @@ const EditUserPage = () => {
                                                         <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
                                                     </label>
                                                 ))}
+                                            </div>
+                                            
+                                            {/* Purchase Management Subsection */}
+                                            <div className="mt-4 ml-8">
+                                                <h5 className="text-sm font-medium text-gray-800 mb-2">Purchase Management</h5>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+                                                    {[
+                                                        { key: 'Requisition list', label: 'Requisition list' },
+                                                        { key: 'Purchase Order', label: 'Purchase Order' },
+                                                        { key: 'Purchase Order Recevied', label: 'Purchase Order Recevied' },
+                                                        { key: 'Yarn QC', label: 'Yarn QC' },
+                                                        { key: 'Yarn Storage', label: 'Yarn Storage' }
+                                                    ].map(subsubsection => (
+                                                        <label key={subsubsection.key} className="flex items-center">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={(navigation['Yarn Management'] as any)?.['Purchase Management']?.[subsubsection.key] === true}
+                                                                onChange={(e) => handleNavigationChange('Yarn Management', 'Purchase Management', subsubsection.key, e.target.checked)}
+                                                                className="rounded border-gray-300 text-primary focus:ring-primary"
+                                                            />
+                                                            <span className="ml-2 text-sm text-gray-700">{subsubsection.label}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
                                             </div>
                                             
                                             {/* Yarn Master Subsection */}
