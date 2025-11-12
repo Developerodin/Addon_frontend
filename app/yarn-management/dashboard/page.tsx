@@ -620,7 +620,7 @@ const DashboardPage = () => {
                           PO Number
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Quantity (kg)
+                          Total Quantity (kg)
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
                           Expected Date
