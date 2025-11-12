@@ -1,7 +1,8 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 
@@ -11,13 +12,14 @@ interface QCRecord {
   purchaseOrderNumber: string;
   receivedOrderNumber: string;
   supplier: string;
-  qcDate: string;
-  testedBy: string;
+  qcDate?: string;
+  testedBy?: string;
   status: 'Pending' | 'Passed' | 'Failed' | 'Partial';
   items: QCItem[];
   notes: string;
   createdAt: string;
   updatedAt: string;
+  isProcessed?: boolean;
 }
 
 interface QCItem {
@@ -37,6 +39,7 @@ interface QCItem {
 }
 
 const YarnQCPage = () => {
+  const router = useRouter();
   const { hasSubPermission } = useNavigation();
   
   // Static QC records data
@@ -136,6 +139,80 @@ const YarnQCPage = () => {
   const [qcRecords, setQCRecords] = useState<QCRecord[]>(staticQCRecords);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [processedQCRecords, setProcessedQCRecords] = useState<string[]>([]);
+
+  // Load processed QC records from localStorage
+  useEffect(() => {
+    const loadProcessedRecords = () => {
+      const stored = localStorage.getItem('processedQCRecords');
+      if (stored) {
+        try {
+          setProcessedQCRecords(JSON.parse(stored));
+        } catch (error) {
+          console.error('Error loading processed QC records:', error);
+        }
+      }
+    };
+
+    loadProcessedRecords();
+
+    // Listen for custom event when QC record is processed
+    const handleProcessedUpdate = () => {
+      loadProcessedRecords();
+    };
+
+    window.addEventListener('qcRecordProcessed', handleProcessedUpdate);
+    window.addEventListener('focus', loadProcessedRecords);
+
+    return () => {
+      window.removeEventListener('qcRecordProcessed', handleProcessedUpdate);
+      window.removeEventListener('focus', loadProcessedRecords);
+    };
+  }, []);
+
+  // Load and apply QC status updates from localStorage
+  useEffect(() => {
+    const loadAndApplyQCUpdates = () => {
+      const stored = localStorage.getItem('qcStatusUpdates');
+      if (stored) {
+        try {
+          const qcUpdates: Record<string, { status: 'Passed' | 'Failed', qcDate: string, testedBy: string }> = JSON.parse(stored);
+          
+          setQCRecords(prev => {
+            return prev.map(record => {
+              if (qcUpdates[record.id]) {
+                return {
+                  ...record,
+                  status: qcUpdates[record.id].status,
+                  qcDate: qcUpdates[record.id].qcDate,
+                  testedBy: qcUpdates[record.id].testedBy,
+                  isProcessed: true,
+                  updatedAt: new Date().toISOString()
+                };
+              }
+              return record;
+            });
+          });
+        } catch (error) {
+          console.error('Error loading QC status updates:', error);
+        }
+      }
+    };
+
+    loadAndApplyQCUpdates();
+
+    const handleQCUpdate = () => {
+      loadAndApplyQCUpdates();
+    };
+
+    window.addEventListener('qcStatusUpdated', handleQCUpdate);
+    window.addEventListener('focus', loadAndApplyQCUpdates);
+
+    return () => {
+      window.removeEventListener('qcStatusUpdated', handleQCUpdate);
+      window.removeEventListener('focus', loadAndApplyQCUpdates);
+    };
+  }, []);
 
   // Check permission
   const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Yarn QC');
@@ -180,17 +257,52 @@ const YarnQCPage = () => {
   };
 
   const handleQCStatusUpdate = (recordId: string, action: 'Accepted' | 'Rejected') => {
+    const finalStatus = action === 'Accepted' ? 'Passed' : 'Failed';
+    const qcDate = new Date().toISOString();
+    
+    // Save to localStorage
+    const processedRecords = JSON.parse(localStorage.getItem('processedQCRecords') || '[]');
+    if (!processedRecords.includes(recordId)) {
+      processedRecords.push(recordId);
+      localStorage.setItem('processedQCRecords', JSON.stringify(processedRecords));
+    }
+
+    const qcStatusUpdates = JSON.parse(localStorage.getItem('qcStatusUpdates') || '{}');
+    qcStatusUpdates[recordId] = {
+      status: finalStatus,
+      qcDate: qcDate,
+      testedBy: 'Manual Update' // Default value for manual updates
+    };
+    localStorage.setItem('qcStatusUpdates', JSON.stringify(qcStatusUpdates));
+
+    // Update state
     setQCRecords(prev =>
       prev.map(record =>
         record.id === recordId
           ? {
               ...record,
-              status: action === 'Accepted' ? 'Passed' : 'Failed',
+              status: finalStatus,
+              qcDate: qcDate,
+              testedBy: 'Manual Update',
+              isProcessed: true,
               updatedAt: new Date().toISOString(),
             }
           : record
       )
     );
+
+    // Update processed records list
+    setProcessedQCRecords(prev => {
+      if (!prev.includes(recordId)) {
+        return [...prev, recordId];
+      }
+      return prev;
+    });
+
+    // Dispatch events
+    window.dispatchEvent(new Event('qcRecordProcessed'));
+    window.dispatchEvent(new Event('qcStatusUpdated'));
+
     toast.success(`QC record ${action === 'Accepted' ? 'marked as Passed' : 'marked as Failed'}`);
   };
 
@@ -320,32 +432,44 @@ const YarnQCPage = () => {
                             {qc.supplier}
                           </td>
                           <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(qc.qcDate).toLocaleDateString()}
+                            {(processedQCRecords.includes(qc.id) || qc.isProcessed) && qc.qcDate 
+                              ? new Date(qc.qcDate).toLocaleDateString() 
+                              : '-'}
                           </td>
                           <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {qc.testedBy}
+                            {(processedQCRecords.includes(qc.id) || qc.isProcessed) && qc.testedBy 
+                              ? qc.testedBy 
+                              : '-'}
                           </td>
                           <td className="border border-gray-300 px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(qc.status)}`}>
-                              {qc.status}
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(processedQCRecords.includes(qc.id) || qc.isProcessed ? qc.status : 'Pending')}`}>
+                              {processedQCRecords.includes(qc.id) || qc.isProcessed ? qc.status : 'Pending'}
                             </span>
                           </td>
                           <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <select
-                              value=""
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  handleQCStatusUpdate(qc.id, e.target.value as 'Accepted' | 'Rejected');
-                                  e.target.value = "";
-                                }
-                              }}
-                              className="text-xs border border-gray-300 rounded px-2 py-1 h-7"
-                              title="Update QC Status"
-                            >
-                              <option value="">Update Status</option>
-                              <option value="Accepted">Mark as Accepted</option>
-                              <option value="Rejected">Mark as Rejected</option>
-                            </select>
+                            <div className="flex items-center gap-2">
+                              {processedQCRecords.includes(qc.id) || qc.isProcessed ? (
+                                <button
+                                  disabled
+                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-green-300 bg-green-50 px-3 py-1 text-sm text-green-700 cursor-not-allowed h-8"
+                                  title="QC has been processed"
+                                >
+                                  <i className="ri-checkbox-circle-line"></i>
+                                  PROCESSED
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    router.push(`/yarn-management/purchase-management/yarn-qc/process/new?qcRecordId=${qc.id}`);
+                                  }}
+                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:border-primary hover:text-primary transition h-8"
+                                  title="Process QC - Scan box barcode"
+                                >
+                                  <i className="ri-box-3-line"></i>
+                                  Process
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
