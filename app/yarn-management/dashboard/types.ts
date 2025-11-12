@@ -23,13 +23,21 @@ export interface InventorySummary {
   inventoryValue: number; // total value of inventory
 }
 
-export interface PendingDelivery {
-  id: string;
+export interface POYarnItem {
   yarnName: string;
   quantity: number;
+  ratePerUnit: number;
+  totalValue: number;
+}
+
+export interface PendingDelivery {
+  id: string;
+  yarnName: string; // Keep for backward compatibility in table display
+  quantity: number; // Total quantity for display
   expectedDate: string;
   supplier: string;
   poNumber: string;
+  yarns?: POYarnItem[]; // Multiple yarns in the PO
 }
 
 export interface InventoryAlert {

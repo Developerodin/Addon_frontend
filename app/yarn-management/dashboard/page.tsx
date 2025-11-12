@@ -7,6 +7,7 @@ import SummaryCards from "./components/SummaryCards";
 import LiveInventoryTable from "./components/LiveInventoryTable";
 import FullInventoryView from "./components/FullInventoryView";
 import InventoryAlertsModal from "./components/InventoryAlertsModal";
+import POYarnDetailsModal from "./components/POYarnDetailsModal";
 import { YarnInventory, InventorySummary, PendingDelivery, InventoryAlert } from "./types";
 
 const DashboardPage = () => {
@@ -23,6 +24,8 @@ const DashboardPage = () => {
   const [alerts, setAlerts] = useState<InventoryAlert[]>([]);
   const [showFullInventory, setShowFullInventory] = useState(false);
   const [showAlertsModal, setShowAlertsModal] = useState(false);
+  const [selectedDelivery, setSelectedDelivery] = useState<PendingDelivery | null>(null);
+  const [showYarnDetailsModal, setShowYarnDetailsModal] = useState(false);
 
   // Check permission
   const hasPermission = hasSubPermission("/yarn-management", "Dashboard");
@@ -42,10 +45,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 250,
         totalValue: 625000,
-        lastUpdated: "2024-01-15",
+        lastUpdated: "2025-11-10",
         status: "In Stock",
         supplier: "Textile Mills Ltd",
-        lotNo: "COT-2024-001",
+        lotNo: "COT-2025-001",
       },
       {
         id: "2",
@@ -58,10 +61,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 180,
         totalValue: 324000,
-        lastUpdated: "2024-01-14",
+        lastUpdated: "2025-11-09",
         status: "In Stock",
         supplier: "Synthetic Fibers Inc",
-        lotNo: "POL-2024-002",
+        lotNo: "POL-2025-002",
       },
       {
         id: "3",
@@ -74,10 +77,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 1200,
         totalValue: 540000,
-        lastUpdated: "2024-01-13",
+        lastUpdated: "2025-11-08",
         status: "Low Stock",
         supplier: "Silk Traders Co",
-        lotNo: "SLK-2024-003",
+        lotNo: "SLK-2025-003",
       },
       {
         id: "4",
@@ -90,10 +93,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 400,
         totalValue: 0,
-        lastUpdated: "2024-01-12",
+        lastUpdated: "2025-11-07",
         status: "Out of Stock",
         supplier: "Wool Suppliers Ltd",
-        lotNo: "WOL-2024-004",
+        lotNo: "WOL-2025-004",
       },
       {
         id: "5",
@@ -106,10 +109,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 350,
         totalValue: 420000,
-        lastUpdated: "2024-01-11",
+        lastUpdated: "2025-11-06",
         status: "In Stock",
         supplier: "Natural Fibers Co",
-        lotNo: "LIN-2024-005",
+        lotNo: "LIN-2025-005",
       },
       {
         id: "6",
@@ -122,10 +125,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 220,
         totalValue: 704000,
-        lastUpdated: "2024-01-16",
+        lastUpdated: "2025-11-11",
         status: "In Stock",
         supplier: "Textile Mills Ltd",
-        lotNo: "COT-2024-006",
+        lotNo: "COT-2025-006",
       },
       {
         id: "7",
@@ -138,10 +141,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 450,
         totalValue: 427500,
-        lastUpdated: "2024-01-10",
+        lastUpdated: "2025-11-05",
         status: "In Stock",
         supplier: "Eco Fibers Co",
-        lotNo: "BAM-2024-007",
+        lotNo: "BAM-2025-007",
       },
       {
         id: "8",
@@ -154,10 +157,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 150,
         totalValue: 420000,
-        lastUpdated: "2024-01-09",
+        lastUpdated: "2025-11-04",
         status: "In Stock",
         supplier: "Synthetic Fibers Inc",
-        lotNo: "ACR-2024-008",
+        lotNo: "ACR-2025-008",
       },
       {
         id: "9",
@@ -170,10 +173,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 2500,
         totalValue: 450000,
-        lastUpdated: "2024-01-08",
+        lastUpdated: "2025-11-03",
         status: "Low Stock",
         supplier: "Luxury Yarns Ltd",
-        lotNo: "CAS-2024-009",
+        lotNo: "CAS-2025-009",
       },
       {
         id: "10",
@@ -186,10 +189,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 380,
         totalValue: 570000,
-        lastUpdated: "2024-01-07",
+        lastUpdated: "2025-11-02",
         status: "In Stock",
         supplier: "Natural Fibers Co",
-        lotNo: "HEM-2024-010",
+        lotNo: "HEM-2025-010",
       },
       {
         id: "11",
@@ -202,10 +205,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 250,
         totalValue: 525000,
-        lastUpdated: "2024-01-06",
+        lastUpdated: "2025-11-01",
         status: "In Stock",
         supplier: "Textile Mills Ltd",
-        lotNo: "COT-2024-011",
+        lotNo: "COT-2025-011",
       },
       {
         id: "12",
@@ -218,10 +221,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 190,
         totalValue: 361000,
-        lastUpdated: "2024-01-05",
+        lastUpdated: "2025-10-31",
         status: "In Stock",
         supplier: "Synthetic Fibers Inc",
-        lotNo: "POL-2024-012",
+        lotNo: "POL-2025-012",
       },
       {
         id: "13",
@@ -234,10 +237,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 1500,
         totalValue: 480000,
-        lastUpdated: "2024-01-04",
+        lastUpdated: "2025-10-30",
         status: "Low Stock",
         supplier: "Silk Traders Co",
-        lotNo: "SLK-2024-013",
+        lotNo: "SLK-2025-013",
       },
       {
         id: "14",
@@ -250,10 +253,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 280,
         totalValue: 448000,
-        lastUpdated: "2024-01-03",
+        lastUpdated: "2025-10-29",
         status: "In Stock",
         supplier: "Organic Textiles Ltd",
-        lotNo: "ORG-2024-014",
+        lotNo: "ORG-2025-014",
       },
       {
         id: "15",
@@ -266,10 +269,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 420,
         totalValue: 462000,
-        lastUpdated: "2024-01-02",
+        lastUpdated: "2025-10-28",
         status: "In Stock",
         supplier: "Wool Suppliers Ltd",
-        lotNo: "WOL-2024-015",
+        lotNo: "WOL-2025-015",
       },
       {
         id: "16",
@@ -282,10 +285,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 400,
         totalValue: 320000,
-        lastUpdated: "2024-01-01",
+        lastUpdated: "2025-10-27",
         status: "In Stock",
         supplier: "Natural Fibers Co",
-        lotNo: "LIN-2024-016",
+        lotNo: "LIN-2025-016",
       },
       {
         id: "17",
@@ -298,10 +301,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 480,
         totalValue: 360000,
-        lastUpdated: "2023-12-31",
+        lastUpdated: "2025-10-26",
         status: "In Stock",
         supplier: "Eco Fibers Co",
-        lotNo: "BAM-2024-017",
+        lotNo: "BAM-2025-017",
       },
       {
         id: "18",
@@ -314,10 +317,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 160,
         totalValue: 352000,
-        lastUpdated: "2023-12-30",
+        lastUpdated: "2025-10-25",
         status: "In Stock",
         supplier: "Synthetic Fibers Inc",
-        lotNo: "ACR-2024-018",
+        lotNo: "ACR-2025-018",
       },
       {
         id: "19",
@@ -330,10 +333,10 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 250,
         totalValue: 125000,
-        lastUpdated: "2023-12-29",
+        lastUpdated: "2025-10-24",
         status: "Low Stock",
         supplier: "Textile Mills Ltd",
-        lotNo: "COT-2024-019",
+        lotNo: "COT-2025-019",
       },
       {
         id: "20",
@@ -346,40 +349,138 @@ const DashboardPage = () => {
         unitOfMeasurement: "kg",
         ratePerUnit: 1200,
         totalValue: 240000,
-        lastUpdated: "2023-12-28",
+        lastUpdated: "2025-10-23",
         status: "Low Stock",
         supplier: "Silk Traders Co",
-        lotNo: "SLK-2024-020",
+        lotNo: "SLK-2025-020",
       },
     ];
 
     // Generate dummy pending deliveries
-    const dummyDeliveries: PendingDelivery[] = [
+    const dummyDeliveriesData = [
       {
         id: "D1",
-        yarnName: "Wool Yarn Winter 20s",
-        quantity: 500,
-        expectedDate: "2024-01-20",
+        expectedDate: "2025-11-25",
         supplier: "Wool Suppliers Ltd",
-        poNumber: "PO-2024-001",
+        poNumber: "PO-2025-001",
+        yarns: [
+          {
+            yarnName: "Wool Yarn Winter 20s",
+            quantity: 500,
+            ratePerUnit: 400,
+            totalValue: 200000,
+          },
+          {
+            yarnName: "Cotton Yarn Premium 40s",
+            quantity: 800,
+            ratePerUnit: 250,
+            totalValue: 200000,
+          },
+          {
+            yarnName: "Polyester Blend 30s",
+            quantity: 600,
+            ratePerUnit: 180,
+            totalValue: 108000,
+          },
+          {
+            yarnName: "Linen Yarn Natural 35s",
+            quantity: 400,
+            ratePerUnit: 350,
+            totalValue: 140000,
+          },
+          {
+            yarnName: "Bamboo Yarn Eco 50s",
+            quantity: 200,
+            ratePerUnit: 450,
+            totalValue: 90000,
+          },
+        ],
       },
       {
         id: "D2",
-        yarnName: "Cotton Yarn Premium 40s",
-        quantity: 1000,
-        expectedDate: "2024-01-18",
+        expectedDate: "2025-11-20",
         supplier: "Textile Mills Ltd",
-        poNumber: "PO-2024-002",
+        poNumber: "PO-2025-002",
+        yarns: [
+          {
+            yarnName: "Cotton Yarn Premium 40s",
+            quantity: 1000,
+            ratePerUnit: 250,
+            totalValue: 250000,
+          },
+          {
+            yarnName: "Cotton Yarn Standard 32s",
+            quantity: 1200,
+            ratePerUnit: 220,
+            totalValue: 264000,
+          },
+          {
+            yarnName: "Cotton Yarn Organic 38s",
+            quantity: 1000,
+            ratePerUnit: 280,
+            totalValue: 280000,
+          },
+        ],
       },
       {
         id: "D3",
-        yarnName: "Silk Yarn Luxury 60s",
-        quantity: 200,
-        expectedDate: "2024-01-22",
+        expectedDate: "2025-11-28",
         supplier: "Silk Traders Co",
-        poNumber: "PO-2024-003",
+        poNumber: "PO-2025-003",
+        yarns: [
+          {
+            yarnName: "Silk Yarn Luxury 60s",
+            quantity: 200,
+            ratePerUnit: 1200,
+            totalValue: 240000,
+          },
+          {
+            yarnName: "Silk Yarn Deluxe 70s",
+            quantity: 300,
+            ratePerUnit: 1500,
+            totalValue: 450000,
+          },
+          {
+            yarnName: "Cashmere Yarn Premium 80s",
+            quantity: 100,
+            ratePerUnit: 2500,
+            totalValue: 250000,
+          },
+          {
+            yarnName: "Linen Yarn Fine 40s",
+            quantity: 400,
+            ratePerUnit: 400,
+            totalValue: 160000,
+          },
+          {
+            yarnName: "Bamboo Yarn Soft 45s",
+            quantity: 300,
+            ratePerUnit: 480,
+            totalValue: 144000,
+          },
+          {
+            yarnName: "Hemp Yarn Natural 28s",
+            quantity: 200,
+            ratePerUnit: 380,
+            totalValue: 76000,
+          },
+        ],
       },
     ];
+
+    // Calculate total quantity from yarns and create PendingDelivery objects
+    const dummyDeliveries: PendingDelivery[] = dummyDeliveriesData.map((delivery) => {
+      const totalQuantity = delivery.yarns.reduce((sum, yarn) => sum + yarn.quantity, 0);
+      return {
+        id: delivery.id,
+        yarnName: "Multiple Yarns",
+        quantity: totalQuantity,
+        expectedDate: delivery.expectedDate,
+        supplier: delivery.supplier,
+        poNumber: delivery.poNumber,
+        yarns: delivery.yarns,
+      };
+    });
 
     // Generate dummy alerts
     const dummyAlerts: InventoryAlert[] = [
@@ -389,7 +490,7 @@ const DashboardPage = () => {
         yarnName: "Silk Yarn Luxury 60s",
         alertType: "Low Stock",
         message: "Stock is below minimum threshold",
-        createdAt: "2024-01-13",
+        createdAt: "2025-11-10",
         severity: "medium",
       },
       {
@@ -398,7 +499,7 @@ const DashboardPage = () => {
         yarnName: "Wool Yarn Winter 20s",
         alertType: "Out of Stock",
         message: "Item is out of stock",
-        createdAt: "2024-01-12",
+        createdAt: "2025-11-09",
         severity: "high",
       },
       {
@@ -407,7 +508,7 @@ const DashboardPage = () => {
         yarnName: "Cotton Yarn Premium 40s",
         alertType: "Overblocked",
         message: "Blocked quantity exceeds available stock. Urgent PO required.",
-        createdAt: "2024-01-15",
+        createdAt: "2025-11-12",
         severity: "high",
       },
     ];
@@ -501,13 +602,13 @@ const DashboardPage = () => {
           {/* Summary Cards */}
           <SummaryCards summary={summary} />
 
-          {/* Pending Deliveries Section */}
+          {/* Recent PO Status Section */}
           {pendingDeliveries.length > 0 && (
             <div className="box mb-6">
               <div className="box-header">
                 <h3 className="box-title">
                   <i className="ri-truck-line me-2"></i>
-                  Pending Deliveries ({pendingDeliveries.length})
+                  Recent PO Status ({pendingDeliveries.length})
                 </h3>
               </div>
               <div className="box-body">
@@ -516,7 +617,7 @@ const DashboardPage = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Yarn Name
+                          PO Number
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
                           Quantity (kg)
@@ -528,7 +629,7 @@ const DashboardPage = () => {
                           Supplier
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
-                          PO Number
+                          Yarn Details
                         </th>
                       </tr>
                     </thead>
@@ -536,7 +637,7 @@ const DashboardPage = () => {
                       {pendingDeliveries.map((delivery) => (
                         <tr key={delivery.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-b border-gray-300">
-                            {delivery.yarnName}
+                            {delivery.poNumber}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                             {delivery.quantity.toLocaleString()} kg
@@ -547,8 +648,17 @@ const DashboardPage = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 border-r border-b border-gray-300">
                             {delivery.supplier}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 border-b border-gray-300">
-                            {delivery.poNumber}
+                          <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
+                            <button
+                              onClick={() => {
+                                setSelectedDelivery(delivery);
+                                setShowYarnDetailsModal(true);
+                              }}
+                              className="ti-btn ti-btn-outline ti-btn-sm"
+                            >
+                              <i className="ri-eye-line me-1"></i>
+                              Details
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -579,6 +689,17 @@ const DashboardPage = () => {
         isOpen={showAlertsModal}
         onClose={() => setShowAlertsModal(false)}
         alerts={alerts}
+      />
+
+      {/* PO Yarn Details Modal */}
+      <POYarnDetailsModal
+        isOpen={showYarnDetailsModal}
+        onClose={() => {
+          setShowYarnDetailsModal(false);
+          setSelectedDelivery(null);
+        }}
+        delivery={selectedDelivery}
+        inventory={inventory}
       />
     </div>
   );
