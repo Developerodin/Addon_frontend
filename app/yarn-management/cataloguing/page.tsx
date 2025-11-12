@@ -105,6 +105,7 @@ const CataloguingPage = () => {
           GST: 12,
           Remark: "Sample remark",
           "HSN Code": "5509",
+          "Min Quantity": 100,
           Status: "active",
         },
         {
@@ -120,6 +121,7 @@ const CataloguingPage = () => {
           GST: 5,
           Remark: "",
           "HSN Code": "",
+          "Min Quantity": "",
           Status: "inactive",
         },
       ];
@@ -137,6 +139,7 @@ const CataloguingPage = () => {
         { wch: 10 },
         { wch: 24 },
         { wch: 14 },
+        { wch: 12 },
         { wch: 10 },
       ];
       XLSX.utils.book_append_sheet(workbook, worksheet, "YarnCatalogs");
@@ -167,6 +170,7 @@ const CataloguingPage = () => {
     GST?: string | number;
     Remark?: string;
     "HSN Code"?: string;
+    "Min Quantity"?: string | number;
     Status?: string;
     "Batch Size"?: string | number;
   };
@@ -248,6 +252,7 @@ const CataloguingPage = () => {
           const season = row.Season?.toString().trim();
           const remark = row.Remark?.toString().trim();
           const hsnCode = row["HSN Code"]?.toString().trim();
+          const minQuantityRaw = row["Min Quantity"];
           const statusRaw = row.Status?.toString().trim().toLowerCase();
 
           if (!yarnTypeId) {
@@ -274,6 +279,16 @@ const CataloguingPage = () => {
             }
           }
 
+          let minQuantityValue: number | undefined;
+          if (minQuantityRaw !== undefined && minQuantityRaw !== null && `${minQuantityRaw}`.trim() !== "") {
+            const parsedMinQuantity = Number(`${minQuantityRaw}`.trim());
+            if (Number.isNaN(parsedMinQuantity) || parsedMinQuantity < 0) {
+              registerError(`Row ${rowNumber}: Min Quantity must be a number greater than or equal to 0`);
+            } else {
+              minQuantityValue = parsedMinQuantity;
+            }
+          }
+
           if (rowHasError) {
             updateRowProgress();
             return;
@@ -297,6 +312,7 @@ const CataloguingPage = () => {
             ...(gstValue !== undefined ? { gst: gstValue } : {}),
             ...(remark ? { remark } : {}),
             ...(hsnCode ? { hsnCode } : {}),
+            ...(minQuantityValue !== undefined ? { minQuantity: minQuantityValue } : {}),
           };
 
           catalogs.push(catalogEntry);
@@ -386,6 +402,7 @@ const CataloguingPage = () => {
         GST: catalog.gst ?? "",
         Remark: catalog.remark || "",
         "HSN Code": catalog.hsnCode || "",
+        "Min Quantity": catalog.minQuantity ?? "",
         Status: catalog.status || "",
         "Created At": catalog.createdAt ? new Date(catalog.createdAt).toLocaleString() : "",
         "Updated At": catalog.updatedAt ? new Date(catalog.updatedAt).toLocaleString() : "",
@@ -411,6 +428,7 @@ const CataloguingPage = () => {
         { wch: 10 },
         { wch: 24 },
         { wch: 14 },
+        { wch: 12 },
         { wch: 10 },
         { wch: 24 },
         { wch: 24 },
@@ -623,6 +641,9 @@ const CataloguingPage = () => {
                             GST
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Min Quantity
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Status
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -663,6 +684,9 @@ const CataloguingPage = () => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {yarn.gst ? `${yarn.gst}%` : '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {yarn.minQuantity !== undefined && yarn.minQuantity !== null ? yarn.minQuantity : '-'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               <span className={`badge ${yarn.status === 'active' ? 'bg-success' : yarn.status === 'inactive' ? 'bg-warning' : 'bg-danger'}`}>
