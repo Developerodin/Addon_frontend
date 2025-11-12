@@ -16,6 +16,7 @@ interface YarnDetailForm {
   yarnsubtype: string;
   color: string;
   shadeNumber: string;
+  tearweight: string;
 }
 
 type SupplierStatus = 'active' | 'inactive' | 'suspended';
@@ -40,6 +41,7 @@ const defaultYarnDetail: YarnDetailForm = {
   yarnsubtype: '',
   color: '',
   shadeNumber: '',
+  tearweight: '',
 };
 
 const AddBrandPage = () => {
@@ -391,6 +393,9 @@ const AddBrandPage = () => {
               if (detail.shadeNumber.trim()) {
                 normalizedDetail.shadeNumber = detail.shadeNumber.trim();
               }
+              if (detail.tearweight.trim()) {
+                normalizedDetail.tearweight = detail.tearweight.trim();
+              }
               return normalizedDetail;
             })
           : undefined,
@@ -638,7 +643,7 @@ const AddBrandPage = () => {
                           key={`yarn-detail-${index}`}
                           className="border border-gray-200 rounded-lg p-4 space-y-4"
                         >
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                             <div>
                               <label className="form-label">
                                 Yarn Type <span className="text-red-500">*</span>
@@ -709,6 +714,16 @@ const AddBrandPage = () => {
                                 onChange={(e) => handleYarnDetailChange(index, 'shadeNumber', e.target.value)}
                                 className="form-control"
                                 placeholder="Enter shade number"
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Tear Weight</label>
+                              <input
+                                type="text"
+                                value={detail.tearweight}
+                                onChange={(e) => handleYarnDetailChange(index, 'tearweight', e.target.value)}
+                                className="form-control"
+                                placeholder="Enter tear weight"
                               />
                             </div>
                           </div>

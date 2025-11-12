@@ -172,6 +172,7 @@ const BrandPage = () => {
     'Yarn Subtype ID'?: string;
     'Color ID'?: string;
     'Shade Number'?: string;
+    'Tear Weight'?: string;
     'Batch Size'?: string | number;
   };
 
@@ -197,6 +198,7 @@ const BrandPage = () => {
           'Yarn Subtype ID': '65f1a2b3c4d5e6f7g8h9i0a2',
           'Color ID': '65f1a2b3c4d5e6f7g8h9i0a3',
           'Shade Number': 'Shade-21',
+          'Tear Weight': '100',
           'Batch Size': '50 (optional, read from first row)',
         },
         {
@@ -216,6 +218,7 @@ const BrandPage = () => {
           'Yarn Subtype ID': '65f1a2b3c4d5e6f7g8h9i0b2',
           'Color ID': '65f1a2b3c4d5e6f7g8h9i0b3',
           'Shade Number': 'Shade-45',
+          'Tear Weight': '150',
         },
       ]);
 
@@ -332,6 +335,7 @@ const BrandPage = () => {
               'Yarn Subtype ID': '',
               'Color ID': '',
               'Shade Number': '',
+              'Tear Weight': '',
               'Batch Size': '',
             },
           ];
@@ -362,12 +366,20 @@ const BrandPage = () => {
             colorId = colorNameToId.get(colorName) || '';
           }
 
+          const tearweightValue =
+            typeof detail.tearweight === 'string'
+              ? detail.tearweight
+              : typeof detail.tearweight === 'number'
+                ? String(detail.tearweight)
+                : '';
+
           return {
             ...baseRow,
             'Yarn Type ID': yarnTypeId,
             'Yarn Subtype ID': yarnSubtypeId,
             'Color ID': colorId,
             'Shade Number': detail.shadeNumber || '',
+            'Tear Weight': tearweightValue,
             'Batch Size': '',
           };
         });
@@ -594,7 +606,8 @@ const BrandPage = () => {
           const yarnSubtypeId = row['Yarn Subtype ID']?.toString().trim() ?? '';
           const colorId = row['Color ID']?.toString().trim() ?? '';
           const shadeNumber = row['Shade Number']?.toString().trim() ?? '';
-          const hasDetailFields = [yarnTypeId, yarnSubtypeId, colorId, shadeNumber].some(field => field.length > 0);
+          const tearweight = row['Tear Weight']?.toString().trim() ?? '';
+          const hasDetailFields = [yarnTypeId, yarnSubtypeId, colorId, shadeNumber, tearweight].some(field => field.length > 0);
 
           if (hasDetailFields) {
             const detailIssues: string[] = [];
@@ -608,7 +621,7 @@ const BrandPage = () => {
             if (detailIssues.length > 0) {
               rowErrors.push(`Row ${rowNumber}: ${detailIssues.join(', ')}`);
             } else if (rowErrors.length === errorsBeforeDetails) {
-              const detailKey = `${yarnTypeId}|${yarnSubtypeId || ''}|${colorId}|${shadeNumber || ''}`;
+              const detailKey = `${yarnTypeId}|${yarnSubtypeId || ''}|${colorId}|${shadeNumber || ''}|${tearweight || ''}`;
               if (!accumulator.detailKeys.has(detailKey)) {
                 const detailPayload: SupplierYarnDetail = {
                   yarnType: yarnTypeId,
@@ -619,6 +632,9 @@ const BrandPage = () => {
                 }
                 if (shadeNumber) {
                   detailPayload.shadeNumber = shadeNumber;
+                }
+                if (tearweight) {
+                  detailPayload.tearweight = tearweight;
                 }
 
                 accumulator.detailKeys.add(detailKey);
@@ -941,6 +957,12 @@ const BrandPage = () => {
                                       typeof detail.shadeNumber === 'string' && detail.shadeNumber.trim().length > 0
                                         ? detail.shadeNumber
                                         : 'N/A';
+                                    const tearweightLabel =
+                                      typeof detail.tearweight === 'string' && detail.tearweight.trim().length > 0
+                                        ? detail.tearweight
+                                        : typeof detail.tearweight === 'number'
+                                          ? String(detail.tearweight)
+                                          : 'N/A';
                                     return (
                                       <div
                                         key={`${brand.id}-yarn-${detailIndex}`}
@@ -959,6 +981,12 @@ const BrandPage = () => {
                                   <>
                                     <span className="mx-2">•</span>
                                     <span>{shadeLabel}</span>
+                                  </>
+                                ) : null}
+                                {tearweightLabel !== 'N/A' ? (
+                                  <>
+                                    <span className="mx-2">•</span>
+                                    <span>TW: {tearweightLabel}</span>
                                   </>
                                 ) : null}
                                       </div>

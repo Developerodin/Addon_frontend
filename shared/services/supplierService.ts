@@ -12,6 +12,7 @@ export interface SupplierYarnDetail {
   yarnsubtype?: string | SupplierYarnReference;
   color: string | SupplierYarnReference;
   shadeNumber?: string;
+  tearweight?: string;
 }
 
 export interface Supplier {
