@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 
@@ -21,7 +22,7 @@ interface ReceivedOrder {
   supplier: string;
   receivedDate: string;
   receivedBy: string;
-  status: 'Partial' | 'Complete' | 'Pending Inspection' | 'In Transit';
+  status: 'Partial' | 'Complete' | 'Pending Inspection' | 'In Transit' | 'Rejected';
   totalAmount: number;
   items: ReceivedItem[];
   notes: string;
@@ -79,6 +80,7 @@ const getOrderSortValue = (order: ReceivedOrder, field: OrderSortField) => {
 };
 
 const PurchaseOrderReceivedPage = () => {
+  const router = useRouter();
   const { hasSubPermission, isLoading } = useNavigation();
   
   // Static received orders data
@@ -299,6 +301,80 @@ const PurchaseOrderReceivedPage = () => {
   const [receivedOrders, setReceivedOrders] = useState<ReceivedOrder[]>(staticReceivedOrders);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [processedOrders, setProcessedOrders] = useState<string[]>([]);
+
+  // Load processed orders from localStorage on mount and when page becomes visible
+  useEffect(() => {
+    const loadProcessedOrders = () => {
+      const stored = localStorage.getItem('processedOrders');
+      if (stored) {
+        try {
+          setProcessedOrders(JSON.parse(stored));
+        } catch (error) {
+          console.error('Error loading processed orders:', error);
+        }
+      }
+    };
+
+    loadProcessedOrders();
+
+    // Listen for custom event when order is processed
+    const handleProcessedOrdersUpdate = () => {
+      loadProcessedOrders();
+    };
+
+    window.addEventListener('processedOrdersUpdated', handleProcessedOrdersUpdate);
+
+    // Also check on focus (when user returns to tab)
+    window.addEventListener('focus', loadProcessedOrders);
+
+    return () => {
+      window.removeEventListener('processedOrdersUpdated', handleProcessedOrdersUpdate);
+      window.removeEventListener('focus', loadProcessedOrders);
+    };
+  }, []);
+
+  // Load and apply status updates from localStorage
+  useEffect(() => {
+    const loadAndApplyStatusUpdates = () => {
+      const stored = localStorage.getItem('orderStatusUpdates');
+      if (stored) {
+        try {
+          const statusUpdates: Record<string, ReceivedOrder["status"]> = JSON.parse(stored);
+          
+          setReceivedOrders(prev => {
+            return prev.map(order => {
+              if (statusUpdates[order.id]) {
+                return {
+                  ...order,
+                  status: statusUpdates[order.id],
+                  updatedAt: new Date().toISOString()
+                };
+              }
+              return order;
+            });
+          });
+        } catch (error) {
+          console.error('Error loading status updates:', error);
+        }
+      }
+    };
+
+    loadAndApplyStatusUpdates();
+
+    // Listen for custom event when order status is updated
+    const handleStatusUpdate = () => {
+      loadAndApplyStatusUpdates();
+    };
+
+    window.addEventListener('orderStatusUpdated', handleStatusUpdate);
+    window.addEventListener('focus', loadAndApplyStatusUpdates);
+
+    return () => {
+      window.removeEventListener('orderStatusUpdated', handleStatusUpdate);
+      window.removeEventListener('focus', loadAndApplyStatusUpdates);
+    };
+  }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [packLists, setPackLists] = useState<Record<string, PackBox[]>>({});
@@ -631,6 +707,7 @@ const PurchaseOrderReceivedPage = () => {
       case 'Partial': return 'bg-yellow-100 text-yellow-800';
       case 'Complete': return 'bg-green-100 text-green-800';
       case 'Pending Inspection': return 'bg-blue-100 text-blue-800';
+      case 'Rejected': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -755,15 +832,6 @@ const PurchaseOrderReceivedPage = () => {
                 <h1 className="box-title text-2xl font-semibold">Purchase Order Received</h1>
                 <p className="text-gray-600 mt-1">Track and manage received purchase orders</p>
               </div>
-              <div className="box-tools">
-                <Link 
-                  href="/yarn-management/purchase-management/purchase-order-received/add"
-                  className="ti-btn ti-btn-primary"
-                >
-                  <i className="ri-add-line me-1"></i>
-                  Record Receipt
-                </Link>
-              </div>
             </div>
           </div>
 
@@ -791,6 +859,7 @@ const PurchaseOrderReceivedPage = () => {
                     <option value="Partial">Partial</option>
                     <option value="Complete">Complete</option>
                     <option value="Pending Inspection">Pending Inspection</option>
+                    <option value="Rejected">Rejected</option>
                   </select>
                   <button className="ti-btn ti-btn-light">
                     <i className="ri-download-line me-1"></i>
@@ -897,7 +966,6 @@ const PurchaseOrderReceivedPage = () => {
                     </thead>
                     <tbody className="bg-white">
                       {filteredAndSortedOrders.map((order) => {
-                        const nextStatusOptions = getNextStatusOptions(order.status);
                         return (
                           <tr
                             key={order.id}
@@ -934,39 +1002,29 @@ const PurchaseOrderReceivedPage = () => {
                             ₹{order.totalAmount.toLocaleString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium border-b border-gray-200">
-                            <div className="flex flex-wrap items-center gap-2">
-                              {/* <button
-                                onClick={() => handleSelectOrder(order.id)}
-                                className={`inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm transition ${
-                                  selectedOrderId === order.id && isProcessModalOpen
-                                    ? "border-primary bg-primary/10 text-primary"
-                                    : "border-gray-300 text-gray-600 hover:border-primary hover:text-primary"
-                                }`}
-                                title="Process receipt workflow"
-                              >
-                                <i className="ri-box-3-line"></i>
-                                Process
-                              </button> */}
-                              {nextStatusOptions.length > 0 && (
-                                <select
-                                  value=""
-                                  onChange={(event) => {
-                                    const selectedValue = event.target.value as ReceivedOrder["status"] | "";
-                                    if (selectedValue) {
-                                      handleOpenStatusModal(order, selectedValue);
-                                      event.target.value = "";
-                                    }
-                                  }}
-                                  className="text-xs border border-gray-300 rounded px-2 py-1 h-8 bg-white"
-                                  title="Update status"
+                            <div className="flex items-center gap-2">
+                              {processedOrders.includes(order.id) ? (
+                                <button
+                                  disabled
+                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-green-300 bg-green-50 px-3 py-1 text-sm text-green-700 cursor-not-allowed h-8"
+                                  title="Order has been processed"
                                 >
-                                  <option value="">Update Status</option>
-                                  {nextStatusOptions.map(option => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
+                                  <i className="ri-checkbox-circle-line"></i>
+                                  PROCESSED
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    console.log('Process button clicked for order:', order.id);
+                                    console.log('Navigating to:', `/yarn-management/purchase-management/purchase-order-received/process/${order.id}`);
+                                    router.push(`/yarn-management/purchase-management/purchase-order-received/process/${order.id}`);
+                                  }}
+                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:border-primary hover:text-primary transition h-8"
+                                  title="Process receipt workflow"
+                                >
+                                  <i className="ri-box-3-line"></i>
+                                  Process
+                                </button>
                               )}
                             </div>
                           </td>
