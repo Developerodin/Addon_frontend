@@ -5,6 +5,7 @@ export interface YarnColor {
   id: string;
   name: string;
   colorCode: string;
+  pantoneName?: string;
   status: 'active' | 'inactive';
   createdAt?: string;
   updatedAt?: string;
@@ -29,12 +30,14 @@ export interface YarnColorQueryParams {
 export interface CreateYarnColorRequest {
   name: string;
   colorCode: string;
+  pantoneName?: string;
   status?: 'active' | 'inactive';
 }
 
 export interface UpdateYarnColorRequest {
   name?: string;
   colorCode?: string;
+  pantoneName?: string;
   status?: 'active' | 'inactive';
 }
 
@@ -43,6 +46,7 @@ export interface BulkImportColorRequest {
     id?: string;
     name: string;
     colorCode: string;
+    pantoneName?: string;
     status?: 'active' | 'inactive';
   }>;
   batchSize?: number;

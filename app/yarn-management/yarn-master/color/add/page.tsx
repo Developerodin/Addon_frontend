@@ -9,9 +9,15 @@ import yarnColorService from '@/shared/services/yarnColorService';
 const AddColorPage = () => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState<{ name: string; colorCode: string; status: 'active' | 'inactive' }>({
+  const [formData, setFormData] = useState<{
+    name: string;
+    colorCode: string;
+    pantoneName: string;
+    status: 'active' | 'inactive';
+  }>({
     name: '',
     colorCode: '#000000',
+    pantoneName: '',
     status: 'active',
   });
 
@@ -35,7 +41,7 @@ const AddColorPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) {
-      toast.error('Color name is required');
+      toast.error('Color family name is required');
       return;
     }
     if (!isValidHex(formData.colorCode)) {
@@ -48,6 +54,7 @@ const AddColorPage = () => {
       await yarnColorService.createColor({
         name: formData.name.trim(),
         colorCode: formData.colorCode.toUpperCase(),
+        pantoneName: formData.pantoneName.trim() || undefined,
         status: formData.status,
       });
       toast.success('Color created successfully');
@@ -78,39 +85,40 @@ const AddColorPage = () => {
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="form-label">Color Name <span className="text-red-500">*</span></label>
-                    <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="form-control" placeholder="Enter color name" required />
+                    <label className="form-label">Color Family Name <span className="text-red-500">*</span></label>
+                    <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="form-control" placeholder="Enter color family name" required />
                   </div>
                   <div>
-                    <label className="form-label">Color Code <span className="text-red-500">*</span></label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="color"
-                        name="colorCode"
-                        value={formData.colorCode}
-                        onChange={(e) => handleColorCodeChange(e.target.value)}
-                        className="w-16 h-12 border border-gray-300 rounded cursor-pointer"
-                        required
-                      />
-                      <input
-                        type="text"
-                        name="colorCode"
-                        value={formData.colorCode}
-                        onChange={(e) => handleColorCodeChange(e.target.value)}
-                        onBlur={(e) => {
-                          if (!e.target.value.startsWith('#')) {
-                            handleColorCodeChange(`#${e.target.value}`);
-                          }
-                        }}
-                        className="form-control uppercase"
-                        placeholder="#FFFFFF"
-                        maxLength={7}
-                        required
-                      />
-                    </div>
+                    <label className="form-label">Pantone Code <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      name="colorCode"
+                      value={formData.colorCode}
+                      onChange={(e) => handleColorCodeChange(e.target.value)}
+                      onBlur={(e) => {
+                        if (!e.target.value.startsWith('#')) {
+                          handleColorCodeChange(`#${e.target.value}`);
+                        }
+                      }}
+                      className="form-control uppercase"
+                      placeholder="#FFFFFF"
+                      maxLength={7}
+                      required
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="form-label">Pantone Name</label>
+                    <input
+                      type="text"
+                      name="pantoneName"
+                      value={formData.pantoneName}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter pantone name"
+                    />
+                  </div>
                   <div>
                     <label className="form-label">Status</label>
                     <select name="status" value={formData.status} onChange={handleInputChange} className="form-select">

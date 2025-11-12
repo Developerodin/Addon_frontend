@@ -74,7 +74,6 @@ const YarnTypePage = () => {
     'Yarn Name'?: string;
     Status?: string;
     Subtype?: string;
-    'Tear Weight'?: string | number;
     'Count Size Names'?: string;
     'Count Size IDs'?: string;
   };
@@ -89,7 +88,6 @@ const YarnTypePage = () => {
           Name: 'Combed Cotton',
           Status: 'active',
           Subtype: 'Combed 40s',
-          'Tear Weight': '2.5',
           'Count Size IDs': '',
         },
         {
@@ -97,7 +95,6 @@ const YarnTypePage = () => {
           Name: 'Combed Cotton',
           Status: 'active',
           Subtype: 'Combed 44s',
-          'Tear Weight': '',
           'Count Size IDs': '',
         },
         {
@@ -105,7 +102,6 @@ const YarnTypePage = () => {
           Name: 'Carded Cotton',
           Status: 'inactive',
           Subtype: '',
-          'Tear Weight': '',
           'Count Size IDs': '',
         },
       ];
@@ -190,7 +186,6 @@ const YarnTypePage = () => {
           return {
             ...baseRow,
             Subtype: detail.subtype,
-            'Tear Weight': detail.tearWeight || '',
             'Count Size Names': countSizeNames.join(', '),
             'Count Size IDs': countSizeIds.join(', '),
           };
@@ -208,7 +203,6 @@ const YarnTypePage = () => {
                 'Yarn Name': '',
                 Status: '',
                 Subtype: '',
-                'Tear Weight': '',
                 'Count Size Names': '',
                 'Count Size IDs': '',
               },
@@ -282,7 +276,6 @@ const YarnTypePage = () => {
             const rawYarnName = row['Yarn Name']?.toString().trim() ?? '';
             const rawStatusValue = row.Status?.toString().trim() ?? '';
             const subtypeRaw = row.Subtype?.toString().trim() ?? '';
-            const tearWeightRaw = row['Tear Weight']?.toString().trim() ?? '';
             const countSizeNamesRaw = row['Count Size Names']?.toString() ?? '';
             const countSizeIdsRaw = row['Count Size IDs']?.toString() ?? '';
 
@@ -292,7 +285,6 @@ const YarnTypePage = () => {
               rawYarnName,
               rawStatusValue,
               subtypeRaw,
-              tearWeightRaw,
               countSizeNamesRaw?.trim?.(),
               countSizeIdsRaw?.trim?.(),
             ].some(value => Boolean(value && value.toString().trim()));
@@ -418,7 +410,6 @@ const YarnTypePage = () => {
               const detailPayload: YarnTypeDetail = {
                 subtype: subtypeRaw,
                 ...(uniqueCountSizeIds.size > 0 ? { countSize: Array.from(uniqueCountSizeIds) } : {}),
-                ...(tearWeightRaw ? { tearWeight: tearWeightRaw } : {}),
               };
 
               entry.details = [...(entry.details || []), detailPayload];
@@ -701,11 +692,6 @@ const YarnTypePage = () => {
                                         {countSizeDisplay && (
                                           <span className="ml-2 text-xs text-gray-500">
                                             Count Size: {countSizeDisplay}
-                                          </span>
-                                        )}
-                                        {detail.tearWeight && (
-                                          <span className="ml-2 text-xs text-gray-500">
-                                            Tear Weight: {detail.tearWeight}
                                           </span>
                                         )}
                                       </div>

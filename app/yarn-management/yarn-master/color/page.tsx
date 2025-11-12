@@ -37,6 +37,7 @@ const ColorPage = () => {
       const formattedResults = (response.results || []).map(color => ({
         ...color,
         colorCode: color.colorCode ? color.colorCode.toUpperCase() : '#000000',
+        pantoneName: color.pantoneName || '',
       }));
       setColors(formattedResults);
       setTotalPages(response.totalPages || 1);
@@ -86,8 +87,8 @@ const ColorPage = () => {
     try {
       const workbook = XLSX.utils.book_new();
       const worksheet = XLSX.utils.json_to_sheet([
-        { Name: 'Ocean Blue', 'Color Code': '#1E90FF', Status: 'active' },
-        { Name: 'Sunset Orange', 'Color Code': '#FF4500', Status: 'inactive' },
+        { 'Color Family Name': 'Ocean Blue', 'Pantone Name': 'Blue 072 C', 'Pantone Code': '#1E90FF', Status: 'active' },
+        { 'Color Family Name': 'Sunset Orange', 'Pantone Name': 'Orange 021 C', 'Pantone Code': '#FF4500', Status: 'inactive' },
       ]);
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Colors');
       XLSX.writeFile(workbook, 'yarn-colors-template.xlsx');
@@ -107,6 +108,7 @@ const ColorPage = () => {
       const allColors = (response.results || []).map(color => ({
         ...color,
         colorCode: color.colorCode ? color.colorCode.toUpperCase() : '#000000',
+        pantoneName: color.pantoneName || '',
       }));
       const exportSource =
         selectedColors.length > 0
@@ -120,8 +122,9 @@ const ColorPage = () => {
 
       const exportData = exportSource.map(color => ({
         ID: color.id,
-        Name: color.name,
-        'Color Code': color.colorCode,
+        'Color Family Name': color.name,
+        'Pantone Name': color.pantoneName || '',
+        'Pantone Code': color.colorCode,
         Status: color.status,
         'Created At': color.createdAt ? new Date(color.createdAt).toLocaleString() : '',
         'Updated At': color.updatedAt ? new Date(color.updatedAt).toLocaleString() : '',
@@ -129,12 +132,13 @@ const ColorPage = () => {
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       worksheet['!cols'] = [
-        { wch: 20 },
-        { wch: 30 },
-        { wch: 15 },
-        { wch: 10 },
-        { wch: 22 },
-        { wch: 22 },
+        { wch: 20 }, // ID
+        { wch: 30 }, // Color Family Name
+        { wch: 25 }, // Pantone Name
+        { wch: 18 }, // Pantone Code
+        { wch: 10 }, // Status
+        { wch: 22 }, // Created At
+        { wch: 22 }, // Updated At
       ];
 
       const workbook = XLSX.utils.book_new();
@@ -169,7 +173,10 @@ const ColorPage = () => {
         const jsonData: Array<
           {
             ID?: string;
+            'Color Family Name'?: string;
             Name?: string;
+            'Pantone Name'?: string;
+            'Pantone Code'?: string;
             'Color Code'?: string;
             Status?: string;
           }
@@ -194,6 +201,7 @@ const ColorPage = () => {
             id?: string;
             name: string;
             colorCode: string;
+            pantoneName?: string;
             status: 'active' | 'inactive';
           }
         >();
@@ -201,8 +209,15 @@ const ColorPage = () => {
         let processed = 0;
         for (const row of jsonData) {
           try {
-            const rawName = row.Name?.toString().trim() ?? '';
-            const rawColorCode = row['Color Code']?.toString().trim() ?? '';
+            const rawName =
+              row['Color Family Name']?.toString().trim() ??
+              row.Name?.toString().trim() ??
+              '';
+            const rawPantoneName = row['Pantone Name']?.toString().trim() ?? '';
+            const rawColorCode =
+              row['Pantone Code']?.toString().trim() ??
+              row['Color Code']?.toString().trim() ??
+              '';
             const rawStatus = row.Status?.toString().trim().toLowerCase() ?? 'active';
 
             if (!rawName) {
@@ -231,6 +246,7 @@ const ColorPage = () => {
               ...(finalId ? { id: finalId } : {}),
               name: rawName,
               colorCode: candidateColorCode,
+              ...(rawPantoneName ? { pantoneName: rawPantoneName } : {}),
               status,
             });
           } catch (rowError) {
@@ -416,9 +432,9 @@ const ColorPage = () => {
                               onChange={handleSelectAll}
                             />
                           </th>
-                          <th scope="col" className="text-start">Name</th>
-                          <th scope="col" className="text-start">Color Code</th>
-                          <th scope="col" className="text-start">Preview</th>
+                          <th scope="col" className="text-start">Color Family Name</th>
+                          <th scope="col" className="text-start">Pantone Name</th>
+                          <th scope="col" className="text-start">Pantone Code</th>
                           <th scope="col" className="text-start">Created At</th>
                           <th scope="col" className="text-start">Status</th>
                           <th scope="col" className="text-start">Action</th>
@@ -445,15 +461,8 @@ const ColorPage = () => {
                               />
                             </td>
                             <td>{color.name}</td>
+                            <td>{color.pantoneName || '-'}</td>
                             <td>{color.colorCode}</td>
-                            <td>
-                              {color.colorCode ? (
-                                <div 
-                                  className="w-8 h-8 rounded border border-gray-300" 
-                                  style={{ backgroundColor: color.colorCode }}
-                                ></div>
-                              ) : '-'}
-                            </td>
                             <td>{color.createdAt ? new Date(color.createdAt).toLocaleString() : '-'}</td>
                             <td>
                               <span className={`badge ${color.status === 'active' ? 'bg-success' : 'bg-danger'}`}>

@@ -11,7 +11,6 @@ import CountSizeMultiSelect from '../../components/CountSizeMultiSelect';
 type DetailFormState = {
   subtype: string;
   countSize: string[];
-  tearWeight: string;
 };
 
 const EditYarnTypePage = () => {
@@ -23,7 +22,7 @@ const EditYarnTypePage = () => {
   const [isCountSizeLoading, setIsCountSizeLoading] = useState(false);
   const [countSizes, setCountSizes] = useState<CountSize[]>([]);
   const [formData, setFormData] = useState<{ name: string; status: 'active' | 'inactive' }>({ name: '', status: 'active' });
-  const [details, setDetails] = useState<DetailFormState[]>([{ subtype: '', countSize: [], tearWeight: '' }]);
+  const [details, setDetails] = useState<DetailFormState[]>([{ subtype: '', countSize: [] }]);
 
   useEffect(() => {
     const fetchCountSizes = async () => {
@@ -71,12 +70,11 @@ const EditYarnTypePage = () => {
             return {
               subtype: detail.subtype || '',
               countSize: countSizeIds,
-              tearWeight: detail.tearWeight || ''
             };
           })
         );
       } else {
-        setDetails([{ subtype: '', countSize: [], tearWeight: '' }]);
+        setDetails([{ subtype: '', countSize: [] }]);
       }
     } catch (error) {
       toast.error('Failed to load yarn type');
@@ -91,10 +89,10 @@ const EditYarnTypePage = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleDetailInputChange = (index: number, field: 'subtype' | 'tearWeight', value: string) => {
+  const handleDetailInputChange = (index: number, value: string) => {
     setDetails(prev => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
+      updated[index] = { ...updated[index], subtype: value };
       return updated;
     });
   };
@@ -108,7 +106,7 @@ const EditYarnTypePage = () => {
   };
 
   const addDetailRow = () => {
-    setDetails(prev => [...prev, { subtype: '', countSize: [], tearWeight: '' }]);
+    setDetails(prev => [...prev, { subtype: '', countSize: [] }]);
   };
 
   const removeDetailRow = (index: number) => {
@@ -126,7 +124,6 @@ const EditYarnTypePage = () => {
     const normalizedDetails = details
       .map(detail => {
         const trimmedSubtype = detail.subtype.trim();
-        const trimmedTearWeight = detail.tearWeight?.trim() || '';
         const countSizeIds = detail.countSize
           .map(countSizeId => countSizeId.trim())
           .filter(id => id.length > 0);
@@ -134,7 +131,6 @@ const EditYarnTypePage = () => {
         return {
           subtype: trimmedSubtype,
           ...(countSizeIds.length > 0 ? { countSize: countSizeIds } : {}),
-          ...(trimmedTearWeight ? { tearWeight: trimmedTearWeight } : {})
         };
       })
       .filter(detail => detail.subtype);
@@ -233,19 +229,9 @@ const EditYarnTypePage = () => {
                           <input
                             type="text"
                             value={detail.subtype}
-                            onChange={(e) => handleDetailInputChange(index, 'subtype', e.target.value)}
+                            onChange={(e) => handleDetailInputChange(index, e.target.value)}
                             className="form-control"
                             placeholder="Enter subtype"
-                          />
-                        </div>
-                        <div>
-                          <label className="form-label">Tear Weight</label>
-                          <input
-                            type="text"
-                            value={detail.tearWeight || ''}
-                            onChange={(e) => handleDetailInputChange(index, 'tearWeight', e.target.value)}
-                            className="form-control"
-                            placeholder="Enter tear weight"
                           />
                         </div>
                         <div className="md:col-span-2">
