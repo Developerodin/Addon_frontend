@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -7,6 +7,7 @@ import { toast } from "react-hot-toast";
 import LongTermStorageLayout from "./components/LongTermStorageLayout";
 import ShortTermStorage from "./components/ShortTermStorage";
 import StoragePreferences from "./components/StoragePreferences";
+import UnallocatedBoxes from "./components/UnallocatedBoxes";
 import {
   RackLocation,
   PackedBox,
@@ -18,9 +19,9 @@ import {
 
 const YarnStoragePage = () => {
   const { hasSubPermission } = useNavigation();
-  const [activeTab, setActiveTab] = useState<"long-term" | "short-term">(
-    "long-term"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "unallocated" | "long-term" | "short-term"
+  >("unallocated");
   const [showPreferences, setShowPreferences] = useState(false);
 
   // Load preferences from localStorage
@@ -315,6 +316,17 @@ const YarnStoragePage = () => {
             <div className="box-body p-0">
               <div className="flex border-b border-gray-200">
                 <button
+                  onClick={() => setActiveTab("unallocated")}
+                  className={`px-6 py-3 font-medium text-sm transition-colors ${
+                    activeTab === "unallocated"
+                      ? "text-primary border-b-2 border-primary"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <i className="ri-box-3-line me-2"></i>
+                  Unallocated Boxes
+                </button>
+                <button
                   onClick={() => setActiveTab("long-term")}
                   className={`px-6 py-3 font-medium text-sm transition-colors ${
                     activeTab === "long-term"
@@ -342,7 +354,14 @@ const YarnStoragePage = () => {
 
           {/* Tab Content */}
           <div className="mt-6">
-            {activeTab === "long-term" ? (
+            {activeTab === "unallocated" ? (
+              <UnallocatedBoxes
+                onBoxAllocate={(orderId) => {
+                  toast.success(`Allocating boxes for order ${orderId}`);
+                  // TODO: Implement box allocation logic
+                }}
+              />
+            ) : activeTab === "long-term" ? (
               <LongTermStorageLayout
                 racks={racks}
                 boxes={boxes}
