@@ -148,6 +148,14 @@ const AddPurchasePage = () => {
       };
 
       const resolveYarnCatalogId = async (item: PurchaseOrderData["items"][number]) => {
+        if (item.yarnId) {
+          return item.yarnId;
+        }
+
+        if (item.selectedCatalog?.id) {
+          return item.selectedCatalog.id;
+        }
+
         const detailId = extractYarnId(item.selectedYarnDetail);
         if (detailId) {
           return detailId;
@@ -238,6 +246,17 @@ const AddPurchasePage = () => {
         });
 
         const resolveSizeCount = () => {
+          if (item.selectedCatalog?.countSize) {
+            const catalogCountSize = item.selectedCatalog.countSize as any;
+            return (
+              catalogCountSize?.name ||
+              catalogCountSize?.label ||
+              catalogCountSize?.id ||
+              item.sizeCountName ||
+              item.sizeCount
+            );
+          }
+
           if (!selectedDetail) {
             return item.sizeCountName || item.sizeCount;
           }
