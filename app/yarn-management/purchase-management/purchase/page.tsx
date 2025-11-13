@@ -4,6 +4,7 @@ import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
+import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
 import { PurchaseOrderStatus } from "./components/PurchaseForm";
 import PacklistModal, { PacklistDetails } from "./components/PacklistModal";
@@ -24,7 +25,17 @@ interface PurchaseOrder {
   notes: string;
   createdAt: string;
   updatedAt: string;
-  packlistDetails?: PacklistDetails;
+  packlistDetails?: {
+    packingNumber?: string;
+    trackingNumber?: string; // Legacy field name from API
+    courierName?: string;
+    dispatchDate?: string;
+    estimatedDeliveryDate?: string;
+    expectedArrivalDate?: string; // Legacy field name from API
+    numberOfCones?: number;
+    numberOfBoxes?: number;
+    totalWeight?: number;
+  };
 }
 
 interface PurchaseItem {
@@ -104,11 +115,16 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
     notes: apiOrder.notes || apiOrder.remarks || '',
     createdAt: apiOrder.createDate || apiOrder.createdAt || apiOrder.created_at || new Date().toISOString(),
     updatedAt: apiOrder.lastUpdateDate || apiOrder.updatedAt || apiOrder.updated_at || new Date().toISOString(),
-    packlistDetails: apiOrder.packlistDetails ? {
-      trackingNumber: apiOrder.packlistDetails.trackingNumber || apiOrder.packlistDetails.tracking_number,
-      courierName: apiOrder.packlistDetails.courierName || apiOrder.packlistDetails.courier_name,
-      dispatchDate: apiOrder.packlistDetails.dispatchDate || apiOrder.packlistDetails.dispatch_date,
-      expectedArrivalDate: apiOrder.packlistDetails.expectedArrivalDate || apiOrder.packlistDetails.expected_arrival_date
+    packlistDetails: (apiOrder.packListDetails || apiOrder.packlistDetails) ? {
+      packingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number,
+      trackingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number,
+      courierName: (apiOrder.packListDetails || apiOrder.packlistDetails)?.courierName || (apiOrder.packListDetails || apiOrder.packlistDetails)?.courier_name,
+      dispatchDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatchDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatch_date,
+      estimatedDeliveryDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date,
+      expectedArrivalDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date,
+      numberOfCones: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfCones || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_cones,
+      numberOfBoxes: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfBoxes || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_boxes,
+      totalWeight: (apiOrder.packListDetails || apiOrder.packlistDetails)?.totalWeight || (apiOrder.packListDetails || apiOrder.packlistDetails)?.total_weight
     } : undefined
   };
 };
@@ -116,6 +132,7 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
 const PurchasePage = () => {
   const router = useRouter();
   const { hasSubPermission, isLoading } = useNavigation();
+  const user = useSelector((state: any) => state.auth?.user);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -288,7 +305,7 @@ const PurchasePage = () => {
       htmlTemplate = htmlTemplate.replace(/\{\{order\.date\}\}/g, new Date(order.orderDate).toLocaleDateString());
 
       // Despatch details
-      htmlTemplate = htmlTemplate.replace(/\{\{despatch\.number\}\}/g, order.packlistDetails?.trackingNumber || '');
+      htmlTemplate = htmlTemplate.replace(/\{\{despatch\.number\}\}/g, order.packlistDetails?.packingNumber || order.packlistDetails?.trackingNumber || '');
 
       // Generate items rows
       let itemsHtml = '';
@@ -381,6 +398,32 @@ const PurchasePage = () => {
     return numberToWords(crore) + ' Crore' + (remainder !== 0 ? ' ' + numberToWords(remainder) : '');
   };
 
+  const updateOrderStatus = async (orderId: string, newStatus: PurchaseOrderStatus) => {
+    if (!user || !user.id || !user.email) {
+      toast.error('User information not available. Please login again.');
+      return;
+    }
+
+    setIsUpdatingStatus(true);
+    try {
+      await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+        orderId,
+        newStatus,
+        user.id,
+        user.email,
+        `Status updated to ${newStatus}`
+      );
+      
+      await fetchPurchaseOrders();
+      toast.success('Purchase order status updated successfully');
+    } catch (error) {
+      console.error('Failed to update status:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update status');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
   const handleStatusUpdate = async (orderId: string, newStatus: PurchaseOrderStatus) => {
     // If updating to "in transit", show packlist modal
     if (newStatus === 'in transit') {
@@ -396,40 +439,56 @@ const PurchasePage = () => {
     await updateOrderStatus(orderId, newStatus);
   };
 
-  const updateOrderStatus = async (orderId: string, newStatus: PurchaseOrderStatus, packlistDetails?: PacklistDetails) => {
+  const handlePacklistSubmit = async (details: PacklistDetails) => {
+    if (!orderForPacklist) {
+      toast.error('Order not found');
+      return;
+    }
+
+    if (!user || !user.id || !user.email) {
+      toast.error('User information not available. Please login again.');
+      return;
+    }
+
     setIsUpdatingStatus(true);
     try {
       // Handle file upload if packlist file is provided
-      if (packlistDetails?.packlistFile) {
+      if (details.packlistFile) {
         // TODO: Implement API call to upload packlist file
-        // Example: await uploadPacklistFile(orderId, packlistDetails.packlistFile);
+        // Example: await uploadPacklistFile(orderForPacklist.id, details.packlistFile);
         console.log('Packlist file to upload:', {
-          fileName: packlistDetails.packlistFileName,
-          fileSize: packlistDetails.packlistFile.size,
-          fileType: packlistDetails.packlistFile.type
+          fileName: details.packlistFileName,
+          fileSize: details.packlistFile.size,
+          fileType: details.packlistFile.type
         });
       }
 
-      // Update status via API
-      await yarnPurchaseOrderService.updatePurchaseOrderStatus(orderId, newStatus, packlistDetails);
+      // First API call: Update order with packlist details
+      await yarnPurchaseOrderService.updatePurchaseOrderWithPacklist(
+        orderForPacklist.id,
+        details
+      );
+
+      // Second API call: Update status to "in transit"
+      await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+        orderForPacklist.id,
+        'in transit',
+        user.id,
+        user.email, // Using email as username, adjust if your API expects different field
+        details.notes || 'Shipment collected by courier'
+      );
       
       // Refresh orders list
       await fetchPurchaseOrders();
       
-      toast.success('Purchase order status updated successfully');
+      toast.success('Purchase order updated and marked as in transit successfully');
       setPacklistModalOpen(false);
       setOrderForPacklist(null);
     } catch (error) {
-      console.error('Failed to update status:', error);
-      toast.error('Failed to update status');
+      console.error('Failed to update order:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update order');
     } finally {
       setIsUpdatingStatus(false);
-    }
-  };
-
-  const handlePacklistSubmit = async (details: PacklistDetails) => {
-    if (orderForPacklist) {
-      await updateOrderStatus(orderForPacklist.id, 'in transit', details);
     }
   };
 
@@ -708,8 +767,21 @@ const PurchasePage = () => {
             setOrderForPacklist(null);
           }}
           onSubmit={handlePacklistSubmit}
-          orderNumber={orderForPacklist.orderNumber}
-          expectedDelivery={orderForPacklist.expectedDelivery}
+          order={{
+            id: orderForPacklist.id,
+            orderNumber: orderForPacklist.orderNumber,
+            supplier: orderForPacklist.supplier,
+            orderDate: orderForPacklist.orderDate,
+            expectedDelivery: orderForPacklist.expectedDelivery,
+            totalAmount: orderForPacklist.totalAmount,
+            items: orderForPacklist.items.map(item => ({
+              yarnName: item.yarnName,
+              sizeCount: item.sizeCount,
+              shadeCode: item.shadeCode,
+              quantity: item.quantity,
+              rate: item.rate
+            }))
+          }}
           isSubmitting={isUpdatingStatus}
         />
       )}
@@ -935,10 +1007,10 @@ const PurchasePage = () => {
                   <div className="mb-6 p-4 bg-blue-50 rounded-lg">
                     <label className="text-sm font-medium text-gray-700 mb-3 block">Packlist Details</label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {selectedOrder.packlistDetails.trackingNumber && (
+                      {(selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber) && (
                         <div>
-                          <label className="text-xs font-medium text-gray-600">Tracking Number</label>
-                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.trackingNumber}</div>
+                          <label className="text-xs font-medium text-gray-600">Packing/Tracking Number</label>
+                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber}</div>
                         </div>
                       )}
                       {selectedOrder.packlistDetails.courierName && (
@@ -955,11 +1027,11 @@ const PurchasePage = () => {
                           </div>
                         </div>
                       )}
-                      {selectedOrder.packlistDetails.expectedArrivalDate && (
+                      {(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate) && (
                         <div>
                           <label className="text-xs font-medium text-gray-600">Expected Arrival</label>
                           <div className="mt-1 text-sm text-gray-900">
-                            {new Date(selectedOrder.packlistDetails.expectedArrivalDate).toLocaleDateString()}
+                            {new Date(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate || '').toLocaleDateString()}
                           </div>
                         </div>
                       )}

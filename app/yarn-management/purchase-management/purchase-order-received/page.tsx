@@ -4,7 +4,11 @@ import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
+import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
+import { PurchaseOrderStatus } from "../purchase/components/PurchaseForm";
+import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
+import yarnBoxService, { CreateBulkYarnBoxPayload } from "@/shared/services/yarnBoxService";
 
 interface ReceiptProcessingDetails {
   processedBy: string;
@@ -15,31 +19,44 @@ interface ReceiptProcessingDetails {
   lastAction?: "Mark as Received" | "Send to QC";
 }
 
-interface ReceivedOrder {
+interface PurchaseOrder {
   id: string;
   orderNumber: string;
-  purchaseOrderNumber: string;
   supplier: string;
-  receivedDate: string;
-  receivedBy: string;
-  status: 'Partial' | 'Complete' | 'Pending Inspection' | 'In Transit' | 'Rejected';
+  supplierId: string;
+  orderDate: string;
+  expectedDelivery: string;
+  status: PurchaseOrderStatus;
   totalAmount: number;
-  items: ReceivedItem[];
+  subTotal: number;
+  totalGst: number;
+  items: PurchaseItem[];
   notes: string;
   createdAt: string;
   updatedAt: string;
-  processingDetails?: ReceiptProcessingDetails;
+  packlistDetails?: {
+    packingNumber?: string;
+    trackingNumber?: string;
+    courierName?: string;
+    dispatchDate?: string;
+    estimatedDeliveryDate?: string;
+    expectedArrivalDate?: string;
+    numberOfCones?: number;
+    numberOfBoxes?: number;
+    totalWeight?: number;
+  };
 }
 
-interface ReceivedItem {
+interface PurchaseItem {
   id: string;
-  yarnCode: string;
   yarnName: string;
-  orderedQuantity: number;
-  receivedQuantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  qualityStatus: 'Approved' | 'Rejected' | 'Pending';
+  sizeCount: string;
+  shadeCode: string;
+  quantity: number;
+  rate: number;
+  gst: number;
+  subTotal: number;
+  estimatedDeliveryDate: string;
 }
 
 interface PackBox {
@@ -54,25 +71,103 @@ interface PackBox {
 
 type OrderSortField =
   | "orderNumber"
-  | "purchaseOrderNumber"
   | "supplier"
-  | "receivedDate"
-  | "receivedBy"
+  | "orderDate"
+  | "expectedDelivery"
   | "status"
   | "totalAmount";
 
 type SortDirection = "asc" | "desc";
 
-const getOrderSortValue = (order: ReceivedOrder, field: OrderSortField) => {
+// Helper function to convert API status code to display format
+const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
+  const statusMap: Record<string, PurchaseOrderStatus> = {
+    'submitted_to_supplier': 'submitted to supplier',
+    'in_transit': 'in transit',
+    'delivered': 'delivered',
+    'rejected': 'rejected',
+    'qc_pending': 'QC pending',
+    'partially_delivered': 'partially delivered',
+    'stocked': 'stocked'
+  };
+  return statusMap[statusCode] || 'submitted to supplier';
+};
+
+// Helper function to convert display status to API status code
+const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
+  const statusMap: Record<PurchaseOrderStatus, string> = {
+    'submitted to supplier': 'submitted_to_supplier',
+    'in transit': 'in_transit',
+    'delivered': 'delivered',
+    'rejected': 'rejected',
+    'QC pending': 'qc_pending',
+    'partially delivered': 'partially_delivered',
+    'stocked': 'stocked'
+  };
+  return statusMap[status] || 'submitted_to_supplier';
+};
+
+// Helper function to map API response to component format
+const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
+  const poItems = apiOrder.poItems || apiOrder.items || apiOrder.orderItems || [];
+  
+  // Get the latest estimated delivery date from items, or use a default
+  const latestDeliveryDate = poItems.length > 0 
+    ? poItems.reduce((latest: string, item: any) => {
+        const itemDate = item.estimatedDeliveryDate || item.estimated_delivery_date;
+        return itemDate && (!latest || new Date(itemDate) > new Date(latest)) ? itemDate : latest;
+      }, '')
+    : new Date().toISOString();
+
+  return {
+    id: apiOrder._id || apiOrder.id || '',
+    orderNumber: apiOrder.poNumber || apiOrder.orderNumber || apiOrder.order_number || apiOrder.po_number || '',
+    supplier: apiOrder.supplierName || apiOrder.supplier?.brandName || apiOrder.supplier?.name || apiOrder.supplier || '',
+    supplierId: apiOrder.supplier?._id || apiOrder.supplier?.id || apiOrder.supplierId || apiOrder.supplier_id || '',
+    orderDate: apiOrder.createDate || apiOrder.orderDate || apiOrder.order_date || apiOrder.createdAt || new Date().toISOString(),
+    expectedDelivery: latestDeliveryDate || apiOrder.expectedDelivery || apiOrder.expected_delivery || new Date().toISOString(),
+    status: convertStatusFromAPI(apiOrder.currentStatus || apiOrder.status || apiOrder.status_code || 'submitted_to_supplier'),
+    totalAmount: apiOrder.total || apiOrder.totalAmount || apiOrder.total_amount || apiOrder.grandTotal || 0,
+    subTotal: apiOrder.subTotal || apiOrder.sub_total || apiOrder.subtotal || 0,
+    totalGst: apiOrder.gst || apiOrder.totalGst || apiOrder.total_gst || apiOrder.gstAmount || 0,
+    items: poItems.map((item: any) => ({
+      id: item._id || item.id || '',
+      yarnName: item.yarnName || item.yarn?.yarnName || item.yarn_name || item.yarn?.name || '',
+      sizeCount: item.sizeCount || item.size_count || item.countSize || '',
+      shadeCode: item.shadeCode || item.shade_code || item.shade || '',
+      quantity: item.quantity || 0,
+      rate: item.rate || item.unitPrice || 0,
+      gst: item.gstRate || item.gst || item.gst_rate || 18,
+      subTotal: item.subTotal || item.sub_total || (item.quantity * (item.rate || 0)) || 0,
+      estimatedDeliveryDate: item.estimatedDeliveryDate || item.estimated_delivery_date || item.expectedDelivery || ''
+    })),
+    notes: apiOrder.notes || apiOrder.remarks || '',
+    createdAt: apiOrder.createDate || apiOrder.createdAt || apiOrder.created_at || new Date().toISOString(),
+    updatedAt: apiOrder.lastUpdateDate || apiOrder.updatedAt || apiOrder.updated_at || new Date().toISOString(),
+    packlistDetails: (apiOrder.packListDetails || apiOrder.packlistDetails) ? {
+      packingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number,
+      trackingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number,
+      courierName: (apiOrder.packListDetails || apiOrder.packlistDetails)?.courierName || (apiOrder.packListDetails || apiOrder.packlistDetails)?.courier_name,
+      dispatchDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatchDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatch_date,
+      estimatedDeliveryDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date,
+      expectedArrivalDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date,
+      numberOfCones: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfCones || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_cones,
+      numberOfBoxes: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfBoxes || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_boxes,
+      totalWeight: (apiOrder.packListDetails || apiOrder.packlistDetails)?.totalWeight || (apiOrder.packListDetails || apiOrder.packlistDetails)?.total_weight
+    } : undefined
+  };
+};
+
+const getOrderSortValue = (order: PurchaseOrder, field: OrderSortField) => {
   switch (field) {
     case "totalAmount":
       return order.totalAmount;
-    case "receivedDate":
-      return new Date(order.receivedDate).getTime();
+    case "orderDate":
+      return new Date(order.orderDate).getTime();
+    case "expectedDelivery":
+      return new Date(order.expectedDelivery).getTime();
     case "orderNumber":
-    case "purchaseOrderNumber":
     case "supplier":
-    case "receivedBy":
     case "status":
     default:
       return (order[field] as string).toLowerCase();
@@ -82,226 +177,71 @@ const getOrderSortValue = (order: ReceivedOrder, field: OrderSortField) => {
 const PurchaseOrderReceivedPage = () => {
   const router = useRouter();
   const { hasSubPermission, isLoading } = useNavigation();
-  
-  // Static received orders data
-  const staticReceivedOrders: ReceivedOrder[] = [
-    {
-      id: "1",
-      orderNumber: "RCP-2024-001",
-      purchaseOrderNumber: "PO-2024-001",
-      supplier: "Reliance Industries",
-      receivedDate: "2024-01-25T10:30:00Z",
-      receivedBy: "Rama",
-      status: "In Transit",
-      totalAmount: 125000,
-      items: [
-        {
-          id: "1",
-          yarnCode: "CT40-001",
-          yarnName: "Cotton Count 40",
-          orderedQuantity: 200,
-          receivedQuantity: 200,
-          unitPrice: 450,
-          totalPrice: 90000,
-          qualityStatus: "Approved"
-        },
-        {
-          id: "2",
-          yarnCode: "CT60-004",
-          yarnName: "Cotton Count 60",
-          orderedQuantity: 100,
-          receivedQuantity: 100,
-          unitPrice: 520,
-          totalPrice: 52000,
-          qualityStatus: "Approved"
-        }
-      ],
-      notes: "All items received in good condition",
-      createdAt: "2024-01-25T10:30:00Z",
-      updatedAt: "2024-01-25T10:30:00Z"
-    },
-    {
-      id: "2",
-      orderNumber: "RCP-2024-002",
-      purchaseOrderNumber: "PO-2024-002",
-      supplier: "Aditya Birla Group",
-      receivedDate: "2024-01-20T14:30:00Z",
-      receivedBy: "Ganesh",
-      status: "In Transit",
-      totalAmount: 48000,
-      items: [
-        {
-          id: "3",
-          yarnCode: "PE150-002",
-          yarnName: "Polyester DTY 150",
-          orderedQuantity: 150,
-          receivedQuantity: 120,
-          unitPrice: 320,
-          totalPrice: 38400,
-          qualityStatus: "Approved"
-        },
-        {
-          id: "4",
-          yarnCode: "PE100-007",
-          yarnName: "Polyester POY 100",
-          orderedQuantity: 200,
-          receivedQuantity: 0,
-          unitPrice: 290,
-          totalPrice: 0,
-          qualityStatus: "Pending"
-        }
-      ],
-      notes: "Partial delivery, remaining items expected next week",
-      createdAt: "2024-01-20T14:30:00Z",
-      updatedAt: "2024-01-20T14:30:00Z"
-    },
-    {
-      id: "3",
-      orderNumber: "RCP-2024-003",
-      purchaseOrderNumber: "PO-2024-003",
-      supplier: "Grasim Industries",
-      receivedDate: "2024-01-22T09:15:00Z",
-      receivedBy: "Rama",
-      status: "In Transit",
-      totalAmount: 95000,
-      items: [
-        {
-          id: "5",
-          yarnCode: "VR30-003",
-          yarnName: "Viscose Rayon 30",
-          orderedQuantity: 180,
-          receivedQuantity: 180,
-          unitPrice: 380,
-          totalPrice: 68400,
-          qualityStatus: "Pending"
-        },
-        {
-          id: "6",
-          yarnCode: "VR40-008",
-          yarnName: "Viscose Rayon 40",
-          orderedQuantity: 100,
-          receivedQuantity: 100,
-          unitPrice: 400,
-          totalPrice: 40000,
-          qualityStatus: "Pending"
-        }
-      ],
-      notes: "Awaiting quality inspection",
-      createdAt: "2024-01-22T09:15:00Z",
-      updatedAt: "2024-01-22T09:15:00Z"
-    },
-    {
-      id: "4",
-      orderNumber: "RCP-2024-004",
-      purchaseOrderNumber: "PO-2024-004",
-      supplier: "Raymond Textiles",
-      receivedDate: "2024-02-02T11:00:00Z",
-      receivedBy: "Suresh",
-      status: "In Transit",
-      totalAmount: 142000,
-      items: [
-        {
-          id: "7",
-          yarnCode: "WL50-005",
-          yarnName: "Wool Blend 50s",
-          orderedQuantity: 160,
-          receivedQuantity: 160,
-          unitPrice: 550,
-          totalPrice: 88000,
-          qualityStatus: "Approved"
-        },
-        {
-          id: "8",
-          yarnCode: "WL70-010",
-          yarnName: "Wool Blend 70s",
-          orderedQuantity: 100,
-          receivedQuantity: 100,
-          unitPrice: 540,
-          totalPrice: 54000,
-          qualityStatus: "Approved"
-        }
-      ],
-      notes: "Received on time, excellent packaging",
-      createdAt: "2024-02-02T11:00:00Z",
-      updatedAt: "2024-02-02T11:00:00Z"
-    },
-    {
-      id: "5",
-      orderNumber: "RCP-2024-005",
-      purchaseOrderNumber: "PO-2024-005",
-      supplier: "Arvind Mills",
-      receivedDate: "2024-02-10T15:45:00Z",
-      receivedBy: "Ganesh",
-      status: "In Transit",
-      totalAmount: 76500,
-      items: [
-        {
-          id: "9",
-          yarnCode: "DN30-006",
-          yarnName: "Denim Yarn 30s",
-          orderedQuantity: 150,
-          receivedQuantity: 140,
-          unitPrice: 350,
-          totalPrice: 49000,
-          qualityStatus: "Approved"
-        },
-        {
-          id: "10",
-          yarnCode: "DN40-012",
-          yarnName: "Denim Yarn 40s",
-          orderedQuantity: 90,
-          receivedQuantity: 50,
-          unitPrice: 550,
-          totalPrice: 27500,
-          qualityStatus: "Pending"
-        }
-      ],
-      notes: "Partial delivery due to transport delay",
-      createdAt: "2024-02-10T15:45:00Z",
-      updatedAt: "2024-02-10T15:45:00Z"
-    },
-    {
-      id: "6",
-      orderNumber: "RCP-2024-006",
-      purchaseOrderNumber: "PO-2024-006",
-      supplier: "Jindal Textiles",
-      receivedDate: "2024-02-18T08:20:00Z",
-      receivedBy: "Rama",
-      status: "In Transit",
-      totalAmount: 158400,
-      items: [
-        {
-          id: "11",
-          yarnCode: "NY60-009",
-          yarnName: "Nylon 60 Denier",
-          orderedQuantity: 200,
-          receivedQuantity: 200,
-          unitPrice: 480,
-          totalPrice: 96000,
-          qualityStatus: "Approved"
-        },
-        {
-          id: "12",
-          yarnCode: "NY80-011",
-          yarnName: "Nylon 80 Denier",
-          orderedQuantity: 130,
-          receivedQuantity: 130,
-          unitPrice: 480,
-          totalPrice: 62400,
-          qualityStatus: "Approved"
-        }
-      ],
-      notes: "All quality parameters met successfully",
-      createdAt: "2024-02-18T08:20:00Z",
-      updatedAt: "2024-02-18T08:20:00Z"
-    }
-    
-  ];
-
-  const [receivedOrders, setReceivedOrders] = useState<ReceivedOrder[]>(staticReceivedOrders);
+  const user = useSelector((state: any) => state.auth?.user);
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  
+  // Set default dates: one month ago to today
+  const getDefaultStartDate = () => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 1);
+    return date.toISOString().split('T')[0];
+  };
+  
+  const getDefaultEndDate = () => {
+    return new Date().toISOString().split('T')[0];
+  };
+  
+  const [startDate, setStartDate] = useState<string>(getDefaultStartDate());
+  const [endDate, setEndDate] = useState<string>(getDefaultEndDate());
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [processedOrders, setProcessedOrders] = useState<string[]>([]);
+
+  // Check permission
+  const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
+
+  // Fetch purchase orders with "in transit" status from API
+  const fetchPurchaseOrders = async () => {
+    setIsLoadingOrders(true);
+    try {
+      const params: any = {};
+
+      // Add date filters if provided
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        params.start_date = start.toISOString();
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        params.end_date = end.toISOString();
+      }
+
+      // Always filter by "in transit" status
+      params.status_code = 'in_transit';
+
+      const response = await yarnPurchaseOrderService.getPurchaseOrders(params);
+      
+      // Handle both array and object with results property
+      const ordersData = Array.isArray(response) ? response : (response.results || []);
+      const mappedOrders = ordersData.map(mapAPIOrderToComponent);
+      setOrders(mappedOrders);
+    } catch (error) {
+      console.error('Failed to fetch purchase orders:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to load purchase orders');
+      setOrders([]);
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  // Fetch orders on mount and when filters change
+  useEffect(() => {
+    if (hasPermission && !isLoading) {
+      fetchPurchaseOrders();
+    }
+  }, [hasPermission, isLoading, startDate, endDate]);
 
   // Load processed orders from localStorage on mount and when page becomes visible
   useEffect(() => {
@@ -324,55 +264,11 @@ const PurchaseOrderReceivedPage = () => {
     };
 
     window.addEventListener('processedOrdersUpdated', handleProcessedOrdersUpdate);
-
-    // Also check on focus (when user returns to tab)
     window.addEventListener('focus', loadProcessedOrders);
 
     return () => {
       window.removeEventListener('processedOrdersUpdated', handleProcessedOrdersUpdate);
       window.removeEventListener('focus', loadProcessedOrders);
-    };
-  }, []);
-
-  // Load and apply status updates from localStorage
-  useEffect(() => {
-    const loadAndApplyStatusUpdates = () => {
-      const stored = localStorage.getItem('orderStatusUpdates');
-      if (stored) {
-        try {
-          const statusUpdates: Record<string, ReceivedOrder["status"]> = JSON.parse(stored);
-          
-          setReceivedOrders(prev => {
-            return prev.map(order => {
-              if (statusUpdates[order.id]) {
-                return {
-                  ...order,
-                  status: statusUpdates[order.id],
-                  updatedAt: new Date().toISOString()
-                };
-              }
-              return order;
-            });
-          });
-        } catch (error) {
-          console.error('Error loading status updates:', error);
-        }
-      }
-    };
-
-    loadAndApplyStatusUpdates();
-
-    // Listen for custom event when order status is updated
-    const handleStatusUpdate = () => {
-      loadAndApplyStatusUpdates();
-    };
-
-    window.addEventListener('orderStatusUpdated', handleStatusUpdate);
-    window.addEventListener('focus', loadAndApplyStatusUpdates);
-
-    return () => {
-      window.removeEventListener('orderStatusUpdated', handleStatusUpdate);
-      window.removeEventListener('focus', loadAndApplyStatusUpdates);
     };
   }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -385,21 +281,19 @@ const PurchaseOrderReceivedPage = () => {
   const [capturedWeight, setCapturedWeight] = useState<number | null>(null);
   const [isReadingWeight, setIsReadingWeight] = useState(false);
   const [weightError, setWeightError] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<OrderSortField>("receivedDate");
+  const [sortField, setSortField] = useState<OrderSortField>("orderDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [isProcessModalOpen, setProcessModalOpen] = useState(false);
   const [statusModalContext, setStatusModalContext] = useState<{
-    order: ReceivedOrder;
-    targetStatus: ReceivedOrder["status"];
+    order: PurchaseOrder;
+    targetStatus: string;
   } | null>(null);
   const [isStatusSubmitting, setIsStatusSubmitting] = useState(false);
-
-  // Check permission
-  const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
+  const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
 
   const selectedOrder = useMemo(
-    () => receivedOrders.find(order => order.id === selectedOrderId) ?? null,
-    [receivedOrders, selectedOrderId]
+    () => orders.find(order => order.id === selectedOrderId) ?? null,
+    [orders, selectedOrderId]
   );
 
   const selectedPackList = useMemo(() => {
@@ -422,16 +316,14 @@ const PurchaseOrderReceivedPage = () => {
   const filteredAndSortedOrders = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    const filtered = receivedOrders.filter(order => {
+    const filtered = orders.filter(order => {
       const matchesSearch =
         normalizedSearch.length === 0 ||
         order.orderNumber.toLowerCase().includes(normalizedSearch) ||
-        order.purchaseOrderNumber.toLowerCase().includes(normalizedSearch) ||
         order.supplier.toLowerCase().includes(normalizedSearch);
 
-      const matchesStatus = statusFilter === "all" || order.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
+      // All orders are "in transit" status, so no need to filter by status
+      return matchesSearch;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -451,7 +343,7 @@ const PurchaseOrderReceivedPage = () => {
     });
 
     return sorted;
-  }, [receivedOrders, searchTerm, statusFilter, sortField, sortDirection]);
+  }, [orders, searchTerm, sortField, sortDirection]);
 
   // Show loading state while permissions are being loaded
   if (isLoading) {
@@ -478,8 +370,8 @@ const PurchaseOrderReceivedPage = () => {
     return Math.random().toString(36).slice(2, 6).toUpperCase();
   };
 
-  const buildBarcode = (order: ReceivedOrder, index: number) => {
-    const prefix = order.purchaseOrderNumber.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+  const buildBarcode = (order: PurchaseOrder, index: number) => {
+    const prefix = order.orderNumber.replace(/[^A-Z0-9]/gi, "").toUpperCase();
     const serial = String(index + 1).padStart(3, "0");
     return `${prefix}-${serial}-${safeRandomSegment()}`;
   };
@@ -685,61 +577,17 @@ const PurchaseOrderReceivedPage = () => {
     );
   }
 
-  const handleUpdateReceivedOrder = async (orderData: ReceivedOrder) => {
-    setIsSubmitting(true);
-    try {
-      // TODO: Implement API call to update received order
-      setReceivedOrders(prev => prev.map(order => 
-        order.id === orderData.id ? { ...orderData, updatedAt: new Date().toISOString() } : order
-      ));
-      toast.success('Received order updated successfully');
-    } catch (error) {
-      console.error('Failed to update received order:', error);
-      toast.error('Failed to update received order');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: PurchaseOrderStatus) => {
     switch (status) {
-      case 'In Transit': return 'bg-purple-100 text-purple-800';
-      case 'Partial': return 'bg-yellow-100 text-yellow-800';
-      case 'Complete': return 'bg-green-100 text-green-800';
-      case 'Pending Inspection': return 'bg-blue-100 text-blue-800';
-      case 'Rejected': return 'bg-red-100 text-red-800';
+      case 'submitted to supplier': return 'bg-blue-100 text-blue-800';
+      case 'in transit': return 'bg-purple-100 text-purple-800';
+      case 'delivered': return 'bg-green-100 text-green-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+      case 'QC pending': return 'bg-yellow-100 text-yellow-800';
+      case 'partially delivered': return 'bg-orange-100 text-orange-800';
+      case 'stocked': return 'bg-emerald-100 text-emerald-800';
       default: return 'bg-gray-100 text-gray-800';
     }
-  };
-
-  const getQualityStatusColor = (status: string) => {
-    switch (status) {
-      case 'Approved': return 'bg-green-100 text-green-800';
-      case 'Rejected': return 'bg-red-100 text-red-800';
-      case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getNextStatusOptions = (status: ReceivedOrder["status"]) => {
-    switch (status) {
-      case "In Transit":
-      case "Partial":
-        return [
-          { value: "Complete" as const, label: "Mark as Received" },
-          { value: "Pending Inspection" as const, label: "Send to QC" },
-        ];
-      case "Pending Inspection":
-        return [
-          { value: "Complete" as const, label: "Mark as Received" },
-        ];
-      default:
-        return [];
-    }
-  };
-
-  const handleOpenStatusModal = (order: ReceivedOrder, targetStatus: ReceivedOrder["status"]) => {
-    setStatusModalContext({ order, targetStatus });
   };
 
   const handleCloseStatusModal = () => {
@@ -747,52 +595,30 @@ const PurchaseOrderReceivedPage = () => {
   };
 
   const handleStatusModalSubmit = async (details: ReceiptProcessingDetails) => {
-    if (!statusModalContext) {
+    if (!statusModalContext || !user || !user.id || !user.email) {
+      toast.error('User information not available. Please login again.');
       return;
     }
     const { order, targetStatus } = statusModalContext;
     setIsStatusSubmitting(true);
     try {
-      // TODO: Implement API call to update received order status
-      setReceivedOrders(prev =>
-        prev.map(item => {
-          if (item.id !== order.id) {
-            return item;
-          }
-
-          const processedDateIso =
-            details.processedDate && details.processedDate.trim().length > 0
-              ? new Date(`${details.processedDate}T00:00:00`).toISOString()
-              : item.receivedDate;
-
-          const updatedOrder: ReceivedOrder = {
-            ...item,
-            status: targetStatus,
-            updatedAt: new Date().toISOString(),
-            processingDetails: {
-              ...details,
-              lastAction: targetStatus === "Complete" ? "Mark as Received" : "Send to QC",
-            },
-          };
-
-          if (targetStatus === "Complete") {
-            if (details.processedBy?.trim()) {
-              updatedOrder.receivedBy = details.processedBy.trim();
-            }
-            if (details.processedDate?.trim()) {
-              updatedOrder.receivedDate = processedDateIso;
-            }
-          }
-
-          return updatedOrder;
-        })
+      // Update order status via API
+      await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+        order.id,
+        targetStatus as PurchaseOrderStatus,
+        user.id,
+        user.email,
+        details.notes || `Status updated to ${targetStatus}`
       );
 
-      toast.success(targetStatus === "Complete" ? "Order marked as received" : "Order sent to QC");
+      // Refresh orders list
+      await fetchPurchaseOrders();
+      
+      toast.success(`Order status updated to ${targetStatus}`);
       setStatusModalContext(null);
     } catch (error) {
-      console.error("Failed to update received order status:", error);
-      toast.error("Failed to update status");
+      console.error("Failed to update order status:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to update status");
     } finally {
       setIsStatusSubmitting(false);
     }
@@ -849,22 +675,44 @@ const PurchaseOrderReceivedPage = () => {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <select
-                    className="form-select"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="all">All Status</option>
-                    <option value="In Transit">In Transit</option>
-                    <option value="Partial">Partial</option>
-                    <option value="Complete">Complete</option>
-                    <option value="Pending Inspection">Pending Inspection</option>
-                    <option value="Rejected">Rejected</option>
-                  </select>
                   <button className="ti-btn ti-btn-light">
                     <i className="ri-download-line me-1"></i>
                     Export
                   </button>
+                </div>
+              </div>
+              <div className="flex flex-col md:flex-row gap-4 mt-4">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="form-label text-xs text-gray-600">Start Date</label>
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="form-label text-xs text-gray-600">End Date</label>
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                    />
+                  </div>
+                  {(startDate || endDate) && (
+                    <button
+                      className="ti-btn ti-btn-light self-end"
+                      onClick={() => {
+                        setStartDate(getDefaultStartDate());
+                        setEndDate(getDefaultEndDate());
+                      }}
+                    >
+                      <i className="ri-close-line me-1"></i>
+                      Clear Dates
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -876,46 +724,39 @@ const PurchaseOrderReceivedPage = () => {
               <h3 className="box-title">Received Orders ({filteredAndSortedOrders.length})</h3>
             </div>
             <div className="box-body">
-              {filteredAndSortedOrders.length === 0 ? (
+              {isLoadingOrders ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading purchase orders...</p>
+                </div>
+              ) : filteredAndSortedOrders.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-gray-400 mb-4">
                     <i className="ri-inbox-line text-4xl"></i>
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Received Orders</h3>
-                  <p className="text-gray-500 mb-4">Start by recording your first order receipt.</p>
-                  <Link 
-                    href="/yarn-management/purchase-management/purchase-order-received/add"
-                    className="ti-btn ti-btn-primary"
-                  >
-                    <i className="ri-add-line me-2"></i>
-                    Record First Receipt
-                  </Link>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Orders in Transit</h3>
+                  <p className="text-gray-500 mb-4">
+                    {searchTerm
+                      ? "No orders match your search criteria. Try adjusting your search term."
+                      : "No purchase orders found in transit status for the selected period."}
+                  </p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full border border-gray-300">
-                    <thead className="bg-gray-50 border-b border-gray-300">
+                  <table className="min-w-full border-collapse border border-gray-300">
+                    <thead className="bg-gray-50">
                       <tr>
                         <th
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-300"
+                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort("orderNumber")}
                         >
                           <div className="flex items-center gap-2">
-                            Receipt Number
+                            PO Number
                             <SortIcon field="orderNumber" />
                           </div>
                         </th>
                         <th
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-300"
-                          onClick={() => handleSort("purchaseOrderNumber")}
-                        >
-                          <div className="flex items-center gap-2">
-                            PO Number
-                            <SortIcon field="purchaseOrderNumber" />
-                          </div>
-                        </th>
-                        <th
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-300"
+                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort("supplier")}
                         >
                           <div className="flex items-center gap-2">
@@ -924,25 +765,25 @@ const PurchaseOrderReceivedPage = () => {
                           </div>
                         </th>
                         <th
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-300"
-                          onClick={() => handleSort("receivedDate")}
+                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort("orderDate")}
                         >
                           <div className="flex items-center gap-2">
-                            Received Date
-                            <SortIcon field="receivedDate" />
+                            Order Date
+                            <SortIcon field="orderDate" />
                           </div>
                         </th>
                         <th
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-300"
-                          onClick={() => handleSort("receivedBy")}
+                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort("expectedDelivery")}
                         >
                           <div className="flex items-center gap-2">
-                            Received By
-                            <SortIcon field="receivedBy" />
+                            Expected Delivery
+                            <SortIcon field="expectedDelivery" />
                           </div>
                         </th>
                         <th
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-300"
+                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort("status")}
                         >
                           <div className="flex items-center gap-2">
@@ -951,7 +792,7 @@ const PurchaseOrderReceivedPage = () => {
                           </div>
                         </th>
                         <th
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-300"
+                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort("totalAmount")}
                         >
                           <div className="flex items-center gap-2">
@@ -959,7 +800,7 @@ const PurchaseOrderReceivedPage = () => {
                             <SortIcon field="totalAmount" />
                           </div>
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
@@ -969,39 +810,31 @@ const PurchaseOrderReceivedPage = () => {
                         return (
                           <tr
                             key={order.id}
-                            className={`hover:bg-gray-50 transition-colors ${
+                            className={`hover:bg-gray-50 ${
                               selectedOrderId === order.id ? "!bg-primary/5" : ""
                             }`}
                           >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-b border-gray-200">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {order.orderNumber}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-200">
-                            <Link 
-                              href={`/yarn-management/purchase-management/purchase/${order.purchaseOrderNumber}`}
-                              className="text-primary hover:underline"
-                            >
-                              {order.purchaseOrderNumber}
-                            </Link>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-200">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {order.supplier}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-200">
-                            {new Date(order.receivedDate).toLocaleDateString()}
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {new Date(order.orderDate).toLocaleDateString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-200">
-                            {order.receivedBy}
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {new Date(order.expectedDelivery).toLocaleDateString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-200">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
                               {order.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-200">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             ₹{order.totalAmount.toLocaleString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium border-b border-gray-200">
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex items-center gap-2">
                               {processedOrders.includes(order.id) ? (
                                 <button
@@ -1014,16 +847,84 @@ const PurchaseOrderReceivedPage = () => {
                                 </button>
                               ) : (
                                 <button
-                                  onClick={() => {
-                                    console.log('Process button clicked for order:', order.id);
-                                    console.log('Navigating to:', `/yarn-management/purchase-management/purchase-order-received/process/${order.id}`);
-                                    router.push(`/yarn-management/purchase-management/purchase-order-received/process/${order.id}`);
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    
+                                    if (processingOrderId === order.id) {
+                                      console.log('Already processing this order');
+                                      return;
+                                    }
+                                    
+                                    console.log('Process button clicked for order:', order.id, order.orderNumber);
+                                    setProcessingOrderId(order.id);
+                                    
+                                    try {
+                                      // Get packlist details
+                                      const packlistDetails = order.packlistDetails;
+                                      console.log('Packlist details:', packlistDetails);
+                                      const numberOfBoxes = packlistDetails?.numberOfBoxes || 0;
+                                      console.log('Number of boxes:', numberOfBoxes);
+
+                                      if (!numberOfBoxes || numberOfBoxes === 0) {
+                                        console.error('Number of boxes not found');
+                                        toast.error('Number of boxes not found in packlist details');
+                                        setProcessingOrderId(null);
+                                        return;
+                                      }
+
+                                      // Check if boxes already exist for this order
+                                      console.log('Checking for existing boxes...');
+                                      const existingBoxes = await yarnBoxService.getYarnBoxes({
+                                        po_number: order.orderNumber,
+                                        cones_issued: false
+                                      });
+                                      console.log('Existing boxes response:', existingBoxes);
+
+                                      // If boxes don't exist, create them in bulk
+                                      if (!existingBoxes.results || existingBoxes.results.length === 0) {
+                                        console.log('No existing boxes found, creating bulk boxes...');
+                                        const bulkPayload: CreateBulkYarnBoxPayload = {
+                                          poNumber: order.orderNumber,
+                                          numberOfBoxes: numberOfBoxes
+                                        };
+                                        console.log('Bulk payload:', bulkPayload);
+
+                                        const result = await yarnBoxService.createBulkYarnBoxes(bulkPayload);
+                                        console.log('Bulk boxes created:', result);
+                                        toast.success(`${numberOfBoxes} yarn box(es) created successfully`);
+                                      } else {
+                                        console.log('Boxes already exist, skipping creation');
+                                        toast.success('Boxes already exist for this order');
+                                      }
+
+                                      // Navigate to process page
+                                      console.log('Navigating to process page...');
+                                      router.push(`/yarn-management/purchase-management/purchase-order-received/process/${order.id}`);
+                                    } catch (error) {
+                                      console.error('Failed to process order:', error);
+                                      toast.error(error instanceof Error ? error.message : 'Failed to process order');
+                                    } finally {
+                                      // Don't reset processingOrderId here if navigation is successful
+                                      // It will be reset when component unmounts or when user comes back
+                                    }
                                   }}
-                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:border-primary hover:text-primary transition h-8"
+                                  disabled={processingOrderId === order.id}
+                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:border-primary hover:text-primary transition h-8 disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Process receipt workflow"
                                 >
-                                  <i className="ri-box-3-line"></i>
-                                  Process
+                                  {processingOrderId === order.id ? (
+                                    <>
+                                      <i className="ri-loader-4-line animate-spin"></i>
+                                      Processing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="ri-box-3-line"></i>
+                                      Process
+                                    </>
+                                  )}
                                 </button>
                               )}
                             </div>
@@ -1169,7 +1070,7 @@ const PurchaseOrderReceivedPage = () => {
 interface ProcessModalProps {
   isOpen: boolean;
   onClose: () => void;
-  order: ReceivedOrder;
+  order: PurchaseOrder;
   boxCountInput: number;
   onBoxCountChange: (value: number) => void;
   onGenerateBarcodes: () => void;
@@ -1182,7 +1083,7 @@ interface ProcessModalProps {
     scanned: number;
     weighed: number;
   };
-  getStatusColor: (status: string) => string;
+  getStatusColor: (status: PurchaseOrderStatus) => string;
 }
 
 const ProcessModal: React.FC<ProcessModalProps> = ({
@@ -1214,7 +1115,7 @@ const ProcessModal: React.FC<ProcessModalProps> = ({
             </h3>
             <p className="text-sm text-gray-500 mt-1">
               Follow the guided workflow to unload, verify packs, and capture weights for{" "}
-              <span className="font-medium text-gray-700">{order.purchaseOrderNumber}</span>.
+              <span className="font-medium text-gray-700">{order.orderNumber}</span>.
             </p>
           </div>
           <button
@@ -1234,12 +1135,12 @@ const ProcessModal: React.FC<ProcessModalProps> = ({
                 <p className="text-sm font-semibold text-gray-800">{order.supplier}</p>
               </div>
               <div>
-                <p className="text-xs uppercase text-gray-500">Receipt Number</p>
-                <p className="text-sm font-semibold text-gray-800">{order.orderNumber}</p>
+                <p className="text-xs uppercase text-gray-500">Order Date</p>
+                <p className="text-sm font-semibold text-gray-800">{new Date(order.orderDate).toLocaleDateString()}</p>
               </div>
               <div>
-                <p className="text-xs uppercase text-gray-500">Received By</p>
-                <p className="text-sm font-semibold text-gray-800">{order.receivedBy}</p>
+                <p className="text-xs uppercase text-gray-500">Expected Delivery</p>
+                <p className="text-sm font-semibold text-gray-800">{new Date(order.expectedDelivery).toLocaleDateString()}</p>
               </div>
               <div>
                 <p className="text-xs uppercase text-gray-500">Status</p>
@@ -1383,8 +1284,8 @@ const ProcessModal: React.FC<ProcessModalProps> = ({
 
 interface ReceiptStatusModalProps {
   isOpen: boolean;
-  order: ReceivedOrder;
-  targetStatus: ReceivedOrder["status"];
+  order: PurchaseOrder;
+  targetStatus: string;
   onClose: () => void;
   onSubmit: (details: ReceiptProcessingDetails) => Promise<void>;
   isSubmitting: boolean;
@@ -1409,7 +1310,7 @@ const ReceiptStatusModal: React.FC<ReceiptStatusModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       const today = new Date().toISOString().split("T")[0];
-      setProcessedBy(order.receivedBy || "");
+      setProcessedBy("");
       setProcessedDate(today);
       setNotes("");
       setQcAssignedTo("");
@@ -1468,6 +1369,9 @@ const ReceiptStatusModal: React.FC<ReceiptStatusModalProps> = ({
               </h3>
               <p className="text-sm text-gray-500 mt-1">
                 {order.orderNumber} &bull; {order.supplier}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Current Status: {order.status}
               </p>
             </div>
             <button

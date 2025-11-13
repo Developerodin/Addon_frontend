@@ -1,15 +1,20 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
+import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
+import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
+import yarnBoxService, { YarnBox, UpdateYarnBoxPayload } from "@/shared/services/yarnBoxService";
 
 interface ReceivedItem {
   id: string;
   yarnCode: string;
   yarnName: string;
+  sizeCount: string;
+  shadeCode: string;
   orderedQuantity: number;
   receivedQuantity: number;
   unitPrice: number;
@@ -24,7 +29,7 @@ interface ReceivedOrder {
   supplier: string;
   receivedDate: string;
   receivedBy: string;
-  status: 'Partial' | 'Complete' | 'Pending Inspection' | 'In Transit' | 'Rejected';
+  status: PurchaseOrderStatus;
   totalAmount: number;
   items: ReceivedItem[];
   notes: string;
@@ -32,24 +37,80 @@ interface ReceivedOrder {
   updatedAt: string;
 }
 
+// Helper function to convert API status code to display format
+const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
+  const statusMap: Record<string, PurchaseOrderStatus> = {
+    'submitted_to_supplier': 'submitted to supplier',
+    'in_transit': 'in transit',
+    'delivered': 'delivered',
+    'rejected': 'rejected',
+    'qc_pending': 'QC pending',
+    'partially_delivered': 'partially delivered',
+    'stocked': 'stocked',
+    'goods_received': 'goods received',
+    'po_rejected': 'rejected'
+  };
+  return statusMap[statusCode] || 'submitted to supplier';
+};
+
+// Helper function to map API response to ReceivedOrder format
+const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
+  const poItems = apiOrder.poItems || apiOrder.items || apiOrder.orderItems || [];
+  
+  return {
+    id: apiOrder._id || apiOrder.id || '',
+    orderNumber: apiOrder.poNumber || apiOrder.orderNumber || apiOrder.order_number || apiOrder.po_number || '',
+    purchaseOrderNumber: apiOrder.poNumber || apiOrder.orderNumber || apiOrder.order_number || apiOrder.po_number || '',
+    supplier: apiOrder.supplierName || apiOrder.supplier?.brandName || apiOrder.supplier?.name || apiOrder.supplier || '',
+    receivedDate: apiOrder.createDate || apiOrder.orderDate || apiOrder.order_date || apiOrder.createdAt || new Date().toISOString(),
+    receivedBy: apiOrder.receivedBy || apiOrder.received_by || apiOrder.updatedBy?.username || '',
+    status: convertStatusFromAPI(apiOrder.currentStatus || apiOrder.status || apiOrder.status_code || 'in_transit'),
+    totalAmount: apiOrder.total || apiOrder.totalAmount || apiOrder.total_amount || apiOrder.grandTotal || 0,
+    items: poItems.map((item: any, index: number) => ({
+      id: item._id || item.id || `${index}`,
+      yarnCode: item.shadeCode || item.shade_code || item.shade || item.yarnCode || '',
+      yarnName: item.yarnName || item.yarn?.yarnName || item.yarn_name || item.yarn?.name || '',
+      sizeCount: item.sizeCount || item.size_count || item.countSize || '',
+      shadeCode: item.shadeCode || item.shade_code || item.shade || '',
+      orderedQuantity: item.quantity || 0,
+      receivedQuantity: item.receivedQuantity || item.received_quantity || item.quantity || 0,
+      unitPrice: item.rate || item.unitPrice || 0,
+      totalPrice: item.subTotal || item.sub_total || (item.quantity * (item.rate || 0)) || 0,
+      qualityStatus: item.qualityStatus || item.quality_status || 'Pending' as 'Approved' | 'Rejected' | 'Pending'
+    })),
+    notes: apiOrder.notes || apiOrder.remarks || '',
+    createdAt: apiOrder.createDate || apiOrder.createdAt || apiOrder.created_at || new Date().toISOString(),
+    updatedAt: apiOrder.lastUpdateDate || apiOrder.updatedAt || apiOrder.updated_at || new Date().toISOString()
+  };
+};
+
 const ProcessOrderPage = () => {
   const params = useParams();
   const router = useRouter();
   const { hasSubPermission, isLoading } = useNavigation();
+  const user = useSelector((state: any) => state.auth?.user);
   const orderId = params?.orderId as string;
 
   const [order, setOrder] = useState<ReceivedOrder | null>(null);
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
-  const [isGeneratingBarcodes, setIsGeneratingBarcodes] = useState(false);
-  const [barcodesGenerated, setBarcodesGenerated] = useState(false);
-  const [itemBarcodes, setItemBarcodes] = useState<Record<string, string>>({});
-  const [showReadyToScan, setShowReadyToScan] = useState(false);
-  const [itemWeights, setItemWeights] = useState<Record<string, number>>({});
-  const [activeScanRow, setActiveScanRow] = useState<string | null>(null);
-  const [tempWeight, setTempWeight] = useState<string>('');
+  const [boxes, setBoxes] = useState<YarnBox[]>([]);
+  const [isLoadingBoxes, setIsLoadingBoxes] = useState(false);
+  const [activeBoxId, setActiveBoxId] = useState<string | null>(null);
+  const [barcodeScanValue, setBarcodeScanValue] = useState<string>('');
+  const [boxData, setBoxData] = useState<Record<string, {
+    yarnName: string;
+    shadeCode: string;
+    orderQty: number;
+    lotNumber: string;
+    boxWeight: string;
+    numberOfCones: string;
+  }>>({});
   const [showProcessedModal, setShowProcessedModal] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<'Pending Inspection' | 'Rejected' | ''>('');
+  const [selectedStatus, setSelectedStatus] = useState<PurchaseOrderStatus | ''>('');
   const [isSubmittingStatus, setIsSubmittingStatus] = useState(false);
+  const [updatingBoxId, setUpdatingBoxId] = useState<string | null>(null);
+  const [selectedBoxForDetails, setSelectedBoxForDetails] = useState<YarnBox | null>(null);
+  const [isUpdatingOrderStatus, setIsUpdatingOrderStatus] = useState(false);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -73,240 +134,94 @@ const ProcessOrderPage = () => {
     }
   }, [showProcessedModal]);
 
-  // Mock data - in real app, fetch from API
-  // Note: This should match the data from the parent page
-  const mockOrders: ReceivedOrder[] = [
-    {
-      id: "1",
-      orderNumber: "RCP-2024-001",
-      purchaseOrderNumber: "PO-2024-001",
-      supplier: "Reliance Industries",
-      receivedDate: "2024-01-25T10:30:00Z",
-      receivedBy: "Rama",
-      status: "In Transit",
-      totalAmount: 125000,
-      items: [
-        {
-          id: "1",
-          yarnCode: "CT40-001",
-          yarnName: "Cotton Count 40",
-          orderedQuantity: 200,
-          receivedQuantity: 200,
-          unitPrice: 450,
-          totalPrice: 90000,
-          qualityStatus: "Approved"
-        },
-        {
-          id: "2",
-          yarnCode: "CT60-004",
-          yarnName: "Cotton Count 60",
-          orderedQuantity: 100,
-          receivedQuantity: 100,
-          unitPrice: 520,
-          totalPrice: 52000,
-          qualityStatus: "Approved"
-        }
-      ],
-      notes: "All items received in good condition",
-      createdAt: "2024-01-25T10:30:00Z",
-      updatedAt: "2024-01-25T10:30:00Z"
-    },
-    {
-      id: "2",
-      orderNumber: "RCP-2024-002",
-      purchaseOrderNumber: "PO-2024-002",
-      supplier: "Aditya Birla Group",
-      receivedDate: "2024-01-20T14:30:00Z",
-      receivedBy: "Ganesh",
-      status: "In Transit",
-      totalAmount: 48000,
-      items: [
-        {
-          id: "3",
-          yarnCode: "PE150-002",
-          yarnName: "Polyester DTY 150",
-          orderedQuantity: 150,
-          receivedQuantity: 120,
-          unitPrice: 320,
-          totalPrice: 38400,
-          qualityStatus: "Approved"
-        },
-        {
-          id: "4",
-          yarnCode: "PE100-007",
-          yarnName: "Polyester POY 100",
-          orderedQuantity: 200,
-          receivedQuantity: 0,
-          unitPrice: 290,
-          totalPrice: 0,
-          qualityStatus: "Pending"
-        }
-      ],
-      notes: "Partial delivery, remaining items expected next week",
-      createdAt: "2024-01-20T14:30:00Z",
-      updatedAt: "2024-01-20T14:30:00Z"
-    },
-    {
-      id: "3",
-      orderNumber: "RCP-2024-003",
-      purchaseOrderNumber: "PO-2024-003",
-      supplier: "Grasim Industries",
-      receivedDate: "2024-01-22T09:15:00Z",
-      receivedBy: "Rama",
-      status: "In Transit",
-      totalAmount: 95000,
-      items: [
-        {
-          id: "5",
-          yarnCode: "VR30-003",
-          yarnName: "Viscose Rayon 30",
-          orderedQuantity: 180,
-          receivedQuantity: 180,
-          unitPrice: 380,
-          totalPrice: 68400,
-          qualityStatus: "Pending"
-        },
-        {
-          id: "6",
-          yarnCode: "VR40-008",
-          yarnName: "Viscose Rayon 40",
-          orderedQuantity: 100,
-          receivedQuantity: 100,
-          unitPrice: 400,
-          totalPrice: 40000,
-          qualityStatus: "Pending"
-        }
-      ],
-      notes: "Awaiting quality inspection",
-      createdAt: "2024-01-22T09:15:00Z",
-      updatedAt: "2024-01-22T09:15:00Z"
-    },
-    {
-      id: "4",
-      orderNumber: "RCP-2024-004",
-      purchaseOrderNumber: "PO-2024-004",
-      supplier: "Raymond Textiles",
-      receivedDate: "2024-02-02T11:00:00Z",
-      receivedBy: "Suresh",
-      status: "In Transit",
-      totalAmount: 142000,
-      items: [
-        {
-          id: "7",
-          yarnCode: "WL50-005",
-          yarnName: "Wool Blend 50s",
-          orderedQuantity: 160,
-          receivedQuantity: 160,
-          unitPrice: 550,
-          totalPrice: 88000,
-          qualityStatus: "Approved"
-        },
-        {
-          id: "8",
-          yarnCode: "WL70-010",
-          yarnName: "Wool Blend 70s",
-          orderedQuantity: 100,
-          receivedQuantity: 100,
-          unitPrice: 540,
-          totalPrice: 54000,
-          qualityStatus: "Approved"
-        }
-      ],
-      notes: "Received on time, excellent packaging",
-      createdAt: "2024-02-02T11:00:00Z",
-      updatedAt: "2024-02-02T11:00:00Z"
-    },
-    {
-      id: "5",
-      orderNumber: "RCP-2024-005",
-      purchaseOrderNumber: "PO-2024-005",
-      supplier: "Arvind Mills",
-      receivedDate: "2024-02-10T15:45:00Z",
-      receivedBy: "Ganesh",
-      status: "In Transit",
-      totalAmount: 76500,
-      items: [
-        {
-          id: "9",
-          yarnCode: "DN30-006",
-          yarnName: "Denim Yarn 30s",
-          orderedQuantity: 150,
-          receivedQuantity: 140,
-          unitPrice: 350,
-          totalPrice: 49000,
-          qualityStatus: "Approved"
-        },
-        {
-          id: "10",
-          yarnCode: "DN40-012",
-          yarnName: "Denim Yarn 40s",
-          orderedQuantity: 90,
-          receivedQuantity: 50,
-          unitPrice: 550,
-          totalPrice: 27500,
-          qualityStatus: "Pending"
-        }
-      ],
-      notes: "Partial delivery due to transport delay",
-      createdAt: "2024-02-10T15:45:00Z",
-      updatedAt: "2024-02-10T15:45:00Z"
-    },
-    {
-      id: "6",
-      orderNumber: "RCP-2024-006",
-      purchaseOrderNumber: "PO-2024-006",
-      supplier: "Jindal Textiles",
-      receivedDate: "2024-02-18T08:20:00Z",
-      receivedBy: "Rama",
-      status: "In Transit",
-      totalAmount: 158400,
-      items: [
-        {
-          id: "11",
-          yarnCode: "NY60-009",
-          yarnName: "Nylon 60 Denier",
-          orderedQuantity: 200,
-          receivedQuantity: 200,
-          unitPrice: 480,
-          totalPrice: 96000,
-          qualityStatus: "Approved"
-        },
-        {
-          id: "12",
-          yarnCode: "NY80-011",
-          yarnName: "Nylon 80 Denier",
-          orderedQuantity: 130,
-          receivedQuantity: 130,
-          unitPrice: 480,
-          totalPrice: 62400,
-          qualityStatus: "Approved"
-        }
-      ],
-      notes: "All quality parameters met successfully",
-      createdAt: "2024-02-18T08:20:00Z",
-      updatedAt: "2024-02-18T08:20:00Z"
-    }
-  ];
-
+  // Fetch order from API
   useEffect(() => {
-    if (orderId) {
-      console.log('Process page - orderId:', orderId);
-      // TODO: Fetch order from API
-      const foundOrder = mockOrders.find(o => o.id === orderId);
-      if (foundOrder) {
-        setOrder(foundOrder);
-        console.log('Process page - order found:', foundOrder);
-      } else {
-        console.log('Process page - order not found for id:', orderId);
-        toast.error('Order not found');
-        router.push('/yarn-management/purchase-management/purchase-order-received');
+    const fetchOrder = async () => {
+      if (!orderId) {
+        setIsLoadingOrder(false);
+        return;
       }
-      setIsLoadingOrder(false);
-    } else {
-      console.log('Process page - no orderId provided');
-      setIsLoadingOrder(false);
+
+      setIsLoadingOrder(true);
+      try {
+        console.log('Process page - fetching order with id:', orderId);
+        const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+        console.log('Process page - API response:', apiOrder);
+        
+        const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
+        console.log('Process page - mapped order:', mappedOrder);
+        
+        setOrder(mappedOrder);
+      } catch (error) {
+        console.error('Process page - failed to fetch order:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to load order details');
+        router.push('/yarn-management/purchase-management/purchase-order-received');
+      } finally {
+        setIsLoadingOrder(false);
+      }
+    };
+
+    if (hasPermission && !isLoading) {
+      fetchOrder();
     }
-  }, [orderId, router]);
+  }, [orderId, router, hasPermission, isLoading]);
+
+  // Fetch boxes when order is loaded
+  useEffect(() => {
+    const fetchBoxes = async () => {
+      if (!order?.orderNumber) return;
+
+      setIsLoadingBoxes(true);
+      try {
+        const response = await yarnBoxService.getYarnBoxes({
+          po_number: order.orderNumber
+        });
+        
+        // Handle both array response and object with results
+        let boxesData: YarnBox[] = [];
+        if (Array.isArray(response)) {
+          boxesData = response;
+        } else if (response && typeof response === 'object' && 'results' in response) {
+          boxesData = (response as any).results || [];
+        } else if (response && typeof response === 'object') {
+          boxesData = [response as YarnBox];
+        }
+        
+        setBoxes(boxesData);
+        
+        // Initialize box data state
+        const initialBoxData: Record<string, any> = {};
+        boxesData.forEach((box) => {
+          const boxId = box._id || box.id || box.boxId;
+          if (boxId) {
+            // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
+            const yarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
+              ? box.yarnName 
+              : '';
+            
+            initialBoxData[boxId] = {
+              yarnName: yarnName,
+              shadeCode: box.shadeCode || '',
+              orderQty: box.orderQty || 0,
+              lotNumber: box.lotNumber || '',
+              boxWeight: box.boxWeight?.toString() || '',
+              numberOfCones: box.numberOfCones?.toString() || ''
+            };
+          }
+        });
+        setBoxData(prev => ({ ...prev, ...initialBoxData }));
+      } catch (error) {
+        console.error('Failed to fetch boxes:', error);
+        toast.error('Failed to load boxes');
+      } finally {
+        setIsLoadingBoxes(false);
+      }
+    };
+
+    if (order?.orderNumber) {
+      fetchBoxes();
+    }
+  }, [order?.orderNumber]);
 
   const getQualityStatusColor = (status: string) => {
     switch (status) {
@@ -317,39 +232,286 @@ const ProcessOrderPage = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: PurchaseOrderStatus) => {
     switch (status) {
-      case 'In Transit': return 'bg-purple-100 text-purple-800';
-      case 'Partial': return 'bg-yellow-100 text-yellow-800';
-      case 'Complete': return 'bg-green-100 text-green-800';
-      case 'Pending Inspection': return 'bg-blue-100 text-blue-800';
-      case 'Rejected': return 'bg-red-100 text-red-800';
+      case 'in transit': return 'bg-purple-100 text-purple-800';
+      case 'partially delivered': return 'bg-yellow-100 text-yellow-800';
+      case 'delivered': return 'bg-green-100 text-green-800';
+      case 'QC pending': return 'bg-blue-100 text-blue-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+      case 'submitted to supplier': return 'bg-blue-100 text-blue-800';
+      case 'stocked': return 'bg-emerald-100 text-emerald-800';
+      case 'goods received': return 'bg-green-100 text-green-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const generateBarcode = (item: ReceivedItem, index: number): string => {
-    const poPrefix = order?.purchaseOrderNumber.replace(/[^A-Z0-9]/gi, "").toUpperCase() || "PO";
-    return `${poPrefix}-${item.yarnCode}-${String(index + 1).padStart(3, "0")}`;
+  // Handle barcode scan
+  const handleBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && barcodeScanValue.trim()) {
+      const scannedBarcode = barcodeScanValue.trim();
+      const foundBox = boxes.find(box => box.barcode === scannedBarcode);
+      
+      if (foundBox) {
+        const boxId = foundBox._id || foundBox.id || foundBox.boxId;
+        setActiveBoxId(boxId);
+        setBarcodeScanValue('');
+        toast.success(`Box ${foundBox.boxId} activated`);
+      } else {
+        toast.error('Barcode not found');
+        setBarcodeScanValue('');
+      }
+    }
   };
 
-  const handleGenerateAllBarcodes = () => {
-    if (!order) return;
+  // Get shade code for selected yarn name
+  const getShadeCodeForYarn = (yarnName: string): string => {
+    if (!order) return '';
+    const item = order.items.find(item => item.yarnName === yarnName);
+    return item?.shadeCode || '';
+  };
+
+  // Get order qty for selected yarn name
+  const getOrderQtyForYarn = (yarnName: string): number => {
+    if (!order) return 0;
+    const item = order.items.find(item => item.yarnName === yarnName);
+    return item?.orderedQuantity || 0;
+  };
+
+  // Handle yarn name change - auto-fill shade code and order qty
+  const handleYarnNameChange = (boxId: string, yarnName: string) => {
+    setBoxData(prev => ({
+      ...prev,
+      [boxId]: {
+        ...prev[boxId],
+        yarnName,
+        shadeCode: getShadeCodeForYarn(yarnName),
+        orderQty: getOrderQtyForYarn(yarnName)
+      }
+    }));
+  };
+
+  // Truncate ID/Barcode for display
+  const truncateId = (id: string): string => {
+    if (!id || id.length <= 7) return id;
+    return `${id.substring(0, 4)}...${id.substring(id.length - 3)}`;
+  };
+
+  // Check if all boxes have weight captured
+  const areAllBoxesCompleted = useMemo(() => {
+    if (boxes.length === 0) return false;
     
-    setIsGeneratingBarcodes(true);
-    
-    // Simulate 4 second loading
-    setTimeout(() => {
-      const generatedBarcodes: Record<string, string> = {};
-      order.items.forEach((item, index) => {
-        generatedBarcodes[item.id] = generateBarcode(item, index);
-      });
+    return boxes.every((box) => {
+      const boxId = box._id || box.id || box.boxId;
+      const data = boxData[boxId];
+      return data && 
+             data.yarnName && 
+             data.lotNumber && 
+             data.boxWeight && 
+             parseFloat(data.boxWeight) > 0 &&
+             data.numberOfCones && 
+             parseInt(data.numberOfCones) > 0;
+    });
+  }, [boxes, boxData]);
+
+  // Convert status to API format
+  const convertStatusToAPICode = (status: string): string => {
+    const statusMap: Record<string, string> = {
+      'goods_received': 'goods_received',
+      'qc_pending': 'qc_pending',
+      'po_rejected': 'po_rejected',
+      'in transit': 'in_transit',
+      'submitted to supplier': 'submitted_to_supplier',
+      'delivered': 'delivered',
+      'rejected': 'rejected',
+      'QC pending': 'qc_pending',
+      'partially delivered': 'partially_delivered',
+      'stocked': 'stocked'
+    };
+    return statusMap[status] || status;
+  };
+
+  // Update order status
+  const handleUpdateOrderStatus = async (statusCode: 'goods_received' | 'qc_pending' | 'po_rejected', notes: string) => {
+    if (!user || !user.id || !user.email) {
+      toast.error('User information not available. Please login again.');
+      return;
+    }
+
+    setIsUpdatingOrderStatus(true);
+    try {
+      // First, always update to goods_received if all boxes are completed
+      if (areAllBoxesCompleted) {
+        await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+          orderId,
+          'goods received' as PurchaseOrderStatus,
+          user.id,
+          user.email,
+          'All boxes processed and weight captured'
+        );
+      }
+
+      // Then update to the target status if it's not goods_received
+      if (statusCode !== 'goods_received') {
+        const statusMap: Record<string, PurchaseOrderStatus> = {
+          'qc_pending': 'QC pending',
+          'po_rejected': 'rejected'
+        };
+        
+        const targetStatus = statusMap[statusCode];
+        if (targetStatus) {
+          await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+            orderId,
+            targetStatus,
+            user.id,
+            user.email,
+            notes
+          );
+        }
+      }
+
+      toast.success(`Order status updated successfully`);
       
-      setItemBarcodes(generatedBarcodes);
-      setBarcodesGenerated(true);
-      setIsGeneratingBarcodes(false);
-      toast.success('All barcodes generated successfully');
-    }, 4000);
+      // Refresh order data
+      const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+      const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
+      setOrder(mappedOrder);
+      
+      // Navigate back to main page
+      router.push('/yarn-management/purchase-management/purchase-order-received');
+    } catch (error) {
+      console.error('Failed to update order status:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update order status');
+    } finally {
+      setIsUpdatingOrderStatus(false);
+    }
+  };
+
+  // Update box data
+  const handleUpdateBox = async (box: YarnBox) => {
+    const boxId = box._id || box.id || box.boxId;
+    if (!boxId) {
+      toast.error('Box ID not found');
+      return;
+    }
+
+    const data = boxData[boxId];
+    if (!data) {
+      toast.error('Box data not found');
+      return;
+    }
+
+    if (!data.yarnName) {
+      toast.error('Please select yarn name');
+      return;
+    }
+
+    if (!data.lotNumber) {
+      toast.error('Please enter lot number');
+      return;
+    }
+
+    if (!data.boxWeight || parseFloat(data.boxWeight) <= 0) {
+      toast.error('Please enter valid box weight');
+      return;
+    }
+
+    if (!data.numberOfCones || parseFloat(data.numberOfCones) <= 0) {
+      toast.error('Please enter valid number of cones');
+      return;
+    }
+
+    setUpdatingBoxId(boxId);
+    try {
+      const payload: UpdateYarnBoxPayload = {
+        yarnName: data.yarnName,
+        shadeCode: data.shadeCode,
+        orderQty: data.orderQty,
+        lotNumber: data.lotNumber,
+        boxWeight: parseFloat(data.boxWeight),
+        numberOfCones: parseInt(data.numberOfCones)
+      };
+
+      // Use _id for API call if available, otherwise use boxId
+      const apiBoxId = box._id || boxId;
+      await yarnBoxService.updateYarnBox(apiBoxId, payload);
+      toast.success(`Box ${box.boxId} updated successfully`);
+      setActiveBoxId(null);
+      
+      // Refresh boxes
+      if (order?.orderNumber) {
+        const response = await yarnBoxService.getYarnBoxes({
+          po_number: order.orderNumber
+        });
+        let boxesData: YarnBox[] = [];
+        if (Array.isArray(response)) {
+          boxesData = response;
+        } else if (response && typeof response === 'object' && 'results' in response) {
+          boxesData = (response as any).results || [];
+        }
+        setBoxes(boxesData);
+        
+        // Update box data state with refreshed data
+        const updatedBoxData: Record<string, any> = {};
+        boxesData.forEach((box) => {
+          const refreshedBoxId = box._id || box.id || box.boxId;
+          if (refreshedBoxId) {
+            // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
+            const yarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
+              ? box.yarnName 
+              : '';
+            
+            updatedBoxData[refreshedBoxId] = {
+              yarnName: yarnName,
+              shadeCode: box.shadeCode || '',
+              orderQty: box.orderQty || 0,
+              lotNumber: box.lotNumber || '',
+              boxWeight: box.boxWeight?.toString() || '',
+              numberOfCones: box.numberOfCones?.toString() || ''
+            };
+          }
+        });
+        setBoxData(prev => ({ ...prev, ...updatedBoxData }));
+        
+        // Check if all boxes are now completed and auto-update status to goods_received
+        const allCompleted = boxesData.every((b) => {
+          const bId = b._id || b.id || b.boxId;
+          const bData = updatedBoxData[bId] || {};
+          return bData.yarnName && 
+                 bData.lotNumber && 
+                 bData.boxWeight && 
+                 parseFloat(bData.boxWeight) > 0 &&
+                 bData.numberOfCones && 
+                 parseInt(bData.numberOfCones) > 0;
+        });
+
+        if (allCompleted && user && user.id && user.email) {
+          // Auto-update to goods_received when all boxes are completed
+          try {
+            await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+              orderId,
+              'goods received' as PurchaseOrderStatus,
+              user.id,
+              user.email,
+              'All boxes processed and weight captured'
+            );
+            // Refresh order to get updated status
+            const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+            const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
+            setOrder(mappedOrder);
+            toast.success('All boxes completed! Order status updated to Goods Received');
+          } catch (error) {
+            console.error('Failed to auto-update status to goods_received:', error);
+            // Don't show error toast for auto-update, just log it
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update box:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update box');
+    } finally {
+      setUpdatingBoxId(null);
+    }
   };
 
   const handlePrintAllBarcodes = () => {
@@ -567,235 +729,464 @@ const ProcessOrderPage = () => {
                   <p className="text-sm text-gray-700">{order.notes}</p>
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Yarn Details Table */}
-          <div className="box">
-            <div className="box-header flex justify-between items-center">
-              <h3 className="box-title">
-                <i className="ri-yarn-line me-2"></i>
-                Yarn Details ({order.items.length} items)
-              </h3>
-              <div className="flex gap-2">
-                {!barcodesGenerated ? (
+              
+              {/* Action Buttons */}
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <div className="flex flex-col sm:flex-row gap-3 justify-end">
                   <button
-                    onClick={handleGenerateAllBarcodes}
-                    disabled={isGeneratingBarcodes}
-                    className="ti-btn ti-btn-primary"
+                    type="button"
+                    onClick={() => handleUpdateOrderStatus('qc_pending', 'Order sent for quality check')}
+                    disabled={!areAllBoxesCompleted || isUpdatingOrderStatus}
+                    className={`ti-btn ${
+                      areAllBoxesCompleted && !isUpdatingOrderStatus
+                        ? 'ti-btn-primary'
+                        : 'ti-btn-light opacity-50 cursor-not-allowed'
+                    }`}
                   >
-                    {isGeneratingBarcodes ? (
+                    {isUpdatingOrderStatus ? (
                       <>
                         <i className="ri-loader-4-line animate-spin me-2"></i>
-                        Generating...
+                        Updating...
                       </>
                     ) : (
                       <>
-                        <i className="ri-barcode-line me-2"></i>
-                        Generate All Barcodes
+                        <i className="ri-checkbox-circle-line me-2"></i>
+                        Send for QC
                       </>
                     )}
                   </button>
-                ) : (
                   <button
-                    onClick={handlePrintAllBarcodes}
-                    className="ti-btn ti-btn-primary bg-green-600 hover:bg-green-700"
+                    type="button"
+                    onClick={() => handleUpdateOrderStatus('po_rejected', 'Order rejected')}
+                    disabled={!areAllBoxesCompleted || isUpdatingOrderStatus}
+                    className={`ti-btn ${
+                      areAllBoxesCompleted && !isUpdatingOrderStatus
+                        ? 'ti-btn-danger'
+                        : 'ti-btn-light opacity-50 cursor-not-allowed'
+                    }`}
                   >
-                    <i className="ri-printer-line me-2"></i>
-                    Print All Barcodes
+                    {isUpdatingOrderStatus ? (
+                      <>
+                        <i className="ri-loader-4-line animate-spin me-2"></i>
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <i className="ri-close-circle-line me-2"></i>
+                        Reject Order
+                      </>
+                    )}
                   </button>
+                </div>
+                {!areAllBoxesCompleted && (
+                  <p className="text-xs text-gray-500 mt-2 text-right">
+                    Complete all box entries (yarn name, lot number, weight, and cones) to enable actions
+                  </p>
                 )}
               </div>
             </div>
-            {showReadyToScan && (
-              <div className="mx-6 mt-4 mb-4">
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-l-4 border-green-500 rounded-lg p-4 shadow-sm">
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0">
-                      <i className="ri-checkbox-circle-line text-2xl text-green-600"></i>
-                    </div>
-                    <div className="ml-3 flex-1">
-                      <h4 className="text-sm font-semibold text-green-800 mb-1">
-                        Ready to Scan
-                      </h4>
-                      <p className="text-sm text-green-700">
-                        Barcodes have been printed. You can now affix them to the boxes and proceed with scanning. The system is ready to process scanned barcodes.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setShowReadyToScan(false)}
-                      className="ml-4 flex-shrink-0 text-green-600 hover:text-green-800"
-                    >
-                      <i className="ri-close-line text-xl"></i>
-                    </button>
-                  </div>
-                </div>
+          </div>
+
+          {/* Boxes Table */}
+          <div className="box">
+            <div className="box-header flex justify-between items-center">
+              <h3 className="box-title">
+                <i className="ri-box-3-line me-2"></i>
+                Boxes ({boxes.length} boxes)
+              </h3>
               </div>
-            )}
             <div className="box-body">
+              {/* Barcode Scanner Input */}
+              <div className="mb-4">
+                <label className="form-label">Scan Barcode</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Scan or enter barcode to activate row"
+                  value={barcodeScanValue}
+                  onChange={(e) => setBarcodeScanValue(e.target.value)}
+                  onKeyDown={handleBarcodeScan}
+                  autoFocus
+                />
+            </div>
+
+              {isLoadingBoxes ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading boxes...</p>
+                    </div>
+              ) : boxes.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">No boxes found for this order</p>
+                    </div>
+              ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full border border-gray-300">
+                  <table className="min-w-full border-collapse border border-gray-300">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                        Yarn Code
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                        Yarn Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                        Ordered Qty
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                        Unit Price
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                        Total Price
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                        Barcode
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                        Weight (kg)
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
-                        Actions
-                      </th>
+                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box ID</th>
+                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
+                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
+                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
+                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Qty</th>
+                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lot Number</th>
+                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box Weight (kg)</th>
+                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. of Cones</th>
+                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white">
-                    {order.items.map((item, index) => {
-                      const isActiveRow = activeScanRow === item.id;
+                      {boxes.map((box) => {
+                        const boxId = box._id || box.id || box.boxId;
+                        const isActive = activeBoxId === boxId;
+                        // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
+                        const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
+                          ? box.yarnName 
+                          : '';
+                        
+                        const data = boxData[boxId] || {
+                          yarnName: defaultYarnName,
+                          shadeCode: box.shadeCode || '',
+                          orderQty: box.orderQty || 0,
+                          lotNumber: box.lotNumber || '',
+                          boxWeight: box.boxWeight?.toString() || '',
+                          numberOfCones: box.numberOfCones?.toString() || ''
+                        };
+                        const isUpdating = updatingBoxId === boxId;
+
                       return (
                       <tr 
-                        key={item.id} 
-                        className={`hover:bg-gray-50 transition-colors ${
-                          isActiveRow ? 'bg-blue-50 border-2 border-blue-400' : ''
-                        }`}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-b border-gray-300">
-                          {item.yarnCode}
+                            key={boxId}
+                            className={`hover:bg-gray-50 ${
+                              isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
+                            }`}
+                          >
+                            <td className="border border-gray-300 px-4 py-3">
+                              <button
+                                onClick={() => setSelectedBoxForDetails(box)}
+                                className="text-sm font-medium text-primary hover:text-primary-dark hover:underline cursor-pointer"
+                                title="Click to view full details"
+                              >
+                                {truncateId(box.boxId)}
+                              </button>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
+                            <td className="border border-gray-300 px-4 py-3">
+                              <button
+                                onClick={() => setSelectedBoxForDetails(box)}
+                                className="text-sm text-gray-900 font-mono text-primary hover:text-primary-dark hover:underline cursor-pointer"
+                                title="Click to view full details"
+                              >
+                                {truncateId(box.barcode)}
+                              </button>
+                            </td>
+                            <td className="border border-gray-300 px-4 py-3">
+                              {isActive ? (
+                                <select
+                                  className="form-select text-sm"
+                                  value={data.yarnName}
+                                  onChange={(e) => handleYarnNameChange(boxId, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
+                                      if (nextInput) {
+                                        (nextInput as HTMLInputElement).focus();
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <option value="">Select Yarn Name</option>
+                                  {order?.items.map((item) => (
+                                    <option key={item.id} value={item.yarnName}>
                           {item.yarnName}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="text-sm text-gray-900">{data.yarnName || '-'}</span>
+                              )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                          {item.orderedQuantity.toLocaleString()} kg
+                            <td className="border border-gray-300 px-4 py-3">
+                              {isActive ? (
+                                <input
+                                  type="text"
+                                  className="form-control text-sm"
+                                  value={data.shadeCode}
+                                  readOnly
+                                  tabIndex={-1}
+                                />
+                              ) : (
+                                <span className="text-sm text-gray-900">{data.shadeCode || '-'}</span>
+                              )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                          ₹{item.unitPrice.toLocaleString()}
+                            <td className="border border-gray-300 px-4 py-3">
+                              {isActive ? (
+                                <input
+                                  type="number"
+                                  className="form-control text-sm"
+                                  value={data.orderQty}
+                                  readOnly
+                                  tabIndex={-1}
+                                />
+                              ) : (
+                                <span className="text-sm text-gray-900">{data.orderQty || '-'}</span>
+                              )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-b border-gray-300">
-                          ₹{item.totalPrice.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                          {barcodesGenerated && itemBarcodes[item.id] ? (
-                            <span className="font-mono text-xs bg-green-100 text-green-800 px-2 py-1 rounded border border-green-300">
-                              {itemBarcodes[item.id]}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400 italic">Not generated</span>
+                            <td className="border border-gray-300 px-4 py-3">
+                              {isActive ? (
+                                <input
+                                  type="text"
+                                  className="form-control text-sm"
+                                  value={data.lotNumber}
+                                  onChange={(e) => {
+                                    setBoxData(prev => ({
+                                      ...prev,
+                                      [boxId]: { ...prev[boxId], lotNumber: e.target.value }
+                                    }));
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
+                                      if (nextInput) {
+                                        (nextInput as HTMLInputElement).focus();
+                                      }
+                                    }
+                                  }}
+                                  placeholder="Enter lot number"
+                                />
+                              ) : (
+                                <span className="text-sm text-gray-900">{data.lotNumber || '-'}</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
-                          {isActiveRow ? (
+                            <td className="border border-gray-300 px-4 py-3">
+                              {isActive ? (
                             <input
                               type="number"
                               step="0.01"
                               min="0"
-                              value={tempWeight}
-                              onChange={(e) => setTempWeight(e.target.value)}
+                                  className="form-control text-sm"
+                                  value={data.boxWeight}
+                                  onChange={(e) => {
+                                    setBoxData(prev => ({
+                                      ...prev,
+                                      [boxId]: { ...prev[boxId], boxWeight: e.target.value }
+                                    }));
+                                  }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
-                                  const weight = parseFloat(tempWeight);
-                                  if (!isNaN(weight) && weight > 0) {
-                                    const updatedWeights = {
-                                      ...itemWeights,
-                                      [item.id]: weight
-                                    };
-                                    setItemWeights(updatedWeights);
-                                    setActiveScanRow(null);
-                                    setTempWeight('');
-                                    toast.success(`Weight ${weight} kg recorded for ${item.yarnName}`);
-                                    
-                                    // Check if all items have weights
-                                    if (order && Object.keys(updatedWeights).length === order.items.length) {
-                                      setTimeout(() => {
-                                        setShowProcessedModal(true);
-                                      }, 500);
+                                      e.preventDefault();
+                                      const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
+                                      if (nextInput) {
+                                        (nextInput as HTMLInputElement).focus();
+                                      }
                                     }
-                                  } else {
-                                    toast.error('Please enter a valid weight');
-                                  }
-                                } else if (e.key === 'Escape') {
-                                  setActiveScanRow(null);
-                                  setTempWeight('');
-                                }
-                              }}
-                              autoFocus
-                              className="w-24 px-2 py-1 text-sm border border-blue-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  }}
                               placeholder="0.00"
                             />
                           ) : (
-                            <span className="text-sm text-gray-900">
-                              {itemWeights[item.id] ? (
-                                <span className="font-semibold text-blue-600">
-                                  {itemWeights[item.id].toFixed(2)} kg
+                                <span className="text-sm text-gray-900">{data.boxWeight || '-'}</span>
+                              )}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-3">
+                              {isActive ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  className="form-control text-sm"
+                                  value={data.numberOfCones}
+                                  onChange={(e) => {
+                                    setBoxData(prev => ({
+                                      ...prev,
+                                      [boxId]: { ...prev[boxId], numberOfCones: e.target.value }
+                                    }));
+                                  }}
+                                  onKeyDown={async (e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      await handleUpdateBox(box);
+                                    }
+                                  }}
+                                  placeholder="0"
+                                />
+                              ) : (
+                                <span className="text-sm text-gray-900">{data.numberOfCones || '-'}</span>
+                              )}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-3">
+                              {isUpdating ? (
+                                <div className="flex items-center gap-2">
+                                  <i className="ri-loader-4-line animate-spin text-primary"></i>
+                                  <span className="text-xs text-gray-500">Updating...</span>
+                                </div>
+                              ) : isActive ? (
+                                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                  Active
+                                </span>
+                              ) : data.yarnName && data.lotNumber && data.boxWeight && data.numberOfCones ? (
+                                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                  Completed
                                 </span>
                               ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
+                                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                                  Pending
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
-                          {barcodesGenerated && (
-                            <button
-                              onClick={() => {
-                                setActiveScanRow(item.id);
-                                setTempWeight(itemWeights[item.id]?.toString() || '');
-                              }}
-                              disabled={isActiveRow}
-                              className={`ti-btn  ${
-                                isActiveRow 
-                                  ? 'ti-btn-primary' 
-                                  : 'ti-btn-outline-primary'
-                              }`}
-                              title="Scan and enter weight"
-                            >
-                              <i className="ri-qr-scan-2-line me-1"></i>
-                              Scan
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    )})}
-                  </tbody>
-                  <tfoot className="bg-gray-50">
-                    <tr>
-                      <td colSpan={2} className="px-6 py-3 text-sm font-semibold text-gray-900 border-r border-t border-gray-300">
-                        Total
-                      </td>
-                      <td className="px-6 py-3 text-sm font-semibold text-gray-900 border-r border-t border-gray-300">
-                        {order.items.reduce((sum, item) => sum + item.orderedQuantity, 0).toLocaleString()} kg
-                      </td>
-                      <td className="px-6 py-3 text-sm text-gray-500 border-r border-t border-gray-300">-</td>
-                      <td className="px-6 py-3 text-sm font-semibold text-gray-900 border-r border-t border-gray-300">
-                        ₹{order.items.reduce((sum, item) => sum + item.totalPrice, 0).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-3 text-sm text-gray-500 border-r border-t border-gray-300">-</td>
-                      <td className="px-6 py-3 text-sm font-semibold text-gray-900 border-r border-t border-gray-300">
-                        {order.items.reduce((sum, item) => sum + (itemWeights[item.id] || 0), 0).toFixed(2)} kg
-                      </td>
-                      <td className="px-6 py-3 border-t border-gray-300"></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Box Details Modal */}
+      {selectedBoxForDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <i className="ri-information-line text-primary"></i>
+                  Box Details
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Full information for {selectedBoxForDetails.boxId}
+                </p>
+              </div>
+                            <button
+                onClick={() => setSelectedBoxForDetails(null)}
+                className="text-gray-400 hover:text-gray-600 transition"
+                aria-label="Close modal"
+              >
+                <i className="ri-close-line text-xl"></i>
+                            </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Box ID</label>
+                  <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
+                    {selectedBoxForDetails.boxId}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Barcode</label>
+                  <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
+                    {selectedBoxForDetails.barcode}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">PO Number</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {selectedBoxForDetails.poNumber}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Yarn Name</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {(() => {
+                      const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
+                      return boxData[boxId]?.yarnName || selectedBoxForDetails.yarnName || '-';
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Shade Code</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {(() => {
+                      const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
+                      return boxData[boxId]?.shadeCode || selectedBoxForDetails.shadeCode || '-';
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Order Qty</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {(() => {
+                      const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
+                      return boxData[boxId]?.orderQty || selectedBoxForDetails.orderQty || 0;
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Lot Number</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {(() => {
+                      const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
+                      return boxData[boxId]?.lotNumber || selectedBoxForDetails.lotNumber || '-';
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Box Weight (kg)</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {(() => {
+                      const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
+                      return boxData[boxId]?.boxWeight || selectedBoxForDetails.boxWeight || '-';
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Number of Cones</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {(() => {
+                      const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
+                      return boxData[boxId]?.numberOfCones || selectedBoxForDetails.numberOfCones || '-';
+                    })()}
+                  </div>
+                </div>
+                {selectedBoxForDetails.receivedDate && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Received Date</label>
+                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                      {new Date(selectedBoxForDetails.receivedDate).toLocaleDateString()}
+                    </div>
+                  </div>
+                )}
+                {selectedBoxForDetails.orderDate && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Order Date</label>
+                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                      {new Date(selectedBoxForDetails.orderDate).toLocaleDateString()}
+              </div>
+            </div>
+                )}
+                {selectedBoxForDetails.conesIssued !== undefined && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Cones Issued</label>
+                    <div className="mt-1">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        selectedBoxForDetails.conesIssued 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {selectedBoxForDetails.conesIssued ? 'Yes' : 'No'}
+                      </span>
+          </div>
+                  </div>
+                )}
+        </div>
+      </div>
+
+            <div className="border-t border-gray-100 px-6 py-4 flex justify-end">
+              <button
+                type="button"
+                className="ti-btn ti-btn-light"
+                onClick={() => setSelectedBoxForDetails(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* All Items Processed Modal */}
       {showProcessedModal && (
@@ -821,13 +1212,13 @@ const ProcessOrderPage = () => {
                   </label>
                   <select
                     value={selectedStatus}
-                    onChange={(e) => setSelectedStatus(e.target.value as 'Pending Inspection' | 'Rejected' | '')}
+                    onChange={(e) => setSelectedStatus(e.target.value as PurchaseOrderStatus | '')}
                     className="form-select"
                     disabled={isSubmittingStatus}
                   >
                     <option value="">Select status...</option>
-                    <option value="Pending Inspection">Send for QC</option>
-                    <option value="Rejected">Reject</option>
+                    <option value="QC pending">Send for QC</option>
+                    <option value="rejected">Reject</option>
                   </select>
                 </div>
               </div>
@@ -852,6 +1243,21 @@ const ProcessOrderPage = () => {
 
                     setIsSubmittingStatus(true);
                     try {
+                      if (!user || !user.id || !user.email) {
+                        toast.error('User information not available. Please login again.');
+                        setIsSubmittingStatus(false);
+                        return;
+                      }
+
+                      // Update order status via API
+                      await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+                        orderId,
+                        selectedStatus as PurchaseOrderStatus,
+                        user.id,
+                        user.email,
+                        `Status updated to ${selectedStatus}`
+                      );
+
                       // Mark order as processed in localStorage
                       const processedOrders = JSON.parse(localStorage.getItem('processedOrders') || '[]');
                       if (!processedOrders.includes(orderId)) {
@@ -859,22 +1265,16 @@ const ProcessOrderPage = () => {
                         localStorage.setItem('processedOrders', JSON.stringify(processedOrders));
                       }
 
-                      // Store status update in localStorage
-                      const statusUpdates = JSON.parse(localStorage.getItem('orderStatusUpdates') || '{}');
-                      statusUpdates[orderId] = selectedStatus;
-                      localStorage.setItem('orderStatusUpdates', JSON.stringify(statusUpdates));
-
                       // Dispatch custom events to notify parent page
                       window.dispatchEvent(new Event('processedOrdersUpdated'));
-                      window.dispatchEvent(new Event('orderStatusUpdated'));
 
-                      toast.success(`Order status updated to ${selectedStatus === 'Pending Inspection' ? 'Send for QC' : 'Rejected'}`);
+                      toast.success(`Order status updated to ${selectedStatus === 'QC pending' ? 'Send for QC' : 'Rejected'}`);
                       
                       // Navigate back to main page
                       router.push('/yarn-management/purchase-management/purchase-order-received');
                     } catch (error) {
                       console.error('Failed to update status:', error);
-                      toast.error('Failed to update status');
+                      toast.error(error instanceof Error ? error.message : 'Failed to update status');
                       setIsSubmittingStatus(false);
                     }
                   }}

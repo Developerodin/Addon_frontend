@@ -14,10 +14,13 @@ export interface PurchaseOrderItem {
 }
 
 export interface PacklistDetails {
-  trackingNumber?: string;
-  courierName?: string;
-  dispatchDate?: string;
-  expectedArrivalDate?: string;
+  packingNumber: string;
+  courierName: string;
+  dispatchDate: string;
+  estimatedDeliveryDate: string;
+  numberOfCones: number;
+  numberOfBoxes: number;
+  totalWeight: number;
   notes?: string;
   packlistFile?: File;
   packlistFileName?: string;
@@ -30,7 +33,8 @@ export type PurchaseOrderStatus =
   | 'rejected'
   | 'QC pending'
   | 'partially delivered'
-  | 'stocked';
+  | 'stocked'
+  | 'goods received';
 
 export interface PurchaseOrder {
   id: string;
@@ -183,24 +187,82 @@ class YarnPurchaseOrderService {
     return this.makeRequest<PurchaseOrder>(`/${orderId}`);
   }
 
-  async updatePurchaseOrderStatus(
+  async updatePurchaseOrderWithPacklist(
     orderId: string,
-    status: PurchaseOrderStatus,
-    packlistDetails?: PacklistDetails
+    packlistDetails: PacklistDetails
   ): Promise<PurchaseOrder> {
     if (!orderId) {
       throw new Error('Order ID is required');
     }
 
-    const payload: Partial<PurchaseOrder> & { status: PurchaseOrderStatus } = { status };
-    if (packlistDetails) {
-      payload.packlistDetails = packlistDetails;
+    const payload: {
+      notes?: string;
+      packListDetails: {
+        packingNumber: string;
+        courierName: string;
+        dispatchDate: string;
+        estimatedDeliveryDate: string;
+        numberOfCones: number;
+        numberOfBoxes: number;
+        totalWeight: number;
+      };
+    } = {
+      notes: packlistDetails.notes || 'Update packing details',
+      packListDetails: {
+        packingNumber: packlistDetails.packingNumber,
+        courierName: packlistDetails.courierName,
+        dispatchDate: packlistDetails.dispatchDate,
+        estimatedDeliveryDate: packlistDetails.estimatedDeliveryDate,
+        numberOfCones: packlistDetails.numberOfCones,
+        numberOfBoxes: packlistDetails.numberOfBoxes,
+        totalWeight: packlistDetails.totalWeight,
+      },
+    };
+
+    return this.makeRequest<PurchaseOrder>(`/${orderId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updatePurchaseOrderStatus(
+    orderId: string,
+    status: PurchaseOrderStatus,
+    userId: string,
+    username: string,
+    notes?: string
+  ): Promise<PurchaseOrder> {
+    if (!orderId) {
+      throw new Error('Order ID is required');
     }
+
+    const payload = {
+      status_code: this.convertStatusToAPI(status),
+      updated_by: {
+        username: username,
+        user_id: userId,
+      },
+      notes: notes || '',
+    };
 
     return this.makeRequest<PurchaseOrder>(`/${orderId}/status`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
+  }
+
+  private convertStatusToAPI(status: PurchaseOrderStatus): string {
+    const statusMap: Record<PurchaseOrderStatus, string> = {
+      'submitted to supplier': 'submitted_to_supplier',
+      'in transit': 'in_transit',
+      'delivered': 'delivered',
+      'rejected': 'rejected',
+      'QC pending': 'qc_pending',
+      'partially delivered': 'partially_delivered',
+      'stocked': 'stocked',
+      'goods received': 'goods_received',
+    };
+    return statusMap[status] || 'submitted_to_supplier';
   }
 
   async createPurchaseOrder(payload: CreatePurchaseOrderPayload): Promise<PurchaseOrder> {
