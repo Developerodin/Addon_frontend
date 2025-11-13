@@ -17,9 +17,11 @@ export type PurchaseOrderStatus =
 export interface YarnPurchaseItem {
   id: string;
   yarnName: string;
+  yarnId?: string;
   yarnTypeId?: string;
   yarnSubtypeId?: string;
   sizeCount: string;
+  sizeCountName?: string;
   shadeCode: string;
   rate: number;
   qty: number;
@@ -185,7 +187,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     const newItem: YarnPurchaseItem = {
       id: Date.now().toString(),
       yarnName: "",
+      yarnId: "",
       sizeCount: "",
+      sizeCountName: "",
       shadeCode: "",
       rate: 0,
       qty: 0,
@@ -270,8 +274,106 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       ? (detail.yarnsubtype as any)?._id || (detail.yarnsubtype as any)?.id || detail.yarnsubtype
       : detail.yarnsubtype;
 
+    const extractYarnId = (yarnDetail: SupplierYarnDetail): string | undefined => {
+      const valueToId = (value: unknown): string | undefined => {
+        if (!value) return undefined;
+        if (typeof value === 'string') {
+          return value;
+        }
+        if (typeof value === 'number') {
+          return String(value);
+        }
+        if (typeof value === 'object') {
+          const obj = value as Record<string, unknown>;
+          if (typeof obj._id === 'string') return obj._id;
+          if (typeof obj.id === 'string') return obj.id;
+          if (typeof obj._id === 'number') return String(obj._id);
+          if (typeof obj.id === 'number') return String(obj.id);
+        }
+        return undefined;
+      };
+
+      const priorityKeys = [
+        'yarnId',
+        'yarnCatalogId',
+        'catalogId',
+        'yarn',
+        'yarnCatalog',
+        'catalog',
+        'yarncatalog',
+        'yarn_catalog',
+        'yarn_catalog_id',
+        'yarncatalogid',
+        'catalogYarn',
+        'catalogYarnId',
+        'id',
+        '_id',
+      ];
+
+      const visited = new Set<unknown>();
+
+      const traverse = (value: unknown, depth = 0): string | undefined => {
+        if (!value || depth > 4 || visited.has(value)) {
+          return undefined;
+        }
+
+        visited.add(value);
+
+        const direct = valueToId(value);
+        if (direct) {
+          return direct;
+        }
+
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            const result = traverse(item, depth + 1);
+            if (result) return result;
+          }
+          return undefined;
+        }
+
+        if (typeof value === 'object') {
+          const obj = value as Record<string, unknown>;
+
+          for (const key of priorityKeys) {
+            if (key in obj) {
+              const result = valueToId(obj[key]);
+              if (result) return result;
+
+              const nested = traverse(obj[key], depth + 1);
+              if (nested) return nested;
+            }
+          }
+
+          for (const [key, nestedValue] of Object.entries(obj)) {
+            if (typeof nestedValue === 'object') {
+              if (/(yarn|catalog|id)$/i.test(key)) {
+                const nestedId = valueToId(nestedValue);
+                if (nestedId) return nestedId;
+              }
+              const result = traverse(nestedValue, depth + 1);
+              if (result) return result;
+            } else if (typeof nestedValue === 'string' && /(yarn|catalog|id)$/i.test(key)) {
+              return nestedValue;
+            } else if (typeof nestedValue === 'number' && /(yarn|catalog|id)$/i.test(key)) {
+              return String(nestedValue);
+            }
+          }
+        }
+
+        return undefined;
+      };
+
+      return traverse(yarnDetail);
+    };
+
+    const yarnId = extractYarnId(detail);
+
+    console.log('[PurchaseForm] Selected yarn detail', { yarnId, detail });
+
     updateItem(itemId, {
       yarnName: displayName,
+      yarnId: yarnId ? String(yarnId) : '',
       yarnTypeId: yarnTypeId || '',
       yarnSubtypeId: yarnSubtypeId || '',
       shadeCode: detail.shadeNumber || '',
@@ -359,39 +461,59 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[PurchaseForm] Submit triggered', {
+      purchaseDate: formData.purchaseDate,
+      supplierId: formData.supplierId,
+      itemsCount: formData.items.length,
+      items: formData.items,
+      totals: {
+        subTotal: formData.subTotal,
+        totalGst: formData.totalGst,
+        total: formData.total,
+      },
+    });
     
     if (!formData.purchaseDate.trim()) {
+      console.warn('[PurchaseForm] Validation failed: purchase date missing');
       toast.error("Purchase Date is required");
       return;
     }
     if (!formData.supplierId) {
+      console.warn('[PurchaseForm] Validation failed: supplier missing');
       toast.error("Supplier is required");
       return;
     }
     if (formData.items.length === 0) {
+      console.warn('[PurchaseForm] Validation failed: no items added');
       toast.error("At least one yarn item is required");
       return;
     }
     
     for (let i = 0; i < formData.items.length; i++) {
       const item = formData.items[i];
+      console.log(`[PurchaseForm] Validating item ${i + 1}`, item);
       if (!item.yarnName.trim()) {
+        console.warn(`[PurchaseForm] Validation failed: yarn name missing for item ${i + 1}`);
         toast.error(`Yarn Name is required for item ${i + 1}`);
         return;
       }
       if (!item.sizeCount) {
+        console.warn(`[PurchaseForm] Validation failed: size/count missing for item ${i + 1}`);
         toast.error(`Size/Count is required for item ${i + 1}`);
         return;
       }
       if (item.rate <= 0) {
+        console.warn(`[PurchaseForm] Validation failed: rate invalid for item ${i + 1}`, item.rate);
         toast.error(`Rate must be greater than 0 for item ${i + 1}`);
         return;
       }
       if (item.qty <= 0) {
+        console.warn(`[PurchaseForm] Validation failed: quantity invalid for item ${i + 1}`, item.qty);
         toast.error(`Quantity must be greater than 0 for item ${i + 1}`);
         return;
       }
       if (!item.estimatedDeliveryDate) {
+        console.warn(`[PurchaseForm] Validation failed: estimated delivery missing for item ${i + 1}`);
         toast.error(`Estimated Delivery Date is required for item ${i + 1}`);
         return;
       }
@@ -402,6 +524,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       ...formData,
       ...totals
     };
+
+    console.log('[PurchaseForm] Passing data to onSubmit', dataToSubmit);
 
     try {
       await onSubmit(dataToSubmit);
@@ -534,8 +658,10 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                             // Clear selected yarn detail if user is typing manually
                             updateItem(item.id, { 
                               yarnName: e.target.value,
+                            yarnId: "",
                               selectedYarnDetail: undefined,
                               sizeCount: '', // Clear size count when yarn changes
+                            sizeCountName: '',
                               yarnTypeId: undefined,
                               yarnSubtypeId: undefined
                             });
@@ -588,7 +714,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       </label>
                       <select
                         value={item.sizeCount}
-                        onChange={(e) => updateItem(item.id, { sizeCount: e.target.value })}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const selectedOption = availableCountSizes.find(cs => cs.id === value);
+                          updateItem(item.id, { 
+                            sizeCount: value, 
+                            sizeCountName: selectedOption?.name || value 
+                          });
+                        }}
                         className="form-select"
                         required
                         disabled={availableCountSizes.length === 0}

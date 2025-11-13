@@ -42,6 +42,7 @@ export interface YarnCatalogQueryParams {
   yarnName?: string;
   status?: 'active' | 'inactive' | 'suspended';
   yarnType?: string;
+  yarnSubtype?: string;
   countSize?: string;
   blend?: string;
   colorFamily?: string;

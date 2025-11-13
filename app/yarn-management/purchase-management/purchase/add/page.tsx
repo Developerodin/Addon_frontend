@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 import PurchaseForm, { PurchaseOrderData } from "../components/PurchaseForm";
+import yarnPurchaseOrderService, { CreatePurchaseOrderPayload, PurchaseOrderItemPayload } from "@/shared/services/yarnPurchaseOrderService";
+import yarnCatalogService, { YarnCatalogQueryParams } from "@/shared/services/yarnCatalogService";
 
 const AddPurchasePage = () => {
   const router = useRouter();
@@ -49,28 +51,258 @@ const AddPurchasePage = () => {
   const handleSubmit = async (data: PurchaseOrderData) => {
     setIsSubmitting(true);
     try {
-      // TODO: Implement API call to create purchase order
-      console.log("Creating purchase order:", data);
-      
-      // Generate order number
-      const orderNumber = `PO-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
-      
-      const orderData = {
-        ...data,
-        orderNumber,
-        status: 'submitted to supplier' as const
+      console.log('[AddPurchasePage] handleSubmit called with data', data);
+      const generatePoNumber = () => {
+        const year = new Date().getFullYear();
+        const randomPart = String(Math.floor(Math.random() * 1000)).padStart(3, "0");
+        return `PO-${year}-${randomPart}`;
       };
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast.success('Purchase order created successfully');
-      router.push('/yarn-management/purchase-management/purchase');
-    } catch (error) {
-      console.error('Failed to create purchase order:', error);
-      toast.error('Failed to create purchase order');
+
+      const extractYarnId = (detail: PurchaseOrderData["items"][number]["selectedYarnDetail"]) => {
+        if (!detail) return undefined;
+
+        const valueToId = (value: unknown): string | undefined => {
+          if (!value) return undefined;
+          if (typeof value === "string") return value;
+          if (typeof value === "number") return String(value);
+          if (typeof value === "object") {
+            const obj = value as Record<string, unknown>;
+            if (typeof obj._id === "string") return obj._id;
+            if (typeof obj.id === "string") return obj.id;
+            if (typeof obj._id === "number") return String(obj._id);
+            if (typeof obj.id === "number") return String(obj.id);
+          }
+          return undefined;
+        };
+
+        const priorityKeys = [
+          "yarnId",
+          "yarnCatalogId",
+          "catalogId",
+          "yarn",
+          "yarnCatalog",
+          "catalog",
+          "yarncatalog",
+          "yarn_catalog",
+          "yarn_catalog_id",
+          "yarncatalogid",
+          "catalogYarn",
+          "catalogYarnId",
+          "id",
+          "_id",
+        ];
+
+        const visited = new Set<unknown>();
+
+        const traverse = (value: unknown, depth = 0): string | undefined => {
+          if (!value || depth > 4 || visited.has(value)) {
+            return undefined;
+          }
+
+          visited.add(value);
+
+          const direct = valueToId(value);
+          if (direct) return direct;
+
+          if (Array.isArray(value)) {
+            for (const item of value) {
+              const result = traverse(item, depth + 1);
+              if (result) return result;
+            }
+            return undefined;
+          }
+
+          if (typeof value === "object") {
+            const obj = value as Record<string, unknown>;
+
+            for (const key of priorityKeys) {
+              if (key in obj) {
+                const result = valueToId(obj[key]);
+                if (result) return result;
+
+                const nested = traverse(obj[key], depth + 1);
+                if (nested) return nested;
+              }
+            }
+
+            for (const [key, nestedValue] of Object.entries(obj)) {
+              if (typeof nestedValue === "object") {
+                if (/(yarn|catalog|id)$/i.test(key)) {
+                  const nestedId = valueToId(nestedValue);
+                  if (nestedId) return nestedId;
+                }
+                const result = traverse(nestedValue, depth + 1);
+                if (result) return result;
+              } else if (typeof nestedValue === "string" && /(yarn|catalog|id)$/i.test(key)) {
+                return nestedValue;
+              } else if (typeof nestedValue === "number" && /(yarn|catalog|id)$/i.test(key)) {
+                return String(nestedValue);
+              }
+            }
+          }
+
+          return undefined;
+        };
+
+        return traverse(detail);
+      };
+
+      const resolveYarnCatalogId = async (item: PurchaseOrderData["items"][number]) => {
+        const detailId = extractYarnId(item.selectedYarnDetail);
+        if (detailId) {
+          return detailId;
+        }
+
+        const query: YarnCatalogQueryParams = {
+          limit: 20,
+          page: 1,
+        };
+
+        if (item.sizeCount) {
+          query.countSize = String(item.sizeCount);
+        }
+        if (item.yarnSubtypeId) {
+          query.yarnSubtype = String(item.yarnSubtypeId);
+        }
+        if (item.yarnTypeId) {
+          query.yarnType = String(item.yarnTypeId);
+        }
+        if (item.yarnName) {
+          query.yarnName = item.yarnName;
+        }
+
+        try {
+          console.log("[AddPurchasePage] Fetching yarn catalog for item", { item, query });
+          const catalogResponse = await yarnCatalogService.getYarnCatalogs(query);
+          console.log("[AddPurchasePage] Yarn catalog response", catalogResponse);
+
+          const byExactName = catalogResponse.results.find(
+            (catalog) => catalog.yarnName?.toLowerCase() === item.yarnName?.toLowerCase()
+          );
+          if (byExactName) {
+            return byExactName.id;
+          }
+
+          const byCountSize = catalogResponse.results.find((catalog) => {
+            const catalogCountId = catalog.countSize?.id || (catalog.countSize as any)?._id;
+            return catalogCountId && String(catalogCountId) === String(item.sizeCount);
+          });
+          if (byCountSize) {
+            return byCountSize.id;
+          }
+
+          const fallbackCatalog = catalogResponse.results[0];
+          return fallbackCatalog?.id;
+        } catch (error) {
+          console.error("[AddPurchasePage] Failed to fetch yarn catalog", error);
+          return undefined;
+        }
+      };
+
+      const itemsWithResolvedIds = await Promise.all(
+        data.items.map(async (item) => {
+          if (item.yarnId) {
+            return item;
+          }
+
+          const resolvedId = await resolveYarnCatalogId(item);
+          console.log("[AddPurchasePage] Resolved yarnId for item", {
+            itemId: item.id,
+            resolvedId,
+          });
+
+          return {
+            ...item,
+            yarnId: resolvedId ? String(resolvedId) : "",
+          };
+        })
+      );
+
+      const missingYarnIndex = itemsWithResolvedIds.findIndex((item) => !item.yarnId);
+
+      if (missingYarnIndex !== -1) {
+        console.warn('[AddPurchasePage] Missing yarnId for item', missingYarnIndex + 1, itemsWithResolvedIds[missingYarnIndex]);
+        toast.error(`Please select a yarn from the supplier catalog for item ${missingYarnIndex + 1}`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const poItems: CreatePurchaseOrderPayload["poItems"] = itemsWithResolvedIds.map((item) => {
+        const selectedDetail = item.selectedYarnDetail;
+        const yarnId = item.yarnId as string;
+        console.log('[AddPurchasePage] Preparing PO item', {
+          index: item.id,
+          yarnId,
+          sizeCount: item.sizeCount,
+          sizeCountName: item.sizeCountName,
+        });
+
+        const resolveSizeCount = () => {
+          if (!selectedDetail) {
+            return item.sizeCountName || item.sizeCount;
+          }
+
+          const rawCountSize =
+            (selectedDetail as any)?.countSize ||
+            (typeof selectedDetail.yarnsubtype === "object"
+              ? (selectedDetail.yarnsubtype as any)?.countSize
+              : undefined);
+
+          const countSizeArray = Array.isArray(rawCountSize)
+            ? rawCountSize
+            : [];
+
+          const matched = countSizeArray.find((cs: any) => {
+            const csId = cs?._id || cs?.id || cs;
+            return csId && String(csId) === String(item.sizeCount);
+          });
+
+          if (matched) {
+            return matched?.name || matched?.label || item.sizeCount;
+          }
+
+          return item.sizeCountName || item.sizeCount;
+        };
+
+        const poItem: PurchaseOrderItemPayload = {
+          yarn: yarnId,
+          yarnName: item.yarnName,
+          sizeCount: String(resolveSizeCount()),
+          shadeCode: item.shadeCode || undefined,
+          rate: item.rate,
+          quantity: item.qty,
+          estimatedDeliveryDate: item.estimatedDeliveryDate,
+          gstRate: item.gst,
+        };
+
+        return poItem;
+      });
+
+      const payload: CreatePurchaseOrderPayload = {
+        poNumber: generatePoNumber(),
+        supplierName: data.supplierName,
+        supplier: data.supplierId,
+        poItems,
+        notes: data.notes,
+        subTotal: data.subTotal,
+        gst: data.totalGst,
+        total: data.total,
+        currentStatus: data.status.replace(/\s+/g, "_").toLowerCase(),
+      };
+      console.log('[AddPurchasePage] Final payload', payload);
+
+      await yarnPurchaseOrderService.createPurchaseOrder(payload);
+      console.log('[AddPurchasePage] Purchase order creation request sent successfully');
+
+      toast.success("Purchase order created successfully");
+      router.push("/yarn-management/purchase-management/purchase");
+    } catch (error: any) {
+      console.error("Failed to create purchase order:", error);
+      const message = error?.message || "Failed to create purchase order";
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
+      console.log('[AddPurchasePage] Submission state reset');
     }
   };
 

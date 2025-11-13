@@ -8,6 +8,15 @@ export interface SupplierYarnReference {
 }
 
 export interface SupplierYarnDetail {
+  id?: string;
+  _id?: string;
+  yarn?: string;
+  yarnCatalogId?: string;
+  yarnCatalog?: {
+    id?: string;
+    _id?: string;
+    [key: string]: unknown;
+  } | string;
   yarnType: string | SupplierYarnReference;
   yarnsubtype?: string | SupplierYarnReference;
   color: string | SupplierYarnReference;
