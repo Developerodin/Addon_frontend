@@ -167,6 +167,20 @@ class YarnBoxService {
     });
   }
 
+  async getYarnBoxById(boxId: string): Promise<YarnBox> {
+    if (!boxId) {
+      throw new Error('Box ID is required');
+    }
+    return this.makeRequest<YarnBox>(`/${boxId}`);
+  }
+
+  async getYarnBoxByBarcode(barcode: string): Promise<YarnBox> {
+    if (!barcode) {
+      throw new Error('Barcode is required');
+    }
+    return this.makeRequest<YarnBox>(`/barcode/${barcode}`);
+  }
+
   async updateYarnBox(boxId: string, payload: UpdateYarnBoxPayload): Promise<YarnBox> {
     if (!boxId) {
       throw new Error('Box ID is required');

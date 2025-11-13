@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
-import { PurchaseOrderStatus } from "../purchase/components/PurchaseForm";
-import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
+import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { CreateBulkYarnBoxPayload } from "@/shared/services/yarnBoxService";
 
 interface ReceiptProcessingDetails {
@@ -88,7 +87,9 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     'rejected': 'rejected',
     'qc_pending': 'QC pending',
     'partially_delivered': 'partially delivered',
-    'stocked': 'stocked'
+    'stocked': 'stocked',
+    'goods_received': 'goods received',
+    'po_rejected': 'rejected'
   };
   return statusMap[statusCode] || 'submitted to supplier';
 };
@@ -102,7 +103,8 @@ const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
     'rejected': 'rejected',
     'QC pending': 'qc_pending',
     'partially delivered': 'partially_delivered',
-    'stocked': 'stocked'
+    'stocked': 'stocked',
+    'goods received': 'goods_received'
   };
   return statusMap[status] || 'submitted_to_supplier';
 };
@@ -200,32 +202,43 @@ const PurchaseOrderReceivedPage = () => {
   // Check permission
   const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
 
-  // Fetch purchase orders with "in transit" status from API
+  // Fetch purchase orders with "in transit" and "goods_received" status from API
   const fetchPurchaseOrders = async () => {
     setIsLoadingOrders(true);
     try {
-      const params: any = {};
+      const baseParams: any = {};
 
       // Add date filters if provided
       if (startDate) {
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
-        params.start_date = start.toISOString();
+        baseParams.start_date = start.toISOString();
       }
       if (endDate) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
-        params.end_date = end.toISOString();
+        baseParams.end_date = end.toISOString();
       }
 
-      // Always filter by "in transit" status
-      params.status_code = 'in_transit';
+      // Fetch orders with "in_transit" status
+      const inTransitParams = { ...baseParams, status_code: 'in_transit' };
+      const inTransitResponse = await yarnPurchaseOrderService.getPurchaseOrders(inTransitParams);
+      const inTransitData = Array.isArray(inTransitResponse) ? inTransitResponse : (inTransitResponse.results || []);
 
-      const response = await yarnPurchaseOrderService.getPurchaseOrders(params);
+      // Fetch orders with "goods_received" status
+      const goodsReceivedParams = { ...baseParams, status_code: 'goods_received' };
+      const goodsReceivedResponse = await yarnPurchaseOrderService.getPurchaseOrders(goodsReceivedParams);
+      const goodsReceivedData = Array.isArray(goodsReceivedResponse) ? goodsReceivedResponse : (goodsReceivedResponse.results || []);
+
+      // Combine both results
+      const allOrdersData = [...inTransitData, ...goodsReceivedData];
       
-      // Handle both array and object with results property
-      const ordersData = Array.isArray(response) ? response : (response.results || []);
-      const mappedOrders = ordersData.map(mapAPIOrderToComponent);
+      // Remove duplicates based on order ID
+      const uniqueOrders = allOrdersData.filter((order, index, self) => 
+        index === self.findIndex((o) => (o._id || o.id) === (order._id || order.id))
+      );
+      
+      const mappedOrders = uniqueOrders.map(mapAPIOrderToComponent);
       setOrders(mappedOrders);
     } catch (error) {
       console.error('Failed to fetch purchase orders:', error);

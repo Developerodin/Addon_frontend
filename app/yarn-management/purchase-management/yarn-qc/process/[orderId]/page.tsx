@@ -1,0 +1,733 @@
+"use client";
+import React, { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Seo from "@/shared/layout-components/seo/seo";
+import Link from "next/link";
+import { useNavigation } from "@/shared/contextapi/navigationContext";
+import { toast } from "react-hot-toast";
+import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
+import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
+
+interface ReceivedItem {
+  id: string;
+  yarnCode: string;
+  yarnName: string;
+  sizeCount: string;
+  shadeCode: string;
+  orderedQuantity: number;
+  receivedQuantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  qualityStatus: 'Approved' | 'Rejected' | 'Pending';
+}
+
+interface ReceivedOrder {
+  id: string;
+  orderNumber: string;
+  purchaseOrderNumber: string;
+  supplier: string;
+  receivedDate: string;
+  receivedBy: string;
+  status: PurchaseOrderStatus;
+  totalAmount: number;
+  items: ReceivedItem[];
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  packListDetails?: {
+    packingNumber?: string;
+    trackingNumber?: string;
+    courierName?: string;
+    dispatchDate?: string;
+    estimatedDeliveryDate?: string;
+    expectedArrivalDate?: string;
+    numberOfCones?: number;
+    numberOfBoxes?: number;
+    totalWeight?: number;
+  };
+}
+
+// Helper function to convert API status code to display format
+const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
+  const statusMap: Record<string, PurchaseOrderStatus> = {
+    'submitted_to_supplier': 'submitted to supplier',
+    'in_transit': 'in transit',
+    'delivered': 'delivered',
+    'rejected': 'rejected',
+    'qc_pending': 'QC pending',
+    'partially_delivered': 'partially delivered',
+    'stocked': 'stocked',
+    'goods_received': 'goods received',
+    'po_rejected': 'rejected'
+  };
+  return statusMap[statusCode] || 'submitted to supplier';
+};
+
+// Helper function to map API response to ReceivedOrder format
+const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
+  const poItems = apiOrder.poItems || apiOrder.items || apiOrder.orderItems || [];
+  
+  return {
+    id: apiOrder._id || apiOrder.id || '',
+    orderNumber: apiOrder.poNumber || apiOrder.orderNumber || apiOrder.order_number || apiOrder.po_number || '',
+    purchaseOrderNumber: apiOrder.poNumber || apiOrder.orderNumber || apiOrder.order_number || apiOrder.po_number || '',
+    supplier: apiOrder.supplierName || apiOrder.supplier?.brandName || apiOrder.supplier?.name || apiOrder.supplier || '',
+    receivedDate: apiOrder.createDate || apiOrder.orderDate || apiOrder.order_date || apiOrder.createdAt || new Date().toISOString(),
+    receivedBy: apiOrder.receivedBy || apiOrder.received_by || apiOrder.updatedBy?.username || '',
+    status: convertStatusFromAPI(apiOrder.currentStatus || apiOrder.status || apiOrder.status_code || 'qc_pending'),
+    totalAmount: apiOrder.total || apiOrder.totalAmount || apiOrder.total_amount || apiOrder.grandTotal || 0,
+    items: poItems.map((item: any, index: number) => ({
+      id: item._id || item.id || `${index}`,
+      yarnCode: item.shadeCode || item.shade_code || item.shade || item.yarnCode || '',
+      yarnName: item.yarnName || item.yarn?.yarnName || item.yarn_name || item.yarn?.name || '',
+      sizeCount: item.sizeCount || item.size_count || item.countSize || '',
+      shadeCode: item.shadeCode || item.shade_code || item.shade || '',
+      orderedQuantity: item.quantity || 0,
+      receivedQuantity: item.receivedQuantity || item.received_quantity || item.quantity || 0,
+      unitPrice: item.rate || item.unitPrice || 0,
+      totalPrice: item.subTotal || item.sub_total || (item.quantity * (item.rate || 0)) || 0,
+      qualityStatus: item.qualityStatus || item.quality_status || 'Pending' as 'Approved' | 'Rejected' | 'Pending'
+    })),
+    notes: apiOrder.notes || apiOrder.remarks || '',
+    createdAt: apiOrder.createDate || apiOrder.createdAt || apiOrder.created_at || new Date().toISOString(),
+    updatedAt: apiOrder.lastUpdateDate || apiOrder.updatedAt || apiOrder.updated_at || new Date().toISOString(),
+    packListDetails: (apiOrder.packListDetails || apiOrder.packlistDetails) ? {
+      packingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number,
+      trackingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number,
+      courierName: (apiOrder.packListDetails || apiOrder.packlistDetails)?.courierName || (apiOrder.packListDetails || apiOrder.packlistDetails)?.courier_name,
+      dispatchDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatchDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatch_date,
+      estimatedDeliveryDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date,
+      expectedArrivalDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date,
+      numberOfCones: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfCones || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_cones,
+      numberOfBoxes: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfBoxes || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_boxes,
+      totalWeight: (apiOrder.packListDetails || apiOrder.packlistDetails)?.totalWeight || (apiOrder.packListDetails || apiOrder.packlistDetails)?.total_weight
+    } : undefined
+  };
+};
+
+const ProcessQCOrderPage = () => {
+  const params = useParams();
+  const router = useRouter();
+  const { hasSubPermission, isLoading } = useNavigation();
+  const orderId = params?.orderId as string;
+
+  const [order, setOrder] = useState<ReceivedOrder | null>(null);
+  const [isLoadingOrder, setIsLoadingOrder] = useState(true);
+  const [barcodeScanValue, setBarcodeScanValue] = useState<string>('');
+  const [scannedBox, setScannedBox] = useState<YarnBox | null>(null);
+  const [isLoadingBox, setIsLoadingBox] = useState(false);
+  const [qcStatus, setQcStatus] = useState<'QC Accepted' | 'QC Rejected' | ''>('');
+  const [qcNotes, setQcNotes] = useState("");
+  const [qcBy, setQcBy] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadedMedia, setUploadedMedia] = useState<Array<{ id: string; type: 'image' | 'video'; url: string; fileName: string; uploadedAt: string }>>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Check permission - allow if user has Purchase Management access
+  const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
+  const hasYarnQC = hasSubPermission('/yarn-management/purchase-management', 'Yarn QC');
+  const hasPermission = hasPurchaseManagement || hasYarnQC;
+  
+  // Fetch order from API
+  useEffect(() => {
+    const fetchOrder = async () => {
+      if (!orderId) {
+        setIsLoadingOrder(false);
+        return;
+      }
+
+      setIsLoadingOrder(true);
+      try {
+        console.log('QC Process page - fetching order with id:', orderId);
+        const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+        console.log('QC Process page - API response:', apiOrder);
+        
+        const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
+        console.log('QC Process page - mapped order:', mappedOrder);
+        
+        setOrder(mappedOrder);
+      } catch (error) {
+        console.error('QC Process page - failed to fetch order:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to load order details');
+        router.push('/yarn-management/purchase-management/yarn-qc');
+      } finally {
+        setIsLoadingOrder(false);
+      }
+    };
+
+    if (hasPermission && !isLoading) {
+      fetchOrder();
+    }
+  }, [orderId, router, hasPermission, isLoading]);
+
+  const getStatusColor = (status: PurchaseOrderStatus) => {
+    switch (status) {
+      case 'in transit': return 'bg-purple-100 text-purple-800';
+      case 'partially delivered': return 'bg-yellow-100 text-yellow-800';
+      case 'delivered': return 'bg-green-100 text-green-800';
+      case 'QC pending': return 'bg-yellow-100 text-yellow-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+      case 'submitted to supplier': return 'bg-blue-100 text-blue-800';
+      case 'stocked': return 'bg-emerald-100 text-emerald-800';
+      case 'goods received': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Handle barcode scan - fetch box details by barcode
+  const handleBarcodeScan = async (e?: React.KeyboardEvent<HTMLInputElement> | React.MouseEvent<HTMLButtonElement>) => {
+    // Allow both Enter key and button click
+    if (e && 'key' in e && e.key !== 'Enter') {
+      return;
+    }
+    
+    if (!barcodeScanValue.trim()) {
+      toast.error('Please enter a barcode');
+      return;
+    }
+
+    const scannedBarcode = barcodeScanValue.trim();
+    setIsLoadingBox(true);
+    
+    try {
+      console.log('Fetching box by barcode:', scannedBarcode);
+      // Get box details by barcode using /barcode/:barcode API
+      const boxDetails = await yarnBoxService.getYarnBoxByBarcode(scannedBarcode);
+      console.log('Box details received:', boxDetails);
+      
+      setScannedBox(boxDetails);
+      toast.success(`Box ${boxDetails.boxId} found`);
+    } catch (error) {
+      console.error('Failed to fetch box details:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to fetch box details');
+      setScannedBox(null);
+    } finally {
+      setIsLoadingBox(false);
+      // Don't clear barcode value, keep it for reference
+    }
+  };
+
+  // Handle file upload
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    
+    // Simulate file upload
+    setTimeout(() => {
+      const newMedia: Array<{ id: string; type: 'image' | 'video'; url: string; fileName: string; uploadedAt: string }> = Array.from(files).map((file, index) => ({
+        id: `media-${Date.now()}-${index}`,
+        type: file.type.startsWith('video/') ? 'video' : 'image',
+        url: URL.createObjectURL(file),
+        fileName: file.name,
+        uploadedAt: new Date().toISOString()
+      }));
+      
+      setUploadedMedia(prev => [...prev, ...newMedia]);
+      setIsUploading(false);
+      toast.success(`${newMedia.length} file(s) uploaded successfully`);
+    }, 1000);
+  };
+
+  // Handle remove media
+  const handleRemoveMedia = (mediaId: string) => {
+    setUploadedMedia(prev => prev.filter(m => m.id !== mediaId));
+    toast.success("File removed");
+  };
+
+  // Handle submit QC
+  const handleSubmitQC = async () => {
+    if (!scannedBox) {
+      toast.error("Please scan a box first");
+      return;
+    }
+
+    if (!qcStatus) {
+      toast.error("Please select QC status");
+      return;
+    }
+
+    if (!qcBy.trim()) {
+      toast.error("Please enter QC inspector name");
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      // TODO: Call API to update QC status for the box
+      // For now, just show success message
+      toast.success(`QC ${qcStatus === 'QC Accepted' ? 'accepted' : 'rejected'} successfully`);
+      
+      // Navigate back after a short delay
+      setTimeout(() => {
+        router.push('/yarn-management/purchase-management/yarn-qc');
+      }, 1500);
+    } catch (error) {
+      console.error('Failed to update QC status:', error);
+      toast.error('Failed to update QC status');
+      setIsSubmitting(false);
+    }
+  };
+
+  // Show loading state while permissions are being loaded
+  if (isLoading || isLoadingOrder) {
+    return (
+      <div className="main-content">
+        <div className="flex justify-center items-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!order) {
+    return (
+      <div className="main-content">
+        <div className="text-center py-12">
+          <div className="text-gray-400 mb-4">
+            <i className="ri-error-warning-line text-6xl"></i>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Order Not Found</h3>
+          <Link href="/yarn-management/purchase-management/yarn-qc" className="ti-btn ti-btn-primary">
+            <i className="ri-arrow-left-line me-2"></i>
+            Back to QC Orders
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="main-content">
+      <Seo title={`QC Process Order - ${order.orderNumber}`} />
+      
+      <div className="grid grid-cols-12 gap-6">
+        <div className="col-span-12">
+          {/* PO Details Section */}
+          <div className="box mb-6">
+            <div className="box-header flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/yarn-management/purchase-management/yarn-qc"
+                  className="text-gray-500 hover:text-gray-700"
+                  title="Back to QC orders"
+                >
+                  <i className="ri-arrow-left-line text-lg"></i>
+                </Link>
+                <h3 className="box-title text-base">
+                  <i className="ri-file-text-line me-2"></i>
+                  Purchase Order Details
+                </h3>
+              </div>
+            </div>
+            <div className="box-body">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 py-2">
+                <div>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">PO Number</p>
+                  <p className="text-sm font-semibold text-gray-900">{order.purchaseOrderNumber}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Supplier</p>
+                  <p className="text-sm font-semibold text-gray-900">{order.supplier}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Received Date</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {new Date(order.receivedDate).toLocaleDateString()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Status</p>
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
+                    {order.status}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Amount</p>
+                  <p className="text-sm font-semibold text-gray-900">₹{order.totalAmount.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Items</p>
+                  <p className="text-sm font-semibold text-gray-900">{order.items.length}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Quantity</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {order.items.reduce((sum, item) => sum + item.orderedQuantity, 0).toLocaleString()} kg
+                  </p>
+                </div>
+                {order.packListDetails?.numberOfBoxes && (
+                  <div>
+                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Boxes</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {order.packListDetails.numberOfBoxes}
+                    </p>
+                  </div>
+                )}
+                {order.packListDetails?.numberOfCones && (
+                  <div>
+                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Cones</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {order.packListDetails.numberOfCones}
+                    </p>
+                  </div>
+                )}
+                {order.packListDetails?.totalWeight && (
+                  <div>
+                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Weight</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {order.packListDetails.totalWeight} kg
+                    </p>
+                  </div>
+                )}
+              </div>
+              {order.notes && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <p className="text-xs uppercase text-gray-500 mb-1">Notes</p>
+                  <p className="text-sm text-gray-700">{order.notes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Barcode Scanner Section */}
+          <div className="box mb-6">
+            <div className="box-header">
+              <h3 className="box-title">
+                <i className="ri-qr-scan-2-line me-2"></i>
+                Scan Box Barcode
+              </h3>
+            </div>
+            <div className="box-body">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex-1">
+                  <label className="form-label">Enter or Scan Barcode</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Scan or enter box barcode"
+                    value={barcodeScanValue}
+                    onChange={(e) => setBarcodeScanValue(e.target.value)}
+                    onKeyDown={handleBarcodeScan}
+                    disabled={isLoadingBox}
+                    autoFocus
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={handleBarcodeScan}
+                    disabled={isLoadingBox || !barcodeScanValue.trim()}
+                    className="ti-btn ti-btn-primary whitespace-nowrap"
+                  >
+                    {isLoadingBox ? (
+                      <>
+                        <i className="ri-loader-4-line animate-spin me-2"></i>
+                        Scanning...
+                      </>
+                    ) : (
+                      <>
+                        <i className="ri-qr-scan-2-line me-2"></i>
+                        Scan
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+              {isLoadingBox && (
+                <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+                  <i className="ri-loader-4-line animate-spin"></i>
+                  <span>Loading box details...</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Scanned Box Details */}
+          {scannedBox && (
+            <div className="box">
+              <div className="box-header flex justify-between items-center">
+                <h3 className="box-title">
+                  <i className="ri-information-line me-2"></i>
+                  Box Details
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScannedBox(null);
+                    setBarcodeScanValue('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition"
+                  title="Clear box details"
+                >
+                  <i className="ri-close-line text-lg"></i>
+                </button>
+              </div>
+              <div className="box-body">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Box ID</label>
+                    <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
+                      {scannedBox.boxId}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Barcode</label>
+                    <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
+                      {scannedBox.barcode}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">PO Number</label>
+                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                      {scannedBox.poNumber}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Yarn Name</label>
+                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                      {scannedBox.yarnName || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Shade Code</label>
+                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                      {scannedBox.shadeCode || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Order Qty</label>
+                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                      {scannedBox.orderQty || 0}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Lot Number</label>
+                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                      {scannedBox.lotNumber || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Box Weight (kg)</label>
+                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                      {scannedBox.boxWeight || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Number of Cones</label>
+                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                      {scannedBox.numberOfCones || '-'}
+                    </div>
+                  </div>
+                  {scannedBox.receivedDate && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 uppercase">Received Date</label>
+                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                        {new Date(scannedBox.receivedDate).toLocaleDateString()}
+                      </div>
+                    </div>
+                  )}
+                  {scannedBox.orderDate && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 uppercase">Order Date</label>
+                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                        {new Date(scannedBox.orderDate).toLocaleDateString()}
+                      </div>
+                    </div>
+                  )}
+                  {scannedBox.conesIssued !== undefined && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 uppercase">Cones Issued</label>
+                      <div className="mt-1">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          scannedBox.conesIssued 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {scannedBox.conesIssued ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Media Upload Section - Show when box is scanned */}
+          {scannedBox && (
+            <div className="box mb-6">
+              <div className="box-header">
+                <h3 className="box-title">
+                  <i className="ri-image-line me-2"></i>
+                  Upload Images & Videos
+                </h3>
+              </div>
+              <div className="box-body">
+                <div className="mb-4">
+                  <label className="form-label">Upload QC Images/Videos</label>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,video/*"
+                    onChange={handleFileUpload}
+                    disabled={isUploading}
+                    className="form-control"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Upload images or videos showing the quality inspection of this box
+                  </p>
+                </div>
+
+                {uploadedMedia.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+                    {uploadedMedia.map((media) => (
+                      <div key={media.id} className="relative group">
+                        {media.type === 'image' ? (
+                          <img
+                            src={media.url}
+                            alt={media.fileName}
+                            className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                          />
+                        ) : (
+                          <video
+                            src={media.url}
+                            className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                            controls
+                          />
+                        )}
+                        <button
+                          onClick={() => handleRemoveMedia(media.id)}
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Remove"
+                        >
+                          <i className="ri-close-line text-sm"></i>
+                        </button>
+                        <p className="text-xs text-gray-500 mt-1 truncate">{media.fileName}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* QC Status Update Section - Show when box is scanned */}
+          {scannedBox && (
+            <div className="box mb-6">
+              <div className="box-header">
+                <h3 className="box-title">
+                  <i className="ri-checkbox-circle-line me-2"></i>
+                  Update QC Status
+                </h3>
+              </div>
+              <div className="box-body">
+                <div className="space-y-4">
+                  <div>
+                    <label className="form-label">
+                      QC Status <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setQcStatus('QC Accepted')}
+                        className={`flex-1 ti-btn ${
+                          qcStatus === 'QC Accepted'
+                            ? 'ti-btn-primary'
+                            : 'ti-btn-outline-primary'
+                        }`}
+                        disabled={isSubmitting}
+                      >
+                        <i className="ri-checkbox-circle-line me-2"></i>
+                        QC Accepted
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQcStatus('QC Rejected')}
+                        className={`flex-1 ti-btn ${
+                          qcStatus === 'QC Rejected'
+                            ? 'ti-btn-danger'
+                            : 'ti-btn-outline-danger'
+                        }`}
+                        disabled={isSubmitting}
+                      >
+                        <i className="ri-close-circle-line me-2"></i>
+                        QC Rejected
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="form-label">
+                      QC Inspector Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={qcBy}
+                      onChange={(e) => setQcBy(e.target.value)}
+                      placeholder="Enter QC inspector name"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label">QC Notes</label>
+                    <textarea
+                      className="form-control"
+                      rows={4}
+                      value={qcNotes}
+                      onChange={(e) => setQcNotes(e.target.value)}
+                      placeholder="Add any notes or observations about the quality inspection..."
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
+                    <Link
+                      href="/yarn-management/purchase-management/yarn-qc"
+                      className="ti-btn ti-btn-light"
+                      onClick={(e) => {
+                        if (isSubmitting) {
+                          e.preventDefault();
+                        }
+                      }}
+                    >
+                      Cancel
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={handleSubmitQC}
+                      disabled={isSubmitting || !qcStatus || !qcBy.trim()}
+                      className="ti-btn ti-btn-primary"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <i className="ri-loader-4-line animate-spin me-2"></i>
+                          Submitting...
+                        </>
+                      ) : (
+                        <>
+                          <i className="ri-check-line me-2"></i>
+                          Update QC Status
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ProcessQCOrderPage;
+

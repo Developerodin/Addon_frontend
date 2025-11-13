@@ -35,6 +35,17 @@ interface ReceivedOrder {
   notes: string;
   createdAt: string;
   updatedAt: string;
+  packListDetails?: {
+    packingNumber?: string;
+    trackingNumber?: string;
+    courierName?: string;
+    dispatchDate?: string;
+    estimatedDeliveryDate?: string;
+    expectedArrivalDate?: string;
+    numberOfCones?: number;
+    numberOfBoxes?: number;
+    totalWeight?: number;
+  };
 }
 
 // Helper function to convert API status code to display format
@@ -80,7 +91,18 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
     })),
     notes: apiOrder.notes || apiOrder.remarks || '',
     createdAt: apiOrder.createDate || apiOrder.createdAt || apiOrder.created_at || new Date().toISOString(),
-    updatedAt: apiOrder.lastUpdateDate || apiOrder.updatedAt || apiOrder.updated_at || new Date().toISOString()
+    updatedAt: apiOrder.lastUpdateDate || apiOrder.updatedAt || apiOrder.updated_at || new Date().toISOString(),
+    packListDetails: (apiOrder.packListDetails || apiOrder.packlistDetails) ? {
+      packingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number,
+      trackingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number,
+      courierName: (apiOrder.packListDetails || apiOrder.packlistDetails)?.courierName || (apiOrder.packListDetails || apiOrder.packlistDetails)?.courier_name,
+      dispatchDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatchDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatch_date,
+      estimatedDeliveryDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date,
+      expectedArrivalDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date,
+      numberOfCones: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfCones || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_cones,
+      numberOfBoxes: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfBoxes || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_boxes,
+      totalWeight: (apiOrder.packListDetails || apiOrder.packListDetails)?.totalWeight || (apiOrder.packListDetails || apiOrder.packlistDetails)?.total_weight
+    } : undefined
   };
 };
 
@@ -515,9 +537,12 @@ const ProcessOrderPage = () => {
   };
 
   const handlePrintAllBarcodes = () => {
-    if (!order) return;
+    if (!order || boxes.length === 0) {
+      toast.error('No boxes available to print');
+      return;
+    }
     
-    // Create a print-friendly HTML with all barcodes
+    // Create a print-friendly HTML with all box barcodes
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       toast.error('Please allow popups to print barcodes');
@@ -560,7 +585,7 @@ const ProcessOrderPage = () => {
               background: #f5f5f5;
               border: 1px dashed #ccc;
             }
-            .yarn-info {
+            .box-info {
               font-size: 11px;
               color: #333;
               margin-top: 5px;
@@ -573,17 +598,16 @@ const ProcessOrderPage = () => {
           </style>
         </head>
         <body>
-          <h2>Barcodes - ${order.orderNumber}</h2>
-          <p>PO Number: ${order.purchaseOrderNumber} | Supplier: ${order.supplier}</p>
+          <h2>Box Barcodes - ${order.orderNumber}</h2>
+          <p>PO Number: ${order.purchaseOrderNumber} | Supplier: ${order.supplier} | Total Boxes: ${boxes.length}</p>
           <div class="barcode-container">
-            ${order.items.map((item, index) => {
-              const barcode = itemBarcodes[item.id] || generateBarcode(item, index);
+            ${boxes.map((box) => {
               return `
                 <div class="barcode-item">
-                  <div class="barcode-label">Yarn Code</div>
-                  <div class="barcode-value">${barcode}</div>
-                  <div class="yarn-info">${item.yarnName}</div>
-                  <div class="yarn-info">Qty: ${item.receivedQuantity} kg</div>
+                  <div class="barcode-label">Box ID</div>
+                  <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
+                  <div class="barcode-label">Barcode</div>
+                  <div class="barcode-value">${box.barcode}</div>
                 </div>
               `;
             }).join('')}
@@ -597,8 +621,7 @@ const ProcessOrderPage = () => {
     
     setTimeout(() => {
       printWindow.print();
-      setShowReadyToScan(true);
-      toast.success('Barcodes printed successfully');
+      toast.success(`${boxes.length} box barcode(s) printed successfully`);
     }, 250);
   };
 
@@ -658,70 +681,83 @@ const ProcessOrderPage = () => {
       
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none mb-6">
+          {/* PO Details Section */}
+          <div className="box mb-6">
             <div className="box-header flex justify-between items-center">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center gap-2">
                   <Link
                     href="/yarn-management/purchase-management/purchase-order-received"
                     className="text-gray-500 hover:text-gray-700"
+                  title="Back to received orders"
                   >
-                    <i className="ri-arrow-left-line text-xl"></i>
+                  <i className="ri-arrow-left-line text-lg"></i>
                   </Link>
-                  <h1 className="box-title text-2xl font-semibold">Process Order</h1>
-                </div>
-                <p className="text-gray-600 mt-1">Order Number: {order.orderNumber}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* PO Details Section */}
-          <div className="box mb-6">
-            <div className="box-header">
-              <h3 className="box-title">
+                <h3 className="box-title text-base">
                 <i className="ri-file-text-line me-2"></i>
                 Purchase Order Details
               </h3>
+              </div>
             </div>
             <div className="box-body">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 py-2">
                 <div>
-                  <p className="text-xs uppercase text-gray-500 mb-1">Receipt Number</p>
-                  <p className="text-sm font-semibold text-gray-900">{order.orderNumber}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-1">PO Number</p>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">PO Number</p>
                   <p className="text-sm font-semibold text-gray-900">{order.purchaseOrderNumber}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase text-gray-500 mb-1">Supplier</p>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Supplier</p>
                   <p className="text-sm font-semibold text-gray-900">{order.supplier}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase text-gray-500 mb-1">Received Date</p>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Received Date</p>
                   <p className="text-sm font-semibold text-gray-900">
                     {new Date(order.receivedDate).toLocaleDateString()}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase text-gray-500 mb-1">Received By</p>
-                  <p className="text-sm font-semibold text-gray-900">{order.receivedBy}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-1">Status</p>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Status</p>
                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
                     {order.status}
                   </span>
                 </div>
                 <div>
-                  <p className="text-xs uppercase text-gray-500 mb-1">Total Amount</p>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Amount</p>
                   <p className="text-sm font-semibold text-gray-900">₹{order.totalAmount.toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase text-gray-500 mb-1">Total Items</p>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Items</p>
                   <p className="text-sm font-semibold text-gray-900">{order.items.length}</p>
                 </div>
+                <div>
+                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Quantity</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {order.items.reduce((sum, item) => sum + item.orderedQuantity, 0).toLocaleString()} kg
+                  </p>
+                </div>
+                {order.packListDetails?.numberOfBoxes && (
+                  <div>
+                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Boxes</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {order.packListDetails.numberOfBoxes}
+                    </p>
+                  </div>
+                )}
+                {order.packListDetails?.numberOfCones && (
+                  <div>
+                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Cones</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {order.packListDetails.numberOfCones}
+                    </p>
+                  </div>
+                )}
+                {order.packListDetails?.totalWeight && (
+                  <div>
+                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Weight</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {order.packListDetails.totalWeight} kg
+                    </p>
+                  </div>
+                )}
               </div>
               {order.notes && (
                 <div className="mt-4 pt-4 border-t border-gray-200">
@@ -785,7 +821,7 @@ const ProcessOrderPage = () => {
                 )}
               </div>
             </div>
-          </div>
+                    </div>
 
           {/* Boxes Table */}
           <div className="box">
@@ -794,7 +830,18 @@ const ProcessOrderPage = () => {
                 <i className="ri-box-3-line me-2"></i>
                 Boxes ({boxes.length} boxes)
               </h3>
-              </div>
+              {boxes.length > 0 && (
+                    <button
+                  type="button"
+                  onClick={handlePrintAllBarcodes}
+                  className="ti-btn ti-btn-primary"
+                  title="Print all box barcodes"
+                >
+                  <i className="ri-printer-line me-2"></i>
+                  Print All Barcodes
+                    </button>
+              )}
+                  </div>
             <div className="box-body">
               {/* Barcode Scanner Input */}
               <div className="mb-4">
@@ -808,17 +855,17 @@ const ProcessOrderPage = () => {
                   onKeyDown={handleBarcodeScan}
                   autoFocus
                 />
-            </div>
+                </div>
 
               {isLoadingBoxes ? (
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
                   <p className="text-gray-600">Loading boxes...</p>
-                    </div>
+              </div>
               ) : boxes.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-500">No boxes found for this order</p>
-                    </div>
+              </div>
               ) : (
               <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse border border-gray-300">
