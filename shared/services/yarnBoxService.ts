@@ -1,6 +1,14 @@
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import Cookies from 'js-cookie';
 
+export interface QCData {
+  date: string;
+  remarks?: string;
+  status: 'qc_approved' | 'qc_rejected';
+  user: string;
+  username: string;
+}
+
 export interface YarnBox {
   _id?: string;
   id?: string;
@@ -18,6 +26,7 @@ export interface YarnBox {
   conesIssued?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  qcData?: QCData;
 }
 
 export interface UpdateYarnBoxPayload {
@@ -27,6 +36,16 @@ export interface UpdateYarnBoxPayload {
   lotNumber?: string;
   boxWeight?: number;
   numberOfCones?: number;
+}
+
+export interface UpdateQCStatusPayload {
+  poNumber: string;
+  status: 'qc_approved' | 'qc_rejected';
+  user: string;
+  username: string;
+  date: string;
+  remarks?: string;
+  mediaUrl?: Record<string, string>;
 }
 
 export interface YarnBoxListResponse {
@@ -186,6 +205,13 @@ class YarnBoxService {
       throw new Error('Box ID is required');
     }
     return this.makeRequest<YarnBox>(`/${boxId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateQCStatus(payload: UpdateQCStatusPayload): Promise<any> {
+    return this.makeRequest<any>('/update-qc-status', {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });

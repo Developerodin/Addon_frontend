@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../data/utilities/api';
+import Cookies from 'js-cookie';
 
 export interface UploadedFile {
   url: string;
@@ -30,10 +31,16 @@ export class FileUploadService {
     const formData = new FormData();
     formData.append('file', file);
 
+    // Get authentication token
+    const token = Cookies.get('token');
+
     try {
-      // Call API directly without any authentication
+      // Call API with authentication
       const response = await fetch(`${API_BASE_URL}/common/upload`, {
         method: 'POST',
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` })
+        },
         body: formData
       });
 
@@ -61,10 +68,16 @@ export class FileUploadService {
       throw new Error('File key is required');
     }
 
+    // Get authentication token
+    const token = Cookies.get('token');
+
     try {
-      // Call API directly without any authentication
+      // Call API with authentication
       const response = await fetch(`${API_BASE_URL}/common/files/${encodeURIComponent(fileKey)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` })
+        }
       });
 
       const result: DeleteResponse = await response.json();

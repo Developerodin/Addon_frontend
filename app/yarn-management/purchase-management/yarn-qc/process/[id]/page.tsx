@@ -4,9 +4,11 @@ import { useParams, useRouter } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
+import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
-import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
+import yarnBoxService, { YarnBox, UpdateQCStatusPayload } from "@/shared/services/yarnBoxService";
+import { FileUploadService } from "@/shared/services/fileUploadService";
 
 interface ReceivedItem {
   id: string;
@@ -109,6 +111,7 @@ const ProcessQCOrderPage = () => {
   const params = useParams();
   const router = useRouter();
   const { hasSubPermission, isLoading } = useNavigation();
+  const user = useSelector((state: any) => state.auth?.user);
   const orderId = params?.id as string;
 
   const [order, setOrder] = useState<ReceivedOrder | null>(null);
@@ -182,6 +185,8 @@ const ProcessQCOrderPage = () => {
       case 'submitted to supplier': return 'bg-blue-100 text-blue-800';
       case 'stocked': return 'bg-emerald-100 text-emerald-800';
       case 'goods received': return 'bg-green-100 text-green-800';
+      case 'po_accepted': return 'bg-green-100 text-green-800';
+      case 'po_rejected': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -208,7 +213,16 @@ const ProcessQCOrderPage = () => {
       console.log('Box details received:', boxDetails);
       
       setScannedBox(boxDetails);
-      toast.success(`Box ${boxDetails.boxId} found`);
+      
+      // If QC is already done, pre-fill the form with existing QC data
+      if (boxDetails.qcData) {
+        setQcStatus(boxDetails.qcData.status === 'qc_approved' ? 'QC Accepted' : 'QC Rejected');
+        setQcNotes(boxDetails.qcData.remarks || '');
+        setQcBy(boxDetails.qcData.username || '');
+        toast.success(`Box ${boxDetails.boxId} found - QC already completed`);
+      } else {
+        toast.success(`Box ${boxDetails.boxId} found`);
+      }
     } catch (error) {
       console.error('Failed to fetch box details:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to fetch box details');
@@ -226,20 +240,35 @@ const ProcessQCOrderPage = () => {
 
     setIsUploading(true);
     
-    // Simulate file upload
-    setTimeout(() => {
-      const newMedia: Array<{ id: string; type: 'image' | 'video'; url: string; fileName: string; uploadedAt: string }> = Array.from(files).map((file, index) => ({
-        id: `media-${Date.now()}-${index}`,
-        type: file.type.startsWith('video/') ? 'video' : 'image',
-        url: URL.createObjectURL(file),
-        fileName: file.name,
-        uploadedAt: new Date().toISOString()
-      }));
-      
+    try {
+      const uploadPromises = Array.from(files).map(async (file) => {
+        try {
+          // Upload file to S3
+          const uploadedFile = await FileUploadService.uploadFile(file);
+          
+          return {
+            id: `media-${Date.now()}-${Math.random()}`,
+            type: file.type.startsWith('video/') ? 'video' as const : 'image' as const,
+            url: uploadedFile.url,
+            fileName: file.name,
+            uploadedAt: new Date().toISOString()
+          };
+        } catch (error) {
+          console.error(`Failed to upload ${file.name}:`, error);
+          toast.error(`Failed to upload ${file.name}`);
+          throw error;
+        }
+      });
+
+      const newMedia = await Promise.all(uploadPromises);
       setUploadedMedia(prev => [...prev, ...newMedia]);
-      setIsUploading(false);
       toast.success(`${newMedia.length} file(s) uploaded successfully`);
-    }, 1000);
+    } catch (error) {
+      console.error('File upload error:', error);
+      toast.error('Failed to upload some files');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   // Handle remove media
@@ -265,11 +294,64 @@ const ProcessQCOrderPage = () => {
       return;
     }
 
+    if (!user || !user.id || !user.email) {
+      toast.error('User information not available. Please login again.');
+      return;
+    }
+
     setIsSubmitting(true);
     
     try {
-      // TODO: Call API to update QC status for the box
-      // For now, just show success message
+      // Prepare mediaUrl object from uploadedMedia
+      const mediaUrl: Record<string, string> = {};
+      uploadedMedia.forEach((media, index) => {
+        if (media.type === 'video') {
+          mediaUrl[`video${index + 1}`] = media.url;
+        } else {
+          mediaUrl[`image${index + 1}`] = media.url;
+        }
+      });
+
+      // Map QC status to API format
+      const apiStatus = qcStatus === 'QC Accepted' ? 'qc_approved' : 'qc_rejected';
+
+      // Prepare payload
+      const payload: UpdateQCStatusPayload = {
+        poNumber: scannedBox.poNumber,
+        status: apiStatus,
+        user: user.id,
+        username: user.email || user.username || qcBy.trim(),
+        date: new Date().toISOString(),
+        remarks: qcNotes.trim() || undefined,
+        mediaUrl: Object.keys(mediaUrl).length > 0 ? mediaUrl : undefined
+      };
+
+      console.log('Updating QC status with payload:', payload);
+      
+      // Call API to update QC status for boxes
+      await yarnBoxService.updateQCStatus(payload);
+      
+      // Also update PO order status
+      if (order && order.id) {
+        const poStatus = qcStatus === 'QC Accepted' ? 'po_accepted' : 'po_rejected';
+        const poStatusNotes = qcNotes.trim() || `QC ${qcStatus === 'QC Accepted' ? 'approved' : 'rejected'}`;
+        
+        try {
+          await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+            order.id,
+            poStatus as PurchaseOrderStatus,
+            user.id,
+            user.email || user.username || qcBy.trim(),
+            poStatusNotes
+          );
+          console.log('PO status updated successfully');
+        } catch (poError) {
+          console.error('Failed to update PO status:', poError);
+          // Don't fail the whole operation if PO update fails, but log it
+          toast.error('QC status updated but failed to update PO status');
+        }
+      }
+      
       toast.success(`QC ${qcStatus === 'QC Accepted' ? 'accepted' : 'rejected'} successfully`);
       
       // Navigate back after a short delay
@@ -278,7 +360,7 @@ const ProcessQCOrderPage = () => {
       }, 1500);
     } catch (error) {
       console.error('Failed to update QC status:', error);
-      toast.error('Failed to update QC status');
+      toast.error(error instanceof Error ? error.message : 'Failed to update QC status');
       setIsSubmitting(false);
     }
   };
@@ -589,6 +671,52 @@ const ProcessQCOrderPage = () => {
                     </div>
                   )}
                 </div>
+                
+                {/* QC Data Section - Show if QC already done */}
+                {scannedBox.qcData && (
+                  <div className="col-span-full mt-4 pt-4 border-t border-gray-200">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <i className="ri-checkbox-circle-line text-blue-600"></i>
+                        <h4 className="text-sm font-semibold text-blue-900">QC Status - Already Completed</h4>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div>
+                          <label className="text-xs font-medium text-blue-700 uppercase">QC Status</label>
+                          <div className="mt-1">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              scannedBox.qcData.status === 'qc_approved'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {scannedBox.qcData.status === 'qc_approved' ? 'QC Approved' : 'QC Rejected'}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-blue-700 uppercase">QC Date</label>
+                          <div className="mt-1 text-sm text-blue-900">
+                            {new Date(scannedBox.qcData.date).toLocaleDateString()} {new Date(scannedBox.qcData.date).toLocaleTimeString()}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-blue-700 uppercase">QC Inspector</label>
+                          <div className="mt-1 text-sm text-blue-900">
+                            {scannedBox.qcData.username}
+                          </div>
+                        </div>
+                        {scannedBox.qcData.remarks && (
+                          <div className="col-span-full">
+                            <label className="text-xs font-medium text-blue-700 uppercase">QC Remarks</label>
+                            <div className="mt-1 text-sm text-blue-900 bg-white p-2 rounded border border-blue-200">
+                              {scannedBox.qcData.remarks}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -651,8 +779,8 @@ const ProcessQCOrderPage = () => {
             </div>
           )}
 
-          {/* QC Status Update Section - Show when box is scanned */}
-          {scannedBox && (
+          {/* QC Status Update Section - Only show if QC not already done */}
+          {scannedBox && !scannedBox.qcData && (
             <div className="box mb-6">
               <div className="box-header">
                 <h3 className="box-title">

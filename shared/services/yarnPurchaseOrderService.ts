@@ -34,7 +34,9 @@ export type PurchaseOrderStatus =
   | 'QC pending'
   | 'partially delivered'
   | 'stocked'
-  | 'goods received';
+  | 'goods received'
+  | 'po_accepted'
+  | 'po_rejected';
 
 export interface PurchaseOrder {
   id: string;
@@ -252,9 +254,9 @@ class YarnPurchaseOrderService {
       status_code: this.convertStatusToAPI(status),
       updated_by: {
         username: username,
-        user_id: userId,
+        user_id: userId
       },
-      notes: notes || '',
+      notes: notes || ''
     };
 
     return this.makeRequest<PurchaseOrder>(`/${orderId}/status`, {
@@ -273,6 +275,8 @@ class YarnPurchaseOrderService {
       'partially delivered': 'partially_delivered',
       'stocked': 'stocked',
       'goods received': 'goods_received',
+      'po_accepted': 'po_accepted',
+      'po_rejected': 'po_rejected',
     };
     return statusMap[status] || 'submitted_to_supplier';
   }
