@@ -79,6 +79,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [supplierCatalogOptions, setSupplierCatalogOptions] = useState<SupplierCatalogOption[]>([]);
   const [isLoadingCatalogOptions, setIsLoadingCatalogOptions] = useState(false);
+  const supplierYarnDetailsRef = useRef<SupplierYarnDetail[]>([]);
+  const supplierCatalogOptionsRef = useRef<SupplierCatalogOption[]>([]);
+  const lastCatalogSupplierIdRef = useRef<string | null>(null);
   
   const [formData, setFormData] = useState<PurchaseOrderData>({
     purchaseDate: initialData.purchaseDate || new Date().toISOString().split('T')[0],
@@ -100,6 +103,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   }>>({});
 
   const autocompleteRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    supplierYarnDetailsRef.current = supplierYarnDetails;
+  }, [supplierYarnDetails]);
+
+  useEffect(() => {
+    supplierCatalogOptionsRef.current = supplierCatalogOptions;
+  }, [supplierCatalogOptions]);
 
   const extractIdFromValue = useCallback((value: unknown): string | undefined => {
     if (!value) return undefined;
@@ -230,7 +241,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     catalog: YarnCatalog,
     detailsOverride?: SupplierYarnDetail[]
   ): SupplierYarnDetail | undefined => {
-    const detailsPool = detailsOverride ?? supplierYarnDetails;
+    const detailsPool = detailsOverride ?? supplierYarnDetailsRef.current;
     if (!catalog || !detailsPool || detailsPool.length === 0) {
       return undefined;
     }
@@ -302,22 +313,45 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     });
 
     return chosenDetail;
-  }, [doesCatalogFieldMatchDetail, supplierYarnDetails]);
+  }, [doesCatalogFieldMatchDetail]);
 
-  const buildSupplierCatalogOptions = useCallback(async (supplier: Supplier) => {
+  const buildSupplierCatalogOptions = useCallback(async (supplier: Supplier, force = false) => {
+    if (!supplier || !supplier.id) {
+      console.warn("[PurchaseForm] buildSupplierCatalogOptions: missing supplier id", { supplier });
+      lastCatalogSupplierIdRef.current = null;
+      setSupplierCatalogOptions([]);
+      setIsLoadingCatalogOptions(false);
+      return;
+    }
+
+    const supplierId = supplier.id;
+
+    if (
+      !force &&
+      lastCatalogSupplierIdRef.current === supplierId &&
+      supplierCatalogOptionsRef.current.length > 0
+    ) {
+      console.log("[PurchaseForm] buildSupplierCatalogOptions:using cached data", {
+        supplierId,
+        optionsCount: supplierCatalogOptionsRef.current.length,
+      });
+      return;
+    }
+
     const yarnDetails = supplier?.yarnDetails || [];
     console.log("[PurchaseForm] buildSupplierCatalogOptions:start", {
-      supplierId: supplier.id,
+      supplierId,
       supplierName: supplier.brandName,
       yarnDetailsCount: yarnDetails.length,
     });
 
     if (yarnDetails.length === 0) {
       console.warn("[PurchaseForm] buildSupplierCatalogOptions: supplier has no yarn details", {
-        supplierId: supplier.id,
+        supplierId,
       });
       setSupplierCatalogOptions([]);
       setIsLoadingCatalogOptions(false);
+      lastCatalogSupplierIdRef.current = supplierId;
       return;
     }
 
@@ -445,10 +479,12 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       });
 
       setSupplierCatalogOptions(aggregatedOptions);
+      lastCatalogSupplierIdRef.current = supplierId;
     } catch (error) {
       console.error("[PurchaseForm] Failed to fetch yarn catalog data", error);
       toast.error("Failed to load yarn catalog data");
       setSupplierCatalogOptions([]);
+      lastCatalogSupplierIdRef.current = null;
     } finally {
       setIsLoadingCatalogOptions(false);
     }
@@ -566,7 +602,10 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           if (supplier) {
             setSelectedSupplier(supplier);
             setSupplierYarnDetails(supplier.yarnDetails || []);
-            void buildSupplierCatalogOptions(supplier);
+            supplierYarnDetailsRef.current = supplier.yarnDetails || [];
+            supplierCatalogOptionsRef.current = [];
+            lastCatalogSupplierIdRef.current = null;
+            void buildSupplierCatalogOptions(supplier, true);
           }
         }
       } catch (error) {
@@ -641,6 +680,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       setSelectedSupplier(null);
       setSupplierYarnDetails([]);
       setSupplierCatalogOptions([]);
+      supplierYarnDetailsRef.current = [];
+      supplierCatalogOptionsRef.current = [];
+      lastCatalogSupplierIdRef.current = null;
       setAutocompleteStates({});
       setIsLoadingCatalogOptions(false);
       setFormData(prev => ({
@@ -657,6 +699,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       setSelectedSupplier(supplier);
       setSupplierYarnDetails(supplier.yarnDetails || []);
       setSupplierCatalogOptions([]);
+      supplierYarnDetailsRef.current = supplier.yarnDetails || [];
+      supplierCatalogOptionsRef.current = [];
+      lastCatalogSupplierIdRef.current = null;
       setIsLoadingCatalogOptions(false);
       setFormData(prev => ({
         ...prev,
@@ -667,7 +712,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       if (!formData.supplierId || formData.supplierId !== supplier.id) {
         setAutocompleteStates({});
       }
-      void buildSupplierCatalogOptions(supplier);
+      void buildSupplierCatalogOptions(supplier, true);
     }
   };
 
@@ -711,6 +756,24 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     delete newStates[itemId];
     setAutocompleteStates(newStates);
   };
+
+  const updateItem = useCallback((itemId: string, updates: Partial<YarnPurchaseItem>) => {
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map(item => {
+        if (item.id === itemId) {
+          const updatedItem = { ...item, ...updates };
+
+          const baseAmount = updatedItem.rate * updatedItem.qty;
+          const gstAmount = (baseAmount * updatedItem.gst) / 100;
+          updatedItem.subTotal = baseAmount + gstAmount;
+
+          return updatedItem;
+        }
+        return item;
+      })
+    }));
+  }, []);
 
   const handleYarnNameInput = (itemId: string, value: string) => {
     const queryLower = value.toLowerCase().trim();
@@ -759,7 +822,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     });
   };
 
-  const selectYarnSuggestion = (itemId: string, option: SupplierCatalogOption) => {
+  const selectYarnSuggestion = useCallback((itemId: string, option: SupplierCatalogOption) => {
     const { catalog, supplierDetail, displayName } = option;
 
     console.log("[PurchaseForm] selectYarnSuggestion", {
@@ -828,26 +891,46 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         showSuggestions: false,
       },
     }));
-  };
+  }, [extractCountSizeOptionsFromDetail, extractIdFromValue, updateItem]);
 
-  const updateItem = (itemId: string, updates: Partial<YarnPurchaseItem>) => {
-    setFormData(prev => ({
-      ...prev,
-      items: prev.items.map(item => {
-        if (item.id === itemId) {
-          const updatedItem = { ...item, ...updates };
-          
-          // Calculate sub-total
-          const baseAmount = updatedItem.rate * updatedItem.qty;
-          const gstAmount = (baseAmount * updatedItem.gst) / 100;
-          updatedItem.subTotal = baseAmount + gstAmount;
-          
-          return updatedItem;
+  useEffect(() => {
+    if (!selectedSupplier || supplierCatalogOptions.length === 0) {
+      return;
+    }
+
+    formData.items.forEach((item) => {
+      if (!item) return;
+      if (item.selectedCatalog) return;
+      if (!item.yarnId && !item.yarnName) return;
+
+      const match = supplierCatalogOptions.find((option) => {
+        const optionId = option.catalog?.id ? String(option.catalog.id) : undefined;
+        const itemId = item.yarnId ? String(item.yarnId) : undefined;
+
+        if (itemId && optionId && itemId === optionId) {
+          return true;
         }
-        return item;
-      })
-    }));
-  };
+
+        if (item.yarnName && option.catalog?.yarnName) {
+          return option.catalog.yarnName.trim().toLowerCase() === item.yarnName.trim().toLowerCase();
+        }
+
+        return false;
+      });
+
+      if (match) {
+        setAutocompleteStates(prev => ({
+          ...prev,
+          [item.id]: {
+            query: item.yarnName,
+            suggestions: [],
+            showSuggestions: false,
+          },
+        }));
+        selectYarnSuggestion(item.id, match);
+      }
+    });
+  }, [formData.items, selectedSupplier, supplierCatalogOptions, selectYarnSuggestion]);
 
   const calculateTotals = () => {
     const subTotal = formData.items.reduce((sum, item) => {
@@ -899,14 +982,29 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       return Array.from(uniqueOptions.entries()).map(([id, name]) => ({ id, name }));
     }
     
-    // Fallback to old method if no selected yarn detail
-    if (!item.yarnSubtypeId || !item.yarnTypeId) return [];
-    
-    const subtypes = yarnSubtypeMap[item.yarnTypeId] || [];
-    const subtype = subtypes.find(s => s.id === item.yarnSubtypeId);
-    if (!subtype) return [];
+    if (item.yarnSubtypeId && item.yarnTypeId) {
+      const subtypes = yarnSubtypeMap[item.yarnTypeId] || [];
+      const subtype = subtypes.find(s => s.id === item.yarnSubtypeId);
 
-    return countSizes.filter(cs => subtype.countSizes.includes(cs.id));
+      if (subtype) {
+        const subtypeOptions = countSizes
+          .filter(cs => subtype.countSizes.includes(cs.id))
+          .map(cs => ({ id: cs.id, name: cs.name }));
+
+        if (subtypeOptions.length > 0) {
+          return subtypeOptions;
+        }
+      }
+    }
+
+    if (item.sizeCount) {
+      return [{
+        id: item.sizeCount,
+        name: item.sizeCountName || item.sizeCount,
+      }];
+    }
+
+    return [];
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

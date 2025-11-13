@@ -91,6 +91,18 @@ export interface CreatePurchaseOrderPayload {
   currentStatus: string;
 }
 
+export interface UpdatePurchaseOrderPayload {
+  poNumber: string;
+  supplierName: string;
+  supplier: string;
+  poItems: PurchaseOrderItemPayload[];
+  notes?: string;
+  subTotal: number;
+  gst: number;
+  total: number;
+  currentStatus: string;
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === 'undefined') return null;
 
@@ -206,6 +218,17 @@ class YarnPurchaseOrderService {
   async createPurchaseOrder(payload: CreatePurchaseOrderPayload): Promise<PurchaseOrder> {
     return this.makeRequest<PurchaseOrder>('', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updatePurchaseOrder(orderId: string, payload: UpdatePurchaseOrderPayload): Promise<PurchaseOrder> {
+    if (!orderId) {
+      throw new Error('Order ID is required');
+    }
+
+    return this.makeRequest<PurchaseOrder>(`/${orderId}`, {
+      method: 'PATCH',
       body: JSON.stringify(payload),
     });
   }
