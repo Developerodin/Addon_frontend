@@ -109,7 +109,7 @@ const ProcessQCOrderPage = () => {
   const params = useParams();
   const router = useRouter();
   const { hasSubPermission, isLoading } = useNavigation();
-  const orderId = params?.orderId as string;
+  const orderId = params?.id as string;
 
   const [order, setOrder] = useState<ReceivedOrder | null>(null);
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
@@ -132,6 +132,7 @@ const ProcessQCOrderPage = () => {
   useEffect(() => {
     const fetchOrder = async () => {
       if (!orderId) {
+        console.log('QC Process page - No orderId provided');
         setIsLoadingOrder(false);
         return;
       }
@@ -139,6 +140,8 @@ const ProcessQCOrderPage = () => {
       setIsLoadingOrder(true);
       try {
         console.log('QC Process page - fetching order with id:', orderId);
+        console.log('QC Process page - API URL will be:', `/v1/yarn-management/yarn-purchase-orders/${orderId}`);
+        
         const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
         console.log('QC Process page - API response:', apiOrder);
         
@@ -146,19 +149,28 @@ const ProcessQCOrderPage = () => {
         console.log('QC Process page - mapped order:', mappedOrder);
         
         setOrder(mappedOrder);
+        toast.success('Order details loaded successfully');
       } catch (error) {
         console.error('QC Process page - failed to fetch order:', error);
         toast.error(error instanceof Error ? error.message : 'Failed to load order details');
-        router.push('/yarn-management/purchase-management/yarn-qc');
+        // Don't redirect immediately, let user see the error
       } finally {
         setIsLoadingOrder(false);
       }
     };
 
-    if (hasPermission && !isLoading) {
-      fetchOrder();
+    // Fetch order when orderId is available
+    // Wait for navigation to finish loading before making API call
+    if (orderId) {
+      // Small delay to ensure route params are fully loaded
+      const timer = setTimeout(() => {
+        console.log('QC Process page - Calling fetchOrder, orderId:', orderId);
+        fetchOrder();
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
-  }, [orderId, router, hasPermission, isLoading]);
+  }, [orderId]);
 
   const getStatusColor = (status: PurchaseOrderStatus) => {
     switch (status) {
@@ -271,15 +283,36 @@ const ProcessQCOrderPage = () => {
     }
   };
 
-  // Show loading state while permissions are being loaded
+  // Show loading state while permissions or order are being loaded
   if (isLoading || isLoadingOrder) {
     return (
       <div className="main-content">
         <div className="flex justify-center items-center py-12">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading...</p>
+            <p className="text-gray-600">
+              {isLoading ? 'Loading permissions...' : 'Loading order details...'}
+            </p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Check permission after loading
+  if (!hasPermission) {
+    return (
+      <div className="main-content">
+        <div className="text-center py-12">
+          <div className="text-gray-400 mb-4">
+            <i className="ri-lock-line text-6xl"></i>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
+          <p className="text-gray-500 mb-4">You don't have permission to access Yarn QC.</p>
+          <Link href="/yarn-management/purchase-management/yarn-qc" className="ti-btn ti-btn-primary">
+            <i className="ri-arrow-left-line me-2"></i>
+            Back to QC Orders
+          </Link>
         </div>
       </div>
     );
@@ -293,6 +326,7 @@ const ProcessQCOrderPage = () => {
             <i className="ri-error-warning-line text-6xl"></i>
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">Order Not Found</h3>
+          <p className="text-gray-500 mb-4">Order ID: {orderId}</p>
           <Link href="/yarn-management/purchase-management/yarn-qc" className="ti-btn ti-btn-primary">
             <i className="ri-arrow-left-line me-2"></i>
             Back to QC Orders
