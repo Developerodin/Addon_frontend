@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -7,6 +7,7 @@ import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 import { PurchaseOrderStatus } from "./components/PurchaseForm";
 import PacklistModal, { PacklistDetails } from "./components/PacklistModal";
+import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
 
 interface PurchaseOrder {
   id: string;
@@ -38,421 +39,154 @@ interface PurchaseItem {
   estimatedDeliveryDate: string;
 }
 
+// Helper function to convert API status code to display format
+const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
+  const statusMap: Record<string, PurchaseOrderStatus> = {
+    'submitted_to_supplier': 'submitted to supplier',
+    'in_transit': 'in transit',
+    'delivered': 'delivered',
+    'rejected': 'rejected',
+    'qc_pending': 'QC pending',
+    'partially_delivered': 'partially delivered',
+    'stocked': 'stocked'
+  };
+  return statusMap[statusCode] || 'submitted to supplier';
+};
+
+// Helper function to convert display status to API status code
+const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
+  const statusMap: Record<PurchaseOrderStatus, string> = {
+    'submitted to supplier': 'submitted_to_supplier',
+    'in transit': 'in_transit',
+    'delivered': 'delivered',
+    'rejected': 'rejected',
+    'QC pending': 'qc_pending',
+    'partially delivered': 'partially_delivered',
+    'stocked': 'stocked'
+  };
+  return statusMap[status] || 'submitted_to_supplier';
+};
+
+// Helper function to map API response to component format
+const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
+  const poItems = apiOrder.poItems || apiOrder.items || apiOrder.orderItems || [];
+  
+  // Get the latest estimated delivery date from items, or use a default
+  const latestDeliveryDate = poItems.length > 0 
+    ? poItems.reduce((latest: string, item: any) => {
+        const itemDate = item.estimatedDeliveryDate || item.estimated_delivery_date;
+        return itemDate && (!latest || new Date(itemDate) > new Date(latest)) ? itemDate : latest;
+      }, '')
+    : new Date().toISOString();
+
+  return {
+    id: apiOrder._id || apiOrder.id || '',
+    orderNumber: apiOrder.poNumber || apiOrder.orderNumber || apiOrder.order_number || apiOrder.po_number || '',
+    supplier: apiOrder.supplierName || apiOrder.supplier?.brandName || apiOrder.supplier?.name || apiOrder.supplier || '',
+    supplierId: apiOrder.supplier?._id || apiOrder.supplier?.id || apiOrder.supplierId || apiOrder.supplier_id || '',
+    orderDate: apiOrder.createDate || apiOrder.orderDate || apiOrder.order_date || apiOrder.createdAt || new Date().toISOString(),
+    expectedDelivery: latestDeliveryDate || apiOrder.expectedDelivery || apiOrder.expected_delivery || new Date().toISOString(),
+    status: convertStatusFromAPI(apiOrder.currentStatus || apiOrder.status || apiOrder.status_code || 'submitted_to_supplier'),
+    totalAmount: apiOrder.total || apiOrder.totalAmount || apiOrder.total_amount || apiOrder.grandTotal || 0,
+    subTotal: apiOrder.subTotal || apiOrder.sub_total || apiOrder.subtotal || 0,
+    totalGst: apiOrder.gst || apiOrder.totalGst || apiOrder.total_gst || apiOrder.gstAmount || 0,
+    items: poItems.map((item: any) => ({
+      id: item._id || item.id || '',
+      yarnName: item.yarnName || item.yarn?.yarnName || item.yarn_name || item.yarn?.name || '',
+      sizeCount: item.sizeCount || item.size_count || item.countSize || '',
+      shadeCode: item.shadeCode || item.shade_code || item.shade || '',
+      quantity: item.quantity || 0,
+      rate: item.rate || item.unitPrice || 0,
+      gst: item.gstRate || item.gst || item.gst_rate || 18,
+      subTotal: item.subTotal || item.sub_total || (item.quantity * (item.rate || 0)) || 0,
+      estimatedDeliveryDate: item.estimatedDeliveryDate || item.estimated_delivery_date || item.expectedDelivery || ''
+    })),
+    notes: apiOrder.notes || apiOrder.remarks || '',
+    createdAt: apiOrder.createDate || apiOrder.createdAt || apiOrder.created_at || new Date().toISOString(),
+    updatedAt: apiOrder.lastUpdateDate || apiOrder.updatedAt || apiOrder.updated_at || new Date().toISOString(),
+    packlistDetails: apiOrder.packlistDetails ? {
+      trackingNumber: apiOrder.packlistDetails.trackingNumber || apiOrder.packlistDetails.tracking_number,
+      courierName: apiOrder.packlistDetails.courierName || apiOrder.packlistDetails.courier_name,
+      dispatchDate: apiOrder.packlistDetails.dispatchDate || apiOrder.packlistDetails.dispatch_date,
+      expectedArrivalDate: apiOrder.packlistDetails.expectedArrivalDate || apiOrder.packlistDetails.expected_arrival_date
+    } : undefined
+  };
+};
+
 const PurchasePage = () => {
   const router = useRouter();
   const { hasSubPermission, isLoading } = useNavigation();
-  
-  // Static purchase orders data with new statuses
-  // Today's date: Nov 12, 2025 - order dates are in past, expected delivery dates are in future
-  const staticOrders: PurchaseOrder[] = [
-    {
-      id: "1",
-      orderNumber: "PO-2025-001",
-      supplier: "Reliance Industries",
-      supplierId: "supplier-1",
-      orderDate: "2025-10-15T10:30:00Z",
-      expectedDelivery: "2025-11-25T10:30:00Z",
-      status: "stocked",
-      totalAmount: 125000,
-      subTotal: 100000,
-      totalGst: 25000,
-      items: [
-        {
-          id: "1",
-          yarnName: "Cotton Count 40",
-          sizeCount: "40",
-          shadeCode: "SH001",
-          quantity: 200,
-          rate: 400,
-          gst: 18,
-          subTotal: 94400,
-          estimatedDeliveryDate: "2025-11-25"
-        },
-        {
-          id: "2",
-          yarnName: "Cotton Count 60",
-          sizeCount: "60",
-          shadeCode: "SH002",
-          quantity: 100,
-          rate: 500,
-          gst: 18,
-          subTotal: 59000,
-          estimatedDeliveryDate: "2025-11-25"
-        }
-      ],
-      notes: "Priority order for production",
-      createdAt: "2025-10-15T10:30:00Z",
-      updatedAt: "2025-11-10T10:30:00Z"
-    },
-    {
-      id: "2",
-      orderNumber: "PO-2025-002",
-      supplier: "Aditya Birla Group",
-      supplierId: "supplier-2",
-      orderDate: "2025-10-20T09:15:00Z",
-      expectedDelivery: "2025-11-20T09:15:00Z",
-      status: "in transit",
-      totalAmount: 85000,
-      subTotal: 72000,
-      totalGst: 13000,
-      items: [
-        {
-          id: "3",
-          yarnName: "Polyester DTY 150",
-          sizeCount: "150",
-          shadeCode: "SH003",
-          quantity: 150,
-          rate: 320,
-          gst: 18,
-          subTotal: 56640,
-          estimatedDeliveryDate: "2025-11-20"
-        }
-      ],
-      notes: "Standard delivery",
-      createdAt: "2025-10-20T09:15:00Z",
-      updatedAt: "2025-11-10T14:30:00Z",
-      packlistDetails: {
-        trackingNumber: "TRK123456",
-        courierName: "BlueDart",
-        dispatchDate: "2025-11-10",
-        expectedArrivalDate: "2025-11-20"
-      }
-    },
-    {
-      id: "3",
-      orderNumber: "PO-2025-003",
-      supplier: "Grasim Industries",
-      supplierId: "supplier-3",
-      orderDate: "2025-11-05T14:20:00Z",
-      expectedDelivery: "2025-11-25T14:20:00Z",
-      status: "submitted to supplier",
-      totalAmount: 95000,
-      subTotal: 80000,
-      totalGst: 15000,
-      items: [
-        {
-          id: "5",
-          yarnName: "Viscose Rayon 30",
-          sizeCount: "30",
-          shadeCode: "SH004",
-          quantity: 180,
-          rate: 380,
-          gst: 18,
-          subTotal: 80712,
-          estimatedDeliveryDate: "2025-11-25"
-        }
-      ],
-      notes: "Quality check required",
-      createdAt: "2025-11-05T14:20:00Z",
-      updatedAt: "2025-11-05T14:20:00Z"
-    },
-    {
-      id: "4",
-      orderNumber: "PO-2025-004",
-      supplier: "SRF Limited",
-      supplierId: "supplier-4",
-      orderDate: "2025-10-25T16:30:00Z",
-      expectedDelivery: "2025-11-20T16:30:00Z",
-      status: "QC pending",
-      totalAmount: 42000,
-      subTotal: 35000,
-      totalGst: 7000,
-      items: [
-        {
-          id: "7",
-          yarnName: "Nylon FDY 70",
-          sizeCount: "70",
-          shadeCode: "SH005",
-          quantity: 150,
-          rate: 280,
-          gst: 18,
-          subTotal: 49560,
-          estimatedDeliveryDate: "2025-11-20"
-        }
-      ],
-      notes: "Awaiting QC approval",
-      createdAt: "2025-10-25T16:30:00Z",
-      updatedAt: "2025-11-10T16:30:00Z"
-    },
-    {
-      id: "5",
-      orderNumber: "PO-2025-005",
-      supplier: "Welspun India",
-      supplierId: "supplier-5",
-      orderDate: "2025-10-28T08:15:00Z",
-      expectedDelivery: "2025-11-18T08:15:00Z",
-      status: "rejected",
-      totalAmount: 76000,
-      subTotal: 64000,
-      totalGst: 12000,
-      items: [
-        {
-          id: "8",
-          yarnName: "Cotton Count 20",
-          sizeCount: "20",
-          shadeCode: "SH006",
-          quantity: 200,
-          rate: 380,
-          gst: 18,
-          subTotal: 89680,
-          estimatedDeliveryDate: "2025-11-18"
-        }
-      ],
-      notes: "Rejected due to quality issues",
-      createdAt: "2025-10-28T08:15:00Z",
-      updatedAt: "2025-11-05T11:45:00Z"
-    },
-    {
-      id: "6",
-      orderNumber: "PO-2025-006",
-      supplier: "Reliance Industries",
-      supplierId: "supplier-1",
-      orderDate: "2025-10-30T15:40:00Z",
-      expectedDelivery: "2025-11-22T15:40:00Z",
-      status: "partially delivered",
-      totalAmount: 136000,
-      subTotal: 115000,
-      totalGst: 21000,
-      items: [
-        {
-          id: "9",
-          yarnName: "Cotton Count 80",
-          sizeCount: "80",
-          shadeCode: "SH007",
-          quantity: 200,
-          rate: 680,
-          gst: 18,
-          subTotal: 160480,
-          estimatedDeliveryDate: "2025-11-22"
-        }
-      ],
-      notes: "Premium quality required",
-      createdAt: "2025-10-30T15:40:00Z",
-      updatedAt: "2025-11-08T09:20:00Z"
-    },
-    {
-      id: "7",
-      orderNumber: "PO-2025-007",
-      supplier: "Raymond Limited",
-      supplierId: "supplier-6",
-      orderDate: "2025-11-08T10:00:00Z",
-      expectedDelivery: "2025-11-28T10:00:00Z",
-      status: "submitted to supplier",
-      totalAmount: 110000,
-      subTotal: 93000,
-      totalGst: 17000,
-      items: [
-        {
-          id: "10",
-          yarnName: "Cotton Count 50",
-          sizeCount: "50",
-          shadeCode: "SH008",
-          quantity: 150,
-          rate: 450,
-          gst: 18,
-          subTotal: 79650,
-          estimatedDeliveryDate: "2025-11-28"
-        },
-        {
-          id: "11",
-          yarnName: "Polyester Count 100",
-          sizeCount: "100",
-          shadeCode: "SH009",
-          quantity: 100,
-          rate: 350,
-          gst: 18,
-          subTotal: 41300,
-          estimatedDeliveryDate: "2025-11-28"
-        }
-      ],
-      notes: "Urgent order for upcoming production",
-      createdAt: "2025-11-08T10:00:00Z",
-      updatedAt: "2025-11-08T10:00:00Z"
-    },
-    {
-      id: "8",
-      orderNumber: "PO-2025-008",
-      supplier: "Arvind Limited",
-      supplierId: "supplier-7",
-      orderDate: "2025-11-10T14:30:00Z",
-      expectedDelivery: "2025-11-30T14:30:00Z",
-      status: "submitted to supplier",
-      totalAmount: 145000,
-      subTotal: 123000,
-      totalGst: 22000,
-      items: [
-        {
-          id: "12",
-          yarnName: "Cotton Count 30",
-          sizeCount: "30",
-          shadeCode: "SH010",
-          quantity: 250,
-          rate: 420,
-          gst: 18,
-          subTotal: 123900,
-          estimatedDeliveryDate: "2025-11-30"
-        }
-      ],
-      notes: "Bulk order for seasonal production",
-      createdAt: "2025-11-10T14:30:00Z",
-      updatedAt: "2025-11-10T14:30:00Z"
-    },
-    {
-      id: "9",
-      orderNumber: "PO-2025-009",
-      supplier: "Bombay Dyeing",
-      supplierId: "supplier-8",
-      orderDate: "2025-11-11T09:00:00Z",
-      expectedDelivery: "2025-12-01T09:00:00Z",
-      status: "submitted to supplier",
-      totalAmount: 88000,
-      subTotal: 75000,
-      totalGst: 13000,
-      items: [
-        {
-          id: "13",
-          yarnName: "Viscose Count 40",
-          sizeCount: "40",
-          shadeCode: "SH011",
-          quantity: 120,
-          rate: 480,
-          gst: 18,
-          subTotal: 67968,
-          estimatedDeliveryDate: "2025-12-01"
-        },
-        {
-          id: "14",
-          yarnName: "Cotton Count 70",
-          sizeCount: "70",
-          shadeCode: "SH012",
-          quantity: 80,
-          rate: 580,
-          gst: 18,
-          subTotal: 54752,
-          estimatedDeliveryDate: "2025-12-01"
-        }
-      ],
-      notes: "Mixed yarn order for special collection",
-      createdAt: "2025-11-11T09:00:00Z",
-      updatedAt: "2025-11-11T09:00:00Z"
-    },
-    {
-      id: "10",
-      orderNumber: "PO-2025-010",
-      supplier: "Trident Group",
-      supplierId: "supplier-9",
-      orderDate: "2025-11-12T11:15:00Z",
-      expectedDelivery: "2025-12-02T11:15:00Z",
-      status: "submitted to supplier",
-      totalAmount: 132000,
-      subTotal: 112000,
-      totalGst: 20000,
-      items: [
-        {
-          id: "15",
-          yarnName: "Polyester Count 75",
-          sizeCount: "75",
-          shadeCode: "SH013",
-          quantity: 200,
-          rate: 380,
-          gst: 18,
-          subTotal: 89680,
-          estimatedDeliveryDate: "2025-12-02"
-        },
-        {
-          id: "16",
-          yarnName: "Nylon Count 60",
-          sizeCount: "60",
-          shadeCode: "SH014",
-          quantity: 150,
-          rate: 420,
-          gst: 18,
-          subTotal: 74340,
-          estimatedDeliveryDate: "2025-12-02"
-        }
-      ],
-      notes: "Standard quality yarn for regular production",
-      createdAt: "2025-11-12T11:15:00Z",
-      updatedAt: "2025-11-12T11:15:00Z"
-    },
-    {
-      id: "11",
-      orderNumber: "PO-2025-011",
-      supplier: "Grasim Industries",
-      supplierId: "supplier-3",
-      orderDate: "2025-11-07T16:45:00Z",
-      expectedDelivery: "2025-11-27T16:45:00Z",
-      status: "submitted to supplier",
-      totalAmount: 98000,
-      subTotal: 83000,
-      totalGst: 15000,
-      items: [
-        {
-          id: "17",
-          yarnName: "Cotton Count 45",
-          sizeCount: "45",
-          shadeCode: "SH015",
-          quantity: 180,
-          rate: 440,
-          gst: 18,
-          subTotal: 93456,
-          estimatedDeliveryDate: "2025-11-27"
-        }
-      ],
-      notes: "Follow-up order for continuous production",
-      createdAt: "2025-11-07T16:45:00Z",
-      updatedAt: "2025-11-07T16:45:00Z"
-    },
-    {
-      id: "12",
-      orderNumber: "PO-2025-012",
-      supplier: "Aditya Birla Group",
-      supplierId: "supplier-2",
-      orderDate: "2025-11-09T13:20:00Z",
-      expectedDelivery: "2025-11-29T13:20:00Z",
-      status: "submitted to supplier",
-      totalAmount: 156000,
-      subTotal: 132000,
-      totalGst: 24000,
-      items: [
-        {
-          id: "18",
-          yarnName: "Viscose Count 35",
-          sizeCount: "35",
-          shadeCode: "SH016",
-          quantity: 220,
-          rate: 460,
-          gst: 18,
-          subTotal: 119416,
-          estimatedDeliveryDate: "2025-11-29"
-        },
-        {
-          id: "19",
-          yarnName: "Cotton Count 55",
-          sizeCount: "55",
-          shadeCode: "SH017",
-          quantity: 100,
-          rate: 520,
-          gst: 18,
-          subTotal: 61360,
-          estimatedDeliveryDate: "2025-11-29"
-        }
-      ],
-      notes: "Large order for export production",
-      createdAt: "2025-11-09T13:20:00Z",
-      updatedAt: "2025-11-09T13:20:00Z"
-    }
-  ];
-
-  const [orders, setOrders] = useState<PurchaseOrder[]>(staticOrders);
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Set default dates: one month ago to today
+  const getDefaultStartDate = () => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 1);
+    return date.toISOString().split('T')[0];
+  };
+  
+  const getDefaultEndDate = () => {
+    return new Date().toISOString().split('T')[0];
+  };
+  
   const [statusFilter, setStatusFilter] = useState<string>("submitted to supplier");
+  const [startDate, setStartDate] = useState<string>(getDefaultStartDate());
+  const [endDate, setEndDate] = useState<string>(getDefaultEndDate());
   const [packlistModalOpen, setPacklistModalOpen] = useState(false);
   const [orderForPacklist, setOrderForPacklist] = useState<PurchaseOrder | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [detailedOrderData, setDetailedOrderData] = useState<any>(null);
 
   // Check permission
   const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
+
+  // Fetch purchase orders from API
+  const fetchPurchaseOrders = async () => {
+    setIsLoadingOrders(true);
+    try {
+      const params: any = {};
+
+      // Add date filters if provided
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        params.start_date = start.toISOString();
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        params.end_date = end.toISOString();
+      }
+
+      // Always filter by submitted to supplier status
+      params.status_code = convertStatusToAPI(statusFilter as PurchaseOrderStatus);
+
+      const response = await yarnPurchaseOrderService.getPurchaseOrders(params);
+      
+      // Handle both array and object with results property
+      const ordersData = Array.isArray(response) ? response : (response.results || []);
+      const mappedOrders = ordersData.map(mapAPIOrderToComponent);
+      setOrders(mappedOrders);
+    } catch (error) {
+      console.error('Failed to fetch purchase orders:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to load purchase orders');
+      setOrders([]);
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  // Fetch orders on mount and when filters change
+  useEffect(() => {
+    if (hasPermission && !isLoading) {
+      fetchPurchaseOrders();
+    }
+  }, [hasPermission, isLoading, startDate, endDate, statusFilter]);
 
   // Show loading state while permissions are being loaded
   if (isLoading) {
@@ -676,23 +410,12 @@ const PurchasePage = () => {
         });
       }
 
-      // TODO: Implement API call to update status
-      setOrders(prev => prev.map(order => 
-        order.id === orderId 
-          ? { 
-              ...order, 
-              status: newStatus, 
-              updatedAt: new Date().toISOString(),
-              packlistDetails: packlistDetails ? {
-                trackingNumber: packlistDetails.trackingNumber,
-                courierName: packlistDetails.courierName,
-                dispatchDate: packlistDetails.dispatchDate,
-                expectedArrivalDate: packlistDetails.expectedArrivalDate,
-                notes: packlistDetails.notes
-              } : order.packlistDetails
-            } 
-          : order
-      ));
+      // Update status via API
+      await yarnPurchaseOrderService.updatePurchaseOrderStatus(orderId, newStatus, packlistDetails);
+      
+      // Refresh orders list
+      await fetchPurchaseOrders();
+      
       toast.success('Purchase order status updated successfully');
       setPacklistModalOpen(false);
       setOrderForPacklist(null);
@@ -778,6 +501,7 @@ const PurchasePage = () => {
           {/* Search and Filters */}
           <div className="box">
             <div className="box-body">
+              <div className="flex flex-col gap-4">
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-1">
                   <input
@@ -788,25 +512,53 @@ const PurchasePage = () => {
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <div className="flex gap-2">
-                  <select
-                    className="form-select"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="all">All Status</option>
-                    <option value="submitted to supplier">Submitted to Supplier</option>
-                    <option value="in transit">In Transit</option>
-                    <option value="delivered">Delivered</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="QC pending">QC Pending</option>
-                    <option value="partially delivered">Partially Delivered</option>
-                    <option value="stocked">Stocked</option>
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      className="form-select"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                    >
+                      <option value="submitted to supplier">Submitted to Supplier</option>
+                    </select>
                   <button className="ti-btn ti-btn-light">
                     <i className="ri-download-line me-1"></i>
                     Export
                   </button>
+                </div>
+              </div>
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="form-label text-xs text-gray-600">Start Date</label>
+                      <input
+                        type="date"
+                        className="form-control"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="form-label text-xs text-gray-600">End Date</label>
+                      <input
+                        type="date"
+                        className="form-control"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                      />
+                    </div>
+                    {(startDate || endDate) && (
+                      <button
+                        className="ti-btn ti-btn-light self-end"
+                        onClick={() => {
+                          setStartDate("");
+                          setEndDate("");
+                        }}
+                      >
+                        <i className="ri-close-line me-1"></i>
+                        Clear Dates
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -818,20 +570,22 @@ const PurchasePage = () => {
               <h3 className="box-title">Purchase Orders ({filteredOrders.length})</h3>
             </div>
             <div className="box-body">
-              {filteredOrders.length === 0 ? (
+              {isLoadingOrders ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading purchase orders...</p>
+                </div>
+              ) : filteredOrders.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-gray-400 mb-4">
                     <i className="ri-shopping-cart-line text-4xl"></i>
                   </div>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No Purchase Orders</h3>
-                  <p className="text-gray-500 mb-4">Start by creating your first purchase order.</p>
-                  <Link 
-                    href="/yarn-management/purchase-management/purchase/add"
-                    className="ti-btn ti-btn-primary"
-                  >
-                    <i className="ri-add-line me-2"></i>
-                    Create First Order
-                  </Link>
+                  <p className="text-gray-500 mb-4">
+                    {searchTerm
+                      ? "No orders match your search criteria. Try adjusting your search term."
+                      : "No purchase orders found for the selected period."}
+                  </p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -839,7 +593,7 @@ const PurchasePage = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Order Number
+                          PO Number
                         </th>
                         <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Supplier
@@ -863,7 +617,6 @@ const PurchasePage = () => {
                     </thead>
                     <tbody className="bg-white">
                       {filteredOrders.map((order) => {
-                        const nextStatusOptions = getNextStatusOptions(order.status);
                         return (
                           <tr key={order.id} className="hover:bg-gray-50">
                             <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -889,6 +642,27 @@ const PurchasePage = () => {
                             <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium">
                               <div className="flex items-center space-x-2">
                                 <button
+                                  onClick={async () => {
+                                    setSelectedOrder(order);
+                                    setDetailsModalOpen(true);
+                                    setIsLoadingDetails(true);
+                                    try {
+                                      const detailedData = await yarnPurchaseOrderService.getPurchaseOrderById(order.id);
+                                      setDetailedOrderData(detailedData);
+                                    } catch (error) {
+                                      console.error('Failed to fetch order details:', error);
+                                      toast.error('Failed to load order details');
+                                      setDetailedOrderData(null);
+                                    } finally {
+                                      setIsLoadingDetails(false);
+                                    }
+                                  }}
+                                  className="text-purple-600 hover:text-purple-900 flex items-center justify-center"
+                                  title="View Details"
+                                >
+                                  <i className="ri-eye-line text-lg"></i>
+                                </button>
+                                <button
                                   onClick={() => handlePrintInvoice(order)}
                                   className="text-blue-600 hover:text-blue-900 flex items-center justify-center"
                                   title="Print Invoice"
@@ -902,25 +676,14 @@ const PurchasePage = () => {
                                 >
                                   <i className="ri-edit-line text-lg"></i>
                                 </Link>
-                                {nextStatusOptions.length > 0 && (
-                                  <select
-                                    value=""
-                                    onChange={(e) => {
-                                      if (e.target.value) {
-                                        handleStatusUpdate(order.id, e.target.value as PurchaseOrderStatus);
-                                        e.target.value = "";
-                                      }
-                                    }}
-                                    className="text-xs border border-gray-300 rounded px-2 py-1 h-7"
-                                    title="Update Status"
+                                {order.status === 'submitted to supplier' && (
+                                  <button
+                                    onClick={() => handleStatusUpdate(order.id, 'in transit')}
+                                    className="text-xs border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded px-3 py-1 h-7 font-medium"
+                                    title="Mark in Transit"
                                   >
-                                    <option value="">Update Status</option>
-                                    {nextStatusOptions.map(status => (
-                                      <option key={status} value={status}>
-                                        Mark as {status}
-                                      </option>
-                                    ))}
-                                  </select>
+                                    Mark in Transit
+                                  </button>
                                 )}
                               </div>
                             </td>
@@ -949,6 +712,323 @@ const PurchasePage = () => {
           expectedDelivery={orderForPacklist.expectedDelivery}
           isSubmitting={isUpdatingStatus}
         />
+      )}
+
+      {/* Order Details Modal */}
+      {selectedOrder && (
+        <div className={`fixed inset-0 z-50 overflow-y-auto ${detailsModalOpen ? '' : 'hidden'}`}>
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            {/* Background overlay */}
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => {
+                setDetailsModalOpen(false);
+                setSelectedOrder(null);
+                setDetailedOrderData(null);
+              }}
+            ></div>
+
+            {/* Modal panel */}
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full">
+              {/* Header */}
+              <div className="bg-primary text-white px-6 py-4 flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-semibold">Purchase Order Details</h3>
+                  <p className="text-sm text-white/80 mt-1">{selectedOrder.orderNumber}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setDetailsModalOpen(false);
+                    setSelectedOrder(null);
+                  }}
+                  className="text-white hover:text-gray-200 transition-colors"
+                >
+                  <i className="ri-close-line text-xl"></i>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="px-6 py-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+                {isLoadingDetails ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading order details...</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Order Information */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">PO Number</label>
+                          <div className="mt-1 text-sm text-gray-900 font-medium">
+                            {detailedOrderData?.poNumber || selectedOrder.orderNumber}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">Supplier</label>
+                          <div className="mt-1 text-sm text-gray-900">
+                            {detailedOrderData?.supplierName || detailedOrderData?.supplier?.brandName || selectedOrder.supplier}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">Order Date</label>
+                          <div className="mt-1 text-sm text-gray-900">
+                            {new Date(detailedOrderData?.createDate || selectedOrder.orderDate).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">Expected Delivery</label>
+                          <div className="mt-1 text-sm text-gray-900">
+                            {detailedOrderData?.poItems && detailedOrderData.poItems.length > 0 ? (
+                              new Date(
+                                detailedOrderData.poItems.reduce((latest: string, item: any) => {
+                                  const itemDate = item.estimatedDeliveryDate;
+                                  return itemDate && (!latest || new Date(itemDate) > new Date(latest)) ? itemDate : latest;
+                                }, '')
+                              ).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })
+                            ) : (
+                              new Date(selectedOrder.expectedDelivery).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">Status</label>
+                          <div className="mt-1">
+                            <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(detailedOrderData?.currentStatus || selectedOrder.status))}`}>
+                              {convertStatusFromAPI(detailedOrderData?.currentStatus || selectedOrder.status)}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">Sub Total</label>
+                          <div className="mt-1 text-sm text-gray-900">₹{(detailedOrderData?.subTotal || selectedOrder.subTotal).toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">GST</label>
+                          <div className="mt-1 text-sm text-gray-900">₹{(detailedOrderData?.gst || selectedOrder.totalGst).toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">Total Amount</label>
+                          <div className="mt-1 text-sm text-gray-900 font-semibold text-lg">₹{(detailedOrderData?.total || selectedOrder.totalAmount).toLocaleString()}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Supplier Details */}
+                    {detailedOrderData?.supplier && (
+                      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                        <label className="text-sm font-medium text-gray-700 mb-3 block">Supplier Details</label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {detailedOrderData.supplier.brandName && (
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Brand Name</label>
+                              <div className="mt-1 text-sm text-gray-900">{detailedOrderData.supplier.brandName}</div>
+                            </div>
+                          )}
+                          {detailedOrderData.supplier.contactPersonName && (
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Contact Person</label>
+                              <div className="mt-1 text-sm text-gray-900">{detailedOrderData.supplier.contactPersonName}</div>
+                            </div>
+                          )}
+                          {detailedOrderData.supplier.contactNumber && (
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Contact Number</label>
+                              <div className="mt-1 text-sm text-gray-900">{detailedOrderData.supplier.contactNumber}</div>
+                            </div>
+                          )}
+                          {detailedOrderData.supplier.email && (
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Email</label>
+                              <div className="mt-1 text-sm text-gray-900">{detailedOrderData.supplier.email}</div>
+                            </div>
+                          )}
+                          {detailedOrderData.supplier.address && (
+                            <div className="md:col-span-2">
+                              <label className="text-xs font-medium text-gray-600">Address</label>
+                              <div className="mt-1 text-sm text-gray-900 whitespace-pre-line">
+                                {detailedOrderData.supplier.address}
+                                {detailedOrderData.supplier.city && `, ${detailedOrderData.supplier.city}`}
+                                {detailedOrderData.supplier.state && `, ${detailedOrderData.supplier.state}`}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Notes */}
+                    {(detailedOrderData?.notes || selectedOrder.notes) && (
+                      <div className="mb-6">
+                        <label className="text-sm font-medium text-gray-600">Notes</label>
+                        <div className="mt-1 p-3 bg-gray-50 rounded text-sm text-gray-900">
+                          {detailedOrderData?.notes || selectedOrder.notes}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Items Table */}
+                    <div className="mb-6">
+                      <label className="text-sm font-medium text-gray-600 mb-3 block">Order Items</label>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse border border-gray-300">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
+                              <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Size/Count</th>
+                              <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
+                              <th className="border border-gray-300 px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                              <th className="border border-gray-300 px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Rate</th>
+                              <th className="border border-gray-300 px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">GST %</th>
+                              <th className="border border-gray-300 px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Sub Total</th>
+                              <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Est. Delivery</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white">
+                            {(detailedOrderData?.poItems || selectedOrder.items).map((item: any, index: number) => {
+                              const yarnName = item.yarnName || item.yarn?.yarnName || '';
+                              const sizeCount = item.sizeCount || '';
+                              const shadeCode = item.shadeCode || '';
+                              const quantity = item.quantity || 0;
+                              const rate = item.rate || 0;
+                              const gstRate = item.gstRate || item.gst || 18;
+                              const subTotal = item.subTotal || (quantity * rate);
+                              const estimatedDelivery = item.estimatedDeliveryDate || '';
+                              
+                              return (
+                                <tr key={item.id || item._id || index} className="hover:bg-gray-50">
+                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900">{yarnName}</td>
+                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900">{sizeCount}</td>
+                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900">{shadeCode}</td>
+                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900 text-right">{quantity.toLocaleString()}</td>
+                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900 text-right">₹{rate.toLocaleString()}</td>
+                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900 text-right">{gstRate}%</td>
+                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900 text-right">₹{subTotal.toLocaleString()}</td>
+                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900">
+                                    {estimatedDelivery ? new Date(estimatedDelivery).toLocaleDateString() : '-'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                {/* Packlist Details */}
+                {selectedOrder.packlistDetails && (
+                  <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                    <label className="text-sm font-medium text-gray-700 mb-3 block">Packlist Details</label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {selectedOrder.packlistDetails.trackingNumber && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-600">Tracking Number</label>
+                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.trackingNumber}</div>
+                        </div>
+                      )}
+                      {selectedOrder.packlistDetails.courierName && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-600">Courier</label>
+                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.courierName}</div>
+                        </div>
+                      )}
+                      {selectedOrder.packlistDetails.dispatchDate && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-600">Dispatch Date</label>
+                          <div className="mt-1 text-sm text-gray-900">
+                            {new Date(selectedOrder.packlistDetails.dispatchDate).toLocaleDateString()}
+                          </div>
+                        </div>
+                      )}
+                      {selectedOrder.packlistDetails.expectedArrivalDate && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-600">Expected Arrival</label>
+                          <div className="mt-1 text-sm text-gray-900">
+                            {new Date(selectedOrder.packlistDetails.expectedArrivalDate).toLocaleDateString()}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                    {/* Status Logs */}
+                    {detailedOrderData?.statusLogs && detailedOrderData.statusLogs.length > 0 && (
+                      <div className="mb-6">
+                        <label className="text-sm font-medium text-gray-600 mb-3 block">Status History</label>
+                        <div className="space-y-3">
+                          {detailedOrderData.statusLogs.map((log: any, index: number) => (
+                            <div key={index} className="p-3 bg-gray-50 rounded-lg border-l-4 border-primary">
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(log.statusCode))}`}>
+                                      {convertStatusFromAPI(log.statusCode)}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {new Date(log.updatedAt).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  {log.updatedBy?.username && (
+                                    <div className="text-xs text-gray-600 mt-1">
+                                      Updated by: <span className="font-medium">{log.updatedBy.username}</span>
+                                    </div>
+                                  )}
+                                  {log.notes && (
+                                    <div className="text-sm text-gray-700 mt-2">{log.notes}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Timestamps */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500 pt-4 border-t">
+                      <div>
+                        <span className="font-medium">Created:</span> {new Date(detailedOrderData?.createDate || selectedOrder.createdAt).toLocaleString()}
+                      </div>
+                      <div>
+                        <span className="font-medium">Last Updated:</span> {new Date(detailedOrderData?.lastUpdateDate || selectedOrder.updatedAt).toLocaleString()}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setDetailsModalOpen(false);
+                    setSelectedOrder(null);
+                    setDetailedOrderData(null);
+                  }}
+                  className="ti-btn ti-btn-light"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
