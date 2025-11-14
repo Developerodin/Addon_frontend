@@ -5,6 +5,7 @@ import Link from 'next/link';
 import axios from 'axios';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import HelpIcon from '@/shared/components/HelpIcon';
+import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 
 interface AttributeOptionValue {
   _id: string;
@@ -19,16 +20,6 @@ interface AttributeOption {
   type: string;
   sortOrder: number;
   optionValues: AttributeOptionValue[];
-}
-
-interface RawMaterial {
-  id: string;
-  name: string;
-  itemName: string;
-  printName: string;
-  color: string;
-  unit: string;
-  description: string;
 }
 
 interface ProcessStep {
@@ -58,14 +49,6 @@ interface ProcessApiResponse {
   totalResults: number;
 }
 
-interface RawMaterialApiResponse {
-  results: RawMaterial[];
-  page: number;
-  limit: number;
-  totalPages: number;
-  totalResults: number;
-}
-
 interface AttributesApiResponse {
   results: AttributeOption[];
   page: number;
@@ -79,10 +62,9 @@ interface Attributes {
 }
 
 interface BomItem {
-  materialId: string;
+  yarnCatalogId: string;
+  yarnName: string;
   quantity: number;
-  materialName?: string;
-  materialUnit?: string;
 }
 
 interface ProcessItem {
@@ -101,7 +83,6 @@ interface Category {
 // API endpoints
 const API_ENDPOINTS = {
   attributes: `${API_BASE_URL}/product-attributes?page=1&limit=200`,
-  rawMaterials: `${API_BASE_URL}/raw-materials?page=1&limit=200`,
   processes: `${API_BASE_URL}/processes?page=1&limit=200`,
   createProduct: `${API_BASE_URL}/products`,
   categories: `${API_BASE_URL}/categories?page=1&limit=200`
@@ -115,7 +96,7 @@ const generateSoftwareCode = () => {
 
 const AddProductPage = () => {
   const [activeTab, setActiveTab] = useState('general');
-  const [bomItems, setBomItems] = useState<BomItem[]>([{ materialId: '', quantity: 0 }]);
+  const [bomItems, setBomItems] = useState<BomItem[]>([{ yarnCatalogId: '', yarnName: '', quantity: 0 }]);
   const [processItems, setProcessItems] = useState<ProcessItem[]>([{ processId: '' }]);
   const [softwareCode, setSoftwareCode] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -123,7 +104,7 @@ const AddProductPage = () => {
   // API data states
   const [attributes, setAttributes] = useState<Attributes>({});
   const [attributeDefinitions, setAttributeDefinitions] = useState<AttributeOption[]>([]);
-  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [yarnCatalogs, setYarnCatalogs] = useState<YarnCatalog[]>([]);
   const [availableProcesses, setAvailableProcesses] = useState<Process[]>([]);
   
   // Add categories state
@@ -144,12 +125,12 @@ const AddProductPage = () => {
   // Add image state
   const [productImage, setProductImage] = useState<File | null>(null);
 
-  // Modal and search states
-  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
-  const [materialSearchQuery, setMaterialSearchQuery] = useState('');
-  const [currentMaterialPage, setCurrentMaterialPage] = useState(1);
-  const [selectedMaterialIndex, setSelectedMaterialIndex] = useState<number | null>(null);
-  const materialsPerPage = 10;
+  // Yarn catalog search states
+  const [yarnSearchQuery, setYarnSearchQuery] = useState('');
+  const [currentYarnPage, setCurrentYarnPage] = useState(1);
+  const [totalYarnPages, setTotalYarnPages] = useState(1);
+  const [totalYarnResults, setTotalYarnResults] = useState(0);
+  const yarnsPerPage = 50;
 
   useEffect(() => {
     // Generate software code on component mount
@@ -160,15 +141,13 @@ const AddProductPage = () => {
       setIsLoading(true);
       try {
         // Fetch all data in parallel
-        const [attributesRes, materialsRes, processesRes, categoriesRes] = await Promise.all([
+        const [attributesRes, processesRes, categoriesRes] = await Promise.all([
           axios.get(API_ENDPOINTS.attributes),
-          axios.get(API_ENDPOINTS.rawMaterials),
           axios.get(API_ENDPOINTS.processes),
           axios.get(API_ENDPOINTS.categories)
         ]);
 
         console.log('Product Attributes Response:', attributesRes.data);
-        console.log('Raw Materials Response:', materialsRes.data);
         console.log('Processes Response:', processesRes.data);
         console.log('Categories Response:', categoriesRes.data);
 
@@ -184,11 +163,6 @@ const AddProductPage = () => {
         
         setAttributes(transformedAttributes);
         console.log('Transformed attributes:', transformedAttributes);
-
-        // Set raw materials from results array
-        const materialsResponse = materialsRes.data as RawMaterialApiResponse;
-        setRawMaterials(materialsResponse.results || []);
-        console.log('Raw Materials:', rawMaterials);
         
         // Set processes from results array
         const processResponse = processesRes.data as ProcessApiResponse;
@@ -210,67 +184,58 @@ const AddProductPage = () => {
     fetchData();
   }, []);
 
-  // Material search and pagination functions
-  const filteredMaterials = rawMaterials.filter(material => {
-    const materialName = material.name || material.itemName || '';
-    return materialName.toLowerCase().includes(materialSearchQuery.toLowerCase());
-  });
+  // Fetch yarn catalogs when search query or page changes
+  useEffect(() => {
+    const fetchYarnCatalogs = async () => {
+      try {
+        const response = await yarnCatalogService.getYarnCatalogs({
+          page: currentYarnPage,
+          limit: yarnsPerPage,
+          yarnName: yarnSearchQuery.trim() || undefined,
+          status: 'active'
+        });
+        setYarnCatalogs(response.results || []);
+        setTotalYarnPages(response.totalPages || 1);
+        setTotalYarnResults(response.totalResults || 0);
+      } catch (error) {
+        console.error('Error fetching yarn catalogs:', error);
+        setYarnCatalogs([]);
+      }
+    };
 
-  const totalMaterialPages = Math.ceil(filteredMaterials.length / materialsPerPage);
-  const paginatedMaterials = filteredMaterials.slice(
-    (currentMaterialPage - 1) * materialsPerPage,
-    currentMaterialPage * materialsPerPage
-  );
+    // Skip debounce on initial load (when search is empty and page is 1)
+    const isInitialLoad = yarnSearchQuery === '' && currentYarnPage === 1;
+    const delay = isInitialLoad ? 0 : 500;
+    
+    const timeoutId = setTimeout(() => {
+      fetchYarnCatalogs();
+    }, delay);
 
-  const handleMaterialSearch = (query: string) => {
-    setMaterialSearchQuery(query);
-    setCurrentMaterialPage(1); // Reset to first page when search changes
-  };
+    return () => clearTimeout(timeoutId);
+  }, [yarnSearchQuery, currentYarnPage]);
 
-  const handleMaterialPageChange = (page: number) => {
-    setCurrentMaterialPage(page);
-  };
-
-  const handleMaterialSelect = (material: RawMaterial) => {
-    if (selectedMaterialIndex !== null) {
-      const newBomItems = [...bomItems];
-      newBomItems[selectedMaterialIndex] = {
-        ...newBomItems[selectedMaterialIndex],
-        materialId: material.id,
-        materialName: material?.name || material?.itemName || '',
-        materialUnit: material?.unit
-      };
-      setBomItems(newBomItems);
-    }
-    setIsMaterialModalOpen(false);
-    setSelectedMaterialIndex(null);
-    setMaterialSearchQuery('');
-    setCurrentMaterialPage(1);
-  };
-
-  const openMaterialModal = (index: number) => {
-    setSelectedMaterialIndex(index);
-    setIsMaterialModalOpen(true);
+  const handleYarnSearch = (query: string) => {
+    setYarnSearchQuery(query);
+    setCurrentYarnPage(1); // Reset to first page when search changes
   };
 
   const handleAddBomItem = () => {
-    setBomItems([...bomItems, { materialId: '', quantity: 0 }]);
+    setBomItems([...bomItems, { yarnCatalogId: '', yarnName: '', quantity: 0 }]);
   };
 
-  const handleBomItemChange = (index: number, field: 'materialId' | 'quantity', value: string | number) => {
+  const handleBomItemChange = (index: number, field: 'yarnCatalogId' | 'quantity', value: string | number) => {
     const newBomItems = [...bomItems];
-    if (field === 'materialId') {
-      const selectedMaterial = rawMaterials.find(m => m.id === value);
+    if (field === 'yarnCatalogId') {
+      const selectedYarn = yarnCatalogs.find(y => y.id === value);
       newBomItems[index] = {
         ...newBomItems[index],
-        materialId: value.toString(),
-        materialName: selectedMaterial?.name || selectedMaterial?.itemName || '',
-        materialUnit: selectedMaterial?.unit || ''
+        yarnCatalogId: value.toString(),
+        yarnName: selectedYarn?.yarnName || ''
       };
     } else if (field === 'quantity') {
       newBomItems[index] = {
         ...newBomItems[index],
-        quantity: typeof value === 'string' ? parseInt(value, 10) : value
+        quantity: typeof value === 'string' ? parseFloat(value) : value
       };
     }
     setBomItems(newBomItems);
@@ -357,9 +322,10 @@ const AddProductPage = () => {
 
         // BOM
         bom: bomItems
-          .filter(item => item.materialId && item.quantity > 0)
+          .filter(item => item.yarnCatalogId && item.quantity > 0)
           .map(item => ({
-            materialId: item.materialId,
+            yarnCatalogId: item.yarnCatalogId,
+            yarnName: item.yarnName,
             quantity: item.quantity
           })),
 
@@ -433,7 +399,7 @@ const AddProductPage = () => {
                           <ul className="list-disc list-inside space-y-1 text-gray-700">
                             <li><strong>General Information:</strong> Set basic product details like name, codes, category, and description</li>
                             <li><strong>Product Attributes:</strong> Define custom attributes and their values for the product</li>
-                            <li><strong>Bill of Materials (BOM):</strong> Specify raw materials and quantities required for production</li>
+                            <li><strong>Bill of Materials (BOM):</strong> Specify yarn catalogs and quantities required for production</li>
                             <li><strong>Manufacturing Processes:</strong> Define the production processes and their sequence</li>
                             <li><strong>Image Upload:</strong> Add product images for visual reference</li>
                           </ul>
@@ -444,7 +410,7 @@ const AddProductPage = () => {
                           <ul className="list-disc list-inside space-y-1 text-gray-700">
                             <li><strong>General:</strong> Basic product information, codes, category, and description</li>
                             <li><strong>Attributes:</strong> Custom product attributes with predefined values</li>
-                            <li><strong>BOM:</strong> Raw materials and quantities needed for production</li>
+                            <li><strong>BOM:</strong> Yarn catalogs and quantities needed for production</li>
                             <li><strong>Processes:</strong> Manufacturing processes and their sequence</li>
                           </ul>
                         </div>
@@ -462,7 +428,7 @@ const AddProductPage = () => {
                           <h4 className="font-semibold text-lg mb-2">Tips:</h4>
                           <ul className="list-disc list-inside space-y-1 text-gray-700">
                             <li>Software Code is auto-generated, but you can customize it</li>
-                            <li>Use the search functionality in BOM and Processes tabs to find materials and processes</li>
+                            <li>Use the search functionality in BOM and Processes tabs to find yarn catalogs and processes</li>
                             <li>Attributes are optional but help in product categorization and filtering</li>
                             <li>Save your work frequently to avoid losing data</li>
                           </ul>
@@ -700,16 +666,15 @@ const AddProductPage = () => {
                         className="ti-btn ti-btn-primary"
                         disabled={isLoading}
                       >
-                        <i className="ri-add-line me-2"></i> Add Material
+                        <i className="ri-add-line me-2"></i> Add Yarn
                       </button>
                     </div>
                     <div className="table-responsive">
                       <table className="table whitespace-nowrap table-bordered min-w-full">
                         <thead>
                           <tr className="border-b border-gray-200">
-                            <th className="text-start">Material</th>
-                            <th className="text-start">Unit</th>
-                            <th className="text-start">Quantity</th>
+                            <th className="text-start">Yarn Name</th>
+                            <th className="text-start">Quantity in Grams</th>
                             <th className="text-start">Action</th>
                           </tr>
                         </thead>
@@ -717,30 +682,30 @@ const AddProductPage = () => {
                           {bomItems.map((item, index) => (
                             <tr key={index} className="border-b border-gray-200">
                               <td>
-                                <button
-                                  type="button"
-                                  onClick={() => openMaterialModal(index)}
-                                  className="ti-btn border-gray-300 w-full text-left justify-start hover:bg-gray-100"
+                                <select
+                                  className="form-select"
+                                  value={item.yarnCatalogId}
+                                  onChange={(e) => handleBomItemChange(index, 'yarnCatalogId', e.target.value)}
                                   disabled={isLoading}
                                 >
-                                  {item.materialName ? (
-                                    <span>{item.materialName}</span>
-                                  ) : (
-                                    <span className="text-gray-500">Select Material</span>
-                                  )}
-                                  <i className="ri-arrow-down-s-line ms-auto"></i>
-                                </button>
-                              </td>
-                              <td>
-                                {item.materialUnit || ''}
+                                  <option value="">Select Yarn Catalog</option>
+                                  {yarnCatalogs.map((yarn) => (
+                                    <option key={yarn.id} value={yarn.id}>
+                                      {yarn.yarnName}
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                               <td>
                                 <input
                                   type="number"
+                                  step="0.01"
+                                  min="0"
                                   className="form-control"
                                   value={item.quantity}
                                   onChange={(e) => handleBomItemChange(index, 'quantity', Number(e.target.value))}
-                                  disabled={isLoading}
+                                  disabled={isLoading || !item.yarnCatalogId}
+                                  placeholder="Enter quantity"
                                 />
                               </td>
                               <td>
@@ -757,6 +722,36 @@ const AddProductPage = () => {
                         </tbody>
                       </table>
                     </div>
+                    {totalYarnPages > 1 && (
+                      <div className="flex justify-between items-center mt-4">
+                        <div className="text-sm text-gray-500">
+                          Showing {((currentYarnPage - 1) * yarnsPerPage) + 1} to{' '}
+                          {Math.min(currentYarnPage * yarnsPerPage, totalYarnResults)} of{' '}
+                          {totalYarnResults} yarn catalogs
+                        </div>
+                        <div className="flex space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => setCurrentYarnPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentYarnPage === 1}
+                            className="ti-btn ti-btn-outline-secondary ti-btn-sm"
+                          >
+                            <i className="ri-arrow-left-s-line"></i>
+                          </button>
+                          <span className="px-3 py-2 text-sm text-gray-600">
+                            Page {currentYarnPage} of {totalYarnPages}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCurrentYarnPage(prev => Math.min(prev + 1, totalYarnPages))}
+                            disabled={currentYarnPage === totalYarnPages}
+                            className="ti-btn ti-btn-outline-secondary ti-btn-sm"
+                          >
+                            <i className="ri-arrow-right-s-line"></i>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -845,178 +840,6 @@ const AddProductPage = () => {
         </div>
       </form>
 
-      {/* Material Selection Modal */}
-      {isMaterialModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex justify-between items-center p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold">Select Material</h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMaterialModalOpen(false);
-                  setSelectedMaterialIndex(null);
-                  setMaterialSearchQuery('');
-                  setCurrentMaterialPage(1);
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <i className="ri-close-line text-xl"></i>
-              </button>
-            </div>
-
-            {/* Search Bar */}
-            <div className="p-6 border-b border-gray-200">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search materials..."
-                  value={materialSearchQuery}
-                  onChange={(e) => handleMaterialSearch(e.target.value)}
-                  autoFocus
-                  className="form-control pl-10"
-                />
-                <i className="ri-search-line absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-              </div>
-            </div>
-
-            {/* Materials List */}
-            <div className="flex-1 overflow-y-auto max-h-96">
-              {paginatedMaterials.length > 0 ? (
-                <div className="divide-y divide-gray-200">
-                  {paginatedMaterials.map((material, index) => (
-                    <div
-                      key={material.id}
-                      onClick={() => {
-                        setSelectedMaterialIndex(index);
-                        handleMaterialSelect(material);
-                      }}
-                      className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h2 className="font-medium text-lg text-gray-900">{material.name || material.itemName}</h2>
-                          <p className="text-sm text-gray-700 mt-1">{material.printName}</p>
-                          {material.description && (
-                            <p className="text-sm text-gray-700 mt-1 line-clamp-2">{material.description}</p>
-                          )}
-                        </div>
-                        <div className="text-right ml-4">
-                          <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {material.unit}
-                          </div>
-                          {material.color && (
-                            <div className="text-xs text-gray-500">{material.color}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-8 text-center">
-                  <i className="ri-search-line text-4xl text-gray-300 mb-4"></i>
-                  <p className="text-gray-500">
-                    {materialSearchQuery ? 'No materials found matching your search.' : 'No materials available.'}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Pagination */}
-            {totalMaterialPages >= 1 && (
-              <div className="p-6 border-t border-gray-200">
-                <div className="flex justify-between items-center">
-                  <div className="text-sm text-gray-500">
-                    Showing {((currentMaterialPage - 1) * materialsPerPage) + 1} to{' '}
-                    {Math.min(currentMaterialPage * materialsPerPage, filteredMaterials.length)} of{' '}
-                    {filteredMaterials.length} materials
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => handleMaterialPageChange(currentMaterialPage - 1)}
-                      disabled={currentMaterialPage === 1}
-                      className="ti-btn ti-btn-outline-secondary ti-btn-sm"
-                    >
-                      <i className="ri-arrow-left-s-line"></i>
-                    </button>
-                    
-                    {/* Generate pagination items with ellipsis */}
-                    {(() => {
-                      const pages = [];
-                      const showPages = 5; // Number of page buttons to show
-                      
-                      if (totalMaterialPages <= showPages) {
-                        // Show all pages if total is small
-                        for (let i = 1; i <= totalMaterialPages; i++) {
-                          pages.push(i);
-                        }
-                      } else {
-                        // Always show first page
-                        pages.push(1);
-                        
-                        if (currentMaterialPage > 3) {
-                          pages.push('...');
-                        }
-                        
-                        // Show pages around current page
-                        const start = Math.max(2, currentMaterialPage - 1);
-                        const end = Math.min(totalMaterialPages - 1, currentMaterialPage + 1);
-                        
-                        for (let i = start; i <= end; i++) {
-                          if (i !== 1 && i !== totalMaterialPages) {
-                            pages.push(i);
-                          }
-                        }
-                        
-                        if (currentMaterialPage < totalMaterialPages - 2) {
-                          pages.push('...');
-                        }
-                        
-                        // Always show last page
-                        if (totalMaterialPages > 1) {
-                          pages.push(totalMaterialPages);
-                        }
-                      }
-                      
-                      return pages.map((page, index) => (
-                        <React.Fragment key={index}>
-                          {page === '...' ? (
-                            <span className="px-3 py-2 text-sm text-gray-500">...</span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleMaterialPageChange(page as number)}
-                              className={`ti-btn ti-btn-sm ${
-                                currentMaterialPage === page
-                                  ? 'ti-btn-primary'
-                                  : 'ti-btn-outline-secondary'
-                              }`}
-                            >
-                              {page}
-                            </button>
-                          )}
-                        </React.Fragment>
-                      ));
-                    })()}
-                    
-                    <button
-                      type="button"
-                      onClick={() => handleMaterialPageChange(currentMaterialPage + 1)}
-                      disabled={currentMaterialPage === totalMaterialPages}
-                      className="ti-btn ti-btn-outline-secondary ti-btn-sm"
-                    >
-                      <i className="ri-arrow-right-s-line"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
