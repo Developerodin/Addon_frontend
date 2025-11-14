@@ -49,7 +49,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 				closeMenu();
 			}
 		}
-		mainContent!.addEventListener('click', menuClose);
+		mainContent!.addEventListener('click', (e) => menuClose(e));
 		return () => {
 			window.removeEventListener("resize", menuResizeFn);
 			window.removeEventListener('resize', checkHoriMenu);
@@ -74,7 +74,15 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		}
 	}
 
-	function menuClose() {
+	function menuClose(event?: Event) {
+		// Don't close if click is inside the sidebar
+		if (event && event.target) {
+			const sidebar = document.querySelector(".app-sidebar");
+			const clickedElement = event.target as HTMLElement;
+			if (sidebar && (sidebar.contains(clickedElement) || clickedElement.closest(".app-sidebar"))) {
+				return;
+			}
+		}
 		const theme = store.getState();
 		if (window.innerWidth <= 992) {
 			ThemeChanger({ ...theme, dataToggled: "close" });
@@ -658,7 +666,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 								<path d="M13.293 6.293 7.586 12l5.707 5.707 1.414-1.414L10.414 12l4.293-4.293z"></path>
 							</svg></div>
 
-							<ul className="main-menu" onClick={() => Sideclick()}>
+							<ul className="main-menu" onClick={(e) => { e.stopPropagation(); Sideclick(); }}>
 								{isLoading ? (
 									// Loading skeleton
 									<>
@@ -692,7 +700,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 													</span>
 													: ""}
 												{levelone.type === "link" ?
-													<Link href={levelone.path} className={`side-menu__item ${levelone.selected ? 'active' : ''}`} >
+													<Link href={levelone.path} className={`side-menu__item ${levelone.selected ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); }} >
 													<span className={`hs-tooltip inline-block [--placement:right] leading-none ${local_varaiable?.dataVerticalStyle == 'doublemenu' ? '' : 'hidden'}`}>
 														<button type="button" className="hs-tooltip-toggle  inline-flex justify-center items-center
 																">
