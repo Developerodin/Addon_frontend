@@ -670,17 +670,7 @@ const CataloguingPage = () => {
                               {yarn.blend?.name || (yarn.blend as any)?.brandName || '-'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {yarn.colorFamily ? (
-                                <span className="inline-flex items-center">
-                                  <span 
-                                    className="w-4 h-4 rounded-full mr-2 border border-gray-300"
-                                    style={{ backgroundColor: yarn.colorFamily.colorCode || '#ccc' }}
-                                  ></span>
-                                  {yarn.colorFamily.name || '-'}
-                                </span>
-                              ) : (
-                                '-'
-                              )}
+                              {yarn.colorFamily?.name || '-'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {yarn.gst ? `${yarn.gst}%` : '-'}
