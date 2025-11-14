@@ -487,7 +487,10 @@ const ProcessQCPage = () => {
                       <div className="flex gap-3">
                         <button
                           type="button"
-                          onClick={() => setQcStatus('QC Accepted')}
+                          onClick={() => {
+                            console.log('QC Accepted button clicked');
+                            setQcStatus('QC Accepted');
+                          }}
                           className={`flex-1 ti-btn ${
                             qcStatus === 'QC Accepted'
                               ? 'ti-btn-primary'
@@ -500,7 +503,10 @@ const ProcessQCPage = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setQcStatus('QC Rejected')}
+                          onClick={() => {
+                            console.log('QC Rejected button clicked');
+                            setQcStatus('QC Rejected');
+                          }}
                           className={`flex-1 ti-btn ${
                             qcStatus === 'QC Rejected'
                               ? 'ti-btn-danger'
