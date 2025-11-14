@@ -110,19 +110,6 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
 
   const box = result?.box;
   const message = result?.message;
-  const areAllConesCaptured = useMemo(
-    () =>
-      cones.length > 0 &&
-      cones.every(
-        (cone) =>
-          typeof cone.coneWeight === "number" &&
-          cone.coneWeight > 0 &&
-          typeof cone.tearWeight === "number" &&
-          cone.tearWeight > 0
-      ),
-    [cones]
-  );
-
   const handleConeBarcodeScan = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
 
@@ -229,11 +216,6 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       return;
     }
 
-    if (!areAllConesCaptured) {
-      toast.error("Capture cone and tear weights for all cones before printing");
-      return;
-    }
-
     const printWindow = window.open("", "_blank");
 
     if (!printWindow) {
@@ -300,15 +282,6 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               <div class="barcode-item">
                 <div class="cone-info">Cone Barcode</div>
                 <div class="barcode-value">${cone.barcode}</div>
-                <div class="cone-info">Weight: ${formatWeight(
-                  cone.coneWeight
-                )} kg</div>
-                <div class="cone-info">Tear Weight: ${formatWeight(
-                  cone.tearWeight
-                )} kg</div>
-                <div class="cone-info">Issue Status: ${formatStatus(
-                  cone.issueStatus
-                )}</div>
               </div>`
               )
               .join("")}
@@ -385,12 +358,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                 <button
                   type="button"
                   onClick={handlePrintCones}
-                  className={`ti-btn ${
-                    areAllConesCaptured
-                      ? "ti-btn-outline-primary"
-                      : "ti-btn-outline-secondary cursor-not-allowed opacity-60"
-                  }`}
-                  disabled={!areAllConesCaptured}
+                  className="ti-btn ti-btn-outline-primary"
                 >
                   <i className="ri-printer-line me-2"></i>
                   Print Cone Barcodes
@@ -509,11 +477,6 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                     />
                   </div>
                 </div>
-              )}
-              {!areAllConesCaptured && (
-                <p className="text-xs text-gray-500 text-right mt-2">
-                  Capture cone and tear weights for every cone to enable printing.
-                </p>
               )}
             </div>
           </div>
@@ -694,7 +657,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                               ) : activeConeId === cone._id ? (
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-primary ti-btn-sm whitespace-nowrap"
+                                  className="ti-btn ti-btn-primary whitespace-nowrap flex items-center justify-center gap-2 px-5 py-2 text-sm min-w-[110px]"
                                   onClick={() => handleUpdateCone(cone)}
                                 >
                                   <i className="ri-save-line me-1"></i>
@@ -703,7 +666,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                               ) : (
                                 <button
                                   type="button"
-                                  className="ti-btn ti-btn-outline-primary ti-btn-sm whitespace-nowrap"
+                                  className="ti-btn ti-btn-outline-primary whitespace-nowrap flex items-center justify-center gap-2 px-5 py-2 text-sm min-w-[110px]"
                                   onClick={() => setActiveConeId(cone._id)}
                                 >
                                   Edit
