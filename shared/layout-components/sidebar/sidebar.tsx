@@ -18,20 +18,73 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 
 	const path = usePathname()	
 
-	function closeMenu() {
+	function closeMenu(keepSelectedActive = false) {
+		console.log('🔴 closeMenu() called', { 
+			keepSelectedActive, 
+			stack: new Error().stack?.split('\n').slice(0, 8).join('\n')
+		});
 		const closeMenudata = (items: any) => {
 			items?.forEach((item: any) => {
-				item.active = false;
-				closeMenudata(item.children);
+				// Don't close menus that are selected or have selected children
+				if (keepSelectedActive && (item.selected || hasSelectedChild(item))) {
+					console.log('✅ Keeping menu open:', item.title, 'selected:', item.selected, 'hasSelectedChild:', hasSelectedChild(item));
+					// Keep this menu open - don't set active to false
+					// But still process children
+					if (item.children) {
+						closeMenudata(item.children);
+					}
+					return;
+				}
+				// Only close if not selected and doesn't have selected children
+				if (!item.selected && !hasSelectedChild(item)) {
+					console.log('❌ Closing menu:', item.title, 'active:', item.active);
+					item.active = false;
+					if (item.children) {
+						closeMenudata(item.children);
+					}
+				} else {
+					console.log('⚠️ Skipping close for:', item.title, 'selected:', item.selected);
+					if (item.children) {
+						closeMenudata(item.children);
+					}
+				}
 			});
 		};
-		closeMenudata(filteredMenuItems);
+		closeMenudata(menuitems.length > 0 ? menuitems : filteredMenuItems);
 		setMenuitems((arr: any) => [...arr]);
+		console.log('🔴 closeMenu() completed');
+	}
+
+	function hasSelectedChild(item: any): boolean {
+		if (!item.children) return false;
+		return item.children.some((child: any) => child.selected || hasSelectedChild(child));
 	}
 
 	useEffect(() => {
-		console.log('Sidebar - filteredMenuItems:', filteredMenuItems);
-		console.log('Sidebar - filteredMenuItems length:', filteredMenuItems?.length);
+		console.log('🔄 Menu items filtered, updating state', { 
+			filteredLength: filteredMenuItems?.length,
+			currentLength: menuitems?.length 
+		});
+		// Preserve active/selected state when menu items are re-filtered
+		if (filteredMenuItems && menuitems.length > 0) {
+			const preserveMenuState = (newItems: any[], oldItems: any[]) => {
+				newItems.forEach((newItem: any) => {
+					const oldItem = oldItems.find((old: any) => 
+						old.path === newItem.path || old.title === newItem.title
+					);
+					if (oldItem) {
+						// Preserve active and selected state
+						newItem.active = oldItem.active;
+						newItem.selected = oldItem.selected;
+						if (newItem.children && oldItem.children) {
+							preserveMenuState(newItem.children, oldItem.children);
+						}
+					}
+				});
+			};
+			preserveMenuState(filteredMenuItems, menuitems);
+			console.log('✅ Preserved menu state after filtering');
+		}
 		setMenuitems(filteredMenuItems || []);
 	}, [filteredMenuItems]);
 
@@ -46,10 +99,16 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 				ThemeChanger({ ...theme, dataToggled: "close" });
 			}
 			else if (document.documentElement.getAttribute('data-nav-layout') == 'horizontal') {
-				closeMenu();
+				closeMenu(true); // Keep selected menus open
 			}
 		}
-		mainContent!.addEventListener('click', (e) => menuClose(e));
+		mainContent!.addEventListener('click', (e) => {
+			console.log('🖱️ Main content clicked', {
+				target: (e.target as HTMLElement)?.tagName,
+				className: (e.target as HTMLElement)?.className
+			});
+			menuClose(e);
+		});
 		return () => {
 			window.removeEventListener("resize", menuResizeFn);
 			window.removeEventListener('resize', checkHoriMenu);
@@ -75,25 +134,65 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	}
 
 	function menuClose(event?: Event) {
-		// Don't close if click is inside the sidebar
+		console.log('🟡 menuClose() called', { 
+			hasEvent: !!event, 
+			target: event?.target,
+			tagName: (event?.target as HTMLElement)?.tagName,
+			className: (event?.target as HTMLElement)?.className,
+			stack: new Error().stack?.split('\n').slice(0, 5).join('\n')
+		});
+		// Don't close if click is inside the sidebar or on menu items/links
 		if (event && event.target) {
 			const sidebar = document.querySelector(".app-sidebar");
 			const clickedElement = event.target as HTMLElement;
-			if (sidebar && (sidebar.contains(clickedElement) || clickedElement.closest(".app-sidebar"))) {
+			const isInSidebar = sidebar?.contains(clickedElement);
+			const isInAppSidebar = clickedElement.closest(".app-sidebar");
+			const isMenuItem = clickedElement.closest(".side-menu__item");
+			const isLink = clickedElement.closest("a[href]") || clickedElement.tagName === "A";
+			
+			console.log('🔍 Click detection:', {
+				isInSidebar,
+				isInAppSidebar: !!isInAppSidebar,
+				isMenuItem: !!isMenuItem,
+				isLink,
+				clickedElement: clickedElement.tagName
+			});
+			
+			if (sidebar && (
+				isInSidebar || 
+				isInAppSidebar ||
+				isMenuItem ||
+				isLink
+			)) {
+				console.log('✅ Preventing menu close - click is inside sidebar/menu');
 				return;
 			}
 		}
 		const theme = store.getState();
+		console.log('📊 Theme state:', {
+			dataNavLayout: theme.dataNavLayout,
+			dataNavStyle: theme.dataNavStyle,
+			dataToggled: theme.dataToggled,
+			windowWidth: window.innerWidth
+		});
+		// Only close sidebar on mobile when clicking outside
 		if (window.innerWidth <= 992) {
+			console.log('📱 Mobile: Closing sidebar');
 			ThemeChanger({ ...theme, dataToggled: "close" });
 		}
 		const overlayElement = document.querySelector("#responsive-overlay") as HTMLElement | null;
 		if (overlayElement) {
 			overlayElement.classList.remove("active");
 		}
-		if (theme.dataNavLayout == "horizontal" || theme.dataNavStyle == "menu-click" || theme.dataNavStyle == "icon-click") {
-			closeMenu();
+		// Only close menu items for horizontal layout with click styles, NOT for vertical
+		// NEVER close menus for vertical layout - they should stay open
+		if (theme.dataNavLayout == "horizontal" && (theme.dataNavStyle == "menu-click" || theme.dataNavStyle == "icon-click")) {
+			console.log('🟠 Horizontal layout: Calling closeMenu(true)');
+			closeMenu(true); // Keep selected menus open
+		} else {
+			console.log('✅ Vertical layout: NOT closing menus');
 		}
+		// For vertical layout, never close menus when clicking outside
 	}
 
 	const WindowPreSize = typeof window !== 'undefined' ? [window.innerWidth] : [];
@@ -349,11 +448,18 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	let hasParentLevel = 0;
 
 	function setSubmenu(event: any, targetObject: any, menuItems = menuitems) {
+		console.log('🟣 setSubmenu() called', {
+			hasEvent: !!event,
+			targetTitle: targetObject?.title,
+			targetPath: targetObject?.path,
+			menuItemsLength: menuItems?.length
+		});
 		const theme = store.getState();
 		if ((window.screen.availWidth <= 992 || theme.dataNavStyle != "icon-hover") && (window.screen.availWidth <= 992 || theme.dataNavStyle != "menu-hover")) {
 		if (!event?.ctrlKey) {
 			for (const item of menuItems) {
 				if (item === targetObject) {
+					console.log('✅ Setting menu item active:', item.title);
 					item.active = true;
 					item.selected = true;
 					setMenuAncestorsActive(item);
@@ -370,6 +476,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		}
 	}
 		setMenuitems((arr: any) => [...arr]);
+		console.log('🟣 setSubmenu() completed');
 	}
 
 	function getParentObject(obj: any, childObject: any) {
@@ -429,20 +536,38 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	}
 
 	function setMenuUsingUrl(currentPath: any) {
+		console.log('🔵 setMenuUsingUrl() called', { currentPath });
 		hasParent = false;
 		hasParentLevel = 1;
 		// Check current url and trigger the setSidemenu method to active the menu.
 		const setSubmenuRecursively = (items: any) => {
-
 			items?.forEach((item: any) => {
 				if (item.path == '') { }
 				else if (item.path === currentPath) {
+					console.log('✅ Found matching path:', item.title, item.path);
+					// Mark this item as selected and active, and keep parent menus open
+					item.selected = true;
+					item.active = true;
 					setSubmenu(null, item);
+				} else {
+					// Only reset selected state - don't reset active if it's a parent
+					item.selected = false;
 				}
-				setSubmenuRecursively(item.children);
+				if (item.children) {
+					setSubmenuRecursively(item.children);
+					// If any child is selected or active, keep this parent menu open
+					const hasSelectedChild = item.children.some((child: any) => child.selected || child.active);
+					if (hasSelectedChild) {
+						console.log('✅ Keeping parent menu open:', item.title);
+						item.active = true;
+					}
+				}
 			});
 		};
-		setSubmenuRecursively(menuitems);
+		// Use current menuitems state, not filteredMenuItems
+		setSubmenuRecursively(menuitems.length > 0 ? menuitems : filteredMenuItems);
+		setMenuitems((arr: any) => [...arr]);
+		console.log('🔵 setMenuUsingUrl() completed');
 	}
 	const [previousUrl, setPreviousUrl] = useState("/");
 
@@ -632,7 +757,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 					currentPath = !currentPath ? '/dashboard/ecommerce' : currentPath;
 					setMenuUsingUrl(currentPath);
 				} else {
-					closeMenu();
+					closeMenu(true); // Keep selected menus open
 				}
 			}
 		}
@@ -647,7 +772,14 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		<Fragment>
 			 
 			<div id="responsive-overlay"
-				onClick={() => { menuClose(); }}></div>
+				onClick={(e) => { 
+					// Don't close if clicking on menu items
+					const target = e.target as HTMLElement;
+					if (target.closest(".app-sidebar") || target.closest(".side-menu__item") || target.closest("a[href]")) {
+						return;
+					}
+					menuClose(e.nativeEvent); 
+				}}></div>
 			<aside className="app-sidebar" id="sidebar" onMouseOver={() => Onhover()}
 				onMouseLeave={() => Outhover()}>
 				<div className="main-sidebar-header">
@@ -700,7 +832,38 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 													</span>
 													: ""}
 												{levelone.type === "link" ?
-													<Link href={levelone.path} className={`side-menu__item ${levelone.selected ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); }} >
+													<Link href={levelone.path} className={`side-menu__item ${levelone.selected ? 'active' : ''}`} onClick={(e) => { 
+														console.log('🟢 Top-level menu link clicked:', {
+															path: levelone.path,
+															title: levelone.title,
+															currentSelected: levelone.selected,
+															currentActive: levelone.active,
+															windowWidth: window.innerWidth
+														});
+														e.stopPropagation(); 
+														// Mark this item as selected
+														levelone.selected = true;
+														levelone.active = true;
+														setMenuitems((arr: any) => [...arr]);
+														console.log('✅ Set top-level menu item state:', {
+															selected: levelone.selected,
+															active: levelone.active
+														});
+														// Only close menu on mobile after navigation
+														if (window.innerWidth <= 992) {
+															console.log('📱 Mobile: Will close menu after navigation');
+															setTimeout(() => {
+																const theme = store.getState();
+																ThemeChanger({ ...theme, dataToggled: "close" });
+																const overlay = document.querySelector("#responsive-overlay");
+																if (overlay) {
+																	overlay.classList.remove("active");
+																}
+															}, 100);
+														} else {
+															console.log('🖥️ Desktop: Menu should stay open');
+														}
+													}} >
 													<span className={`hs-tooltip inline-block [--placement:right] leading-none ${local_varaiable?.dataVerticalStyle == 'doublemenu' ? '' : 'hidden'}`}>
 														<button type="button" className="hs-tooltip-toggle  inline-flex justify-center items-center
 																">

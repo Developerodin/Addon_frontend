@@ -2,6 +2,7 @@ import { ThemeChanger } from "@/shared/redux/action";
 import Link from "next/link";
 import { Fragment } from "react";
 import { connect } from "react-redux";
+import store from "@/shared/redux/store";
 
 function Menuloop({ local_varaiable ,MenuItems, toggleSidemenu, level , HoverToggleInnerMenuFn}: any) {
 
@@ -40,7 +41,43 @@ function Menuloop({ local_varaiable ,MenuItems, toggleSidemenu, level , HoverTog
         {MenuItems.children.map((firstlevel: any, index:any) =>
           <li className={`${firstlevel.menutitle ? 'slide__category' : ''} ${firstlevel?.type == 'empty' ? 'slide' : ''} ${firstlevel?.type == 'link' ? 'slide' : ''} ${firstlevel?.type == 'sub' ? 'slide has-sub' : ''} ${firstlevel?.active ? 'open' : ''} ${firstlevel?.selected ? 'active' : ''}`} key={index}>
             {firstlevel.type === "link" ?
-              <Link href={firstlevel.path} className={`side-menu__item ${firstlevel.selected ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); }}>{firstlevel.icon}
+              <Link href={firstlevel.path} className={`side-menu__item ${firstlevel.selected ? 'active' : ''}`} onClick={(e) => { 
+                console.log('🟢 Menu link clicked:', {
+                  path: firstlevel.path,
+                  title: firstlevel.title,
+                  currentSelected: firstlevel.selected,
+                  currentActive: firstlevel.active,
+                  parentActive: MenuItems?.active,
+                  windowWidth: window.innerWidth
+                });
+                e.stopPropagation(); 
+                // Mark this item as selected and keep parent menu open
+                firstlevel.selected = true;
+                firstlevel.active = true;
+                if (MenuItems) {
+                  MenuItems.active = true;
+                  console.log('✅ Set parent menu active:', MenuItems.title);
+                }
+                console.log('✅ Set menu item state:', {
+                  selected: firstlevel.selected,
+                  active: firstlevel.active,
+                  parentActive: MenuItems?.active
+                });
+                // Only close menu on mobile after navigation
+                if (window.innerWidth <= 992) {
+                  console.log('📱 Mobile: Will close menu after navigation');
+                  setTimeout(() => {
+                    const theme = store.getState();
+                    ThemeChanger({ ...theme, dataToggled: "close" });
+                    const overlay = document.querySelector("#responsive-overlay");
+                    if (overlay) {
+                      overlay.classList.remove("active");
+                    }
+                  }, 100);
+                } else {
+                  console.log('🖥️ Desktop: Menu should stay open');
+                }
+              }}>{firstlevel.icon}
                 <span className=""> {firstlevel.title} {firstlevel.badgetxt ? (<span className={firstlevel.class}> {firstlevel.badgetxt}</span>
                 ) : (
                   ""
