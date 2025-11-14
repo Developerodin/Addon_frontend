@@ -270,7 +270,7 @@ class YarnPurchaseOrderService {
       'submitted to supplier': 'submitted_to_supplier',
       'in transit': 'in_transit',
       'delivered': 'delivered',
-      'rejected': 'rejected',
+      'rejected': 'po_rejected',
       'QC pending': 'qc_pending',
       'partially delivered': 'partially_delivered',
       'stocked': 'stocked',

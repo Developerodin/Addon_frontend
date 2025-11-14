@@ -59,7 +59,10 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     'rejected': 'rejected',
     'qc_pending': 'QC pending',
     'partially_delivered': 'partially delivered',
-    'stocked': 'stocked'
+    'stocked': 'stocked',
+    'goods_received': 'goods received',
+    'po_accepted': 'po_accepted',
+    'po_rejected': 'rejected'
   };
   return statusMap[statusCode] || 'submitted to supplier';
 };
@@ -70,10 +73,13 @@ const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
     'submitted to supplier': 'submitted_to_supplier',
     'in transit': 'in_transit',
     'delivered': 'delivered',
-    'rejected': 'rejected',
+    'rejected': 'po_rejected',
     'QC pending': 'qc_pending',
     'partially delivered': 'partially_delivered',
-    'stocked': 'stocked'
+    'stocked': 'stocked',
+    'goods received': 'goods_received',
+    'po_accepted': 'po_accepted',
+    'po_rejected': 'po_rejected'
   };
   return statusMap[status] || 'submitted_to_supplier';
 };
@@ -180,7 +186,7 @@ const PurchasePage = () => {
         params.end_date = end.toISOString();
       }
 
-      // Always filter by submitted to supplier status
+      // Filter by selected status
       params.status_code = convertStatusToAPI(statusFilter as PurchaseOrderStatus);
 
       const response = await yarnPurchaseOrderService.getPurchaseOrders(params);
@@ -578,6 +584,7 @@ const PurchasePage = () => {
                       onChange={(e) => setStatusFilter(e.target.value)}
                     >
                       <option value="submitted to supplier">Submitted to Supplier</option>
+                      <option value="rejected">Rejected</option>
                     </select>
                   <button className="ti-btn ti-btn-light">
                     <i className="ri-download-line me-1"></i>
