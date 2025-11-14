@@ -36,6 +36,12 @@ export interface GenerateConesResponse {
   cones: YarnCone[];
 }
 
+export interface UpdateYarnConePayload {
+  coneWeight?: number;
+  tearWeight?: number;
+  coneStorageId?: string;
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === "undefined") return null;
 
@@ -116,6 +122,21 @@ class YarnConeService {
     return this.makeRequest<GenerateConesResponse>(`/generate-by-box/${boxId}`, {
       method: "POST",
       body: hasOverrides ? JSON.stringify(overrides) : JSON.stringify({}),
+    });
+  }
+
+  async updateYarnCone(coneId: string, payload: UpdateYarnConePayload): Promise<YarnCone> {
+    if (!coneId) {
+      throw new Error("Cone ID is required to update cone data");
+    }
+
+    if (!payload || Object.keys(payload).length === 0) {
+      throw new Error("Update payload is required");
+    }
+
+    return this.makeRequest<YarnCone>(`/${coneId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     });
   }
 }

@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import Seo from "@/shared/layout-components/seo/seo";
-import {
+import yarnConeService, {
   GenerateConesResponse,
   YarnCone,
 } from "@/shared/services/yarnConeService";
+
 
 const getProcessedBoxStorageKey = (boxId: string) =>
   `processedBoxResult:${boxId}`;
@@ -39,8 +40,39 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   const router = useRouter();
   const [result, setResult] = useState<GenerateConesResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [cones, setCones] = useState<YarnCone[]>([]);
+  const [coneInputs, setConeInputs] = useState<
+    Record<string, { coneWeight: string; tearWeight: string; coneStorageId: string }>
+  >({});
+  const [activeConeId, setActiveConeId] = useState<string | null>(null);
+  const [barcodeScanValue, setBarcodeScanValue] = useState("");
+  const [isUpdatingConeId, setIsUpdatingConeId] = useState<string | null>(null);
 
   const boxIdParam = useMemo(() => decodeURIComponent(params.boxId), [params]);
+  const storageKey = useMemo(
+    () => getProcessedBoxStorageKey(boxIdParam),
+    [boxIdParam]
+  );
+
+  const buildConeInputs = useCallback((conesList: YarnCone[]) => {
+    const formatted: Record<
+      string,
+      { coneWeight: string; tearWeight: string; coneStorageId: string }
+    > = {};
+
+    const formatInitialValue = (value?: number) =>
+      typeof value === "number" && value > 0 ? value.toString() : "";
+
+    conesList.forEach((cone) => {
+      formatted[cone._id] = {
+        coneWeight: formatInitialValue(cone.coneWeight),
+        tearWeight: formatInitialValue(cone.tearWeight),
+        coneStorageId: cone.coneStorageId || "",
+      };
+    });
+
+    return formatted;
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -48,7 +80,6 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       return;
     }
 
-    const storageKey = getProcessedBoxStorageKey(boxIdParam);
     const stored = sessionStorage.getItem(storageKey);
 
     if (!stored) {
@@ -63,6 +94,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     try {
       const parsed = JSON.parse(stored) as GenerateConesResponse;
       setResult(parsed);
+
+      const parsedCones = parsed.cones ?? [];
+      setCones(parsedCones);
+      setConeInputs(buildConeInputs(parsedCones));
     } catch (error) {
       console.error("Failed to parse processed box details:", error);
       toast.error("Failed to load processed box details");
@@ -71,15 +106,131 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [boxIdParam, router]);
+  }, [buildConeInputs, router, storageKey]);
 
   const box = result?.box;
-  const cones = result?.cones ?? [];
   const message = result?.message;
+  const areAllConesCaptured = useMemo(
+    () =>
+      cones.length > 0 &&
+      cones.every(
+        (cone) =>
+          typeof cone.coneWeight === "number" &&
+          cone.coneWeight > 0 &&
+          typeof cone.tearWeight === "number" &&
+          cone.tearWeight > 0
+      ),
+    [cones]
+  );
+
+  const handleConeBarcodeScan = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+
+    const scannedValue = barcodeScanValue.trim();
+
+    if (!scannedValue) {
+      toast.error("Please scan a cone barcode");
+      return;
+    }
+
+    const foundCone = cones.find(
+      (cone) =>
+        cone.barcode.toLowerCase() === scannedValue.toLowerCase() ||
+        cone._id.toLowerCase() === scannedValue.toLowerCase()
+    );
+
+    if (!foundCone) {
+      toast.error("Cone barcode not found");
+      setBarcodeScanValue("");
+      return;
+    }
+
+    setActiveConeId(foundCone._id);
+    setBarcodeScanValue("");
+    toast.success(`Cone ${foundCone.barcode} activated`);
+  };
+
+  const handleConeInputChange = (
+    coneId: string,
+    field: "coneWeight" | "tearWeight" | "coneStorageId",
+    value: string
+  ) => {
+    setConeInputs((prev) => ({
+      ...prev,
+      [coneId]: {
+        ...(prev[coneId] ?? { coneWeight: "", tearWeight: "", coneStorageId: "" }),
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleUpdateCone = async (cone: YarnCone) => {
+    const coneId = cone._id;
+    const inputs = coneInputs[coneId];
+
+    if (!inputs) {
+      toast.error("Cone inputs not found");
+      return;
+    }
+
+    const coneWeight = parseFloat(inputs.coneWeight);
+    const tearWeight = parseFloat(inputs.tearWeight);
+    const coneStorageId = inputs.coneStorageId.trim();
+
+    if (!Number.isFinite(coneWeight) || coneWeight <= 0) {
+      toast.error("Enter valid cone weight");
+      return;
+    }
+
+    if (!Number.isFinite(tearWeight) || tearWeight <= 0) {
+      toast.error("Enter valid tear weight");
+      return;
+    }
+
+    setIsUpdatingConeId(coneId);
+
+    try {
+      const updatedCone = await yarnConeService.updateYarnCone(coneId, {
+        coneWeight,
+        tearWeight,
+        coneStorageId: coneStorageId || undefined,
+      });
+
+      setCones((prev) =>
+        prev.map((c) =>
+          c._id === coneId ? { ...c, coneWeight, tearWeight, coneStorageId } : c
+        )
+      );
+
+      setActiveConeId(null);
+      toast.success("Cone weights updated");
+
+      setConeInputs((prev) => ({
+        ...prev,
+        [coneId]: {
+          coneWeight: updatedCone.coneWeight.toString(),
+          tearWeight: updatedCone.tearWeight.toString(),
+          coneStorageId: updatedCone.coneStorageId || "",
+        },
+      }));
+    } catch (error) {
+      console.error("Failed to update cone weights:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update cone weights"
+      );
+    } finally {
+      setIsUpdatingConeId(null);
+    }
+  };
 
   const handlePrintCones = () => {
     if (!box || cones.length === 0) {
       toast.error("No cones available to print");
+      return;
+    }
+
+    if (!areAllConesCaptured) {
+      toast.error("Capture cone and tear weights for all cones before printing");
       return;
     }
 
@@ -151,6 +302,9 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                 <div class="barcode-value">${cone.barcode}</div>
                 <div class="cone-info">Weight: ${formatWeight(
                   cone.coneWeight
+                )} kg</div>
+                <div class="cone-info">Tear Weight: ${formatWeight(
+                  cone.tearWeight
                 )} kg</div>
                 <div class="cone-info">Issue Status: ${formatStatus(
                   cone.issueStatus
@@ -231,7 +385,12 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                 <button
                   type="button"
                   onClick={handlePrintCones}
-                  className="ti-btn ti-btn-outline-primary"
+                  className={`ti-btn ${
+                    areAllConesCaptured
+                      ? "ti-btn-outline-primary"
+                      : "ti-btn-outline-secondary cursor-not-allowed opacity-60"
+                  }`}
+                  disabled={!areAllConesCaptured}
                 >
                   <i className="ri-printer-line me-2"></i>
                   Print Cone Barcodes
@@ -351,6 +510,11 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                   </div>
                 </div>
               )}
+              {!areAllConesCaptured && (
+                <p className="text-xs text-gray-500 text-right mt-2">
+                  Capture cone and tear weights for every cone to enable printing.
+                </p>
+              )}
             </div>
           </div>
 
@@ -362,6 +526,24 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               </h3>
             </div>
             <div className="box-body">
+              {cones.length > 0 && (
+                <div className="mb-4">
+                  <label className="form-label">Scan Cone Barcode</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Scan cone barcode to activate row"
+                    value={barcodeScanValue}
+                    onChange={(e) => setBarcodeScanValue(e.target.value)}
+                    onKeyDown={handleConeBarcodeScan}
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Scan a cone barcode, update cone & tear weights, then press
+                    Enter to submit.
+                  </p>
+                </div>
+              )}
               {cones.length === 0 ? (
                 <div className="text-center py-8 text-gray-500 text-sm">
                   No cones were generated for this box.
@@ -378,10 +560,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                           Cone Weight (kg)
                         </th>
                         <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Issue Status
+                          Tear Weight (kg)
                         </th>
                         <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Return Status
+                          Issue Status
                         </th>
                         <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Storage Location
@@ -389,20 +571,81 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                         <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Created At
                         </th>
+                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
                       {cones.map((cone: YarnCone) => (
-                        <tr key={cone._id} className="hover:bg-gray-50">
+                        <tr
+                          key={cone._id}
+                          className={`hover:bg-gray-50 ${
+                            activeConeId === cone._id
+                              ? "bg-blue-50 border-2 border-blue-400"
+                              : ""
+                          }`}
+                        >
                           <td className="border border-gray-300 px-4 py-3">
                             <span className="text-sm text-gray-900 font-mono">
                               {cone.barcode}
                             </span>
                           </td>
                           <td className="border border-gray-300 px-4 py-3">
-                            <span className="text-sm text-gray-900">
-                              {formatWeight(cone.coneWeight)}
-                            </span>
+                            {activeConeId === cone._id ? (
+                              <input
+                                type="number"
+                                step="0.001"
+                                className="form-control text-sm"
+                                value={coneInputs[cone._id]?.coneWeight || ""}
+                                onChange={(e) =>
+                                  handleConeInputChange(
+                                    cone._id,
+                                    "coneWeight",
+                                    e.target.value
+                                  )
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    handleUpdateCone(cone);
+                                  }
+                                }}
+                                placeholder="0.0000"
+                              />
+                            ) : (
+                              <span className="text-sm text-gray-900">
+                                {formatWeight(cone.coneWeight)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="border border-gray-300 px-4 py-3">
+                            {activeConeId === cone._id ? (
+                              <input
+                                type="number"
+                                step="0.001"
+                                className="form-control text-sm"
+                                value={coneInputs[cone._id]?.tearWeight || ""}
+                                onChange={(e) =>
+                                  handleConeInputChange(
+                                    cone._id,
+                                    "tearWeight",
+                                    e.target.value
+                                  )
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    handleUpdateCone(cone);
+                                  }
+                                }}
+                                placeholder="0.0000"
+                              />
+                            ) : (
+                              <span className="text-sm text-gray-900">
+                                {formatWeight(cone.tearWeight)}
+                              </span>
+                            )}
                           </td>
                           <td className="border border-gray-300 px-4 py-3">
                             <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 capitalize">
@@ -410,19 +653,63 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                             </span>
                           </td>
                           <td className="border border-gray-300 px-4 py-3">
-                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 capitalize">
-                              {formatStatus(cone.returnStatus)}
-                            </span>
-                          </td>
-                          <td className="border border-gray-300 px-4 py-3">
-                            <span className="text-sm text-gray-900">
-                              {cone.coneStorageId || "-"}
-                            </span>
+                            {activeConeId === cone._id ? (
+                              <input
+                                type="text"
+                                className="form-control text-sm"
+                                value={coneInputs[cone._id]?.coneStorageId || ""}
+                                onChange={(e) =>
+                                  handleConeInputChange(
+                                    cone._id,
+                                    "coneStorageId",
+                                    e.target.value
+                                  )
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    handleUpdateCone(cone);
+                                  }
+                                }}
+                                placeholder="Enter storage ID"
+                              />
+                            ) : (
+                              <span className="text-sm text-gray-900">
+                                {cone.coneStorageId || "-"}
+                              </span>
+                            )}
                           </td>
                           <td className="border border-gray-300 px-4 py-3">
                             <span className="text-sm text-gray-900">
                               {formatDateTime(cone.createdAt)}
                             </span>
+                          </td>
+                          <td className="border border-gray-300 px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-2 min-w-[140px]">
+                              {isUpdatingConeId === cone._id ? (
+                                <div className="flex items-center gap-2 text-sm text-primary whitespace-nowrap">
+                                  <i className="ri-loader-4-line animate-spin"></i>
+                                  <span>Saving...</span>
+                                </div>
+                              ) : activeConeId === cone._id ? (
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-primary ti-btn-sm whitespace-nowrap"
+                                  onClick={() => handleUpdateCone(cone)}
+                                >
+                                  <i className="ri-save-line me-1"></i>
+                                  Save
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="ti-btn ti-btn-outline-primary ti-btn-sm whitespace-nowrap"
+                                  onClick={() => setActiveConeId(cone._id)}
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
