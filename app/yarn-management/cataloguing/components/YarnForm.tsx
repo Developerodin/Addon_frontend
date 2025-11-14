@@ -302,7 +302,7 @@ const YarnForm: React.FC<YarnFormProps> = ({
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Yarn Name (Optional - auto-generated if not provided) */}
-          <div>
+          {/* <div>
             <label className="form-label">
               Yarn Name <span className="text-xs text-gray-400">(Optional - auto-generated if not provided)</span>
             </label>
@@ -315,7 +315,7 @@ const YarnForm: React.FC<YarnFormProps> = ({
               placeholder="Leave empty for auto-generation"
               disabled={isLoadingOptions}
             />
-          </div>
+          </div> */}
 
           {/* Yarn Type */}
           <div>
