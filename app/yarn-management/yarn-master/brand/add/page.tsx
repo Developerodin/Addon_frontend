@@ -8,10 +8,12 @@ import supplierService, {
   CreateSupplierRequest,
   SupplierYarnDetail,
 } from '@/shared/services/supplierService';
-import yarnTypeService, { YarnType } from '@/shared/services/yarnTypeService';
+import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 import yarnColorService, { YarnColor } from '@/shared/services/yarnColorService';
 
 interface YarnDetailForm {
+  yarnCatalogId: string;
+  yarnName: string;
   yarnType: string;
   yarnsubtype: string;
   color: string;
@@ -37,6 +39,8 @@ interface BrandFormState {
 }
 
 const defaultYarnDetail: YarnDetailForm = {
+  yarnCatalogId: '',
+  yarnName: '',
   yarnType: '',
   yarnsubtype: '',
   color: '',
@@ -48,9 +52,8 @@ const AddBrandPage = () => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
-  const [yarnTypes, setYarnTypes] = useState<YarnType[]>([]);
+  const [yarnCatalogs, setYarnCatalogs] = useState<YarnCatalog[]>([]);
   const [yarnColors, setYarnColors] = useState<YarnColor[]>([]);
-  const [yarnSubtypeMap, setYarnSubtypeMap] = useState<Record<string, { id: string; name: string }[]>>({});
   const [formData, setFormData] = useState<BrandFormState>({
     brandName: '',
     contactPersonName: '',
@@ -70,63 +73,63 @@ const AddBrandPage = () => {
     const loadLookups = async () => {
       setIsLoadingOptions(true);
       try {
-        const [typesResponse, colorsResponse] = await Promise.all([
-          yarnTypeService.getTypes({ status: 'active', limit: 1000, page: 1 }),
+        const [catalogResponse, colorsResponse] = await Promise.all([
+          yarnCatalogService.getYarnCatalogs({ status: 'active', limit: 1000, page: 1 }),
           yarnColorService.getColors({ status: 'active', limit: 1000, page: 1 }),
         ]);
-        const rawTypes = typesResponse.results || [];
-        const normalizedTypes = rawTypes
-          .map((type) => {
-            const normalizedTypeId = type.id || type._id || '';
-            const normalizedDetails = Array.isArray(type.details)
-              ? type.details
-                  .map((detail) => {
-                    const detailId = detail?.id || detail?._id || '';
-                    if (!detailId || !detail?.subtype) {
-                      return null;
-                    }
-                    return {
-                      ...detail,
-                      id: detailId,
-                      subtype: detail.subtype,
-                    };
-                  })
-                  .filter(Boolean)
-              : [];
+        const rawCatalogs = catalogResponse.results || [];
+        const normalizedCatalogs: YarnCatalog[] = [];
+        rawCatalogs.forEach((catalog) => {
+          const normalizedCatalogId = (catalog.id as string) || (catalog as { _id?: string })._id || '';
+          const rawType = catalog.yarnType;
 
-            if (!normalizedTypeId) {
-              console.warn('[AddBrandPage] Yarn type missing id/_id', type);
-            }
+          if (!rawType) {
+            console.warn('[AddBrandPage] Yarn catalog missing yarnType', catalog);
+            return;
+          }
 
-            return {
-              ...type,
-              id: normalizedTypeId,
-              details: normalizedDetails,
-            };
-          })
-          .filter((type): type is YarnType & { id: string } => Boolean(type.id));
+          const normalizedTypeId = rawType.id || (rawType as { _id?: string })._id || '';
+          if (!normalizedCatalogId || !normalizedTypeId) {
+            console.warn('[AddBrandPage] Yarn catalog missing id/_id', catalog);
+            return;
+          }
 
-        setYarnTypes(normalizedTypes);
-
-        const subtypeEntries = normalizedTypes.reduce<Record<string, { id: string; name: string }[]>>((acc, type) => {
-          if (Array.isArray(type.details) && type.details.length > 0) {
-            const options = type.details.map((detail) => ({
-              id: detail.id,
-              name: detail.subtype ?? detail.name ?? '',
-            }));
-            if (options.length > 0) {
-              acc[type.id] = options.filter((option) => option.id && option.name);
+          let normalizedSubtype: YarnCatalog['yarnSubtype'];
+          const rawSubtype = catalog.yarnSubtype;
+          if (rawSubtype) {
+            const normalizedSubtypeId = rawSubtype.id || (rawSubtype as { _id?: string })._id || '';
+            if (normalizedSubtypeId) {
+              normalizedSubtype = {
+                ...rawSubtype,
+                id: normalizedSubtypeId,
+              };
             }
           }
-          return acc;
-        }, {});
 
-        setYarnSubtypeMap(subtypeEntries);
+          const normalizedCatalog: YarnCatalog = {
+            ...catalog,
+            id: normalizedCatalogId,
+            yarnType: {
+              ...rawType,
+              id: normalizedTypeId,
+            },
+            ...(normalizedSubtype ? { yarnSubtype: normalizedSubtype } : {}),
+          };
+
+          normalizedCatalogs.push(normalizedCatalog);
+        });
+
+        const activeCatalogs = normalizedCatalogs.filter((catalog) => {
+          const status = (catalog.status || '').toLowerCase();
+          return status === 'active';
+        });
+
+        setYarnCatalogs(activeCatalogs);
 
         const rawColors = colorsResponse.results || [];
         const normalizedColors = rawColors
           .map((color) => {
-            const normalizedColorId = color.id || color._id || '';
+            const normalizedColorId = (color.id as string) || (color as { _id?: string })._id || '';
             if (!normalizedColorId) {
               console.warn('[AddBrandPage] Yarn color missing id/_id', color);
             }
@@ -140,9 +143,8 @@ const AddBrandPage = () => {
         setYarnColors(normalizedColors);
 
         console.debug('[AddBrandPage] Loaded yarn metadata', {
-          typeCount: normalizedTypes.length,
+          catalogCount: activeCatalogs.length,
           colorCount: normalizedColors.length,
-          subtypeParentCount: Object.keys(subtypeEntries).length,
         });
       } catch (error) {
         console.error('Error loading yarn data:', error);
@@ -187,50 +189,35 @@ const AddBrandPage = () => {
     });
   }, []);
 
-  const getSubtypeOptions = useCallback(
-    (yarnTypeId: string) => {
-      if (!yarnTypeId) return [];
-      return yarnSubtypeMap[yarnTypeId] || [];
-    },
-    [yarnSubtypeMap],
+  const yarnCatalogMap = useMemo(
+    () =>
+      yarnCatalogs.reduce<Record<string, YarnCatalog>>((acc, catalog) => {
+        if (catalog.id) {
+          acc[catalog.id] = catalog;
+        }
+        return acc;
+      }, {}),
+    [yarnCatalogs],
   );
 
-  const handleYarnTypeChange = useCallback(
-    async (index: number, value: string) => {
-      updateYarnDetail(index, { yarnType: value, yarnsubtype: '' });
+  const handleYarnCatalogChange = useCallback(
+    (index: number, catalogId: string) => {
+      const selectedCatalog = catalogId ? yarnCatalogMap[catalogId] : undefined;
 
-      if (!value) {
-        return;
-      }
+      updateYarnDetail(index, {
+        yarnCatalogId: catalogId,
+        yarnName: selectedCatalog?.yarnName ?? '',
+        yarnType: selectedCatalog?.yarnType?.id ?? '',
+        yarnsubtype: selectedCatalog?.yarnSubtype?.id ?? '',
+      });
 
-      const existingSubtypes = yarnSubtypeMap[value];
-      if (!existingSubtypes) {
-        try {
-          const type = await yarnTypeService.getTypeById(value);
-          const details = (type.details || []).filter((detail) => detail?.subtype);
-          const options = details
-            .map((detail) => {
-              const subtypeId = detail.id || detail._id;
-              if (!subtypeId || !detail.subtype) return null;
-              return { id: subtypeId, name: detail.subtype };
-            })
-            .filter(Boolean) as { id: string; name: string }[];
-          setYarnSubtypeMap((prev) => ({
-            ...prev,
-            [value]: options,
-          }));
-          if (options.length === 1) {
-            updateYarnDetail(index, { yarnsubtype: options[0].id });
-          }
-        } catch (error) {
-          console.error('Error loading yarn subtypes:', error);
-          toast.error(error instanceof Error ? error.message : 'Failed to load yarn subtypes');
-        }
-      } else if (existingSubtypes.length === 1) {
-        updateYarnDetail(index, { yarnsubtype: existingSubtypes[0].id });
+      if (!catalogId) {
+        console.debug('[AddBrandPage] Yarn catalog cleared for detail', { index });
+      } else if (!selectedCatalog) {
+        console.warn('[AddBrandPage] Selected yarn catalog not found in lookup', { index, catalogId });
       }
     },
-    [updateYarnDetail, yarnSubtypeMap],
+    [updateYarnDetail, yarnCatalogMap],
   );
 
   const handleYarnDetailChange = useCallback(
@@ -243,30 +230,30 @@ const AddBrandPage = () => {
   const addYarnDetail = () => {
     console.debug('[AddBrandPage] Add Yarn Detail clicked', {
       isLoadingOptions,
-      yarnTypeCount: yarnTypeOptions.length,
+      yarnCatalogCount: yarnCatalogOptions.length,
       yarnColorCount: yarnColorOptions.length,
       existingDetails: formData.yarnDetails.length,
     });
 
-    if (!isLoadingOptions && (yarnTypeOptions.length === 0 || yarnColorOptions.length === 0)) {
+    if (!isLoadingOptions && (yarnCatalogOptions.length === 0 || yarnColorOptions.length === 0)) {
       console.warn('[AddBrandPage] Yarn detail options missing when adding detail', {
-        yarnTypeCount: yarnTypeOptions.length,
+        yarnCatalogCount: yarnCatalogOptions.length,
         yarnColorCount: yarnColorOptions.length,
       });
     }
 
     setFormData((prev) => {
-      const autoTypeId = yarnTypeOptions.length === 1 ? yarnTypeOptions[0].id : '';
-      const subtypeOptions = autoTypeId ? getSubtypeOptions(autoTypeId) : [];
-      const autoSubtype = subtypeOptions.length === 1 ? subtypeOptions[0].id : '';
+      const autoCatalog = yarnCatalogOptions.length === 1 ? yarnCatalogOptions[0] : undefined;
       const autoColorId = yarnColorOptions.length === 1 ? yarnColorOptions[0].id : '';
 
       const updatedDetails = [
         ...prev.yarnDetails,
         {
           ...defaultYarnDetail,
-          yarnType: autoTypeId,
-          yarnsubtype: autoSubtype,
+          yarnCatalogId: autoCatalog?.id ?? '',
+          yarnName: autoCatalog?.yarnName ?? '',
+          yarnType: autoCatalog?.yarnType?.id ?? '',
+          yarnsubtype: autoCatalog?.yarnSubtype?.id ?? '',
           color: autoColorId,
         },
       ];
@@ -344,17 +331,26 @@ const AddBrandPage = () => {
     }
 
     for (const detail of formData.yarnDetails) {
+      if (!detail.yarnCatalogId.trim()) {
+        toast.error('Yarn name is required for each yarn detail');
+        return false;
+      }
+      const selectedCatalog = yarnCatalogMap[detail.yarnCatalogId];
+      if (!selectedCatalog) {
+        toast.error('Selected yarn name is unavailable. Please choose a different yarn');
+        return false;
+      }
       if (!detail.yarnType.trim()) {
-        toast.error('Yarn type is required for each yarn detail');
+        toast.error('Selected yarn is missing a yarn type configuration');
         return false;
       }
       if (!detail.color.trim()) {
         toast.error('Color is required for each yarn detail');
         return false;
       }
-      const subtypeOptions = getSubtypeOptions(detail.yarnType);
-      if (subtypeOptions.length > 0 && !detail.yarnsubtype.trim()) {
-        toast.error('Yarn sub type is required when available');
+      const requiresSubtype = Boolean(selectedCatalog?.yarnSubtype?.id);
+      if (requiresSubtype && !detail.yarnsubtype.trim()) {
+        toast.error('Yarn sub type is required for the selected yarn');
         return false;
       }
     }
@@ -412,13 +408,9 @@ const AddBrandPage = () => {
     }
   };
 
-  const yarnTypeOptions = useMemo(
-    () =>
-      yarnTypes.filter((type) => {
-        if (!type?.status) return false;
-        return type.status.toLowerCase() === 'active';
-      }),
-    [yarnTypes],
+  const yarnCatalogOptions = useMemo(
+    () => yarnCatalogs.filter((catalog) => Boolean(catalog?.id)),
+    [yarnCatalogs],
   );
   const yarnColorOptions = useMemo(
     () =>
@@ -428,7 +420,7 @@ const AddBrandPage = () => {
       }),
     [yarnColors],
   );
-  const isAddDisabled = isLoadingOptions;
+  const isAddDisabled = isLoadingOptions || yarnCatalogOptions.length === 0 || yarnColorOptions.length === 0;
 
   return (
     <div className="main-content">
@@ -631,61 +623,47 @@ const AddBrandPage = () => {
                     </div>
                   </div>
 
+                  {!isLoadingOptions && yarnCatalogOptions.length === 0 ? (
+                    <p className="text-sm text-red-500">
+                      Yarn catalogs are not available. Please configure yarn catalog entries before adding details.
+                    </p>
+                  ) : null}
                   {formData.yarnDetails.length === 0 ? (
                     <p className="text-sm text-gray-500">
                       No yarn details added. Use "Add Yarn Detail" to include yarn information.
                     </p>
                   ) : (
                     formData.yarnDetails.map((detail, index) => {
-                      const subtypeOptions = getSubtypeOptions(detail.yarnType);
+                      const selectedCatalog = detail.yarnCatalogId ? yarnCatalogMap[detail.yarnCatalogId] : undefined;
                       return (
                         <div
                           key={`yarn-detail-${index}`}
                           className="border border-gray-200 rounded-lg p-4 space-y-4"
                         >
-                          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div>
                               <label className="form-label">
-                                Yarn Type <span className="text-red-500">*</span>
+                                Yarn Name <span className="text-red-500">*</span>
                               </label>
                               <select
-                                value={detail.yarnType}
-                                onChange={(e) => handleYarnTypeChange(index, e.target.value)}
+                                value={detail.yarnCatalogId}
+                                onChange={(e) => handleYarnCatalogChange(index, e.target.value)}
                                 className="form-select"
                                 required
-                                disabled={isLoadingOptions}
+                                disabled={isLoadingOptions || yarnCatalogOptions.length === 0}
                               >
-                                <option value="">Select yarn type</option>
-                                {yarnTypeOptions.map((type) => (
-                                  <option key={type.id} value={type.id}>
-                                    {type.name}
+                                <option value="">Select yarn name</option>
+                                {yarnCatalogOptions.map((catalog) => (
+                                  <option key={catalog.id} value={catalog.id}>
+                                    {catalog.yarnName || catalog.yarnType?.name || 'Unnamed yarn'}
                                   </option>
                                 ))}
                               </select>
-                            </div>
-                            <div>
-                              <label className="form-label">
-                                Yarn Sub Type{' '}
-                                {subtypeOptions.length > 0 ? (
-                                  <span className="text-red-500">*</span>
-                                ) : (
-                                  <span className="text-xs text-gray-400 ms-1">(Optional)</span>
-                                )}
-                              </label>
-                              <select
-                                value={detail.yarnsubtype}
-                                onChange={(e) => handleYarnDetailChange(index, 'yarnsubtype', e.target.value)}
-                                className="form-select"
-                                disabled={isLoadingOptions || subtypeOptions.length === 0}
-                                required={subtypeOptions.length > 0}
-                              >
-                                <option value="">Select yarn sub type</option>
-                                {subtypeOptions.map((subtype) => (
-                                  <option key={subtype.id} value={subtype.id}>
-                                    {subtype.name}
-                                  </option>
-                                ))}
-                              </select>
+                              {detail.yarnCatalogId && !selectedCatalog && (
+                                <p className="text-xs text-red-500 mt-1">
+                                  Selected yarn name is unavailable. Please choose another option.
+                                </p>
+                              )}
                             </div>
                             <div>
                               <label className="form-label">
@@ -696,7 +674,7 @@ const AddBrandPage = () => {
                                 onChange={(e) => handleYarnDetailChange(index, 'color', e.target.value)}
                                 className="form-select"
                                 required
-                                disabled={isLoadingOptions}
+                                disabled={isLoadingOptions || yarnColorOptions.length === 0}
                               >
                                 <option value="">Select color</option>
                                 {yarnColorOptions.map((color) => (

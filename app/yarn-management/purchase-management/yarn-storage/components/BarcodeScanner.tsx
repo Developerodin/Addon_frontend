@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { toast } from "react-hot-toast";
 
 interface BarcodeScannerProps {
-  onScan: (barcode: string) => void;
+  onScan: (barcode: string) => void | boolean | Promise<void | boolean>;
   placeholder?: string;
   label?: string;
   autoFocus?: boolean;
@@ -38,28 +38,33 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     }
   };
 
-  const handleScan = () => {
+  const handleScan = async () => {
     if (!scannedCode.trim()) {
       toast.error("Please enter or scan a barcode");
       return;
     }
 
     setIsScanning(true);
-    // Simulate scan delay
-    setTimeout(() => {
-      onScan(scannedCode.trim());
-      setScannedCode("");
+    try {
+      const result = await onScan(scannedCode.trim());
+      if (result !== false) {
+        setScannedCode("");
+      }
+    } catch (error) {
+      console.error("Barcode scan failed:", error);
+      toast.error("Failed to process barcode. Please try again.");
+    } finally {
       setIsScanning(false);
       if (inputRef.current) {
         inputRef.current.focus();
       }
-    }, 300);
+    }
   };
 
-  const simulateScan = () => {
+  const simulateScan = async () => {
     const mockBarcode = `BC-${Date.now()}`;
     setScannedCode(mockBarcode);
-    handleScan();
+    await handleScan();
   };
 
   return (

@@ -14,6 +14,7 @@ import supplierService, {
 } from '@/shared/services/supplierService';
 import yarnTypeService, { YarnType } from '@/shared/services/yarnTypeService';
 import yarnColorService, { YarnColor } from '@/shared/services/yarnColorService';
+import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 import * as XLSX from 'xlsx';
 
 const BrandPage = () => {
@@ -30,8 +31,9 @@ const BrandPage = () => {
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [yarnTypeMap, setYarnTypeMap] = useState<Record<string, string>>({});
-  const [yarnSubtypeMap, setYarnSubtypeMap] = useState<Record<string, string>>({});
   const [yarnColorMap, setYarnColorMap] = useState<Record<string, string>>({});
+  const [yarnCatalogById, setYarnCatalogById] = useState<Record<string, YarnCatalog>>({});
+  const [yarnCatalogByTypeSubtype, setYarnCatalogByTypeSubtype] = useState<Record<string, YarnCatalog[]>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
@@ -68,25 +70,73 @@ const BrandPage = () => {
     return 'Unknown color';
   };
 
-  const getYarnSubtypeLabel = (subtype: SupplierYarnDetail['yarnsubtype']) => {
-    if (!subtype) return '';
-    if (typeof subtype === 'string') {
-      return yarnSubtypeMap[subtype] || subtype;
+  const normalizeYarnReferenceId = (
+    reference: SupplierYarnDetail['yarnType'] | SupplierYarnDetail['yarnsubtype'],
+  ) => {
+    if (!reference) return '';
+    if (typeof reference === 'string') {
+      return reference;
     }
-    if (typeof subtype === 'object') {
-      if ('name' in subtype && subtype.name) return subtype.name;
-      if ('id' in subtype && subtype.id) return yarnSubtypeMap[subtype.id] || subtype.id;
-      return yarnSubtypeMap[(subtype as { _id?: string })._id || ''] || '';
+    return reference.id || (reference as { _id?: string })._id || '';
+  };
+
+  const getYarnCatalogLabel = (detail: SupplierYarnDetail) => {
+    if (!detail) return '';
+
+    if (detail.yarnCatalog && typeof detail.yarnCatalog === 'string') {
+      const catalog = yarnCatalogById[detail.yarnCatalog];
+      return catalog?.yarnName || detail.yarnCatalog;
     }
+
+    if (detail.yarnCatalog && typeof detail.yarnCatalog === 'object') {
+      const catalogId = detail.yarnCatalog.id || (detail.yarnCatalog as { _id?: string })._id;
+      if (catalogId) {
+        const catalog = yarnCatalogById[catalogId];
+        if (catalog?.yarnName) {
+          return catalog.yarnName;
+        }
+      }
+      const directName =
+        (detail.yarnCatalog as { yarnName?: string }).yarnName ||
+        (detail.yarnCatalog as { name?: string }).name;
+      if (typeof directName === 'string' && directName.trim().length > 0) {
+        return directName;
+      }
+    }
+
+    if (detail.yarnCatalogId) {
+      const catalog = yarnCatalogById[detail.yarnCatalogId];
+      if (catalog?.yarnName) {
+        return catalog.yarnName;
+      }
+    }
+
+    if (typeof detail.yarn === 'string' && detail.yarn.trim().length > 0) {
+      return detail.yarn;
+    }
+
+    const typeId = normalizeYarnReferenceId(detail.yarnType);
+    if (!typeId) {
+      return '';
+    }
+
+    const subtypeId = normalizeYarnReferenceId(detail.yarnsubtype);
+    const key = `${typeId}|${subtypeId || ''}`;
+    const candidates = yarnCatalogByTypeSubtype[key];
+    if (candidates && candidates.length > 0) {
+      return candidates[0].yarnName;
+    }
+
     return '';
   };
 
   useEffect(() => {
     const loadLookups = async () => {
       try {
-        const [typesResponse, colorsResponse] = await Promise.all([
+        const [typesResponse, colorsResponse, catalogResponse] = await Promise.all([
           yarnTypeService.getTypes({ status: 'active', limit: 1000, page: 1 }),
           yarnColorService.getColors({ status: 'active', limit: 1000, page: 1 }),
+          yarnCatalogService.getYarnCatalogs({ status: 'active', limit: 1000, page: 1 }),
         ]);
 
         const typeEntries = (typesResponse.results || []).map((type: YarnType) => [type.id, type.name]);
@@ -103,10 +153,79 @@ const BrandPage = () => {
             .filter(Boolean) as Array<readonly [string, string]>;
         });
         const colorEntries = (colorsResponse.results || []).map((color: YarnColor) => [color.id, color.name]);
+        const catalogResults = catalogResponse.results || [];
+        const normalizedCatalogs: YarnCatalog[] = [];
+        catalogResults.forEach((catalog) => {
+          const normalizedCatalogId = (catalog.id as string) || (catalog as { _id?: string })._id || '';
+          const rawType = catalog.yarnType;
+
+          if (!rawType) {
+            console.warn('[BrandPage] Yarn catalog missing yarnType', catalog);
+            return;
+          }
+
+          const normalizedTypeId = rawType.id || (rawType as { _id?: string })._id || '';
+          if (!normalizedCatalogId || !normalizedTypeId) {
+            console.warn('[BrandPage] Yarn catalog missing id/_id', catalog);
+            return;
+          }
+
+          let normalizedSubtype: YarnCatalog['yarnSubtype'];
+          const rawSubtype = catalog.yarnSubtype;
+          if (rawSubtype) {
+            const normalizedSubtypeId = rawSubtype.id || (rawSubtype as { _id?: string })._id || '';
+            if (normalizedSubtypeId) {
+              normalizedSubtype = {
+                ...rawSubtype,
+                id: normalizedSubtypeId,
+              };
+            }
+          }
+
+          const normalizedCatalog: YarnCatalog = {
+            ...catalog,
+            id: normalizedCatalogId,
+            yarnType: {
+              ...rawType,
+              id: normalizedTypeId,
+            },
+            ...(normalizedSubtype ? { yarnSubtype: normalizedSubtype } : {}),
+          };
+
+          normalizedCatalogs.push(normalizedCatalog);
+        });
+
+        const activeCatalogs = normalizedCatalogs.filter((catalog) => {
+          const status = (catalog.status || '').toLowerCase();
+          return status === 'active';
+        });
+
+        const catalogByIdEntries = activeCatalogs.map((catalog) => [catalog.id, catalog] as const);
+        const catalogByTypeSubtypeEntries = activeCatalogs.reduce<Record<string, YarnCatalog[]>>((acc, catalog) => {
+          const typeId = catalog.yarnType?.id;
+          if (!typeId) {
+            return acc;
+          }
+          const subtypeId = catalog.yarnSubtype?.id ?? '';
+          const key = `${typeId}|${subtypeId}`;
+          if (!acc[key]) {
+            acc[key] = [];
+          }
+          acc[key].push(catalog);
+          return acc;
+        }, {});
 
         setYarnTypeMap(Object.fromEntries(typeEntries));
-        setYarnSubtypeMap(Object.fromEntries(subtypeEntries));
         setYarnColorMap(Object.fromEntries(colorEntries));
+        setYarnCatalogById(Object.fromEntries(catalogByIdEntries));
+        setYarnCatalogByTypeSubtype(catalogByTypeSubtypeEntries);
+
+        console.debug('[BrandPage] Loaded yarn metadata', {
+          typeCount: typeEntries.length,
+          subtypeCount: subtypeEntries.length,
+          colorCount: colorEntries.length,
+          catalogCount: activeCatalogs.length,
+        });
       } catch (error) {
         console.error('Error loading yarn metadata:', error);
         toast.error(error instanceof Error ? error.message : 'Failed to load yarn metadata');
@@ -950,9 +1069,9 @@ const BrandPage = () => {
                               {brand.yarnDetails && brand.yarnDetails.length > 0 ? (
                                 <div className="flex flex-col gap-1">
                                   {brand.yarnDetails.map((detail, detailIndex) => {
-                                    const yarnTypeLabel = getYarnTypeLabel(detail.yarnType);
+                                    const yarnNameLabel =
+                                      getYarnCatalogLabel(detail) || getYarnTypeLabel(detail.yarnType);
                                     const yarnColorLabel = getYarnColorLabel(detail.color);
-                                    const yarnSubtypeLabel = getYarnSubtypeLabel(detail.yarnsubtype);
                                     const shadeLabel =
                                       typeof detail.shadeNumber === 'string' && detail.shadeNumber.trim().length > 0
                                         ? detail.shadeNumber
@@ -968,27 +1087,27 @@ const BrandPage = () => {
                                         key={`${brand.id}-yarn-${detailIndex}`}
                                         className="px-2 py-1 rounded bg-primary/10 text-primary text-xs"
                                       >
-                                <span className="font-semibold">{yarnTypeLabel}</span>
-                                        {yarnSubtypeLabel ? (
-                                  <>
-                                    <span className="mx-2">•</span>
-                                            <span>{yarnSubtypeLabel}</span>
-                                  </>
-                                ) : null}
-                                <span className="mx-2">•</span>
-                                <span>{yarnColorLabel}</span>
-                                {shadeLabel !== 'N/A' ? (
-                                  <>
-                                    <span className="mx-2">•</span>
-                                    <span>{shadeLabel}</span>
-                                  </>
-                                ) : null}
-                                {tearweightLabel !== 'N/A' ? (
-                                  <>
-                                    <span className="mx-2">•</span>
-                                    <span>TW: {tearweightLabel}</span>
-                                  </>
-                                ) : null}
+                                        <span className="font-semibold">
+                                          {yarnNameLabel || 'Unknown yarn'}
+                                        </span>
+                                        {yarnColorLabel ? (
+                                          <>
+                                            <span className="mx-2">•</span>
+                                            <span>{yarnColorLabel}</span>
+                                          </>
+                                        ) : null}
+                                        {shadeLabel !== 'N/A' ? (
+                                          <>
+                                            <span className="mx-2">•</span>
+                                            <span>{shadeLabel}</span>
+                                          </>
+                                        ) : null}
+                                        {tearweightLabel !== 'N/A' ? (
+                                          <>
+                                            <span className="mx-2">•</span>
+                                            <span>TW: {tearweightLabel}</span>
+                                          </>
+                                        ) : null}
                                       </div>
                                     );
                                   })}

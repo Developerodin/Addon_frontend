@@ -8,7 +8,7 @@ import { PackedBox, Cone, InternalTransferData } from "../types";
 interface InternalTransferModalProps {
   selectedBox: PackedBox | null;
   boxes: PackedBox[];
-  onBoxScan: (barcode: string) => void;
+  onBoxScan: (barcode: string) => Promise<PackedBox | null>;
   onTransfer: (data: InternalTransferData) => void;
   onClose: () => void;
 }
@@ -33,20 +33,29 @@ const InternalTransferModal: React.FC<InternalTransferModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialBox]);
 
-  const handleBoxScan = (barcode: string) => {
-    const box = boxes.find((b) => b.boxBarcode === barcode);
-    if (!box) {
-      toast.error("Box not found");
-      return;
-    }
+  const handleBoxScan = async (barcode: string): Promise<boolean> => {
+    try {
+      const fetchedBox = await onBoxScan(barcode);
+      const box = fetchedBox ?? boxes.find((b) => b.boxBarcode === barcode);
 
-    if (box.status !== "Stored") {
-      toast.error("Box must be stored in long-term storage first");
-      return;
-    }
+      if (!box) {
+        toast.error("Box not found");
+        return false;
+      }
 
-    setSelectedBox(box);
-    generateCones(box);
+      if (box.status !== "Stored") {
+        toast.error("Box must be stored in long-term storage first");
+        return false;
+      }
+
+      setSelectedBox(box);
+      generateCones(box);
+      return true;
+    } catch (error) {
+      console.error("Failed to scan box:", error);
+      toast.error("Failed to scan box. Please try again.");
+      return false;
+    }
   };
 
   const generateCones = (box: PackedBox) => {
@@ -147,7 +156,7 @@ const InternalTransferModal: React.FC<InternalTransferModalProps> = ({
             <>
               {/* Box Information */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex justify-between items-start">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h4 className="font-semibold text-blue-900 mb-2">
                       Box: {selectedBox.boxBarcode}
@@ -176,7 +185,7 @@ const InternalTransferModal: React.FC<InternalTransferModalProps> = ({
                       setSelectedBox(null);
                       setCones([]);
                     }}
-                    className="ti-btn ti-btn-light ti-btn-sm"
+                    className="ti-btn ti-btn-light ti-btn-sm self-start sm:self-auto"
                   >
                     <i className="ri-close-line me-1"></i>
                     Change Box
@@ -187,13 +196,13 @@ const InternalTransferModal: React.FC<InternalTransferModalProps> = ({
               {/* Generated Cones */}
               {cones.length > 0 && (
                 <div>
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                     <h4 className="font-semibold">
                       Generated Cones ({cones.length})
                     </h4>
                     <button
                       onClick={() => generateCones(selectedBox)}
-                      className="ti-btn ti-btn-light ti-btn-sm"
+                      className="ti-btn ti-btn-light ti-btn-sm self-start sm:self-auto"
                     >
                       <i className="ri-refresh-line me-1"></i>
                       Regenerate
