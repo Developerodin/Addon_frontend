@@ -107,6 +107,17 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
   };
 };
 
+interface UploadedMediaItem {
+  id: string;
+  type: 'image' | 'video';
+  url: string;
+  fileName: string;
+  fileKey: string;
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+}
+
 const ProcessQCOrderPage = () => {
   const params = useParams();
   const router = useRouter();
@@ -123,7 +134,7 @@ const ProcessQCOrderPage = () => {
   const [qcNotes, setQcNotes] = useState("");
   const [qcBy, setQcBy] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [uploadedMedia, setUploadedMedia] = useState<Array<{ id: string; type: 'image' | 'video'; url: string; fileName: string; uploadedAt: string }>>([]);
+  const [uploadedMedia, setUploadedMedia] = useState<UploadedMediaItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
   // Check permission - allow if user has Purchase Management access
@@ -248,9 +259,12 @@ const ProcessQCOrderPage = () => {
           
           return {
             id: `media-${Date.now()}-${Math.random()}`,
-            type: file.type.startsWith('video/') ? 'video' as const : 'image' as const,
+            type: uploadedFile.mimeType.startsWith('video/') ? 'video' as const : 'image' as const,
             url: uploadedFile.url,
-            fileName: file.name,
+            fileName: uploadedFile.originalName,
+            fileKey: uploadedFile.key,
+            mimeType: uploadedFile.mimeType,
+            size: uploadedFile.size,
             uploadedAt: new Date().toISOString()
           };
         } catch (error) {
@@ -272,9 +286,20 @@ const ProcessQCOrderPage = () => {
   };
 
   // Handle remove media
-  const handleRemoveMedia = (mediaId: string) => {
-    setUploadedMedia(prev => prev.filter(m => m.id !== mediaId));
-    toast.success("File removed");
+  const handleRemoveMedia = async (mediaId: string) => {
+    const mediaToRemove = uploadedMedia.find((m) => m.id === mediaId);
+    if (!mediaToRemove) {
+      return;
+    }
+
+    try {
+      await FileUploadService.deleteFile(mediaToRemove.fileKey);
+      setUploadedMedia(prev => prev.filter(m => m.id !== mediaId));
+      toast.success("File removed");
+    } catch (error) {
+      console.error(`Failed to delete file with key ${mediaToRemove.fileKey}:`, error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete file');
+    }
   };
 
   // Handle submit QC
@@ -304,12 +329,14 @@ const ProcessQCOrderPage = () => {
     try {
       // Prepare mediaUrl object from uploadedMedia
       const mediaUrl: Record<string, string> = {};
-      uploadedMedia.forEach((media, index) => {
-        if (media.type === 'video') {
-          mediaUrl[`video${index + 1}`] = media.url;
-        } else {
-          mediaUrl[`image${index + 1}`] = media.url;
-        }
+      uploadedMedia.forEach((media) => {
+        const existingIndex = Number(
+          Object.keys(mediaUrl)
+            .filter((key) => key.startsWith(media.type === 'video' ? 'video' : 'image'))
+            .length
+        );
+        const keyPrefix = media.type === 'video' ? 'video' : 'image';
+        mediaUrl[`${keyPrefix}${existingIndex + 1}`] = media.url;
       });
 
       // Map QC status to API format
@@ -771,6 +798,9 @@ const ProcessQCOrderPage = () => {
                           <i className="ri-close-line text-sm"></i>
                         </button>
                         <p className="text-xs text-gray-500 mt-1 truncate">{media.fileName}</p>
+                        <p className="text-[10px] text-gray-400">
+                          {FileUploadService.formatFileSize(media.size)} • {media.mimeType}
+                        </p>
                       </div>
                     ))}
                   </div>
