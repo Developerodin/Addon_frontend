@@ -3,6 +3,7 @@ import Cookies from 'js-cookie';
 
 export interface YarnCatalogEmbedded {
   id: string;
+  _id?: string;
   name?: string;
   brandName?: string;
   colorCode?: string;
