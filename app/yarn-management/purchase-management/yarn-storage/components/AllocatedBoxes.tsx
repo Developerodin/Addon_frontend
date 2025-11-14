@@ -410,7 +410,7 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
                           </td>
                           <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                              {(box as any).storageLocation || "-"}
+                              {box.storageLocation || "-"}
                             </span>
                           </td>
                           <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">

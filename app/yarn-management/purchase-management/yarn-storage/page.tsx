@@ -8,6 +8,7 @@ import LongTermStorageLayout from "./components/LongTermStorageLayout";
 import ShortTermStorage from "./components/ShortTermStorage";
 import StoragePreferences from "./components/StoragePreferences";
 import UnallocatedBoxes from "./components/UnallocatedBoxes";
+import AllocatedBoxes from "./components/AllocatedBoxes";
 import {
   RackLocation,
   PackedBox,
@@ -20,7 +21,7 @@ import {
 const YarnStoragePage = () => {
   const { hasSubPermission } = useNavigation();
   const [activeTab, setActiveTab] = useState<
-    "unallocated" | "long-term" | "short-term"
+    "unallocated" | "allocated" | "long-term" | "short-term"
   >("unallocated");
   const [showPreferences, setShowPreferences] = useState(false);
 
@@ -327,6 +328,17 @@ const YarnStoragePage = () => {
                   Unallocated Boxes
                 </button>
                 <button
+                  onClick={() => setActiveTab("allocated")}
+                  className={`px-6 py-3 font-medium text-sm transition-colors ${
+                    activeTab === "allocated"
+                      ? "text-primary border-b-2 border-primary"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <i className="ri-checkbox-circle-line me-2"></i>
+                  Allocated Boxes
+                </button>
+                <button
                   onClick={() => setActiveTab("long-term")}
                   className={`px-6 py-3 font-medium text-sm transition-colors ${
                     activeTab === "long-term"
@@ -361,6 +373,8 @@ const YarnStoragePage = () => {
                   // TODO: Implement box allocation logic
                 }}
               />
+            ) : activeTab === "allocated" ? (
+              <AllocatedBoxes />
             ) : activeTab === "long-term" ? (
               <LongTermStorageLayout
                 racks={racks}

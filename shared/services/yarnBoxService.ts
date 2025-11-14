@@ -48,6 +48,8 @@ export interface UpdateYarnBoxPayload {
   lotNumber?: string;
   boxWeight?: number;
   numberOfCones?: number;
+  storageLocation?: string;
+  storedStatus?: boolean;
 }
 
 export interface UpdateQCStatusPayload {
