@@ -17,6 +17,10 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
   const [selectedPO, setSelectedPO] = useState<string>("");
   const [boxes, setBoxes] = useState<YarnBox[]>([]);
   const [isLoadingBoxes, setIsLoadingBoxes] = useState(false);
+  const [allocatingBoxId, setAllocatingBoxId] = useState<string | null>(null);
+  const [showAllocateModal, setShowAllocateModal] = useState(false);
+  const [storageRackCode, setStorageRackCode] = useState("");
+  const [isAllocating, setIsAllocating] = useState(false);
 
   // Set default dates: one month ago to today
   const getDefaultStartDate = () => {
@@ -249,6 +253,93 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
   // Use all orders for the dropdown (no filtering needed)
   const filteredOrders = orders;
 
+  // Handle allocate button click
+  const handleAllocateClick = (boxId: string) => {
+    setAllocatingBoxId(boxId);
+    setStorageRackCode("");
+    setShowAllocateModal(true);
+  };
+
+  // Handle allocate confirmation
+  const handleAllocateConfirm = async () => {
+    if (!allocatingBoxId || !storageRackCode.trim()) {
+      toast.error("Please enter a storage rack code");
+      return;
+    }
+
+    setIsAllocating(true);
+    try {
+      // Get the box ID (_id or id)
+      const box = boxes.find(
+        (b) => (b._id || b.id || b.boxId) === allocatingBoxId
+      );
+      if (!box) {
+        toast.error("Box not found");
+        return;
+      }
+
+      const boxId = box._id || box.id;
+      if (!boxId) {
+        toast.error("Invalid box ID");
+        return;
+      }
+
+      // Call PATCH API
+      await yarnBoxService.updateYarnBox(boxId, {
+        storageLocation: storageRackCode.trim(),
+        storedStatus: true,
+      });
+
+      toast.success(
+        `Box ${box.boxId || box.barcode} allocated to storage location ${storageRackCode}`
+      );
+
+      // Close modal and refresh boxes
+      setShowAllocateModal(false);
+      setAllocatingBoxId(null);
+      setStorageRackCode("");
+
+      // Refresh boxes list
+      const response = await yarnBoxService.getYarnBoxes({
+        po_number: selectedPO,
+      });
+
+      let boxesData: YarnBox[] = [];
+      if (Array.isArray(response)) {
+        boxesData = response;
+      } else if (response && typeof response === 'object' && 'results' in response) {
+        boxesData = (response as any).results || [];
+      } else if (response && typeof response === 'object') {
+        boxesData = [response as YarnBox];
+      }
+
+      // Filter boxes where storedStatus is false
+      const unallocatedBoxes = boxesData.filter(
+        (box: any) => box.storedStatus === false || box.storedStatus === undefined
+      );
+
+      setBoxes(unallocatedBoxes);
+    } catch (error) {
+      console.error("Failed to allocate box:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to allocate box to storage"
+      );
+    } finally {
+      setIsAllocating(false);
+    }
+  };
+
+  // Handle modal close
+  const handleModalClose = () => {
+    if (!isAllocating) {
+      setShowAllocateModal(false);
+      setAllocatingBoxId(null);
+      setStorageRackCode("");
+    }
+  };
+
   return (
     <div className="box">
       <div className="box-header flex justify-between items-center">
@@ -392,6 +483,9 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
                       <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Received Date
                       </th>
+                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white">
@@ -428,6 +522,16 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
                               ? new Date(box.receivedDate).toLocaleDateString()
                               : "-"}
                           </td>
+                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm">
+                            <button
+                              onClick={() => handleAllocateClick(boxId)}
+                              className="ti-btn ti-btn-primary"
+                              title="Allocate to storage"
+                            >
+                              <i className="ri-map-pin-line me-1"></i>
+                              Allocate
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -435,6 +539,69 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Allocate Modal */}
+        {showAllocateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+              <div className="box-header border-b border-gray-200 px-6 py-4">
+                <h3 className="box-title text-lg font-semibold">
+                  Allocate Box to Storage
+                </h3>
+              </div>
+              <div className="box-body px-6 py-4">
+                <div className="mb-4">
+                  <label className="form-label text-sm font-medium text-gray-700 mb-2 block">
+                    Storage Rack Code <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Enter storage rack barcode"
+                    value={storageRackCode}
+                    onChange={(e) => setStorageRackCode(e.target.value)}
+                    disabled={isAllocating}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !isAllocating) {
+                        handleAllocateConfirm();
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter the barcode of the storage rack location
+                  </p>
+                </div>
+              </div>
+              <div className="box-footer border-t border-gray-200 px-6 py-4 flex justify-end gap-2">
+                <button
+                  onClick={handleModalClose}
+                  className="ti-btn ti-btn-light"
+                  disabled={isAllocating}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAllocateConfirm}
+                  className="ti-btn ti-btn-primary"
+                  disabled={isAllocating || !storageRackCode.trim()}
+                >
+                  {isAllocating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2 inline-block"></div>
+                      Allocating...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-check-line me-1"></i>
+                      Confirm
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

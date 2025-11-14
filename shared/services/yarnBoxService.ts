@@ -24,6 +24,8 @@ export interface YarnBox {
   receivedDate?: string;
   orderDate?: string;
   conesIssued?: boolean;
+  storageLocation?: string;
+  storedStatus?: boolean;
   createdAt?: string;
   updatedAt?: string;
   qcData?: QCData;
@@ -36,6 +38,8 @@ export interface UpdateYarnBoxPayload {
   lotNumber?: string;
   boxWeight?: number;
   numberOfCones?: number;
+  storageLocation?: string;
+  storedStatus?: boolean;
 }
 
 export interface UpdateQCStatusPayload {
