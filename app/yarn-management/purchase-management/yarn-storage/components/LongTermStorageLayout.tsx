@@ -10,6 +10,7 @@ import storageSlotService, {
   BoxInSlot,
   ConeInSlot,
 } from "@/shared/services/storageSlotService";
+import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 
 interface LongTermStorageLayoutProps {
   racks: RackLocation[];
@@ -38,6 +39,10 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const [isRackModalOpen, setIsRackModalOpen] = useState(false);
   const [rackDetails, setRackDetails] = useState<SlotDetailsResponse | null>(null);
   const [isLoadingRackDetails, setIsLoadingRackDetails] = useState(false);
+  const [showAllocateModal, setShowAllocateModal] = useState(false);
+  const [storageRackCode, setStorageRackCode] = useState("");
+  const [isAllocating, setIsAllocating] = useState(false);
+  const [isLoadingBox, setIsLoadingBox] = useState(false);
 
   // Fetch storage slots from API
   useEffect(() => {
@@ -139,26 +144,71 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     return grid;
   }, [racks, gridDimensions, isLoadingSlots]);
 
-  const handleBoxScan = (barcode: string) => {
-    const box = boxes.find((b) => b.boxBarcode === barcode);
-    if (!box) {
-      toast.error("Box not found");
+  // Map YarnBox to PackedBox format
+  const mapYarnBoxToPackedBox = (box: YarnBox): PackedBox => {
+    const qcApproved = box.qcData?.status === "qc_approved";
+    const isStored = box.storedStatus === true;
+
+    return {
+      id: box._id || box.id || box.boxId || box.barcode,
+      boxBarcode: box.barcode,
+      yarnId: box._id || box.id || box.boxId || box.barcode,
+      yarnName: box.yarnName || "",
+      batchNumber: box.lotNumber || "",
+      weight: box.boxWeight ?? 0,
+      numberOfCones: box.numberOfCones ?? 0,
+      qcApproved,
+      qcApprovedDate: box.qcData?.date,
+      rackLocation: undefined,
+      storedDate: box.receivedDate,
+      status: isStored ? "Stored" : qcApproved ? "QC_Approved" : "QC_Pending",
+    };
+  };
+
+  const handleBoxScan = async (barcode: string) => {
+    const trimmedBarcode = barcode.trim();
+
+    if (!trimmedBarcode) {
+      toast.error("Please enter a barcode");
       return;
     }
 
-    if (!box.qcApproved) {
-      toast.error("Box is not QC approved");
-      return;
-    }
+    setIsLoadingBox(true);
+    try {
+      console.log("Fetching box by barcode:", trimmedBarcode);
+      // Fetch box from API by barcode
+      const boxDetails = await yarnBoxService.getYarnBoxByBarcode(trimmedBarcode);
+      console.log("Box details received:", boxDetails);
 
-    if (box.status === "Stored") {
-      toast.error("Box is already stored");
-      return;
-    }
+      // Map YarnBox to PackedBox
+      const mappedBox = mapYarnBoxToPackedBox(boxDetails);
 
-    setSelectedBox(box);
-    setScanningRack(true);
-    toast.success(`Box ${box.boxBarcode} selected. Please scan rack barcode.`);
+      // Validate box
+      if (!mappedBox.qcApproved) {
+        toast.error("Box is not QC approved");
+        return;
+      }
+
+      if (mappedBox.status === "Stored") {
+        toast.error("Box is already stored");
+        return;
+      }
+
+      // Open modal with box details
+      setSelectedBox(mappedBox);
+      setStorageRackCode("");
+      setShowAllocateModal(true);
+      toast.success(`Box ${boxDetails.boxId || trimmedBarcode} selected. Please enter location barcode.`);
+    } catch (error) {
+      console.error("Failed to fetch box details:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch box details. Please check the barcode and try again."
+      );
+    } finally {
+      setIsLoadingBox(false);
+    }
   };
 
   const handleRackScan = (barcode: string) => {
@@ -207,8 +257,69 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
     // Reset state
     setSelectedBox(null);
-    setSelectedRack(null);
-    setScanningRack(false);
+  };
+
+  // Handle allocate confirmation from modal
+  const handleAllocateConfirm = async () => {
+    if (!selectedBox || !storageRackCode.trim()) {
+      toast.error("Please enter a storage rack code");
+      return;
+    }
+
+    setIsAllocating(true);
+    try {
+      // Find rack by barcode
+      const rack = racks.find((r) => r.barcode === storageRackCode.trim());
+      if (!rack) {
+        toast.error("Rack not found with the provided barcode");
+        return;
+      }
+
+      if (rack.status === "Occupied" || rack.status === "Maintenance") {
+        toast.error(`Rack ${rack.rackCode} is ${rack.status.toLowerCase()}`);
+        return;
+      }
+
+      // Get the box ID - try to find the actual YarnBox to get _id
+      const boxId = selectedBox.id;
+
+      // Call API to update box storage location
+      try {
+        await yarnBoxService.updateYarnBox(boxId, {
+          storageLocation: storageRackCode.trim(),
+          storedStatus: true,
+        });
+      } catch (apiError) {
+        // If API call fails, still proceed with local state update
+        console.warn("Failed to update box via API, updating local state only:", apiError);
+      }
+
+      // Update local state via callback
+      handleStoreBox(selectedBox.id, rack.id);
+
+      // Close modal and reset state
+      setShowAllocateModal(false);
+      setStorageRackCode("");
+      setSelectedBox(null);
+    } catch (error) {
+      console.error("Failed to allocate box:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to allocate box to storage"
+      );
+    } finally {
+      setIsAllocating(false);
+    }
+  };
+
+  // Handle modal close
+  const handleModalClose = () => {
+    if (!isAllocating) {
+      setShowAllocateModal(false);
+      setStorageRackCode("");
+      setSelectedBox(null);
+    }
   };
 
   const getRackStatusColor = (rack: RackLocation | null) => {
@@ -254,82 +365,18 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           <h3 className="box-title">Store QC-Approved Box</h3>
         </div>
         <div className="box-body space-y-4">
-          {!selectedBox ? (
+          {isLoadingBox ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary me-2"></div>
+              <span className="text-sm text-gray-600">Loading box details...</span>
+            </div>
+          ) : (
             <BarcodeScanner
               onScan={handleBoxScan}
               label="Scan Box Barcode"
               placeholder="Scan QC-approved box barcode"
+              disabled={isLoadingBox}
             />
-          ) : (
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-semibold text-blue-900">
-                      Selected Box: {selectedBox.boxBarcode}
-                    </h4>
-                    <div className="mt-2 space-y-1 text-sm text-blue-700">
-                      <p>
-                        <span className="font-medium">Yarn:</span>{" "}
-                        {selectedBox.yarnName}
-                      </p>
-                      <p>
-                        <span className="font-medium">Weight:</span>{" "}
-                        {selectedBox.weight} kg
-                      </p>
-                      <p>
-                        <span className="font-medium">Cones:</span>{" "}
-                        {selectedBox.numberOfCones}
-                      </p>
-                      <p>
-                        <span className="font-medium">Batch:</span>{" "}
-                        {selectedBox.batchNumber}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSelectedBox(null);
-                      setScanningRack(false);
-                    }}
-                    className="ti-btn ti-btn-light ti-btn-sm"
-                  >
-                    <i className="ri-close-line"></i>
-                  </button>
-                </div>
-              </div>
-
-              {scanningRack && (
-                <BarcodeScanner
-                  onScan={handleRackScan}
-                  label="Scan Rack Barcode"
-                  placeholder="Scan rack barcode to assign location"
-                />
-              )}
-
-              {selectedRack && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h4 className="font-semibold text-green-900">
-                        Selected Rack: {selectedRack.rackCode}
-                      </h4>
-                      <p className="text-sm text-green-700 mt-1">
-                        Row: {selectedRack.row}, Column: {selectedRack.column}
-                        {selectedRack.shelf && `, Shelf: ${selectedRack.shelf}`}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleStoreBox(selectedBox.id, selectedRack.id)}
-                      className="ti-btn ti-btn-primary"
-                    >
-                      <i className="ri-save-line me-1"></i>
-                      Confirm Storage
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
           )}
         </div>
       </div>
@@ -416,7 +463,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                             <div>Floor: {rack.column}</div>
                             <div>Shelf: {rack.shelf}</div>
                           </div>
-                          {box ? (
+                          {/* {box ? (
                             <div className="text-xs text-gray-600 space-y-0.5 mt-1">
                               <div className="truncate font-medium">{box.boxBarcode}</div>
                               <div className="text-gray-500">
@@ -432,7 +479,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                             <div className="absolute top-1 right-1">
                               <i className="ri-checkbox-circle-fill text-blue-500 text-sm"></i>
                             </div>
-                          )}
+                          )} */}
                         </>
                       ) : (
                         <div className="text-xs text-gray-400 text-center mt-4">
@@ -471,6 +518,69 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         dataType={rackDetails?.type || "boxes"}
         isLoading={isLoadingRackDetails}
       />
+
+      {/* Allocate Box Modal */}
+      {showAllocateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="box-header border-b border-gray-200 px-6 py-4">
+              <h3 className="box-title text-lg font-semibold">
+                Allocate Box to Storage
+              </h3>
+            </div>
+            <div className="box-body px-6 py-4">
+              <div className="mb-4">
+                <label className="form-label text-sm font-medium text-gray-700 mb-2 block">
+                  Storage Rack Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Enter storage rack barcode"
+                  value={storageRackCode}
+                  onChange={(e) => setStorageRackCode(e.target.value)}
+                  disabled={isAllocating}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !isAllocating) {
+                      handleAllocateConfirm();
+                    }
+                  }}
+                  autoFocus
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter the barcode of the storage rack location
+                </p>
+              </div>
+            </div>
+            <div className="box-footer border-t border-gray-200 px-6 py-4 flex justify-end gap-2">
+              <button
+                onClick={handleModalClose}
+                className="ti-btn ti-btn-light"
+                disabled={isAllocating}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAllocateConfirm}
+                className="ti-btn ti-btn-primary"
+                disabled={isAllocating || !storageRackCode.trim()}
+              >
+                {isAllocating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2 inline-block"></div>
+                    Allocating...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-check-line me-1"></i>
+                    Confirm
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

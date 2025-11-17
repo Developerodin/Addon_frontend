@@ -676,7 +676,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                             <div>Floor: {rack.column}</div>
                             <div>Shelf: {rack.shelf}</div>
                           </div>
-                          {box ? (
+                          {/* {box ? (
                             <div className="text-xs text-gray-600 space-y-0.5 mt-1">
                               <div className="truncate font-medium">{box.boxBarcode}</div>
                               <div className="text-gray-500">
@@ -692,7 +692,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                             <div className="absolute top-1 right-1">
                               <i className="ri-checkbox-circle-fill text-blue-500 text-sm"></i>
                             </div>
-                          )}
+                          )} */}
                         </>
                       ) : (
                         <div className="text-xs text-gray-400 text-center mt-4">
