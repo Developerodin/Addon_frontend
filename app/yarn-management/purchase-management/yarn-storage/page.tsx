@@ -392,6 +392,11 @@ const YarnStoragePage = () => {
                 inventory={shortTermInventory}
                 boxes={boxes}
                 onInternalTransfer={handleInternalTransfer}
+                preferences={{
+                  gridColumns: preferences.gridColumns,
+                  gridRows: preferences.gridRows,
+                  showEmptySlots: preferences.showEmptySlots,
+                }}
               />
             )}
           </div>
