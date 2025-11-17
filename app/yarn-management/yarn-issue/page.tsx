@@ -4,6 +4,8 @@ import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
+import { API_BASE_URL } from "@/shared/data/utilities/api";
+import Cookies from "js-cookie";
 
 type RequirementStatus = "Not Issued" | "Partially Issued" | "Issued";
 
@@ -27,6 +29,30 @@ interface YarnRequirement {
   logs: IssueLog[];
 }
 
+interface Article {
+  id: string;
+  _id?: string;
+  articleNumber: string;
+  plannedQuantity: number;
+  linkingType: string;
+  priority: string;
+  status: string;
+  machineId?: any;
+  remarks?: string;
+}
+
+interface ApiProductionOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  priority: string;
+  currentFloor: string;
+  orderNote?: string;
+  articles: Article[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface ProductionOrder {
   id: string;
   orderNumber: string;
@@ -36,6 +62,45 @@ interface ProductionOrder {
   scheduledDate: string;
   notes?: string;
   bom: YarnRequirement[];
+  articles?: Article[];
+}
+
+interface ProductBOMItem {
+  _id: string;
+  yarnCatalogId: string | {
+    id: string;
+    yarnName: string;
+    yarnType?: {
+      id: string;
+      name: string;
+      status: string;
+    };
+    countSize?: {
+      id: string;
+      name: string;
+      status: string;
+    };
+    blend?: {
+      id: string;
+      name: string;
+      status: string;
+    };
+    colorFamily?: {
+      id: string;
+      name: string;
+      colorCode?: string;
+      status: string;
+    };
+  };
+  yarnName: string;
+  quantity: number; // Quantity in grams per unit
+}
+
+interface Product {
+  id: string;
+  styleCode: string;
+  name: string;
+  bom: ProductBOMItem[];
 }
 
 type YarnSortField =
@@ -43,8 +108,6 @@ type YarnSortField =
   | "yarnCode"
   | "requiredQty"
   | "issuedQty"
-  | "shortTermAvailable"
-  | "longTermAvailable"
   | "status";
 
 const ISSUE_TOLERANCE_DEFAULT = 0.2;
@@ -66,6 +129,11 @@ const getRequirementStatus = (requirement: YarnRequirement): RequirementStatus =
 };
 
 const getOrderStatus = (order: ProductionOrder): RequirementStatus => {
+  // If BOM is empty, order is not issued yet
+  if (!order.bom || order.bom.length === 0) {
+    return "Not Issued";
+  }
+  
   const requirementStatuses = order.bom.map(getRequirementStatus);
   if (requirementStatuses.every((status) => status === "Issued")) {
     return "Issued";
@@ -104,126 +172,255 @@ const orderStatusBadge = (status: RequirementStatus) => {
   }
 };
 
-const initialOrders: ProductionOrder[] = [
-  {
-    id: "po-2024-001",
-    orderNumber: "PO-2024-001",
-    buyer: "Acme Sportswear",
-    floor: "Knitting Floor",
-    styleCode: "KS-1001",
-    scheduledDate: "2024-01-20",
-    notes: "Priority order for next week shipment",
-    bom: [
-      {
-        id: "req-1",
-        yarnCode: "COT-001",
-        yarnName: "Cotton Yarn Premium",
-        yarnType: "Cotton",
-        requiredQty: 10,
-        tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
-        shortTermAvailable: 6,
-        longTermAvailable: 18,
-        logs: [],
-      },
-      {
-        id: "req-2",
-        yarnCode: "POL-002",
-        yarnName: "Polyester Blend Soft",
-        yarnType: "Polyester",
-        requiredQty: 8,
-        tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
-        shortTermAvailable: 4,
-        longTermAvailable: 12,
-        logs: [
-          {
-            id: "log-1",
-            issueDate: "2024-01-14T10:00:00Z",
-            coneBarcode: "POL-002-00045",
-            weightIssued: 5,
-            issuedBy: "Amit Shah",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "po-2024-002",
-    orderNumber: "PO-2024-002",
-    buyer: "Urban Athleisure",
-    floor: "Knitting Floor",
-    styleCode: "KN-2245",
-    scheduledDate: "2024-01-22",
-    notes: "Combine with Lot LT-558 for dyeing consistency",
-    bom: [
-      {
-        id: "req-3",
-        yarnCode: "VIS-010",
-        yarnName: "Viscose Shine",
-        yarnType: "Viscose",
-        requiredQty: 12,
-        tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
-        shortTermAvailable: 9,
-        longTermAvailable: 6,
-        logs: [],
-      },
-      {
-        id: "req-4",
-        yarnCode: "NYL-004",
-        yarnName: "Nylon Core Thread",
-        yarnType: "Nylon",
-        requiredQty: 5,
-        tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
-        shortTermAvailable: 3,
-        longTermAvailable: 8,
-        logs: [],
-      },
-    ],
-  },
-  {
-    id: "po-2024-003",
-    orderNumber: "PO-2024-003",
-    buyer: "Zen Athletica",
-    floor: "Linking Floor",
-    styleCode: "LK-5520",
-    scheduledDate: "2024-01-18",
-    notes: "Already issued last week",
-    bom: [
-      {
-        id: "req-5",
-        yarnCode: "MER-015",
-        yarnName: "Merino Wool 30s",
-        yarnType: "Wool",
-        requiredQty: 6,
-        tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
-        shortTermAvailable: 0,
-        longTermAvailable: 4,
-        logs: [
-          {
-            id: "log-2",
-            issueDate: "2024-01-10T12:30:00Z",
-            coneBarcode: "MER-015-0234",
-            weightIssued: 6,
-            issuedBy: "Priya Patel",
-          },
-        ],
-      },
-    ],
-  },
-];
+const getAccessToken = (): string | null => {
+  if (typeof document === "undefined") return null;
+  try {
+    const tokenFromCookie = Cookies.get("accessToken");
+    if (tokenFromCookie) return tokenFromCookie;
+    const tokenFromStorage = localStorage.getItem("token");
+    return tokenFromStorage;
+  } catch {
+    return null;
+  }
+};
 
 const YarnIssuePage = () => {
   const { hasSubPermission, isLoading } = useNavigation();
-  const [orders, setOrders] = useState<ProductionOrder[]>(initialOrders);
+  const [orders, setOrders] = useState<ProductionOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [activeRequirementId, setActiveRequirementId] = useState<string | null>(null);
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [awaitingWeight, setAwaitingWeight] = useState(false);
-  const [weightInput, setWeightInput] = useState("");
   const [sortField, setSortField] = useState<YarnSortField>("yarnName");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [productLoading, setProductLoading] = useState(false);
+  const [showIssueModal, setShowIssueModal] = useState(false);
+  const [coneData, setConeData] = useState<any>(null);
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const [transactionForm, setTransactionForm] = useState({
+    totalWeight: "",
+    numberOfCones: "",
+    totalTearWeight: "",
+    totalNetWeight: "",
+  });
+  const [submittingTransaction, setSubmittingTransaction] = useState(false);
 
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Issue");
+
+  // Fetch production orders
+  useEffect(() => {
+    const fetchOrders = async () => {
+      setOrdersLoading(true);
+      try {
+        const token = getAccessToken();
+        const response = await fetch(
+          `${API_BASE_URL}/production/orders?page=1&limit=10&sortBy=createdAt&populate=articles`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch production orders");
+        }
+
+        const data = await response.json();
+        const apiOrders: ApiProductionOrder[] = data.results || [];
+
+        // Transform API orders to match our interface
+        const transformedOrders: ProductionOrder[] = apiOrders.map((order) => ({
+          id: order.id,
+          orderNumber: order.orderNumber,
+          buyer: order.orderNote || "N/A",
+          floor: order.currentFloor || "N/A",
+          styleCode: "",
+          scheduledDate: order.createdAt || new Date().toISOString(),
+          notes: order.orderNote,
+          bom: [],
+          articles: order.articles || [],
+        }));
+
+        setOrders(transformedOrders);
+      } catch (error) {
+        console.error("Error fetching orders:", error);
+        toast.error("Failed to load production orders");
+      } finally {
+        setOrdersLoading(false);
+      }
+    };
+
+    if (hasPermission) {
+      fetchOrders();
+    }
+  }, [hasPermission]);
+
+  // Fetch product details when article is selected
+  useEffect(() => {
+    const fetchProductAndUpdateBOM = async () => {
+      if (!selectedOrderId || !selectedArticleId) {
+        return;
+      }
+
+      // Get article number from current orders state
+      const selectedOrder = orders.find((o) => o.id === selectedOrderId);
+      if (!selectedOrder || !selectedOrder.articles) {
+        return;
+      }
+
+      const selectedArticle = selectedOrder.articles.find((a) => a.id === selectedArticleId);
+      if (!selectedArticle) {
+        return;
+      }
+
+      const articleNumber = selectedArticle.articleNumber;
+
+      setProductLoading(true);
+      try {
+        const token = getAccessToken();
+        let product: Product | null = null;
+
+        // Strategy 1: Search products with higher limit to find by styleCode
+        try {
+          const searchResponse = await fetch(
+            `${API_BASE_URL}/products?page=1&limit=20&search=${encodeURIComponent(articleNumber)}`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
+              },
+            }
+          );
+
+          if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            const products = searchData.results || [];
+
+            // Find product with matching styleCode
+            for (const p of products) {
+              if (p.styleCode === articleNumber) {
+                product = p;
+                break;
+              }
+            }
+          }
+        } catch (error) {
+          console.warn("Product search failed:", error);
+        }
+
+        // Strategy 2: If not found, try direct fetch (assuming articleNumber might be product ID)
+        if (!product) {
+          try {
+            const directResponse = await fetch(`${API_BASE_URL}/products/${articleNumber}`, {
+              headers: {
+                "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
+              },
+            });
+
+            if (directResponse.ok) {
+              const directProduct = await directResponse.json();
+              // Verify it has BOM
+              if (directProduct.bom && directProduct.bom.length > 0) {
+                product = directProduct;
+              }
+            }
+          } catch (error) {
+            console.warn("Direct product fetch failed:", error);
+          }
+        }
+
+        if (!product || !product.bom || product.bom.length === 0) {
+          toast.error(`No BOM found for article ${articleNumber}`);
+          setProductLoading(false);
+          return;
+        }
+
+        // Get article planned quantity for calculation
+        const articlePlannedQty = selectedArticle.plannedQuantity || 1;
+
+        // Map product BOM to yarn requirements
+        // BOM quantity is in grams per unit, so multiply by article planned quantity
+        const yarnRequirements: YarnRequirement[] = product.bom.map((bomItem, index) => {
+          // Handle yarnCatalogId - can be string or populated object
+          let yarnCode = `YARN-${index}`;
+          let yarnType = "Unknown";
+          
+          if (typeof bomItem.yarnCatalogId === "string") {
+            yarnCode = bomItem.yarnCatalogId;
+          } else if (bomItem.yarnCatalogId && typeof bomItem.yarnCatalogId === "object") {
+            yarnCode = bomItem.yarnCatalogId.id || yarnCode;
+            // Get yarn type from populated object if available
+            if (bomItem.yarnCatalogId.yarnType?.name) {
+              yarnType = bomItem.yarnCatalogId.yarnType.name;
+            }
+          }
+
+          // If yarn type not found from populated object, extract from yarnName
+          if (yarnType === "Unknown" && bomItem.yarnName) {
+            const parts = bomItem.yarnName.split("-");
+            if (parts.length >= 2) {
+              const lastPart = parts[parts.length - 1];
+              const typeParts = lastPart.split("/");
+              if (typeParts.length > 0 && typeParts[0].trim()) {
+                yarnType = typeParts[0].trim();
+              } else if (lastPart.trim()) {
+                yarnType = lastPart.trim();
+              }
+            }
+          }
+
+          // Calculate required quantity: BOM quantity (grams per unit) * article planned quantity
+          // Convert grams to kg for display (divide by 1000)
+          const requiredQtyInGrams = bomItem.quantity * articlePlannedQty;
+          const requiredQtyInKg = requiredQtyInGrams / 1000;
+
+          return {
+            id: `req-${bomItem._id}-${index}`,
+            yarnCode: yarnCode,
+            yarnName: bomItem.yarnName || "Unknown Yarn",
+            yarnType: yarnType,
+            requiredQty: requiredQtyInKg, // Store in kg
+            tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
+            shortTermAvailable: 0, // Keep for internal use but won't display
+            longTermAvailable: 0, // Keep for internal use but won't display
+            logs: [],
+          };
+        });
+
+        // Update the order with BOM
+        setOrders((prev) =>
+          prev.map((order) => {
+            if (order.id !== selectedOrderId) {
+              return order;
+            }
+            return {
+              ...order,
+              styleCode: product?.styleCode || articleNumber,
+              bom: yarnRequirements,
+            };
+          })
+        );
+
+        // Auto-select first requirement
+        if (yarnRequirements.length > 0) {
+          setActiveRequirementId(yarnRequirements[0].id);
+        }
+      } catch (error) {
+        console.error("Error fetching product:", error);
+        toast.error(`Failed to load product details for article ${articleNumber}`);
+      } finally {
+        setProductLoading(false);
+      }
+    };
+
+    fetchProductAndUpdateBOM();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrderId, selectedArticleId]);
 
   const filteredOrders = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -239,9 +436,9 @@ const YarnIssuePage = () => {
 
       return (
         order.orderNumber.toLowerCase().includes(query) ||
-        order.buyer.toLowerCase().includes(query) ||
-        order.floor.toLowerCase().includes(query) ||
-        order.styleCode.toLowerCase().includes(query)
+        (order.buyer && order.buyer.toLowerCase().includes(query)) ||
+        (order.floor && order.floor.toLowerCase().includes(query)) ||
+        (order.styleCode && order.styleCode.toLowerCase().includes(query))
       );
     });
   }, [orders, searchTerm]);
@@ -249,11 +446,17 @@ const YarnIssuePage = () => {
   useEffect(() => {
     if (!filteredOrders.length) {
       setSelectedOrderId(null);
+      setSelectedArticleId(null);
       return;
     }
 
     if (!selectedOrderId || !filteredOrders.some((order) => order.id === selectedOrderId)) {
-      setSelectedOrderId(filteredOrders[0].id);
+      const firstOrder = filteredOrders[0];
+      setSelectedOrderId(firstOrder.id);
+      // Auto-select first article if available
+      if (firstOrder.articles && firstOrder.articles.length > 0) {
+        setSelectedArticleId(firstOrder.articles[0].id);
+      }
     }
   }, [filteredOrders, selectedOrderId]);
 
@@ -261,6 +464,13 @@ const YarnIssuePage = () => {
     () => filteredOrders.find((order) => order.id === selectedOrderId) ?? null,
     [filteredOrders, selectedOrderId]
   );
+
+  const selectedArticle = useMemo(() => {
+    if (!selectedOrder || !selectedOrder.articles || !selectedArticleId) {
+      return null;
+    }
+    return selectedOrder.articles.find((article) => article.id === selectedArticleId) ?? null;
+  }, [selectedOrder, selectedArticleId]);
 
   useEffect(() => {
     if (!selectedOrder) {
@@ -311,14 +521,6 @@ const YarnIssuePage = () => {
           aValue = getIssuedQty(a);
           bValue = getIssuedQty(b);
           break;
-        case "shortTermAvailable":
-          aValue = a.shortTermAvailable;
-          bValue = b.shortTermAvailable;
-          break;
-        case "longTermAvailable":
-          aValue = a.longTermAvailable;
-          bValue = b.longTermAvailable;
-          break;
         case "status":
           aValue = getRequirementStatus(a);
           bValue = getRequirementStatus(b);
@@ -362,8 +564,6 @@ const YarnIssuePage = () => {
 
   const resetScanState = () => {
     setBarcodeInput("");
-    setWeightInput("");
-    setAwaitingWeight(false);
   };
 
   const handleStartIssuing = (requirementId: string) => {
@@ -371,123 +571,197 @@ const YarnIssuePage = () => {
     resetScanState();
   };
 
-  const handleBarcodeSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleBarcodeSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!barcodeInput.trim()) {
       toast.error("Scan the cone barcode before proceeding.");
       return;
     }
 
-    setAwaitingWeight(true);
-    toast.success("Barcode captured. Place the cone on the weight scale.");
+    if (!activeRequirement) {
+      toast.error("Select a yarn requirement first.");
+      return;
+    }
+
+    setBarcodeLoading(true);
+    try {
+      const token = getAccessToken();
+      const response = await fetch(
+        `${API_BASE_URL}/yarn-management/yarn-cones/barcode/${barcodeInput.trim()}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch cone details");
+      }
+
+      const coneDetails = await response.json();
+      setConeData(coneDetails);
+      
+      // Reset form
+      setTransactionForm({
+        totalWeight: "",
+        numberOfCones: "1",
+        totalTearWeight: coneDetails.tearWeight?.toString() || "0",
+        totalNetWeight: "",
+      });
+      
+      setShowIssueModal(true);
+    } catch (error) {
+      console.error("Error fetching cone:", error);
+      toast.error("Failed to fetch cone details. Please check the barcode.");
+    } finally {
+      setBarcodeLoading(false);
+    }
   };
 
-  const handleIssueSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleTransactionFormChange = (field: string, value: string) => {
+    setTransactionForm((prev) => {
+      const updated = { ...prev, [field]: value };
+      
+      // Calculate totalNetWeight when totalWeight or totalTearWeight changes
+      if (field === "totalWeight" || field === "totalTearWeight") {
+        const totalWeight = parseFloat(updated.totalWeight) || 0;
+        const totalTearWeight = parseFloat(updated.totalTearWeight) || 0;
+        updated.totalNetWeight = (totalWeight - totalTearWeight).toFixed(2);
+      }
+      
+      return updated;
+    });
+  };
 
-    if (!selectedOrder || !activeRequirement) {
-      toast.error("Select a yarn requirement to issue yarn.");
+  const handleIssueSubmit = async () => {
+    if (!selectedOrder || !activeRequirement || !coneData) {
+      toast.error("Missing required information.");
       return;
     }
 
-    const parsedWeight = parseFloat(weightInput);
-    if (!barcodeInput.trim()) {
-      toast.error("Scan the cone barcode before recording weight.");
+    // Validate form
+    const totalWeight = parseFloat(transactionForm.totalWeight);
+    const numberOfCones = parseInt(transactionForm.numberOfCones);
+    const totalTearWeight = parseFloat(transactionForm.totalTearWeight) || 0;
+    const totalNetWeight = parseFloat(transactionForm.totalNetWeight) || 0;
+
+    if (Number.isNaN(totalWeight) || totalWeight <= 0) {
+      toast.error("Enter a valid total weight.");
       return;
     }
 
-    if (Number.isNaN(parsedWeight) || parsedWeight <= 0) {
-      toast.error("Enter a valid weight reading from the scale.");
+    if (Number.isNaN(numberOfCones) || numberOfCones <= 0) {
+      toast.error("Enter a valid number of cones.");
       return;
     }
 
+    // Get yarnCatalogId from the requirement
+    // We need to find it from the product BOM that was loaded
+    // For now, we'll use the yarnCode which should be the yarnCatalogId
+    const yarnCatalogId = activeRequirement.yarnCode;
+
+    // Check if we're exceeding the required quantity
     const currentIssued = getIssuedQty(activeRequirement);
     const maxAllowed = activeRequirement.requiredQty * (1 + activeRequirement.tolerancePercent);
-    if (currentIssued + parsedWeight > maxAllowed + 0.0001) {
+    if (currentIssued + totalNetWeight > maxAllowed + 0.0001) {
       toast.error(
         `Cannot issue more than ${formatKg(maxAllowed)} for ${activeRequirement.yarnName}.`
       );
       return;
     }
 
-    let updatedShortTerm = activeRequirement.shortTermAvailable;
-    let updatedLongTerm = activeRequirement.longTermAvailable;
+    setSubmittingTransaction(true);
+    try {
+      const token = getAccessToken();
+      const transactionDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
 
-    if (parsedWeight > updatedShortTerm + 0.0001) {
-      const deficit = parsedWeight - updatedShortTerm;
-      if (updatedLongTerm < deficit - 0.0001) {
-        toast.error("Insufficient stock in long-term storage to cover the shortage.");
-        return;
+      const transactionData = {
+        yarn: yarnCatalogId,
+        yarnName: activeRequirement.yarnName,
+        transactionType: "yarn_issued",
+        transactionDate: transactionDate,
+        totalWeight: totalWeight,
+        totalTearWeight: totalTearWeight,
+        totalNetWeight: totalNetWeight,
+        numberOfCones: numberOfCones,
+        orderno: selectedOrder.orderNumber,
+      };
+
+      const response = await fetch(`${API_BASE_URL}/yarn-management/yarn-transactions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify(transactionData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to create transaction");
       }
 
-      const confirmed = window.confirm(
-        `Short-term storage is short by ${formatKg(deficit)}. Transfer from long-term storage?`
+      // Create log entry for local state
+      const newLog: IssueLog = {
+        id: crypto.randomUUID(),
+        issueDate: new Date().toISOString(),
+        coneBarcode: barcodeInput.trim(),
+        weightIssued: totalNetWeight,
+        issuedBy: "System User",
+      };
+
+      // Update local state
+      setOrders((prev) =>
+        prev.map((order) => {
+          if (order.id !== selectedOrder.id) {
+            return order;
+          }
+
+          return {
+            ...order,
+            bom: order.bom.map((requirement) => {
+              if (requirement.id !== activeRequirement.id) {
+                return requirement;
+              }
+
+              return {
+                ...requirement,
+                logs: [...requirement.logs, newLog],
+              };
+            }),
+          };
+        })
       );
 
-      if (!confirmed) {
-        toast("Internal transfer cancelled.");
-        return;
-      }
+      const updatedTotal = currentIssued + totalNetWeight;
+      const statusAfterIssue = updatedTotal + 0.0001 >= activeRequirement.requiredQty ? "Issued" : "Partially Issued";
 
-      updatedLongTerm -= deficit;
-      updatedShortTerm += deficit;
       toast.success(
-        `Internal stock transfer recorded. ${formatKg(deficit)} moved to short-term storage.`
+        `${formatKg(totalNetWeight)} issued successfully. Status: ${statusAfterIssue}.`
       );
+
+      // Close modal and reset
+      setShowIssueModal(false);
+      resetScanState();
+      setConeData(null);
+    } catch (error) {
+      console.error("Error creating transaction:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to issue yarn. Please try again.");
+    } finally {
+      setSubmittingTransaction(false);
     }
-
-    updatedShortTerm -= parsedWeight;
-
-    const newLog: IssueLog = {
-      id: crypto.randomUUID(),
-      issueDate: new Date().toISOString(),
-      coneBarcode: barcodeInput.trim(),
-      weightIssued: parseFloat(parsedWeight.toFixed(3)),
-      issuedBy: "System User",
-    };
-
-    setOrders((prev) =>
-      prev.map((order) => {
-        if (order.id !== selectedOrder.id) {
-          return order;
-        }
-
-        return {
-          ...order,
-          bom: order.bom.map((requirement) => {
-            if (requirement.id !== activeRequirement.id) {
-              return requirement;
-            }
-
-            return {
-              ...requirement,
-              shortTermAvailable: Math.max(updatedShortTerm, 0),
-              longTermAvailable: Math.max(updatedLongTerm, 0),
-              logs: [...requirement.logs, newLog],
-            };
-          }),
-        };
-      })
-    );
-
-    const updatedTotal = currentIssued + parsedWeight;
-    const statusAfterIssue = updatedTotal + 0.0001 >= activeRequirement.requiredQty ? "Issued" : "Partially Issued";
-
-    toast.success(
-      `${formatKg(parsedWeight)} issued from short-term storage. Status: ${statusAfterIssue}.`
-    );
-
-    resetScanState();
   };
 
   // Show loading state while permissions are being loaded
-  if (isLoading) {
+  if (isLoading || ordersLoading) {
     return (
       <div className="main-content">
         <div className="flex justify-center items-center py-12">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading permissions...</p>
+            <p className="text-gray-600">Loading...</p>
           </div>
         </div>
       </div>
@@ -638,7 +912,7 @@ const YarnIssuePage = () => {
                   <div>
                     <h2 className="box-title text-xl">{selectedOrder.orderNumber}</h2>
                     <p className="text-sm text-gray-500">
-                      {selectedOrder.buyer} • {selectedOrder.styleCode}
+                      {selectedOrder.buyer} • {selectedOrder.styleCode || "Select article"}
                     </p>
                   </div>
                   <div className="text-end text-sm text-gray-500">
@@ -648,7 +922,7 @@ const YarnIssuePage = () => {
                     </div>
                     <div className="flex items-center gap-2 justify-end">
                       <i className="ri-calendar-check-line"></i>
-                      Scheduled:{" "}
+                      Created:{" "}
                       {new Date(selectedOrder.scheduledDate).toLocaleDateString()}
                     </div>
                   </div>
@@ -661,20 +935,88 @@ const YarnIssuePage = () => {
                 )}
               </div>
 
-              <div className="box">
-                <div className="box-header flex justify-between items-center">
-                  <h3 className="box-title">Bill of Material Yarn Requirements</h3>
-                  <span className="text-xs text-gray-500">
-                    {selectedOrder.bom.length} yarn types
-                  </span>
-                </div>
-                <div className="box-body">
-                  {sortedRequirements.length === 0 ? (
-                    <div className="text-center py-12 text-gray-500">
-                      <i className="ri-stack-line text-4xl text-gray-400 mb-2"></i>
-                      <p>No yarn requisition configured in BOM.</p>
+              {/* Articles Selection */}
+              {selectedOrder.articles && selectedOrder.articles.length > 0 && (
+                <div className="box">
+                  <div className="box-header">
+                    <h3 className="box-title">Select Article</h3>
+                  </div>
+                  <div className="box-body">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {selectedOrder.articles.map((article) => (
+                        <button
+                          key={article.id}
+                          className={`text-left border rounded-md px-4 py-3 transition ${
+                            selectedArticleId === article.id
+                              ? "border-primary bg-primary/5 shadow-sm"
+                              : "border-gray-200 hover:border-primary/60"
+                          }`}
+                          onClick={() => {
+                            setSelectedArticleId(article.id);
+                            setActiveRequirementId(null);
+                          }}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900">
+                                {article.articleNumber}
+                              </h4>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Qty: {article.plannedQuantity}
+                              </p>
+                              {article.remarks && (
+                                <p className="text-xs text-gray-400 mt-1">{article.remarks}</p>
+                              )}
+                            </div>
+                            <span
+                              className={`inline-flex px-2 py-1 text-[10px] font-semibold rounded-full ${
+                                article.status === "In Progress"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : article.status === "Completed"
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-gray-100 text-gray-800"
+                              }`}
+                            >
+                              {article.status}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
                     </div>
-                  ) : (
+                  </div>
+                </div>
+              )}
+
+              {/* Loading state for product BOM */}
+              {productLoading && (
+                <div className="box">
+                  <div className="box-body text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                    <p className="text-sm text-gray-600">Loading yarn requirements...</p>
+                  </div>
+                </div>
+              )}
+
+              {!productLoading && (
+                <div className="box">
+                  <div className="box-header flex justify-between items-center">
+                    <h3 className="box-title">Bill of Material Yarn Requirements</h3>
+                    <span className="text-xs text-gray-500">
+                      {selectedOrder.bom.length} yarn types
+                    </span>
+                  </div>
+                  <div className="box-body">
+                    {!selectedArticle ? (
+                      <div className="text-center py-12 text-gray-500">
+                        <i className="ri-article-line text-4xl text-gray-400 mb-2"></i>
+                        <p>Select an article to view yarn requirements.</p>
+                      </div>
+                    ) : sortedRequirements.length === 0 ? (
+                      <div className="text-center py-12 text-gray-500">
+                        <i className="ri-stack-line text-4xl text-gray-400 mb-2"></i>
+                        <p>No yarn requisition configured in BOM for this article.</p>
+                      </div>
+                    ) : (
                     <div className="overflow-x-auto">
                       <table className="min-w-full border border-gray-300">
                         <thead className="bg-gray-50">
@@ -708,24 +1050,6 @@ const YarnIssuePage = () => {
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
                               Remaining
-                            </th>
-                            <th
-                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                              onClick={() => handleSort("shortTermAvailable")}
-                            >
-                              <div className="flex items-center gap-2">
-                                Short-Term
-                                <SortIcon field="shortTermAvailable" />
-                              </div>
-                            </th>
-                            <th
-                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                              onClick={() => handleSort("longTermAvailable")}
-                            >
-                              <div className="flex items-center gap-2">
-                                Long-Term
-                                <SortIcon field="longTermAvailable" />
-                              </div>
                             </th>
                             <th
                               className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
@@ -781,12 +1105,6 @@ const YarnIssuePage = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                                   {formatKg(remaining)}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {formatKg(requirement.shortTermAvailable)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {formatKg(requirement.longTermAvailable)}
-                                </td>
                                 <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
                                   <span
                                     className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
@@ -814,9 +1132,10 @@ const YarnIssuePage = () => {
                         </tbody>
                       </table>
                     </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 <div className="box">
@@ -888,42 +1207,23 @@ const YarnIssuePage = () => {
                               placeholder="Scan or enter cone barcode"
                               value={barcodeInput}
                               onChange={(event) => setBarcodeInput(event.target.value)}
-                              disabled={awaitingWeight}
+                              disabled={barcodeLoading}
                             />
                             <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                           </div>
                           <button
                             type="submit"
                             className="ti-btn ti-btn-primary w-full sm:w-auto whitespace-normal break-words leading-tight px-4 py-2 text-sm"
-                            disabled={awaitingWeight}
+                            disabled={barcodeLoading}
                           >
-                            Capture Barcode
-                          </button>
-                        </form>
-
-                        <form onSubmit={handleIssueSubmit} className="space-y-2">
-                          <label className="form-label text-sm font-semibold text-gray-700">
-                            2. Capture Weight Reading
-                          </label>
-                          <div className="relative">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              className="form-control ps-10"
-                              placeholder="Weight in kg from scale"
-                              value={weightInput}
-                              onChange={(event) => setWeightInput(event.target.value)}
-                              disabled={!awaitingWeight}
-                            />
-                            <i className="ri-scales-3-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                          </div>
-                          <button
-                            type="submit"
-                            className="ti-btn ti-btn-success w-full sm:w-auto whitespace-normal break-words leading-tight px-4 py-2 text-sm"
-                            disabled={!awaitingWeight}
-                          >
-                            Log Issued Weight
+                            {barcodeLoading ? (
+                              <>
+                                <span className="animate-spin inline-block mr-2">⟳</span>
+                                Loading...
+                              </>
+                            ) : (
+                              "Scan Barcode"
+                            )}
                           </button>
                         </form>
                       </div>
@@ -996,6 +1296,170 @@ const YarnIssuePage = () => {
           )}
         </div>
       </div>
+
+      {/* Issue Modal */}
+      {showIssueModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="box-header border-b border-gray-200 px-6 py-4">
+              <div className="flex justify-between items-center">
+                <h3 className="box-title text-lg">Issue Yarn</h3>
+                <button
+                  onClick={() => {
+                    setShowIssueModal(false);
+                    setConeData(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <i className="ri-close-line text-xl"></i>
+                </button>
+              </div>
+            </div>
+            <div className="box-body p-6">
+              {coneData && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-md">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Cone Details</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-gray-500">Barcode:</span>
+                      <span className="ml-2 font-medium">{coneData.barcode}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Yarn Name:</span>
+                      <span className="ml-2 font-medium">{coneData.yarnName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Cone Weight:</span>
+                      <span className="ml-2 font-medium">{coneData.coneWeight} kg</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Tear Weight:</span>
+                      <span className="ml-2 font-medium">{coneData.tearWeight} kg</span>
+                    </div>
+                    {coneData.boxId && (
+                      <div>
+                        <span className="text-gray-500">Box ID:</span>
+                        <span className="ml-2 font-medium">{coneData.boxId}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="form-label text-sm font-semibold text-gray-700">
+                    Total Weight (kg) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="form-control"
+                    placeholder="Enter total weight"
+                    value={transactionForm.totalWeight}
+                    onChange={(e) => handleTransactionFormChange("totalWeight", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label text-sm font-semibold text-gray-700">
+                    Number of Cones <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    className="form-control"
+                    placeholder="Enter number of cones"
+                    value={transactionForm.numberOfCones}
+                    onChange={(e) => handleTransactionFormChange("numberOfCones", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label text-sm font-semibold text-gray-700">
+                    Total Tear Weight (kg)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="form-control"
+                    placeholder="Enter tear weight"
+                    value={transactionForm.totalTearWeight}
+                    onChange={(e) => handleTransactionFormChange("totalTearWeight", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label text-sm font-semibold text-gray-700">
+                    Total Net Weight (kg)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="form-control bg-gray-50"
+                    placeholder="Auto-calculated"
+                    value={transactionForm.totalNetWeight}
+                    readOnly
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Calculated as: Total Weight - Total Tear Weight
+                  </p>
+                </div>
+
+                {activeRequirement && (
+                  <div className="p-3 bg-blue-50 rounded-md">
+                    <p className="text-xs text-gray-600">
+                      <span className="font-semibold">Yarn:</span> {activeRequirement.yarnName}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      <span className="font-semibold">Order:</span> {selectedOrder?.orderNumber}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      <span className="font-semibold">Required:</span> {formatKg(activeRequirement.requiredQty)} |{" "}
+                      <span className="font-semibold">Issued:</span> {formatKg(getIssuedQty(activeRequirement))} |{" "}
+                      <span className="font-semibold">Remaining:</span>{" "}
+                      {formatKg(Math.max(activeRequirement.requiredQty - getIssuedQty(activeRequirement), 0))}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowIssueModal(false);
+                    setConeData(null);
+                  }}
+                  className="ti-btn ti-btn-outline"
+                  disabled={submittingTransaction}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleIssueSubmit}
+                  className="ti-btn ti-btn-primary"
+                  disabled={submittingTransaction}
+                >
+                  {submittingTransaction ? (
+                    <>
+                      <span className="animate-spin inline-block mr-2">⟳</span>
+                      Processing...
+                    </>
+                  ) : (
+                    "Issue Yarn"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
