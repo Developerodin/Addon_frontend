@@ -5,6 +5,8 @@ import axios from 'axios';
 import Seo from '@/shared/layout-components/seo/seo';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
+import { useSelector } from 'react-redux';
+import { isDesignUser, shouldShowAttribute } from '@/shared/utils/userUtils';
 
 interface Product {
   id: string;
@@ -76,6 +78,8 @@ const EditProductPage = () => {
   const params = useParams();
   const router = useRouter();
   const productId = params.id as string;
+  const { user } = useSelector((state: any) => state.auth);
+  const isDesign = isDesignUser(user);
 
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -418,26 +422,48 @@ const EditProductPage = () => {
       console.log('Submitting with attributes:', formData.attributes);
       
       // Prepare the base product data
-      const productData = {
+      const productData: any = {
         name: formData.name,
         softwareCode: formData.softwareCode,
         internalCode: formData.internalCode,
         vendorCode: formData.vendorCode,
-        factoryCode: formData.factoryCode,
-        styleCode: formData.styleCode,
-        eanCode: formData.eanCode,
-        description: formData.description,
         category: formData.category.id, // Send only the ID
-        attributes: formData.attributes,
-        bom: formData.bom.filter(item => item.yarnCatalogId && item.quantity > 0).map(item => ({
+      };
+
+      // Add optional fields for non-design users
+      if (!isDesign) {
+        productData.factoryCode = formData.factoryCode;
+        productData.styleCode = formData.styleCode;
+        productData.eanCode = formData.eanCode;
+        productData.description = formData.description;
+      }
+
+      // Attributes - filter to only allowed attributes for design user
+      const allowedAttributes = isDesign
+        ? Object.fromEntries(
+            Object.entries(formData.attributes).filter(([key]) => {
+              // Check if attribute name matches allowed list
+              const category = attributeCategories.find(cat => 
+                cat.name === key || cat.id === key
+              );
+              return category ? shouldShowAttribute(category.name, isDesign) : false;
+            })
+          )
+        : formData.attributes;
+      
+      productData.attributes = allowedAttributes;
+
+      // BOM and Processes only for non-design users
+      if (!isDesign) {
+        productData.bom = formData.bom.filter(item => item.yarnCatalogId && item.quantity > 0).map(item => ({
           yarnCatalogId: item.yarnCatalogId,
           yarnName: item.yarnName,
           quantity: Number(item.quantity)
-        })),
-        processes: formData.processes.filter(proc => proc.processId).map(proc => ({
+        }));
+        productData.processes = formData.processes.filter(proc => proc.processId).map(proc => ({
           processId: proc.processId
-        }))
-      };
+        }));
+      }
 
       if (selectedImage) {
         const formDataObj = new FormData();
@@ -502,7 +528,7 @@ const EditProductPage = () => {
                 {/* Tabs */}
                 <div className="border-b border-gray-200 mb-6">
                   <nav className="-mb-px flex space-x-8">
-                    {['general', 'attributes', 'bom', 'processes'].map((tab) => (
+                    {['general', 'attributes', ...(isDesign ? [] : ['bom', 'processes'])].map((tab) => (
                       <button
                         key={tab}
                         type="button"
@@ -583,50 +609,54 @@ const EditProductPage = () => {
                         required
                       />
                     </div>
-                    <div>
-                      <label className="form-label">Factory Code *</label>
-                      <input
-                        type="text"
-                        name="factoryCode"
-                        className="form-control"
-                        value={formData.factoryCode}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="form-label">Style Code *</label>
-                      <input
-                        type="text"
-                        name="styleCode"
-                        className="form-control"
-                        value={formData.styleCode}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="form-label">EAN Code *</label>
-                      <input
-                        type="text"
-                        name="eanCode"
-                        className="form-control"
-                        value={formData.eanCode}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="form-label">Description *</label>
-                      <textarea
-                        name="description"
-                        className="form-control"
-                        value={formData.description}
-                        onChange={handleInputChange}
-                        required
-                        rows={4}
-                      />
-                    </div>
+                    {!isDesign && (
+                      <>
+                        <div>
+                          <label className="form-label">Factory Code *</label>
+                          <input
+                            type="text"
+                            name="factoryCode"
+                            className="form-control"
+                            value={formData.factoryCode}
+                            onChange={handleInputChange}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label">Style Code *</label>
+                          <input
+                            type="text"
+                            name="styleCode"
+                            className="form-control"
+                            value={formData.styleCode}
+                            onChange={handleInputChange}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label">EAN Code *</label>
+                          <input
+                            type="text"
+                            name="eanCode"
+                            className="form-control"
+                            value={formData.eanCode}
+                            onChange={handleInputChange}
+                            required
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="form-label">Description *</label>
+                          <textarea
+                            name="description"
+                            className="form-control"
+                            value={formData.description}
+                            onChange={handleInputChange}
+                            required
+                            rows={4}
+                          />
+                        </div>
+                      </>
+                    )}
                     <div className="md:col-span-2">
                       <label className="form-label">Product Image</label>
                       <input
@@ -657,43 +687,45 @@ const EditProductPage = () => {
                         <p>No attribute categories found.</p>
                       </div>
                     ) : (
-                      attributeCategories.map((category) => {
-                        // Get the current attribute value - try both by ID and by name
-                        const valueById = formData.attributes[category.id] || '';
-                        const valueByName = formData.attributes[category.name] || '';
-                        const currentValue = valueById || valueByName;
-                        
-                        return (
-                          <div key={category.id} className="space-y-2">
-                            <label className="form-label">{category.name}</label>
-                            <select
-                              className="form-control"
-                              value={currentValue}
-                              onChange={(e) => handleAttributeChange(category.name, e.target.value)}
-                            >
-                              <option value="">Select {category.name}</option>
-                              {category.optionValues && category.optionValues.length > 0 ? (
-                                category.optionValues.map((option) => (
-                                  <option 
-                                    key={option._id} 
-                                    value={option._id}
-                                  >
-                                    {option.name}
-                                  </option>
-                                ))
-                              ) : (
-                                <option value="" disabled>No options available</option>
-                              )}
-                            </select>
-                          </div>
-                        );
-                      })
+                      attributeCategories
+                        .filter((category) => shouldShowAttribute(category.name, isDesign))
+                        .map((category) => {
+                          // Get the current attribute value - try both by ID and by name
+                          const valueById = formData.attributes[category.id] || '';
+                          const valueByName = formData.attributes[category.name] || '';
+                          const currentValue = valueById || valueByName;
+                          
+                          return (
+                            <div key={category.id} className="space-y-2">
+                              <label className="form-label">{category.name}</label>
+                              <select
+                                className="form-control"
+                                value={currentValue}
+                                onChange={(e) => handleAttributeChange(category.name, e.target.value)}
+                              >
+                                <option value="">Select {category.name}</option>
+                                {category.optionValues && category.optionValues.length > 0 ? (
+                                  category.optionValues.map((option) => (
+                                    <option 
+                                      key={option._id} 
+                                      value={option._id}
+                                    >
+                                      {option.name}
+                                    </option>
+                                  ))
+                                ) : (
+                                  <option value="" disabled>No options available</option>
+                                )}
+                              </select>
+                            </div>
+                          );
+                        })
                     )}
                   </div>
                 )}
 
                 {/* BOM Tab */}
-                {activeTab === 'bom' && (
+                {!isDesign && activeTab === 'bom' && (
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-medium">Bill of Materials</h3>
@@ -793,7 +825,7 @@ const EditProductPage = () => {
                 )}
 
                 {/* Processes Tab */}
-                {activeTab === 'processes' && (
+                {!isDesign && activeTab === 'processes' && (
                   <div>
                     {formData.processes.map((proc, index) => {
                       const currentProcessId = typeof proc.processId === 'object' ? proc.processId.id : proc.processId;

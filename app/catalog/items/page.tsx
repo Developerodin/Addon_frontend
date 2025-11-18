@@ -8,6 +8,8 @@ import { saveAs } from 'file-saver';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import { toast, Toaster } from 'react-hot-toast';
 import HelpIcon from '@/shared/components/HelpIcon';
+import { useSelector } from 'react-redux';
+import { isDesignUser } from '@/shared/utils/userUtils';
 
 interface Product {
   id: string;
@@ -55,6 +57,9 @@ const API_ENDPOINTS = {
 };
 
 const ProductListPage = () => {
+  const { user } = useSelector((state: any) => state.auth);
+  const isDesign = isDesignUser(user);
+  
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -1659,10 +1664,10 @@ const ProductListPage = () => {
                             />
                           </th>
                           <th className="text-start">Name</th>
-                          <th className="text-start">Style Code</th>
-                          <th className="text-start">Internal Code</th>
+                          {!isDesign && <th className="text-start">Style Code</th>}
+                          {!isDesign && <th className="text-start">Internal Code</th>}
                           <th className="text-start">Category</th>
-                          <th className="text-start">Created At</th>
+                          {!isDesign && <th className="text-start">Created At</th>}
                           <th className="text-start">Actions</th>
                         </tr>
                       </thead>
@@ -1683,10 +1688,10 @@ const ProductListPage = () => {
                               >
                                 {product.name}
                               </Link></td>
-                            <td>{product.styleCode || ''}</td>
-                            <td>{product.internalCode || ''}</td>
+                            {!isDesign && <td>{product.styleCode || ''}</td>}
+                            {!isDesign && <td>{product.internalCode || ''}</td>}
                             <td>{getCategoryName(product.category)}</td>
-                            <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>
+                            {!isDesign && <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>}
                             <td>
                               <div className="flex space-x-2">
                                 <Link href={`/catalog/items/${product.id}/edit`} className="ti-btn ti-btn-primary ti-btn-sm">
