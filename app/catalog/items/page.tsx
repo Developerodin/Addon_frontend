@@ -9,7 +9,7 @@ import { API_BASE_URL } from '@/shared/data/utilities/api';
 import { toast, Toaster } from 'react-hot-toast';
 import HelpIcon from '@/shared/components/HelpIcon';
 import { useSelector } from 'react-redux';
-import { isDesignUser } from '@/shared/utils/userUtils';
+import { isDesignUser, isProductionUser, isFinalUser } from '@/shared/utils/userUtils';
 
 interface Product {
   id: string;
@@ -59,6 +59,8 @@ const API_ENDPOINTS = {
 const ProductListPage = () => {
   const { user } = useSelector((state: any) => state.auth);
   const isDesign = isDesignUser(user);
+  const isProduction = isProductionUser(user);
+  const isFinal = isFinalUser(user);
   
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1664,10 +1666,13 @@ const ProductListPage = () => {
                             />
                           </th>
                           <th className="text-start">Name</th>
-                          {!isDesign && <th className="text-start">Style Code</th>}
-                          {!isDesign && <th className="text-start">Internal Code</th>}
+                          {(!isDesign && !isProduction) || isFinal ? <th className="text-start">Style Code</th> : null}
+                          {!isDesign && !isProduction && <th className="text-start">Internal Code</th>}
                           <th className="text-start">Category</th>
-                          {!isDesign && <th className="text-start">Created At</th>}
+                          {isProduction && <th className="text-start">Factory Code</th>}
+                          {isFinal && <th className="text-start">EAN Code</th>}
+                          {isFinal && <th className="text-start">Description</th>}
+                          {!isDesign && !isFinal && <th className="text-start">Created At</th>}
                           <th className="text-start">Actions</th>
                         </tr>
                       </thead>
@@ -1682,16 +1687,21 @@ const ProductListPage = () => {
                                 onChange={() => handleProductSelect(product.id)}
                               />
                             </td>
-                            <td><Link 
+                            <td>
+                              <Link 
                                 href={`/analytics/product-analysis/${product.id}`}
                                 className="text-primary hover:text-primary/80 transition-colors duration-200"
                               >
                                 {product.name}
-                              </Link></td>
-                            {!isDesign && <td>{product.styleCode || ''}</td>}
-                            {!isDesign && <td>{product.internalCode || ''}</td>}
+                              </Link>
+                            </td>
+                            {(!isDesign && !isProduction) || isFinal ? <td>{product.styleCode || ''}</td> : null}
+                            {!isDesign && !isProduction && <td>{product.internalCode || ''}</td>}
                             <td>{getCategoryName(product.category)}</td>
-                            {!isDesign && <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>}
+                            {isProduction && <td>{product.factoryCode || ''}</td>}
+                            {isFinal && <td>{product.eanCode || ''}</td>}
+                            {isFinal && <td className="max-w-xs truncate" title={product.description || ''}>{product.description || ''}</td>}
+                            {!isDesign && !isFinal && <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>}
                             <td>
                               <div className="flex space-x-2">
                                 <Link href={`/catalog/items/${product.id}/edit`} className="ti-btn ti-btn-primary ti-btn-sm">

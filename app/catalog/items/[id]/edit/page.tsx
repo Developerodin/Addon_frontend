@@ -6,7 +6,7 @@ import Seo from '@/shared/layout-components/seo/seo';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 import { useSelector } from 'react-redux';
-import { isDesignUser, shouldShowAttribute } from '@/shared/utils/userUtils';
+import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
 interface Product {
   id: string;
@@ -80,6 +80,8 @@ const EditProductPage = () => {
   const productId = params.id as string;
   const { user } = useSelector((state: any) => state.auth);
   const isDesign = isDesignUser(user);
+  const isProduction = isProductionUser(user);
+  const isFinal = isFinalUser(user);
 
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -422,39 +424,77 @@ const EditProductPage = () => {
       console.log('Submitting with attributes:', formData.attributes);
       
       // Prepare the base product data
-      const productData: any = {
-        name: formData.name,
-        softwareCode: formData.softwareCode,
-        internalCode: formData.internalCode,
-        vendorCode: formData.vendorCode,
-        category: formData.category.id, // Send only the ID
-      };
+      const productData: any = {};
 
-      // Add optional fields for non-design users
-      if (!isDesign) {
+      if (isProduction) {
+        // Production user: Only Factory Code
+        productData.factoryCode = formData.factoryCode;
+      } else if (isFinal) {
+        // Final user: Only Style Code, EAN Code, Description
+        productData.styleCode = formData.styleCode;
+        productData.eanCode = formData.eanCode;
+        productData.description = formData.description;
+      } else if (isDesign) {
+        // Design user: Basic fields
+        productData.name = formData.name;
+        productData.softwareCode = formData.softwareCode;
+        productData.internalCode = formData.internalCode;
+        productData.vendorCode = formData.vendorCode;
+        productData.category = formData.category.id;
+      } else {
+        // Other users: All fields
+        productData.name = formData.name;
+        productData.softwareCode = formData.softwareCode;
+        productData.internalCode = formData.internalCode;
+        productData.vendorCode = formData.vendorCode;
+        productData.category = formData.category.id;
         productData.factoryCode = formData.factoryCode;
         productData.styleCode = formData.styleCode;
         productData.eanCode = formData.eanCode;
         productData.description = formData.description;
       }
 
-      // Attributes - filter to only allowed attributes for design user
-      const allowedAttributes = isDesign
-        ? Object.fromEntries(
-            Object.entries(formData.attributes).filter(([key]) => {
-              // Check if attribute name matches allowed list
-              const category = attributeCategories.find(cat => 
-                cat.name === key || cat.id === key
-              );
-              return category ? shouldShowAttribute(category.name, isDesign) : false;
-            })
-          )
-        : formData.attributes;
+      // Attributes - filter based on user type
+      let allowedAttributes;
+      if (isProduction) {
+        // Production user: Only "needles" attribute
+        allowedAttributes = Object.fromEntries(
+          Object.entries(formData.attributes).filter(([key]) => {
+            const category = attributeCategories.find(cat => 
+              cat.name === key || cat.id === key
+            );
+            return category && category.name.toLowerCase() === 'needles';
+          })
+        );
+      } else if (isFinal) {
+        // Final user: Only Brand, Age group, MRP
+        allowedAttributes = Object.fromEntries(
+          Object.entries(formData.attributes).filter(([key]) => {
+            const category = attributeCategories.find(cat => 
+              cat.name === key || cat.id === key
+            );
+            return category ? shouldShowAttributeForFinal(category.name, isFinal) : false;
+          })
+        );
+      } else if (isDesign) {
+        // Design user: Only allowed attributes
+        allowedAttributes = Object.fromEntries(
+          Object.entries(formData.attributes).filter(([key]) => {
+            const category = attributeCategories.find(cat => 
+              cat.name === key || cat.id === key
+            );
+            return category ? shouldShowAttribute(category.name, isDesign) : false;
+          })
+        );
+      } else {
+        // Other users: All attributes
+        allowedAttributes = formData.attributes;
+      }
       
       productData.attributes = allowedAttributes;
 
-      // BOM and Processes only for non-design users
-      if (!isDesign) {
+      // BOM and Processes for production users and non-design/non-final/non-production users
+      if (isProduction || (!isDesign && !isFinal && !isProduction)) {
         productData.bom = formData.bom.filter(item => item.yarnCatalogId && item.quantity > 0).map(item => ({
           yarnCatalogId: item.yarnCatalogId,
           yarnName: item.yarnName,
@@ -528,7 +568,7 @@ const EditProductPage = () => {
                 {/* Tabs */}
                 <div className="border-b border-gray-200 mb-6">
                   <nav className="-mb-px flex space-x-8">
-                    {['general', 'attributes', ...(isDesign ? [] : ['bom', 'processes'])].map((tab) => (
+                    {['general', 'attributes', ...(isDesign || isFinal ? [] : ['bom', 'processes'])].map((tab) => (
                       <button
                         key={tab}
                         type="button"
@@ -548,80 +588,22 @@ const EditProductPage = () => {
                 {/* General Tab */}
                 {activeTab === 'general' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="form-label">Name *</label>
-                      <input
-                        type="text"
-                        name="name"
-                        className="form-control"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="form-label">Category *</label>
-                      <select
-                        name="category"
-                        className="form-control"
-                        value={formData.category?.id || ''}
-                        onChange={handleInputChange}
-                        required
-                      >
-                        <option value="">Select Category</option>
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="form-label">Software Code *</label>
-                      <input
-                        type="text"
-                        name="softwareCode"
-                        className="form-control"
-                        value={formData.softwareCode}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="form-label">Internal Code *</label>
-                      <input
-                        type="text"
-                        name="internalCode"
-                        className="form-control"
-                        value={formData.internalCode}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="form-label">Vendor Code *</label>
-                      <input
-                        type="text"
-                        name="vendorCode"
-                        className="form-control"
-                        value={formData.vendorCode}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    {!isDesign && (
+                    {isProduction ? (
+                      // Production user: Only Factory Code
+                      <div>
+                        <label className="form-label">Factory Code *</label>
+                        <input
+                          type="text"
+                          name="factoryCode"
+                          className="form-control"
+                          value={formData.factoryCode}
+                          onChange={handleInputChange}
+                          required
+                        />
+                      </div>
+                    ) : isFinal ? (
+                      // Final user: Only Style Code, EAN Code, Description
                       <>
-                        <div>
-                          <label className="form-label">Factory Code *</label>
-                          <input
-                            type="text"
-                            name="factoryCode"
-                            className="form-control"
-                            value={formData.factoryCode}
-                            onChange={handleInputChange}
-                            required
-                          />
-                        </div>
                         <div>
                           <label className="form-label">Style Code *</label>
                           <input
@@ -656,25 +638,220 @@ const EditProductPage = () => {
                           />
                         </div>
                       </>
+                    ) : (
+                      <>
+                        {!isDesign && (
+                          <>
+                            <div>
+                              <label className="form-label">Name *</label>
+                              <input
+                                type="text"
+                                name="name"
+                                className="form-control"
+                                value={formData.name}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Category *</label>
+                              <select
+                                name="category"
+                                className="form-control"
+                                value={formData.category?.id || ''}
+                                onChange={handleInputChange}
+                                required
+                              >
+                                <option value="">Select Category</option>
+                                {categories.map((category) => (
+                                  <option key={category.id} value={category.id}>
+                                    {category.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label">Software Code *</label>
+                              <input
+                                type="text"
+                                name="softwareCode"
+                                className="form-control"
+                                value={formData.softwareCode}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Internal Code *</label>
+                              <input
+                                type="text"
+                                name="internalCode"
+                                className="form-control"
+                                value={formData.internalCode}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Vendor Code *</label>
+                              <input
+                                type="text"
+                                name="vendorCode"
+                                className="form-control"
+                                value={formData.vendorCode}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Factory Code *</label>
+                              <input
+                                type="text"
+                                name="factoryCode"
+                                className="form-control"
+                                value={formData.factoryCode}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Style Code *</label>
+                              <input
+                                type="text"
+                                name="styleCode"
+                                className="form-control"
+                                value={formData.styleCode}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">EAN Code *</label>
+                              <input
+                                type="text"
+                                name="eanCode"
+                                className="form-control"
+                                value={formData.eanCode}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="form-label">Description *</label>
+                              <textarea
+                                name="description"
+                                className="form-control"
+                                value={formData.description}
+                                onChange={handleInputChange}
+                                required
+                                rows={4}
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="form-label">Product Image</label>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImageChange}
+                                className="form-control"
+                              />
+                              {imagePreview && (
+                                <div className="mt-4">
+                                  <img
+                                    src={imagePreview}
+                                    alt="Product preview"
+                                    className="max-w-xs rounded-lg shadow-sm"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                        {isDesign && (
+                          <>
+                            <div>
+                              <label className="form-label">Name *</label>
+                              <input
+                                type="text"
+                                name="name"
+                                className="form-control"
+                                value={formData.name}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Category *</label>
+                              <select
+                                name="category"
+                                className="form-control"
+                                value={formData.category?.id || ''}
+                                onChange={handleInputChange}
+                                required
+                              >
+                                <option value="">Select Category</option>
+                                {categories.map((category) => (
+                                  <option key={category.id} value={category.id}>
+                                    {category.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label">Software Code *</label>
+                              <input
+                                type="text"
+                                name="softwareCode"
+                                className="form-control"
+                                value={formData.softwareCode}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Internal Code *</label>
+                              <input
+                                type="text"
+                                name="internalCode"
+                                className="form-control"
+                                value={formData.internalCode}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Vendor Code *</label>
+                              <input
+                                type="text"
+                                name="vendorCode"
+                                className="form-control"
+                                value={formData.vendorCode}
+                                onChange={handleInputChange}
+                                required
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="form-label">Product Image</label>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImageChange}
+                                className="form-control"
+                              />
+                              {imagePreview && (
+                                <div className="mt-4">
+                                  <img
+                                    src={imagePreview}
+                                    alt="Product preview"
+                                    className="max-w-xs rounded-lg shadow-sm"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </>
                     )}
-                    <div className="md:col-span-2">
-                      <label className="form-label">Product Image</label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        className="form-control"
-                      />
-                      {imagePreview && (
-                        <div className="mt-4">
-                          <img
-                            src={imagePreview}
-                            alt="Product preview"
-                            className="max-w-xs rounded-lg shadow-sm"
-                          />
-                        </div>
-                      )}
-                    </div>
                   </div>
                 )}
 
@@ -688,7 +865,22 @@ const EditProductPage = () => {
                       </div>
                     ) : (
                       attributeCategories
-                        .filter((category) => shouldShowAttribute(category.name, isDesign))
+                        .filter((category) => {
+                          if (isProduction) {
+                            // Production user: Only show "needles" attribute
+                            return category.name.toLowerCase() === 'needles';
+                          }
+                          if (isFinal) {
+                            // Final user: Only show Brand, Age group, MRP
+                            return shouldShowAttributeForFinal(category.name, isFinal);
+                          }
+                          // Design user: Show allowed attributes
+                          if (isDesign) {
+                            return shouldShowAttribute(category.name, isDesign);
+                          }
+                          // Other users: Show all attributes
+                          return true;
+                        })
                         .map((category) => {
                           // Get the current attribute value - try both by ID and by name
                           const valueById = formData.attributes[category.id] || '';
@@ -725,7 +917,7 @@ const EditProductPage = () => {
                 )}
 
                 {/* BOM Tab */}
-                {!isDesign && activeTab === 'bom' && (
+                {!isDesign && !isFinal && activeTab === 'bom' && (
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-medium">Bill of Materials</h3>
@@ -825,7 +1017,7 @@ const EditProductPage = () => {
                 )}
 
                 {/* Processes Tab */}
-                {!isDesign && activeTab === 'processes' && (
+                {!isDesign && !isFinal && activeTab === 'processes' && (
                   <div>
                     {formData.processes.map((proc, index) => {
                       const currentProcessId = typeof proc.processId === 'object' ? proc.processId.id : proc.processId;
