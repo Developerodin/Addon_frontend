@@ -1814,7 +1814,7 @@ const ProductListPage = () => {
                           {(!isDesign && !isProduction) || isFinal ? <th className="text-start">Style Code</th> : null}
                           {!isDesign && !isProduction && <th className="text-start">Internal Code</th>}
                           <th className="text-start">Category</th>
-                          {isProduction && <th className="text-start">Factory Code</th>}
+                          <th className="text-start">Factory Code</th>
                           {isFinal && <th className="text-start">EAN Code</th>}
                           {isFinal && <th className="text-start">Description</th>}
                           {!isDesign && !isFinal && <th className="text-start">Created At</th>}
@@ -1843,7 +1843,7 @@ const ProductListPage = () => {
                             {(!isDesign && !isProduction) || isFinal ? <td>{product.styleCode || ''}</td> : null}
                             {!isDesign && !isProduction && <td>{product.internalCode || ''}</td>}
                             <td>{getCategoryName(product.category)}</td>
-                            {isProduction && <td>{product.factoryCode || ''}</td>}
+                            <td>{product.factoryCode || ''}</td>
                             {isFinal && <td>{product.eanCode || ''}</td>}
                             {isFinal && <td className="max-w-xs truncate" title={product.description || ''}>{product.description || ''}</td>}
                             {!isDesign && !isFinal && <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>}
