@@ -6,6 +6,8 @@ import axios from 'axios';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import HelpIcon from '@/shared/components/HelpIcon';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
+import { useSelector } from 'react-redux';
+import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
 interface AttributeOptionValue {
   _id: string;
@@ -95,6 +97,11 @@ const generateSoftwareCode = () => {
 };
 
 const AddProductPage = () => {
+  const { user } = useSelector((state: any) => state.auth);
+  const isDesign = isDesignUser(user);
+  const isProduction = isProductionUser(user);
+  const isFinal = isFinalUser(user);
+  
   const [activeTab, setActiveTab] = useState('general');
   const [bomItems, setBomItems] = useState<BomItem[]>([{ yarnCatalogId: '', yarnName: '', quantity: 0 }]);
   const [processItems, setProcessItems] = useState<ProcessItem[]>([{ processId: '' }]);
@@ -289,53 +296,112 @@ const AddProductPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate required fields
-    if (!generalForm.name || !generalForm.category || !generalForm.internalCode || 
-        !generalForm.vendorCode || !generalForm.factoryCode || !generalForm.styleCode || 
-        !generalForm.eanCode || !generalForm.description) {
-      alert('Please fill in all required fields');
-      return;
+    // Validate required fields based on user type
+    if (isProduction) {
+      // Production user: Only Factory Code required
+      if (!generalForm.factoryCode) {
+        alert('Please fill in all required fields');
+        return;
+      }
+    } else if (isFinal) {
+      // Final user: Only Style Code, EAN Code, Description required
+      if (!generalForm.styleCode || !generalForm.eanCode || !generalForm.description) {
+        alert('Please fill in all required fields');
+        return;
+      }
+    } else if (isDesign) {
+      if (!generalForm.name || !generalForm.category || !generalForm.internalCode || 
+          !generalForm.vendorCode) {
+        alert('Please fill in all required fields');
+        return;
+      }
+    } else {
+      if (!generalForm.name || !generalForm.category || !generalForm.internalCode || 
+          !generalForm.vendorCode || !generalForm.factoryCode || !generalForm.styleCode || 
+          !generalForm.eanCode || !generalForm.description) {
+        alert('Please fill in all required fields');
+        return;
+      }
     }
 
     setIsLoading(true);
 
     try {
       // Prepare the product data
-      const productData = {
-        // General Information (all required)
-        name: generalForm.name,
-        softwareCode: softwareCode,
-        internalCode: generalForm.internalCode,
-        vendorCode: generalForm.vendorCode,
-        factoryCode: generalForm.factoryCode,
-        styleCode: generalForm.styleCode,
-        eanCode: generalForm.eanCode,
-        description: generalForm.description,
-        category: generalForm.category, // This should now be an ObjectId from the categories API
+      const productData: any = {};
 
-        // Attributes
-        attributes: Object.fromEntries(
-          attributeDefinitions
-            .map(attr => [attr.name, formData[attr.name.toLowerCase()]])
-            .filter(([_, value]) => value)
-        ),
+      if (isProduction) {
+        // Production user: Only Factory Code
+        productData.factoryCode = generalForm.factoryCode;
+      } else if (isFinal) {
+        // Final user: Only Style Code, EAN Code, Description
+        productData.styleCode = generalForm.styleCode;
+        productData.eanCode = generalForm.eanCode;
+        productData.description = generalForm.description;
+      } else if (isDesign) {
+        // Design user: Basic fields
+        productData.name = generalForm.name;
+        productData.softwareCode = softwareCode;
+        productData.internalCode = generalForm.internalCode;
+        productData.vendorCode = generalForm.vendorCode;
+        productData.category = generalForm.category;
+      } else {
+        // Other users: All fields
+        productData.name = generalForm.name;
+        productData.softwareCode = softwareCode;
+        productData.internalCode = generalForm.internalCode;
+        productData.vendorCode = generalForm.vendorCode;
+        productData.category = generalForm.category;
+        productData.factoryCode = generalForm.factoryCode;
+        productData.styleCode = generalForm.styleCode;
+        productData.eanCode = generalForm.eanCode;
+        productData.description = generalForm.description;
+      }
 
-        // BOM
-        bom: bomItems
+      // Attributes - filter based on user type
+      let allowedAttributes;
+      if (isProduction) {
+        // Production user: Only "needles" attribute
+        allowedAttributes = attributeDefinitions.filter(attr => 
+          attr.name.toLowerCase() === 'needles'
+        );
+      } else if (isFinal) {
+        // Final user: Only Brand, Age group, MRP
+        allowedAttributes = attributeDefinitions.filter(attr => 
+          shouldShowAttributeForFinal(attr.name, isFinal)
+        );
+      } else if (isDesign) {
+        // Design user: Only allowed attributes
+        allowedAttributes = attributeDefinitions.filter(attr => 
+          shouldShowAttribute(attr.name, isDesign)
+        );
+      } else {
+        // Other users: All attributes
+        allowedAttributes = attributeDefinitions;
+      }
+      
+      productData.attributes = Object.fromEntries(
+        allowedAttributes
+          .map(attr => [attr.name, formData[attr.name.toLowerCase()]])
+          .filter(([_, value]) => value)
+      );
+
+      // BOM and Processes for production users and non-design/non-final/non-production users
+      if (isProduction || (!isDesign && !isFinal && !isProduction)) {
+        productData.bom = bomItems
           .filter(item => item.yarnCatalogId && item.quantity > 0)
           .map(item => ({
             yarnCatalogId: item.yarnCatalogId,
             yarnName: item.yarnName,
             quantity: item.quantity
-          })),
+          }));
 
-        // Processes
-        processes: processItems
+        productData.processes = processItems
           .filter(item => item.processId)
           .map(item => ({
             processId: item.processId
-          }))
-      };
+          }));
+      }
 
       // Create FormData only if there's an image
       let requestData: any;
@@ -473,85 +539,56 @@ const AddProductPage = () => {
                     >
                       Attributes
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('bom')}
-                      className={`px-3 py-2 text-sm font-medium rounded-md ${
-                        activeTab === 'bom'
-                          ? 'bg-primary text-white'
-                          : 'text-gray-500 hover:text-gray-700'
-                      }`}
-                    >
-                      BOM
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('processes')}
-                      className={`px-3 py-2 text-sm font-medium rounded-md ${
-                        activeTab === 'processes'
-                          ? 'bg-primary text-white'
-                          : 'text-gray-500 hover:text-gray-700'
-                      }`}
-                    >
-                      Processes
-                    </button>
+                    {!isDesign && !isFinal && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('bom')}
+                          className={`px-3 py-2 text-sm font-medium rounded-md ${
+                            activeTab === 'bom'
+                              ? 'bg-primary text-white'
+                              : 'text-gray-500 hover:text-gray-700'
+                          }`}
+                        >
+                          BOM
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('processes')}
+                          className={`px-3 py-2 text-sm font-medium rounded-md ${
+                            activeTab === 'processes'
+                              ? 'bg-primary text-white'
+                              : 'text-gray-500 hover:text-gray-700'
+                          }`}
+                        >
+                          Processes
+                        </button>
+                      </>
+                    )}
                   </nav>
                 </div>
 
                 {/* General Tab */}
                 {activeTab === 'general' && (
                   <div className="grid grid-cols-12 gap-6">
-                    <div className="col-span-12 lg:col-span-8">
-                      <div className="space-y-6">
+                    {isProduction ? (
+                      // Production user: Only Factory Code
+                      <div className="col-span-12">
                         <div>
-                          <label className="form-label">Product Name *</label>
+                          <label className="form-label">Factory Code *</label>
                           <input 
                             type="text" 
                             className="form-control"
-                            value={generalForm.name}
-                            onChange={(e) => handleGeneralChange('name', e.target.value)}
+                            value={generalForm.factoryCode}
+                            onChange={(e) => handleGeneralChange('factoryCode', e.target.value)}
                             required
                           />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="form-label">Software Code</label>
-                            <input type="text" className="form-control" value={softwareCode} readOnly />
-                          </div>
-                          <div>
-                            <label className="form-label">Internal Code *</label>
-                            <input 
-                              type="text" 
-                              className="form-control"
-                              value={generalForm.internalCode}
-                              onChange={(e) => handleGeneralChange('internalCode', e.target.value)}
-                              required
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="form-label">Vendor Code *</label>
-                            <input 
-                              type="text" 
-                              className="form-control"
-                              value={generalForm.vendorCode}
-                              onChange={(e) => handleGeneralChange('vendorCode', e.target.value)}
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="form-label">Factory Code *</label>
-                            <input 
-                              type="text" 
-                              className="form-control"
-                              value={generalForm.factoryCode}
-                              onChange={(e) => handleGeneralChange('factoryCode', e.target.value)}
-                              required
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
+                      </div>
+                    ) : isFinal ? (
+                      // Final user: Only Style Code, EAN Code, Description
+                      <div className="col-span-12">
+                        <div className="space-y-6">
                           <div>
                             <label className="form-label">Style Code *</label>
                             <input 
@@ -572,58 +609,232 @@ const AddProductPage = () => {
                               required
                             />
                           </div>
-                        </div>
-                        <div>
-                          <label className="form-label">Description *</label>
-                          <textarea 
-                            className="form-control" 
-                            rows={4}
-                            value={generalForm.description}
-                            onChange={(e) => handleGeneralChange('description', e.target.value)}
-                            required
-                          ></textarea>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-span-12 lg:col-span-4">
-                      <div className="space-y-6">
-                        <div>
-                          <label className="form-label">Category *</label>
-                          <select 
-                            className="form-select"
-                            value={generalForm.category}
-                            onChange={(e) => handleGeneralChange('category', e.target.value)}
-                            required
-                          >
-                            <option value="">Select Category</option>
-                            {categories.map((category) => (
-                              <option key={category.id} value={category.id}>
-                                {category.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="form-label">Product Image</label>
-                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              id="productImage"
-                              onChange={handleImageUpload}
-                            />
-                            <label htmlFor="productImage" className="cursor-pointer">
-                              <div className="flex flex-col items-center">
-                                <i className="ri-upload-cloud-2-line text-4xl text-gray-400 mb-2"></i>
-                                <p className="text-sm text-gray-500">Click to upload or drag and drop</p>
-                                <p className="text-xs text-gray-400">SVG, PNG, JPG or GIF (MAX. 800x400px)</p>
-                              </div>
-                            </label>
+                          <div>
+                            <label className="form-label">Description *</label>
+                            <textarea 
+                              className="form-control" 
+                              rows={4}
+                              value={generalForm.description}
+                              onChange={(e) => handleGeneralChange('description', e.target.value)}
+                              required
+                            ></textarea>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      <>
+                        <div className="col-span-12 lg:col-span-8">
+                          <div className="space-y-6">
+                            {!isDesign && (
+                              <>
+                                <div>
+                                  <label className="form-label">Product Name *</label>
+                                  <input 
+                                    type="text" 
+                                    className="form-control"
+                                    value={generalForm.name}
+                                    onChange={(e) => handleGeneralChange('name', e.target.value)}
+                                    required
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="form-label">Software Code</label>
+                                    <input type="text" className="form-control" value={softwareCode} readOnly />
+                                  </div>
+                                  <div>
+                                    <label className="form-label">Internal Code *</label>
+                                    <input 
+                                      type="text" 
+                                      className="form-control"
+                                      value={generalForm.internalCode}
+                                      onChange={(e) => handleGeneralChange('internalCode', e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="form-label">Vendor Code *</label>
+                                    <input 
+                                      type="text" 
+                                      className="form-control"
+                                      value={generalForm.vendorCode}
+                                      onChange={(e) => handleGeneralChange('vendorCode', e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="form-label">Factory Code *</label>
+                                    <input 
+                                      type="text" 
+                                      className="form-control"
+                                      value={generalForm.factoryCode}
+                                      onChange={(e) => handleGeneralChange('factoryCode', e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="form-label">Style Code *</label>
+                                    <input 
+                                      type="text" 
+                                      className="form-control"
+                                      value={generalForm.styleCode}
+                                      onChange={(e) => handleGeneralChange('styleCode', e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="form-label">EAN Code *</label>
+                                    <input 
+                                      type="text" 
+                                      className="form-control"
+                                      value={generalForm.eanCode}
+                                      onChange={(e) => handleGeneralChange('eanCode', e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="form-label">Description *</label>
+                                  <textarea 
+                                    className="form-control" 
+                                    rows={4}
+                                    value={generalForm.description}
+                                    onChange={(e) => handleGeneralChange('description', e.target.value)}
+                                    required
+                                  ></textarea>
+                                </div>
+                              </>
+                            )}
+                            {isDesign && (
+                              <>
+                                <div>
+                                  <label className="form-label">Product Name *</label>
+                                  <input 
+                                    type="text" 
+                                    className="form-control"
+                                    value={generalForm.name}
+                                    onChange={(e) => handleGeneralChange('name', e.target.value)}
+                                    required
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="form-label">Software Code</label>
+                                    <input type="text" className="form-control" value={softwareCode} readOnly />
+                                  </div>
+                                  <div>
+                                    <label className="form-label">Internal Code *</label>
+                                    <input 
+                                      type="text" 
+                                      className="form-control"
+                                      value={generalForm.internalCode}
+                                      onChange={(e) => handleGeneralChange('internalCode', e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="form-label">Vendor Code *</label>
+                                  <input 
+                                    type="text" 
+                                    className="form-control"
+                                    value={generalForm.vendorCode}
+                                    onChange={(e) => handleGeneralChange('vendorCode', e.target.value)}
+                                    required
+                                  />
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="col-span-12 lg:col-span-4">
+                          <div className="space-y-6">
+                            {!isDesign && (
+                              <div>
+                                <label className="form-label">Category *</label>
+                                <select 
+                                  className="form-select"
+                                  value={generalForm.category}
+                                  onChange={(e) => handleGeneralChange('category', e.target.value)}
+                                  required
+                                >
+                                  <option value="">Select Category</option>
+                                  {categories.map((category) => (
+                                    <option key={category.id} value={category.id}>
+                                      {category.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                            {isDesign && (
+                              <div>
+                                <label className="form-label">Category *</label>
+                                <select 
+                                  className="form-select"
+                                  value={generalForm.category}
+                                  onChange={(e) => handleGeneralChange('category', e.target.value)}
+                                  required
+                                >
+                                  <option value="">Select Category</option>
+                                  {categories.map((category) => (
+                                    <option key={category.id} value={category.id}>
+                                      {category.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                            {!isDesign && (
+                              <div>
+                                <label className="form-label">Product Image</label>
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    id="productImage"
+                                    onChange={handleImageUpload}
+                                  />
+                                  <label htmlFor="productImage" className="cursor-pointer">
+                                    <div className="flex flex-col items-center">
+                                      <i className="ri-upload-cloud-2-line text-4xl text-gray-400 mb-2"></i>
+                                      <p className="text-sm text-gray-500">Click to upload or drag and drop</p>
+                                      <p className="text-xs text-gray-400">SVG, PNG, JPG or GIF (MAX. 800x400px)</p>
+                                    </div>
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+                            {isDesign && (
+                              <div>
+                                <label className="form-label">Product Image</label>
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    id="productImage"
+                                    onChange={handleImageUpload}
+                                  />
+                                  <label htmlFor="productImage" className="cursor-pointer">
+                                    <div className="flex flex-col items-center">
+                                      <i className="ri-upload-cloud-2-line text-4xl text-gray-400 mb-2"></i>
+                                      <p className="text-sm text-gray-500">Click to upload or drag and drop</p>
+                                      <p className="text-xs text-gray-400">SVG, PNG, JPG or GIF (MAX. 800x400px)</p>
+                                    </div>
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -632,31 +843,48 @@ const AddProductPage = () => {
                   <div className="grid grid-cols-12 gap-6">
                     <div className="col-span-12">
                       <div className="grid grid-cols-2 gap-6">
-                        {attributeDefinitions.map((attrDef) => (
-                          <div key={attrDef.id} className="space-y-2">
-                            <label className="form-label">{attrDef.name}</label>
-                            <select 
-                              className="form-select" 
-                              disabled={isLoading}
-                              value={formData[attrDef.name.toLowerCase()] || ''}
-                              onChange={(e) => handleAttributeChange(attrDef.name.toLowerCase(), e.target.value)}
-                            >
-                              <option value="">Select {attrDef.name}</option>
-                              {attrDef.optionValues.map((option) => (
-                                <option key={option._id} value={option._id}>
-                                  {option.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        ))}
+                        {attributeDefinitions
+                          .filter((attrDef) => {
+                            if (isProduction) {
+                              // Production user: Only show "needles" attribute
+                              return attrDef.name.toLowerCase() === 'needles';
+                            }
+                            if (isFinal) {
+                              // Final user: Only show Brand, Age group, MRP
+                              return shouldShowAttributeForFinal(attrDef.name, isFinal);
+                            }
+                            // Design user: Show allowed attributes
+                            if (isDesign) {
+                              return shouldShowAttribute(attrDef.name, isDesign);
+                            }
+                            // Other users: Show all attributes
+                            return true;
+                          })
+                          .map((attrDef) => (
+                            <div key={attrDef.id} className="space-y-2">
+                              <label className="form-label">{attrDef.name}</label>
+                              <select 
+                                className="form-select" 
+                                disabled={isLoading}
+                                value={formData[attrDef.name.toLowerCase()] || ''}
+                                onChange={(e) => handleAttributeChange(attrDef.name.toLowerCase(), e.target.value)}
+                              >
+                                <option value="">Select {attrDef.name}</option>
+                                {attrDef.optionValues.map((option) => (
+                                  <option key={option._id} value={option._id}>
+                                    {option.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
                       </div>
                     </div>
                   </div>
                 )}
 
                 {/* BOM Tab */}
-                {activeTab === 'bom' && (
+                {!isDesign && !isFinal && activeTab === 'bom' && (
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-medium">Bill of Materials</h3>
@@ -756,7 +984,7 @@ const AddProductPage = () => {
                 )}
 
                 {/* Processes Tab */}
-                {activeTab === 'processes' && (
+                {!isDesign && !isFinal && activeTab === 'processes' && (
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-medium">Production Processes</h3>

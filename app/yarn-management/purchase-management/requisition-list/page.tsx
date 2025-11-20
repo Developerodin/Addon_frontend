@@ -1,9 +1,10 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
+import { yarnInventoryService } from "@/app/yarn-management/dashboard/services/yarnInventoryService";
 
 interface YarnInventory {
   id: string;
@@ -17,56 +18,66 @@ interface YarnInventory {
 const RequisitionListPage = () => {
   const { hasSubPermission } = useNavigation();
 
-  const staticYarnInventory: YarnInventory[] = [
-    {
-      id: "1",
-      yarnName: "Cotton Count 40",
-      minimumQty: 250,
-      availableQty: 180,
-      blockedQty: 60,
-      lastUpdated: "2024-01-16T09:15:00Z"
-    },
-    {
-      id: "2",
-      yarnName: "Polyester DTY 150",
-      minimumQty: 200,
-      availableQty: 90,
-      blockedQty: 120,
-      lastUpdated: "2024-01-16T11:45:00Z"
-    },
-    {
-      id: "3",
-      yarnName: "Viscose Rayon 30",
-      minimumQty: 150,
-      availableQty: 140,
-      blockedQty: 60,
-      lastUpdated: "2024-01-18T10:15:00Z"
-    },
-    {
-      id: "4",
-      yarnName: "Linen Blend 24",
-      minimumQty: 100,
-      availableQty: 80,
-      blockedQty: 30,
-      lastUpdated: "2024-01-18T12:05:00Z"
-    },
-    {
-      id: "5",
-      yarnName: "Bamboo Fiber 20",
-      minimumQty: 120,
-      availableQty: 190,
-      blockedQty: 210,
-      lastUpdated: "2024-01-18T12:15:00Z"
-    }
-  ];
-
-  const [yarns, setYarns] = useState<YarnInventory[]>(staticYarnInventory);
+  const [yarns, setYarns] = useState<YarnInventory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "belowMin" | "overblocked">("all");
   const [sortConfig, setSortConfig] = useState<{ key: keyof YarnInventory; direction: "asc" | "desc" } | null>(null);
   const [dateFilter, setDateFilter] = useState<{ from: string; to: string }>({ from: "", to: "" });
 
   const hasPermission = hasSubPermission("/yarn-management/purchase-management", "Requisition list");
+
+  // Fetch requisitions from API
+  useEffect(() => {
+    if (!hasPermission) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchRequisitions = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch requisitions for the last 90 days
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 90);
+
+        const requisitions = await yarnInventoryService.getYarnRequisitions({
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          // Don't filter by poSent here - we'll filter in the UI
+        });
+
+        // Transform API response to UI format
+        // Filter out requisitions where PO is already sent
+        const transformedYarns: YarnInventory[] = requisitions
+          .filter((req) => !req.poSent) // Only show pending requisitions
+          .map((req) => ({
+            id: req._id,
+            yarnName: req.yarnName,
+            minimumQty: req.minQty,
+            availableQty: req.availableQty,
+            blockedQty: req.blockedQty,
+            lastUpdated: req.lastUpdated || req.created,
+          }));
+
+        setYarns(transformedYarns);
+      } catch (err) {
+        console.error('Error fetching requisitions:', err);
+        setError(
+          err instanceof Error ? err.message : 'Failed to load requisition data'
+        );
+        toast.error('Failed to load requisition data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRequisitions();
+  }, [hasPermission]);
 
   const isBelowMinimum = (yarn: YarnInventory) => yarn.availableQty < yarn.minimumQty;
   const isOverblocked = (yarn: YarnInventory) => yarn.blockedQty > yarn.availableQty;
@@ -147,6 +158,38 @@ const RequisitionListPage = () => {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="main-content">
+        <div className="py-12 text-center">
+          <div className="inline-block mb-4 animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <p className="text-gray-600">Loading requisition data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="main-content">
+        <div className="py-12 text-center">
+          <div className="mb-4 text-red-400">
+            <i className="ri-error-warning-line text-6xl"></i>
+          </div>
+          <h3 className="mb-2 text-lg font-medium text-gray-900">Error Loading Data</h3>
+          <p className="mb-4 text-gray-500">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="ti-btn ti-btn-primary"
+          >
+            <i className="ri-refresh-line me-2"></i>
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const buttonBaseClasses = "flex items-center gap-2 whitespace-nowrap !h-9 !px-3 text-xs font-semibold";
 
   const handleSort = (key: keyof YarnInventory) => {
@@ -190,7 +233,7 @@ const RequisitionListPage = () => {
     return badges;
   };
 
-  const handleMarkPoSent = (id: string) => {
+  const handleMarkPoSent = async (id: string) => {
     const yarn = yarns.find((item) => item.id === id);
 
     if (!yarn) return;
@@ -203,8 +246,23 @@ const RequisitionListPage = () => {
       return;
     }
 
-    setYarns((prev) => prev.filter((item) => item.id !== id));
-    toast.success(`${yarn.yarnName} marked as PO sent and removed from the list.`);
+    try {
+      // Update requisition status via API
+      await yarnInventoryService.updateRequisitionStatus(id, {
+        poSent: true,
+      });
+
+      // Remove from list (it will be filtered out since poSent is now true)
+      setYarns((prev) => prev.filter((item) => item.id !== id));
+      toast.success(`${yarn.yarnName} marked as PO sent and removed from the list.`);
+    } catch (err) {
+      console.error('Error updating requisition status:', err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : 'Failed to update requisition status'
+      );
+    }
   };
 
   const handleExport = () => {

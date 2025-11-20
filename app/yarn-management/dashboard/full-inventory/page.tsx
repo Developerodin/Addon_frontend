@@ -5,7 +5,7 @@ import Link from "next/link";
 import Seo from "@/shared/layout-components/seo/seo";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { YarnInventory } from "../types";
-import { getDummyInventory } from "../data/dummyData";
+import { yarnInventoryService } from "../services/yarnInventoryService";
 
 type SortField = keyof YarnInventory;
 type SortDirection = "asc" | "desc";
@@ -17,12 +17,98 @@ const FullInventoryPage = () => {
   const [sortField, setSortField] = useState<SortField>("yarnName");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const hasPermission = hasSubPermission("/yarn-management", "Dashboard");
 
   useEffect(() => {
-    setInventory(getDummyInventory());
-  }, []);
+    if (!hasPermission) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchInventory = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch yarn inventories
+        const inventoryResponse = await yarnInventoryService.getYarnInventories({
+          limit: 1000, // Get all inventories
+        });
+
+        // Fetch requisitions to get blocked quantities
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 90);
+
+        const requisitions = await yarnInventoryService.getYarnRequisitions({
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        });
+
+        // Transform API response to UI format
+        const transformedInventory: YarnInventory[] =
+          inventoryResponse.results.map((item) => {
+            const totalWeight =
+              item.longTermStorage.totalWeight +
+              item.shortTermStorage.totalWeight;
+            const totalNetWeight =
+              item.longTermStorage.netWeight +
+              item.shortTermStorage.netWeight;
+
+            // Find blocked quantity from requisitions
+            const relatedRequisitions = requisitions.filter(
+              (req) => req.yarn._id === item.yarnId
+            );
+            const blockedQty = relatedRequisitions.reduce(
+              (sum, req) => sum + req.blockedQty,
+              0
+            );
+            const availableQty = Math.max(0, totalNetWeight - blockedQty);
+
+            // Map inventory status to UI status
+            let status: 'In Stock' | 'Low Stock' | 'Out of Stock' = 'In Stock';
+            if (item.inventoryStatus === 'low_stock' || item.inventoryStatus === 'soon_to_be_low') {
+              status = 'Low Stock';
+            } else if (totalWeight === 0) {
+              status = 'Out of Stock';
+            }
+
+            return {
+              id: item._id || item.yarnId,
+              yarnName: item.yarnName,
+              weight: totalWeight,
+              conesLongTerm: item.longTermStorage.numberOfCones,
+              conesShortTerm: item.shortTermStorage.numberOfCones,
+              blockedQty: blockedQty,
+              availableQty: availableQty,
+              unitOfMeasurement: 'kg',
+              ratePerUnit: 0, // Not available from API
+              totalValue: 0, // Not available from API
+              lastUpdated: new Date().toISOString().split('T')[0],
+              status: status,
+              supplier: '', // Not available from API
+              yarnId: item.yarnId,
+              inventoryStatus: item.inventoryStatus,
+              overbooked: item.overbooked,
+            };
+          });
+
+        setInventory(transformedInventory);
+      } catch (err) {
+        console.error('Error fetching inventory:', err);
+        setError(
+          err instanceof Error ? err.message : 'Failed to load inventory data'
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInventory();
+  }, [hasPermission]);
 
   const filteredAndSorted = useMemo(() => {
     const filtered = inventory.filter((item) => {
@@ -107,6 +193,40 @@ const FullInventoryPage = () => {
             <i className="ri-arrow-left-line me-2"></i>
             Back to Yarn Management
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="main-content">
+        <div className="text-center py-12">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <p className="text-gray-600">Loading inventory data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="main-content">
+        <div className="text-center py-12">
+          <div className="text-red-400 mb-4">
+            <i className="ri-error-warning-line text-6xl"></i>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Error Loading Inventory
+          </h3>
+          <p className="text-gray-500 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="ti-btn ti-btn-primary"
+          >
+            <i className="ri-refresh-line me-2"></i>
+            Retry
+          </button>
         </div>
       </div>
     );

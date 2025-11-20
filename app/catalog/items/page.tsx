@@ -8,6 +8,8 @@ import { saveAs } from 'file-saver';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import { toast, Toaster } from 'react-hot-toast';
 import HelpIcon from '@/shared/components/HelpIcon';
+import { useSelector } from 'react-redux';
+import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
 interface Product {
   id: string;
@@ -55,6 +57,11 @@ const API_ENDPOINTS = {
 };
 
 const ProductListPage = () => {
+  const { user } = useSelector((state: any) => state.auth);
+  const isDesign = isDesignUser(user);
+  const isProduction = isProductionUser(user);
+  const isFinal = isFinalUser(user);
+  
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -178,6 +185,62 @@ const ProductListPage = () => {
     }
   };
 
+  // Helper function to get allowed fields based on user type
+  const getAllowedFields = () => {
+    if (isProduction) {
+      return ['ID', 'Factory Code'];
+    } else if (isFinal) {
+      return ['ID', 'Style Code', 'EAN Code', 'Description'];
+    } else if (isDesign) {
+      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Vendor Code'];
+    } else {
+      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Vendor Code', 'Factory Code', 'Style Code', 'EAN Code', 'Description'];
+    }
+  };
+
+  // Helper function to build export data object with only allowed fields
+  const buildExportData = (product: Product, categoryNameMapping: Record<string, string>) => {
+    const allowedFields = getAllowedFields();
+    const exportObj: Record<string, any> = {};
+    
+    allowedFields.forEach(field => {
+      switch(field) {
+        case 'ID':
+          exportObj['ID'] = product.id;
+          break;
+        case 'Name':
+          exportObj['Name'] = product.name;
+          break;
+        case 'Category':
+          exportObj['Category'] = categoryNameMapping[product.category] || product.category;
+          break;
+        case 'Software Code':
+          exportObj['Software Code'] = product.softwareCode;
+          break;
+        case 'Internal Code':
+          exportObj['Internal Code'] = product.internalCode;
+          break;
+        case 'Vendor Code':
+          exportObj['Vendor Code'] = product.vendorCode;
+          break;
+        case 'Factory Code':
+          exportObj['Factory Code'] = product.factoryCode;
+          break;
+        case 'Style Code':
+          exportObj['Style Code'] = product.styleCode;
+          break;
+        case 'EAN Code':
+          exportObj['EAN Code'] = product.eanCode;
+          break;
+        case 'Description':
+          exportObj['Description'] = product.description;
+          break;
+      }
+    });
+    
+    return exportObj;
+  };
+
   const handleExport = async () => {
     try {
       setIsLoading(true);
@@ -196,19 +259,8 @@ const ProductListPage = () => {
       
       const wb = XLSX.utils.book_new();
 
-      // Create Products sheet with only basic product data
-      const exportData = data.results.map(product => ({
-        'ID': product.id,
-        'Name': product.name,
-        'Category': categoryNameMapping[product.category] || product.category, // Show category name instead of ID
-        'Software Code': product.softwareCode,
-        'Internal Code': product.internalCode,
-        'Vendor Code': product.vendorCode,
-        'Factory Code': product.factoryCode,
-        'Style Code': product.styleCode,
-        'EAN Code': product.eanCode,
-        'Description': product.description
-      }));
+      // Create Products sheet with only user-appropriate fields
+      const exportData = data.results.map(product => buildExportData(product, categoryNameMapping));
       
       const ws = XLSX.utils.json_to_sheet(exportData);
       XLSX.utils.book_append_sheet(wb, ws, 'Products');
@@ -259,18 +311,30 @@ const ProductListPage = () => {
       
       const wb = XLSX.utils.book_new();
 
-      // Create Attributes sheet for selected products only
+      // Create Attributes sheet for selected products only - filter by user type
       const attributesData = selectedProductsData.flatMap(product => {
         if (product.attributes && Object.keys(product.attributes).length > 0) {
-          return Object.entries(product.attributes).map(([attrName, attrValueId]) => {
-            const mapping = reverseMapping[attrValueId];
-            return {
-              'Product ID': product.id,
-              'Product Name': product.name,
-              'Attribute Name': attrName,
-              'Attribute Value': mapping ? mapping.attributeValueName : attrValueId
-            };
-          });
+          return Object.entries(product.attributes)
+            .filter(([attrName]) => {
+              // Filter attributes based on user type
+              if (isProduction) {
+                return attrName.toLowerCase() === 'needles';
+              } else if (isFinal) {
+                return shouldShowAttributeForFinal(attrName, isFinal);
+              } else if (isDesign) {
+                return shouldShowAttribute(attrName, isDesign);
+              }
+              return true; // Other users see all attributes
+            })
+            .map(([attrName, attrValueId]) => {
+              const mapping = reverseMapping[attrValueId];
+              return {
+                'Product ID': product.id,
+                'Product Name': product.name,
+                'Attribute Name': attrName,
+                'Attribute Value': mapping ? mapping.attributeValueName : attrValueId
+              };
+            });
         }
         return [];
       });
@@ -428,50 +492,70 @@ const ProductListPage = () => {
   const handleDownloadTemplate = () => {
     try {
       const wb = XLSX.utils.book_new();
+      const allowedFields = getAllowedFields();
 
-      // Create a simple template with only basic product fields
-      const templateData = [
-        {
-          'ID': '680c7a2bc30d1e00643b84e8',
-          'Name': 'Example Product 1',
-          'Category': 'Electronics',
-          'Software Code': 'PRD-M9XTTW8I-85T1C',
-          'Internal Code': '123',
-          'Vendor Code': '456',
-          'Factory Code': '789',
-          'Style Code': 'STY-12345',
-          'EAN Code': '1234567890123',
-          'Description': 'Example product description'
-        },
-        {
-          'ID': '68246cc23d04e20065d3d60a',
-          'Name': 'Example Product 2',
-          'Category': 'Clothing',
-          'Software Code': 'PRD-MANS85IE-BW0YJ',
-          'Internal Code': 'INT-67890',
-          'Vendor Code': 'VEN-67890',
-          'Factory Code': 'FAC-67890',
-          'Style Code': 'STY-67890',
-          'EAN Code': '9876543210987',
-          'Description': 'Another example product'
+      // Build template data based on user type
+      const buildTemplateRow = (exampleNum: number) => {
+        const row: Record<string, any> = {};
+        
+        if (allowedFields.includes('ID')) {
+          row['ID'] = exampleNum === 1 ? '680c7a2bc30d1e00643b84e8' : '68246cc23d04e20065d3d60a';
         }
-      ];
+        if (allowedFields.includes('Name')) {
+          row['Name'] = `Example Product ${exampleNum}`;
+        }
+        if (allowedFields.includes('Category')) {
+          row['Category'] = exampleNum === 1 ? 'Electronics' : 'Clothing';
+        }
+        if (allowedFields.includes('Software Code')) {
+          row['Software Code'] = exampleNum === 1 ? 'PRD-M9XTTW8I-85T1C' : 'PRD-MANS85IE-BW0YJ';
+        }
+        if (allowedFields.includes('Internal Code')) {
+          row['Internal Code'] = exampleNum === 1 ? '123' : 'INT-67890';
+        }
+        if (allowedFields.includes('Vendor Code')) {
+          row['Vendor Code'] = exampleNum === 1 ? '456' : 'VEN-67890';
+        }
+        if (allowedFields.includes('Factory Code')) {
+          row['Factory Code'] = exampleNum === 1 ? '789' : 'FAC-67890';
+        }
+        if (allowedFields.includes('Style Code')) {
+          row['Style Code'] = exampleNum === 1 ? 'STY-12345' : 'STY-67890';
+        }
+        if (allowedFields.includes('EAN Code')) {
+          row['EAN Code'] = exampleNum === 1 ? '1234567890123' : '9876543210987';
+        }
+        if (allowedFields.includes('Description')) {
+          row['Description'] = exampleNum === 1 ? 'Example product description' : 'Another example product';
+        }
+        
+        return row;
+      };
+
+      const templateData = [buildTemplateRow(1), buildTemplateRow(2)];
       
       const ws = XLSX.utils.json_to_sheet(templateData);
       XLSX.utils.book_append_sheet(wb, ws, 'Products');
 
-      // Add instructions sheet
+      // Add instructions sheet with user-specific requirements
+      const getRequiredFields = () => {
+        if (isProduction) return 'Factory Code';
+        if (isFinal) return 'Style Code, EAN Code, Description';
+        if (isDesign) return 'Name, Category, Internal Code, Vendor Code';
+        return 'Name, Style Code';
+      };
+
       const instructionsTemplate = [
         {
           'Instructions': 'How to use this template:',
           '': ''
         },
         {
-          'Instructions': '1. The Products sheet contains all the basic product information.',
+          'Instructions': '1. The Products sheet contains product information fields based on your user role.',
           '': ''
         },
         {
-          'Instructions': '2. Product Name and Style Code are required fields.',
+          'Instructions': `2. Required fields: ${getRequiredFields()}`,
           '': ''
         },
         {
@@ -491,7 +575,7 @@ const ProductListPage = () => {
           '': ''
         },
         {
-          'Instructions': '7. All other fields are optional but recommended.',
+          'Instructions': '7. Only fill in the fields visible in this template based on your user role.',
           '': ''
         },
         {
@@ -768,13 +852,24 @@ const ProductListPage = () => {
           const productsData = XLSX.utils.sheet_to_json<any>(productsSheet);
           console.log('Parsed products data:', productsData);
 
+          // Validate required fields based on user type
+          const getRequiredFields = () => {
+            if (isProduction) return ['Factory Code'];
+            if (isFinal) return ['Style Code', 'EAN Code', 'Description'];
+            if (isDesign) return ['Name', 'Category', 'Internal Code', 'Vendor Code'];
+            return ['Name', 'Style Code'];
+          };
+
+          const requiredFields = getRequiredFields();
+          
           // Filter out rows without required fields
           const validProducts = productsData.filter((row: any) => {
-            return row['Name'] && row['Style Code'];
+            return requiredFields.every(field => row[field] && row[field].toString().trim() !== '');
           });
 
           if (validProducts.length === 0) {
-            toast.error('No valid products found in the Excel file. Please ensure Name and Style Code are provided.');
+            const requiredFieldsStr = requiredFields.join(', ');
+            toast.error(`No valid products found in the Excel file. Please ensure ${requiredFieldsStr} are provided.`);
             setImportProgress(null);
             toast.dismiss(loadingToast);
             return;
@@ -796,35 +891,63 @@ const ProductListPage = () => {
 
           setImportProgress(50);
 
-          // Transform data for bulk import with category name mapping
+          // Transform data for bulk import with category name mapping - only include allowed fields
           const transformedProducts = validProducts.map((row: any) => {
-            const categoryName = row['Category'] || '';
-            let categoryId = '';
-            
-            if (categoryName && categoryName.toString().trim() !== '') {
-              // Map category name to ID
-              const mappedCategoryId = categoryMapping[categoryName.toString().toLowerCase()];
-              if (mappedCategoryId) {
-                categoryId = mappedCategoryId;
-              } else {
-                console.warn(`Category "${categoryName}" not found in the system`);
-                // You can choose to skip this product or continue with empty category
-                // For now, we'll continue with empty category
+            const productData: any = {
+              id: row['ID'] && row['ID'].toString().trim() !== '' ? row['ID'].toString() : undefined, // For updates
+            };
+
+            // Only include fields allowed for this user type
+            if (isProduction) {
+              productData.factoryCode = row['Factory Code']?.toString() || '';
+            } else if (isFinal) {
+              productData.styleCode = row['Style Code']?.toString() || '';
+              productData.eanCode = row['EAN Code']?.toString() || '';
+              productData.description = row['Description']?.toString() || '';
+            } else if (isDesign) {
+              const categoryName = row['Category'] || '';
+              let categoryId = '';
+              
+              if (categoryName && categoryName.toString().trim() !== '') {
+                const mappedCategoryId = categoryMapping[categoryName.toString().toLowerCase()];
+                if (mappedCategoryId) {
+                  categoryId = mappedCategoryId;
+                } else {
+                  console.warn(`Category "${categoryName}" not found in the system`);
+                }
               }
+
+              productData.name = row['Name']?.toString() || '';
+              productData.softwareCode = row['Software Code']?.toString() || undefined;
+              productData.internalCode = row['Internal Code']?.toString() || '';
+              productData.vendorCode = row['Vendor Code']?.toString() || '';
+              productData.category = categoryId;
+            } else {
+              // Other users: All fields
+              const categoryName = row['Category'] || '';
+              let categoryId = '';
+              
+              if (categoryName && categoryName.toString().trim() !== '') {
+                const mappedCategoryId = categoryMapping[categoryName.toString().toLowerCase()];
+                if (mappedCategoryId) {
+                  categoryId = mappedCategoryId;
+                } else {
+                  console.warn(`Category "${categoryName}" not found in the system`);
+                }
+              }
+
+              productData.name = row['Name']?.toString() || '';
+              productData.styleCode = row['Style Code']?.toString() || '';
+              productData.internalCode = row['Internal Code']?.toString() || '';
+              productData.vendorCode = row['Vendor Code']?.toString() || '';
+              productData.factoryCode = row['Factory Code']?.toString() || '';
+              productData.eanCode = row['EAN Code']?.toString() || '';
+              productData.description = row['Description']?.toString() || '';
+              productData.category = categoryId;
+              productData.softwareCode = row['Software Code']?.toString() || undefined;
             }
 
-            return {
-              id: row['ID'] && row['ID'].toString().trim() !== '' ? row['ID'].toString() : undefined, // For updates
-              name: row['Name']?.toString() || '',
-              styleCode: row['Style Code']?.toString() || '',
-              internalCode: row['Internal Code']?.toString() || '',
-              vendorCode: row['Vendor Code']?.toString() || '',
-              factoryCode: row['Factory Code']?.toString() || '',
-              eanCode: row['EAN Code']?.toString() || '',
-              description: row['Description']?.toString() || '',
-              category: categoryId, // Use mapped category ID
-              softwareCode: row['Software Code']?.toString() || undefined, // Will be auto-generated if not provided
-            };
+            return productData;
           });
 
           setImportProgress(75);
@@ -943,6 +1066,23 @@ const ProductListPage = () => {
             const productId = row['Product ID'].toString().trim();
             const attributeName = row['Attribute Name'].toString().trim();
             const attributeValue = row['Attribute Value'].toString().trim();
+            
+            // Filter attributes based on user type
+            let isAllowed = false;
+            if (isProduction) {
+              isAllowed = attributeName.toLowerCase() === 'needles';
+            } else if (isFinal) {
+              isAllowed = shouldShowAttributeForFinal(attributeName, isFinal);
+            } else if (isDesign) {
+              isAllowed = shouldShowAttribute(attributeName, isDesign);
+            } else {
+              isAllowed = true; // Other users can import all attributes
+            }
+
+            if (!isAllowed) {
+              mappingErrors.push(`Product ${productId}: Attribute "${attributeName}" is not allowed for your user role`);
+              return;
+            }
             
             if (!productAttributes[productId]) {
               productAttributes[productId] = {};
@@ -1516,24 +1656,28 @@ const ProductListPage = () => {
                         <i className="ri-download-2-line me-2"></i>
                         Export by Attributes
                       </button>
-                      <button
-                        type="button"
-                        onClick={handleExportByBOM}
-                        className="ti-btn ti-btn-info"
-                        disabled={isLoading}
-                      >
-                        <i className="ri-download-2-line me-2"></i>
-                        Export by BOM
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleExportByProcesses}
-                        className="ti-btn ti-btn-info"
-                        disabled={isLoading}
-                      >
-                        <i className="ri-download-2-line me-2"></i>
-                        Export by Processes
-                      </button>
+                      {!isDesign && !isFinal && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleExportByBOM}
+                            className="ti-btn ti-btn-info"
+                            disabled={isLoading}
+                          >
+                            <i className="ri-download-2-line me-2"></i>
+                            Export by BOM
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleExportByProcesses}
+                            className="ti-btn ti-btn-info"
+                            disabled={isLoading}
+                          >
+                            <i className="ri-download-2-line me-2"></i>
+                            Export by Processes
+                          </button>
+                        </>
+                      )}
                     </div>
                     
                     {/* Import Buttons - Second Row */}
@@ -1547,24 +1691,28 @@ const ProductListPage = () => {
                         <i className="ri-file-excel-2-line me-2"></i>
                         Import by Attributes
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => bomFileInputRef.current?.click()}
-                        className="ti-btn ti-btn-success"
-                        disabled={isLoading}
-                      >
-                        <i className="ri-file-excel-2-line me-2"></i>
-                        Import by BOM
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => processesFileInputRef.current?.click()}
-                        className="ti-btn ti-btn-success"
-                        disabled={isLoading}
-                      >
-                        <i className="ri-file-excel-2-line me-2"></i>
-                        Import by Processes
-                      </button>
+                      {!isDesign && !isFinal && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => bomFileInputRef.current?.click()}
+                            className="ti-btn ti-btn-success"
+                            disabled={isLoading}
+                          >
+                            <i className="ri-file-excel-2-line me-2"></i>
+                            Import by BOM
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => processesFileInputRef.current?.click()}
+                            className="ti-btn ti-btn-success"
+                            disabled={isLoading}
+                          >
+                            <i className="ri-file-excel-2-line me-2"></i>
+                            Import by Processes
+                          </button>
+                        </>
+                      )}
                     </div>
                     
                     {/* Template Buttons - Third Row */}
@@ -1578,24 +1726,28 @@ const ProductListPage = () => {
                         <i className="ri-file-download-line me-2"></i>
                         Attributes Template
                       </button>
-                      <button
-                        type="button"
-                        onClick={handleDownloadBOMTemplate}
-                        className="ti-btn ti-btn-outline-secondary"
-                        disabled={isLoading}
-                      >
-                        <i className="ri-file-download-line me-2"></i>
-                        BOM Template
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleDownloadProcessesTemplate}
-                        className="ti-btn ti-btn-outline-secondary"
-                        disabled={isLoading}
-                      >
-                        <i className="ri-file-download-line me-2"></i>
-                        Processes Template
-                      </button>
+                      {!isDesign && !isFinal && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleDownloadBOMTemplate}
+                            className="ti-btn ti-btn-outline-secondary"
+                            disabled={isLoading}
+                          >
+                            <i className="ri-file-download-line me-2"></i>
+                            BOM Template
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleDownloadProcessesTemplate}
+                            className="ti-btn ti-btn-outline-secondary"
+                            disabled={isLoading}
+                          >
+                            <i className="ri-file-download-line me-2"></i>
+                            Processes Template
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1659,10 +1811,13 @@ const ProductListPage = () => {
                             />
                           </th>
                           <th className="text-start">Name</th>
-                          <th className="text-start">Style Code</th>
-                          <th className="text-start">Internal Code</th>
+                          {(!isDesign && !isProduction) || isFinal ? <th className="text-start">Style Code</th> : null}
+                          {!isDesign && !isProduction && <th className="text-start">Internal Code</th>}
                           <th className="text-start">Category</th>
-                          <th className="text-start">Created At</th>
+                          <th className="text-start">Factory Code</th>
+                          {isFinal && <th className="text-start">EAN Code</th>}
+                          {isFinal && <th className="text-start">Description</th>}
+                          {!isDesign && !isFinal && <th className="text-start">Created At</th>}
                           <th className="text-start">Actions</th>
                         </tr>
                       </thead>
@@ -1677,16 +1832,21 @@ const ProductListPage = () => {
                                 onChange={() => handleProductSelect(product.id)}
                               />
                             </td>
-                            <td><Link 
+                            <td>
+                              <Link 
                                 href={`/analytics/product-analysis/${product.id}`}
                                 className="text-primary hover:text-primary/80 transition-colors duration-200"
                               >
                                 {product.name}
-                              </Link></td>
-                            <td>{product.styleCode || ''}</td>
-                            <td>{product.internalCode || ''}</td>
+                              </Link>
+                            </td>
+                            {(!isDesign && !isProduction) || isFinal ? <td>{product.styleCode || ''}</td> : null}
+                            {!isDesign && !isProduction && <td>{product.internalCode || ''}</td>}
                             <td>{getCategoryName(product.category)}</td>
-                            <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>
+                            <td>{product.factoryCode || ''}</td>
+                            {isFinal && <td>{product.eanCode || ''}</td>}
+                            {isFinal && <td className="max-w-xs truncate" title={product.description || ''}>{product.description || ''}</td>}
+                            {!isDesign && !isFinal && <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>}
                             <td>
                               <div className="flex space-x-2">
                                 <Link href={`/catalog/items/${product.id}/edit`} className="ti-btn ti-btn-primary ti-btn-sm">
