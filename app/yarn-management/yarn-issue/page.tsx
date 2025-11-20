@@ -212,6 +212,7 @@ const YarnIssuePage = () => {
   // Fetch production orders
   useEffect(() => {
     const fetchOrders = async () => {
+      console.log("Fetching orders from API...");
       setOrdersLoading(true);
       try {
         const token = getAccessToken();
@@ -233,19 +234,27 @@ const YarnIssuePage = () => {
         const apiOrders: ApiProductionOrder[] = data.results || [];
 
         // Transform API orders to match our interface
-        const transformedOrders: ProductionOrder[] = apiOrders.map((order) => ({
-          id: order.id,
-          orderNumber: order.orderNumber,
-          buyer: order.orderNote || "N/A",
-          floor: order.currentFloor || "N/A",
-          styleCode: "",
-          scheduledDate: order.createdAt || new Date().toISOString(),
-          notes: order.orderNote,
-          bom: [],
-          articles: order.articles || [],
-        }));
-
-        setOrders(transformedOrders);
+        // Preserve existing BOM data if orders are being refetched
+        setOrders((prevOrders) => {
+          const transformedOrders: ProductionOrder[] = apiOrders.map((order) => {
+            // Find existing order to preserve BOM and styleCode
+            const existingOrder = prevOrders.find((o) => o.id === order.id);
+            
+            return {
+              id: order.id,
+              orderNumber: order.orderNumber,
+              buyer: order.orderNote || "N/A",
+              floor: order.currentFloor || "N/A",
+              styleCode: existingOrder?.styleCode || "",
+              scheduledDate: order.createdAt || new Date().toISOString(),
+              notes: order.orderNote,
+              bom: existingOrder?.bom || [], // Preserve existing BOM
+              articles: order.articles || [],
+            };
+          });
+          
+          return transformedOrders;
+        });
       } catch (error) {
         console.error("Error fetching orders:", error);
         toast.error("Failed to load production orders");
@@ -284,10 +293,10 @@ const YarnIssuePage = () => {
         const token = getAccessToken();
         let product: Product | null = null;
 
-        // Strategy 1: Search products with higher limit to find by styleCode
+        // Strategy 1: Fetch product by factoryCode
         try {
           const searchResponse = await fetch(
-            `${API_BASE_URL}/products?page=1&limit=20&search=${encodeURIComponent(articleNumber)}`,
+            `${API_BASE_URL}/products/by-code?factoryCode=${encodeURIComponent(articleNumber)}`,
             {
               headers: {
                 "Content-Type": "application/json",
@@ -297,19 +306,21 @@ const YarnIssuePage = () => {
           );
 
           if (searchResponse.ok) {
-            const searchData = await searchResponse.json();
-            const products = searchData.results || [];
-
-            // Find product with matching styleCode
-            for (const p of products) {
-              if (p.styleCode === articleNumber) {
-                product = p;
-                break;
-              }
+            const productData = await searchResponse.json();
+            console.log("Product fetched by factoryCode:", productData);
+            // The API returns a single product object directly, not wrapped in results
+            if (productData && productData.bom && Array.isArray(productData.bom) && productData.bom.length > 0) {
+              product = productData;
+              console.log("Product BOM found:", productData.bom);
+            } else {
+              console.warn("Product found but no BOM or empty BOM:", productData);
             }
+          } else {
+            const errorData = await searchResponse.json().catch(() => ({}));
+            console.warn("Product fetch by factoryCode failed:", searchResponse.status, errorData);
           }
         } catch (error) {
-          console.warn("Product search failed:", error);
+          console.warn("Product fetch by factoryCode failed:", error);
         }
 
         // Strategy 2: If not found, try direct fetch (assuming articleNumber might be product ID)
@@ -334,7 +345,15 @@ const YarnIssuePage = () => {
           }
         }
 
-        if (!product || !product.bom || product.bom.length === 0) {
+        if (!product) {
+          console.error("Product not found for article:", articleNumber);
+          toast.error(`Product not found for article ${articleNumber}`);
+          setProductLoading(false);
+          return;
+        }
+
+        if (!product.bom || !Array.isArray(product.bom) || product.bom.length === 0) {
+          console.error("Product found but no BOM:", product);
           toast.error(`No BOM found for article ${articleNumber}`);
           setProductLoading(false);
           return;
@@ -345,6 +364,7 @@ const YarnIssuePage = () => {
 
         // Map product BOM to yarn requirements
         // BOM quantity is in grams per unit, so multiply by article planned quantity
+        console.log("Processing BOM, product.bom:", product.bom);
         const yarnRequirements: YarnRequirement[] = product.bom.map((bomItem, index) => {
           // Handle yarnCatalogId - can be string or populated object
           let yarnCode = `YARN-${index}`;
@@ -392,19 +412,46 @@ const YarnIssuePage = () => {
           };
         });
 
+        console.log("Yarn requirements created:", yarnRequirements);
+
         // Update the order with BOM
-        setOrders((prev) =>
-          prev.map((order) => {
+        console.log("Updating order with BOM, selectedOrderId:", selectedOrderId, "yarnRequirements:", yarnRequirements);
+        
+        // Use functional update to ensure we have the latest state
+        setOrders((prev) => {
+          // Find the current order to preserve any existing data
+          const currentOrder = prev.find((o) => o.id === selectedOrderId);
+          if (!currentOrder) {
+            console.warn("Order not found in state:", selectedOrderId);
+            return prev;
+          }
+
+          const updated = prev.map((order) => {
             if (order.id !== selectedOrderId) {
               return order;
             }
-            return {
+            
+            // Always use the new yarnRequirements for the selected article
+            const updatedOrder = {
               ...order,
               styleCode: product?.styleCode || articleNumber,
-              bom: yarnRequirements,
+              bom: yarnRequirements, // Use the newly created yarn requirements
             };
-          })
-        );
+            console.log("Updated order:", updatedOrder, "BOM length:", updatedOrder.bom.length);
+            return updatedOrder;
+          });
+          
+          // Verify the update
+          const verifyOrder = updated.find((o) => o.id === selectedOrderId);
+          console.log("Verification - Order in updated array:", {
+            id: verifyOrder?.id,
+            bomLength: verifyOrder?.bom?.length || 0,
+            bom: verifyOrder?.bom,
+          });
+          
+          console.log("All orders after update:", updated);
+          return updated;
+        });
 
         // Auto-select first requirement
         if (yarnRequirements.length > 0) {
@@ -421,6 +468,19 @@ const YarnIssuePage = () => {
     fetchProductAndUpdateBOM();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOrderId, selectedArticleId]);
+
+  // Debug: Track when orders change
+  useEffect(() => {
+    console.log("Orders state changed, total orders:", orders.length);
+    const selectedOrderInState = orders.find((o) => o.id === selectedOrderId);
+    if (selectedOrderInState) {
+      console.log("Selected order in orders state:", {
+        id: selectedOrderInState.id,
+        bomLength: selectedOrderInState.bom?.length || 0,
+        bom: selectedOrderInState.bom,
+      });
+    }
+  }, [orders, selectedOrderId]);
 
   const filteredOrders = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -465,6 +525,14 @@ const YarnIssuePage = () => {
     [filteredOrders, selectedOrderId]
   );
 
+  // Debug: Log when selectedOrder changes
+  useEffect(() => {
+    console.log("selectedOrder changed:", selectedOrder);
+    if (selectedOrder) {
+      console.log("selectedOrder.bom:", selectedOrder.bom, "length:", selectedOrder.bom?.length);
+    }
+  }, [selectedOrder]);
+
   const selectedArticle = useMemo(() => {
     if (!selectedOrder || !selectedOrder.articles || !selectedArticleId) {
       return null;
@@ -495,9 +563,11 @@ const YarnIssuePage = () => {
 
   const sortedRequirements = useMemo(() => {
     if (!selectedOrder) {
+      console.log("sortedRequirements: no selectedOrder");
       return [];
     }
 
+    console.log("sortedRequirements: selectedOrder.bom =", selectedOrder.bom, "length =", selectedOrder.bom?.length);
     const data = [...selectedOrder.bom];
 
     data.sort((a, b) => {
@@ -539,6 +609,7 @@ const YarnIssuePage = () => {
       return sortDirection === "asc" ? compareNumber : -compareNumber;
     });
 
+    console.log("sortedRequirements: returning", data.length, "items");
     return data;
   }, [selectedOrder, sortField, sortDirection]);
 
