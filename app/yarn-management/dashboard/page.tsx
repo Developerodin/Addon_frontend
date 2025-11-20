@@ -13,12 +13,7 @@ import {
   PendingDelivery,
   InventoryAlert,
 } from "./types";
-import {
-  getDummyInventory,
-  getDummyInventoryAlerts,
-  getDummyPendingDeliveries,
-  getInventorySummary,
-} from "./data/dummyData";
+import { yarnInventoryService } from "./services/yarnInventoryService";
 
 const DashboardPage = () => {
   const { hasSubPermission } = useNavigation();
@@ -35,21 +30,199 @@ const DashboardPage = () => {
   const [showAlertsModal, setShowAlertsModal] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<PendingDelivery | null>(null);
   const [showYarnDetailsModal, setShowYarnDetailsModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Check permission
   const hasPermission = hasSubPermission("/yarn-management", "Dashboard");
 
-  // Generate dummy data
+  // Fetch data from APIs
   useEffect(() => {
-    const inventoryData = getDummyInventory();
-    const deliveriesData = getDummyPendingDeliveries();
-    const alertsData = getDummyInventoryAlerts();
+    if (!hasPermission) {
+      setLoading(false);
+      return;
+    }
 
-    setInventory(inventoryData);
-    setPendingDeliveries(deliveriesData);
-    setAlerts(alertsData);
-    setSummary(getInventorySummary(inventoryData, deliveriesData, alertsData));
-  }, []);
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch yarn inventories
+        const inventoryResponse = await yarnInventoryService.getYarnInventories({
+          limit: 1000, // Get all inventories
+        });
+
+        // Transform API response to UI format
+        const transformedInventory: YarnInventory[] =
+          inventoryResponse.results.map((item) => {
+            const totalWeight =
+              item.longTermStorage.totalWeight +
+              item.shortTermStorage.totalWeight;
+            const totalNetWeight =
+              item.longTermStorage.netWeight +
+              item.shortTermStorage.netWeight;
+            const blockedQty = item.overbooked
+              ? totalNetWeight
+              : 0; // We'll get blocked from requisitions
+            const availableQty = totalNetWeight - blockedQty;
+
+            // Map inventory status to UI status
+            let status: 'In Stock' | 'Low Stock' | 'Out of Stock' = 'In Stock';
+            if (item.inventoryStatus === 'low_stock' || item.inventoryStatus === 'soon_to_be_low') {
+              status = 'Low Stock';
+            } else if (totalWeight === 0) {
+              status = 'Out of Stock';
+            }
+
+            return {
+              id: item._id || item.yarnId,
+              yarnName: item.yarnName,
+              weight: totalWeight,
+              conesLongTerm: item.longTermStorage.numberOfCones,
+              conesShortTerm: item.shortTermStorage.numberOfCones,
+              blockedQty: blockedQty,
+              availableQty: availableQty,
+              unitOfMeasurement: 'kg',
+              ratePerUnit: 0, // Not available from API
+              totalValue: 0, // Not available from API
+              lastUpdated: new Date().toISOString().split('T')[0],
+              status: status,
+              supplier: '', // Not available from API
+              yarnId: item.yarnId,
+              inventoryStatus: item.inventoryStatus,
+              overbooked: item.overbooked,
+            };
+          });
+
+        // Fetch yarn requisitions (last 90 days)
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 90);
+
+        const requisitions = await yarnInventoryService.getYarnRequisitions({
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          poSent: false, // Only pending deliveries
+        });
+
+        // Transform requisitions to pending deliveries
+        const transformedDeliveries: PendingDelivery[] = requisitions
+          .filter((req) => !req.poSent)
+          .map((req) => ({
+            id: req._id,
+            yarnName: req.yarnName,
+            quantity: req.minQty - req.availableQty, // Quantity needed
+            expectedDate: new Date(
+              new Date(req.created).getTime() + 30 * 24 * 60 * 60 * 1000
+            )
+              .toISOString()
+              .split('T')[0], // 30 days from creation
+            supplier: 'Supplier', // Not available from API
+            poNumber: `PO-${req._id.slice(-6)}`,
+            yarns: [
+              {
+                yarnName: req.yarnName,
+                quantity: req.minQty - req.availableQty,
+                ratePerUnit: 0, // Not available from API
+                totalValue: 0, // Not available from API
+              },
+            ],
+          }));
+
+        // Transform requisitions to alerts
+        const transformedAlerts: InventoryAlert[] = requisitions
+          .filter(
+            (req) =>
+              req.alertStatus === 'below_minimum' ||
+              req.alertStatus === 'overbooked'
+          )
+          .map((req) => {
+            let alertType: 'Low Stock' | 'Out of Stock' | 'Overblocked' =
+              'Low Stock';
+            let message = '';
+            let severity: 'low' | 'medium' | 'high' = 'medium';
+
+            if (req.alertStatus === 'below_minimum') {
+              alertType = 'Low Stock';
+              message = `Stock is below minimum threshold. Available: ${req.availableQty} kg, Required: ${req.minQty} kg`;
+              severity = 'medium';
+            } else if (req.alertStatus === 'overbooked') {
+              alertType = 'Overblocked';
+              message = `Blocked quantity (${req.blockedQty} kg) exceeds available stock (${req.availableQty} kg). Urgent PO required.`;
+              severity = 'high';
+            }
+
+            return {
+              id: req._id,
+              yarnId: req.yarn._id,
+              yarnName: req.yarnName,
+              alertType: alertType,
+              message: message,
+              createdAt: req.created,
+              severity: severity,
+              minQty: req.minQty,
+              availableQty: req.availableQty,
+              blockedQty: req.blockedQty,
+              alertStatus: req.alertStatus,
+            };
+          });
+
+        // Update blocked quantities from requisitions
+        transformedInventory.forEach((inv) => {
+          const relatedRequisitions = requisitions.filter(
+            (req) => req.yarn._id === inv.yarnId
+          );
+          if (relatedRequisitions.length > 0) {
+            const totalBlocked = relatedRequisitions.reduce(
+              (sum, req) => sum + req.blockedQty,
+              0
+            );
+            inv.blockedQty = totalBlocked;
+            const inventoryItem = inventoryResponse.results.find(
+              (item) => item.yarnId === inv.yarnId
+            );
+            if (inventoryItem) {
+              const totalNetWeight =
+                inventoryItem.longTermStorage.netWeight +
+                inventoryItem.shortTermStorage.netWeight;
+              inv.availableQty = Math.max(0, totalNetWeight - totalBlocked);
+            }
+          }
+        });
+
+        // Calculate summary
+        const totalStock = transformedInventory.reduce(
+          (sum, item) => sum + item.weight,
+          0
+        );
+        const inventoryValue = transformedInventory.reduce(
+          (sum, item) => sum + item.totalValue,
+          0
+        );
+
+        setInventory(transformedInventory);
+        setPendingDeliveries(transformedDeliveries);
+        setAlerts(transformedAlerts);
+        setSummary({
+          totalStock: totalStock,
+          purchaseYarn: totalStock, // Same as total stock
+          pendingDeliveries: transformedDeliveries.length,
+          inventoryAlerts: transformedAlerts.length,
+          inventoryValue: inventoryValue,
+        });
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError(
+          err instanceof Error ? err.message : 'Failed to load dashboard data'
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [hasPermission]);
 
   // Open alerts modal by default when alerts are loaded
   useEffect(() => {
@@ -75,6 +248,40 @@ const DashboardPage = () => {
             <i className="ri-arrow-left-line me-2"></i>
             Back to Yarn Management
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="main-content">
+        <div className="text-center py-12">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <p className="text-gray-600">Loading dashboard data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="main-content">
+        <div className="text-center py-12">
+          <div className="text-red-400 mb-4">
+            <i className="ri-error-warning-line text-6xl"></i>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Error Loading Dashboard
+          </h3>
+          <p className="text-gray-500 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="ti-btn ti-btn-primary"
+          >
+            <i className="ri-refresh-line me-2"></i>
+            Retry
+          </button>
         </div>
       </div>
     );

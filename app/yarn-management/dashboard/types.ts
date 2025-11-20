@@ -1,11 +1,11 @@
 export interface YarnInventory {
   id: string;
   yarnName: string;
-  weight: number; // in kg
+  weight: number; // in kg (total from LTS + STS)
   conesLongTerm: number; // number of cones in long-term storage
   conesShortTerm: number; // number of cones in short-term storage
   blockedQty: number; // blocked quantity for production
-  availableQty: number; // available quantity (weight - blocked)
+  availableQty: number; // available quantity (net weight - blocked)
   unitOfMeasurement: string;
   ratePerUnit: number;
   totalValue: number;
@@ -13,6 +13,10 @@ export interface YarnInventory {
   status: 'In Stock' | 'Low Stock' | 'Out of Stock';
   supplier: string;
   lotNo?: string;
+  // API fields
+  yarnId?: string;
+  inventoryStatus?: 'in_stock' | 'low_stock' | 'soon_to_be_low';
+  overbooked?: boolean;
 }
 
 export interface InventorySummary {
@@ -48,5 +52,10 @@ export interface InventoryAlert {
   message: string;
   createdAt: string;
   severity: 'low' | 'medium' | 'high';
+  // API fields from requisitions
+  minQty?: number;
+  availableQty?: number;
+  blockedQty?: number;
+  alertStatus?: 'below_minimum' | 'overbooked' | null;
 }
 
