@@ -18,6 +18,7 @@ const ColorPage = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
@@ -77,6 +78,25 @@ const ColorPage = () => {
       setSelectedColors(colors.map(c => c.id));
     }
     setSelectAll(!selectAll);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedColors.length === 0) return;
+    
+    if (!window.confirm(`Are you sure you want to delete ${selectedColors.length} selected color(s)?`)) return;
+    
+    setIsDeletingSelected(true);
+    try {
+      await Promise.all(selectedColors.map(id => yarnColorService.deleteColor(id)));
+      toast.success(`${selectedColors.length} color(s) deleted successfully`);
+      setSelectedColors([]);
+      setSelectAll(false);
+      await fetchColors();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete selected colors');
+    } finally {
+      setIsDeletingSelected(false);
+    }
   };
 
   const handleImportClick = () => {
@@ -170,6 +190,8 @@ const ColorPage = () => {
         const workbook = XLSX.read(data, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
+        
+        // Read all rows including empty ones, then filter
         const jsonData: Array<
           {
             ID?: string;
@@ -180,7 +202,12 @@ const ColorPage = () => {
             'Color Code'?: string;
             Status?: string;
           }
-        > = XLSX.utils.sheet_to_json(worksheet);
+        > = XLSX.utils.sheet_to_json(worksheet, { 
+          defval: '', // Default value for empty cells
+          raw: false // Convert all values to strings
+        });
+
+        console.log(`Total rows read from Excel: ${jsonData.length}`);
 
         if (jsonData.length === 0) {
           throw new Error('Import file is empty');
@@ -189,25 +216,21 @@ const ColorPage = () => {
         const existingResponse = await yarnColorService.getColors({ page: 1, limit: 10000 });
         const existingColors = existingResponse.results || [];
         const colorsById = new Map(existingColors.map(color => [color.id, color]));
-        const colorsByName = new Map(
-          existingColors.map(color => [color.name.trim().toLowerCase(), color]),
-        );
 
-        const isValidHex = (value: string) => /^#([0-9A-F]{6})$/i.test(value);
+        const normalizedColors: Array<{
+          id?: string;
+          name: string;
+          colorCode: string;
+          pantoneName?: string;
+          status: 'active' | 'inactive';
+        }> = [];
 
-        const normalizedColors = new Map<
-          string,
-          {
-            id?: string;
-            name: string;
-            colorCode: string;
-            pantoneName?: string;
-            status: 'active' | 'inactive';
-          }
-        >();
-
+        const errors: string[] = [];
         let processed = 0;
-        for (const row of jsonData) {
+        let skipped = 0;
+
+        for (let rowIndex = 0; rowIndex < jsonData.length; rowIndex++) {
+          const row = jsonData[rowIndex];
           try {
             const rawName =
               row['Color Family Name']?.toString().trim() ??
@@ -220,44 +243,51 @@ const ColorPage = () => {
               '';
             const rawStatus = row.Status?.toString().trim().toLowerCase() ?? 'active';
 
-            if (!rawName) {
-              throw new Error('Name is required');
+            // Skip empty rows but don't count as error
+            if (!rawName && !rawColorCode && !rawPantoneName) {
+              skipped++;
+              continue;
             }
 
-            const candidateColorCode = rawColorCode.startsWith('#')
-              ? rawColorCode.toUpperCase()
-              : `#${rawColorCode.toUpperCase()}`;
-
-            if (!isValidHex(candidateColorCode)) {
-              throw new Error(`Invalid color code for ${rawName}: ${rawColorCode}`);
+            if (!rawName) {
+              errors.push(`Row ${rowIndex + 2}: Name is required (skipped)`);
+              skipped++;
+              continue;
             }
 
             const status: 'active' | 'inactive' =
               rawStatus === 'inactive' ? 'inactive' : 'active';
 
+            // Only match by ID if provided - allow duplicate names
             const idFromRow = row.ID?.toString().trim();
-            const normalizedNameKey = rawName.toLowerCase();
             const existingById = idFromRow ? colorsById.get(idFromRow) : undefined;
-            const existingByName = colorsByName.get(normalizedNameKey);
-            const finalId = existingById?.id ?? existingByName?.id;
-            const key = finalId ?? normalizedNameKey;
+            const finalId = existingById?.id;
 
-            normalizedColors.set(key, {
+            // Add to array - allow duplicates by name
+            normalizedColors.push({
               ...(finalId ? { id: finalId } : {}),
               name: rawName,
-              colorCode: candidateColorCode,
+              colorCode: rawColorCode || '#000000', // Default color code if not provided
               ...(rawPantoneName ? { pantoneName: rawPantoneName } : {}),
               status,
             });
           } catch (rowError) {
-            console.error('Error importing color row:', rowError);
+            errors.push(`Row ${rowIndex + 2}: ${rowError instanceof Error ? rowError.message : 'Unknown error'}`);
+            skipped++;
+            console.error(`Error importing color row ${rowIndex + 2}:`, rowError, row);
           } finally {
             processed += 1;
             setImportProgress(Math.min(95, Math.round((processed / jsonData.length) * 90)));
           }
         }
 
-        const colorsPayload = Array.from(normalizedColors.values());
+        // Log summary
+        console.log(`Import Summary: Total rows: ${jsonData.length}, Processed: ${processed}, Valid: ${normalizedColors.length}, Skipped: ${skipped}`);
+        if (errors.length > 0) {
+          console.warn('Import errors:', errors);
+        }
+
+        const colorsPayload = normalizedColors;
 
         if (colorsPayload.length === 0) {
           throw new Error('No valid color records found in the import file');
@@ -271,7 +301,20 @@ const ColorPage = () => {
         setImportProgress(100);
 
         await fetchColors();
-        toast.success('Colors imported successfully');
+        
+        // Show detailed success message
+        const successMessage = skipped > 0
+          ? `Colors imported successfully! ${colorsPayload.length} imported, ${skipped} skipped. ${errors.length > 0 ? `Check console for details.` : ''}`
+          : `Colors imported successfully! ${colorsPayload.length} color(s) imported.`;
+        
+        toast.success(successMessage);
+        
+        if (errors.length > 0 && errors.length <= 10) {
+          // Show first few errors if not too many
+          setTimeout(() => {
+            toast.error(`Some rows were skipped: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`, { duration: 5000 });
+          }, 1000);
+        }
       } catch (error) {
         console.error('Error processing import file:', error);
         toast.error(error instanceof Error ? error.message : 'Failed to process import file');
@@ -330,6 +373,25 @@ const ColorPage = () => {
                   accept=".xlsx,.xls"
                   onChange={handleFileUpload}
                 />
+                {selectedColors.length > 0 && (
+                  <button
+                    type="button"
+                    className="ti-btn ti-btn-danger"
+                    onClick={handleDeleteSelected}
+                    disabled={isDeletingSelected}
+                  >
+                    {isDeletingSelected ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <i className="ri-delete-bin-line me-2"></i> Delete Selected ({selectedColors.length})
+                      </>
+                    )}
+                  </button>
+                )}
                   <button
                     type="button"
                     className="ti-btn ti-btn-secondary"
