@@ -74,6 +74,7 @@ const YarnTypePage = () => {
     'Yarn Name'?: string;
     Status?: string;
     Subtype?: string;
+    'Subtype ID'?: string;
     'Count Size Names'?: string;
     'Count Size IDs'?: string;
   };
@@ -88,6 +89,7 @@ const YarnTypePage = () => {
           Name: 'Combed Cotton',
           Status: 'active',
           Subtype: 'Combed 40s',
+          'Subtype ID': '',
           'Count Size IDs': '',
         },
         {
@@ -95,6 +97,7 @@ const YarnTypePage = () => {
           Name: 'Combed Cotton',
           Status: 'active',
           Subtype: 'Combed 44s',
+          'Subtype ID': '',
           'Count Size IDs': '',
         },
         {
@@ -102,6 +105,7 @@ const YarnTypePage = () => {
           Name: 'Carded Cotton',
           Status: 'inactive',
           Subtype: '',
+          'Subtype ID': '',
           'Count Size IDs': '',
         },
       ];
@@ -147,7 +151,6 @@ const YarnTypePage = () => {
         const baseRow = {
           ID: type.id,
           Name: type.name,
-          'Yarn Name': type.yarnName || '',
           Status: type.status,
         };
 
@@ -186,6 +189,7 @@ const YarnTypePage = () => {
           return {
             ...baseRow,
             Subtype: detail.subtype,
+            'Subtype ID': detail.id || detail._id || '',
             'Count Size Names': countSizeNames.join(', '),
             'Count Size IDs': countSizeIds.join(', '),
           };
@@ -200,9 +204,9 @@ const YarnTypePage = () => {
               {
                 ID: '',
                 Name: '',
-                'Yarn Name': '',
                 Status: '',
                 Subtype: '',
+                'Subtype ID': '',
                 'Count Size Names': '',
                 'Count Size IDs': '',
               },
