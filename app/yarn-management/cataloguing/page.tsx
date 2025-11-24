@@ -200,6 +200,14 @@ const CataloguingPage = () => {
         const worksheet = workbook.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json<CatalogImportRow>(worksheet, { defval: "" });
 
+        console.log("[IMPORT DEBUG] File parsed successfully");
+        console.log("[IMPORT DEBUG] Sheet name:", sheetName);
+        console.log("[IMPORT DEBUG] Total rows parsed:", rows.length);
+        if (rows.length > 0) {
+          console.log("[IMPORT DEBUG] First row sample:", rows[0]);
+          console.log("[IMPORT DEBUG] Available columns:", Object.keys(rows[0] || {}));
+        }
+
         if (rows.length === 0) {
           throw new Error("Import file is empty");
         }
@@ -207,13 +215,20 @@ const CataloguingPage = () => {
         const errors: string[] = [];
         const catalogs: BulkImportYarnCatalogRequest["yarnCatalogs"] = [];
         let resolvedBatchSize: number | undefined;
+        let emptyRowCount = 0;
+        let skippedRowCount = 0;
+        let processedRowCount = 0;
 
         const isRowEmpty = (row: CatalogImportRow) =>
           Object.values(row).every((value) => `${value ?? ""}`.trim().length === 0);
 
         rows.forEach((row, index) => {
           const rowNumber = index + 2;
+          console.log(`[IMPORT DEBUG] Processing row ${rowNumber}:`, row);
+          
           if (isRowEmpty(row)) {
+            console.log(`[IMPORT DEBUG] Row ${rowNumber} is empty, skipping`);
+            emptyRowCount++;
             return;
           }
 
@@ -255,18 +270,36 @@ const CataloguingPage = () => {
           const minQuantityRaw = row["Min Quantity"];
           const statusRaw = row.Status?.toString().trim().toLowerCase();
 
+          console.log(`[IMPORT DEBUG] Row ${rowNumber} parsed values:`, {
+            id,
+            yarnName,
+            yarnTypeId,
+            yarnSubtypeId,
+            countSizeId,
+            blendId,
+            colorFamilyId,
+            pantoneShade,
+            pantoneName,
+            season,
+            remark,
+            hsnCode,
+            minQuantityRaw,
+            statusRaw,
+          });
+
           if (!yarnTypeId) {
+            console.log(`[IMPORT DEBUG] Row ${rowNumber}: Missing Yarn Type ID`);
             registerError(`Row ${rowNumber}: Yarn Type ID is required`);
           }
           if (!countSizeId) {
+            console.log(`[IMPORT DEBUG] Row ${rowNumber}: Missing Count Size ID`);
             registerError(`Row ${rowNumber}: Count Size ID is required`);
           }
           if (!blendId) {
+            console.log(`[IMPORT DEBUG] Row ${rowNumber}: Missing Blend ID`);
             registerError(`Row ${rowNumber}: Blend ID is required`);
           }
-          if (!yarnName) {
-            registerError(`Row ${rowNumber}: Yarn Name is required`);
-          }
+          // Note: Yarn Name is optional - backend will auto-generate it if not provided
 
           let gstValue: number | undefined;
           const gstRaw = row.GST;
@@ -290,6 +323,8 @@ const CataloguingPage = () => {
           }
 
           if (rowHasError) {
+            console.log(`[IMPORT DEBUG] Row ${rowNumber} has validation errors, skipping`);
+            skippedRowCount++;
             updateRowProgress();
             return;
           }
@@ -315,11 +350,32 @@ const CataloguingPage = () => {
             ...(minQuantityValue !== undefined ? { minQuantity: minQuantityValue } : {}),
           };
 
+          console.log(`[IMPORT DEBUG] Row ${rowNumber} validation passed, adding to catalogs:`, catalogEntry);
           catalogs.push(catalogEntry);
+          processedRowCount++;
           updateRowProgress();
         });
 
+        console.log("[IMPORT DEBUG] Row processing summary:", {
+          totalRows: rows.length,
+          emptyRows: emptyRowCount,
+          skippedRows: skippedRowCount,
+          processedRows: processedRowCount,
+          catalogsCreated: catalogs.length,
+          totalErrors: errors.length,
+        });
+
+        if (errors.length > 0) {
+          console.log("[IMPORT DEBUG] All validation errors:", errors);
+        }
+
         if (catalogs.length === 0) {
+          console.error("[IMPORT DEBUG] No valid catalogs created. Details:", {
+            totalRows: rows.length,
+            emptyRows: emptyRowCount,
+            skippedRows: skippedRowCount,
+            errors: errors.slice(0, 10), // First 10 errors
+          });
           throw new Error("No valid yarn catalog rows found in the import file");
         }
 
@@ -343,7 +399,11 @@ const CataloguingPage = () => {
         await fetchYarnCatalogs();
         toast.success("Yarn catalogs imported successfully");
       } catch (error) {
-        console.error("Error processing yarn catalog import file:", error);
+        console.error("[IMPORT DEBUG] Error processing yarn catalog import file:", error);
+        if (error instanceof Error) {
+          console.error("[IMPORT DEBUG] Error message:", error.message);
+          console.error("[IMPORT DEBUG] Error stack:", error.stack);
+        }
         toast.error(error instanceof Error ? error.message : "Failed to process import file");
       } finally {
         setImportProgress(null);
