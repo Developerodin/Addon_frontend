@@ -951,21 +951,7 @@ const YarnIssuePage = () => {
             </div>
           </div>
 
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">Need help?</h3>
-            </div>
-            <div className="box-body text-sm text-gray-600 space-y-2">
-              <p>
-                Yarn is issued only from short-term storage. When stock is short, confirm the
-                transfer prompt to move cones from long-term storage before issuing.
-              </p>
-              <p>
-                Keep the cone on the weight scale right after scanning the barcode. The system uses
-                the live weight reading to log issuance activity automatically.
-              </p>
-            </div>
-          </div>
+          
         </div>
 
         <div className="xl:col-span-2 space-y-6">
