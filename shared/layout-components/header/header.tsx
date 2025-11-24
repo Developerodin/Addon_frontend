@@ -12,6 +12,7 @@ import { authActions } from '@/shared/redux/actions/authActions';
 const Header = ({ local_varaiable, ThemeChanger }:any) => {
   const dispatch = useDispatch();
   const router = useRouter();
+  const user = local_varaiable?.auth?.user;
 
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -431,7 +432,7 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
                   <img className="inline-block rounded-full " src={`${process.env.NODE_ENV === "production" ? basePath : ""}/assets/images/faces/9.jpg`} width="32" height="32" alt="Image Description" />
                 </button>
                 <div className="md:block hidden dropdown-profile">
-                  <p className="font-semibold mb-0 leading-none text-[#536485] text-[0.813rem] ">Admin</p>
+                  <p className="font-semibold mb-0 leading-none text-[#536485] text-[0.813rem] ">{user?.name || user?.username || 'Admin'}</p>
 
                 </div>
                 <div

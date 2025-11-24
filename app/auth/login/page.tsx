@@ -97,7 +97,7 @@ const Signinbasic = () => {
                             <form onSubmit={handleSubmit} className="space-y-6">
                                 <div>
                                     <input
-                                        type="email"
+                                        type="text"
                                         name="email"
                                         value={formData.email}
                                         onChange={handleInputChange}
@@ -105,7 +105,7 @@ const Signinbasic = () => {
                                         style={{
                                             boxShadow: 'inset 5px 5px 10px rgba(0, 0, 0, 0.2), inset -5px -5px 10px rgba(255, 255, 255, 0.05)'
                                         }}
-                                        placeholder="Email"
+                                        placeholder="Email or Username"
                                         required
                                     />
                                 </div>
