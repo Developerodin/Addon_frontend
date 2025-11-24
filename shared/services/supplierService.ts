@@ -11,13 +11,14 @@ export interface SupplierYarnDetail {
   id?: string;
   _id?: string;
   yarn?: string;
+  yarnName?: string;
   yarnCatalogId?: string;
   yarnCatalog?: {
     id?: string;
     _id?: string;
     [key: string]: unknown;
   } | string;
-  yarnType: string | SupplierYarnReference;
+  yarnType?: string | SupplierYarnReference;
   yarnsubtype?: string | SupplierYarnReference;
   color: string | SupplierYarnReference;
   shadeNumber?: string;

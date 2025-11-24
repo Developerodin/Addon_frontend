@@ -287,8 +287,7 @@ const BrandPage = () => {
     Country?: string;
     'GST No'?: string;
     Status?: string;
-    'Yarn Type ID'?: string;
-    'Yarn Subtype ID'?: string;
+    'Yarn Name'?: string;
     'Color ID'?: string;
     'Shade Number'?: string;
     'Tear Weight'?: string;
@@ -313,8 +312,7 @@ const BrandPage = () => {
           Country: 'India',
           'GST No': '29ABCDE1234F2Z5',
           Status: 'active',
-          'Yarn Type ID': '65f1a2b3c4d5e6f7g8h9i0a1',
-          'Yarn Subtype ID': '65f1a2b3c4d5e6f7g8h9i0a2',
+          'Yarn Name': 'Cotton 40s',
           'Color ID': '65f1a2b3c4d5e6f7g8h9i0a3',
           'Shade Number': 'Shade-21',
           'Tear Weight': '100',
@@ -333,8 +331,7 @@ const BrandPage = () => {
           Country: 'India',
           'GST No': '29ABCDE1234F2Z5',
           Status: 'active',
-          'Yarn Type ID': '65f1a2b3c4d5e6f7g8h9i0b1',
-          'Yarn Subtype ID': '65f1a2b3c4d5e6f7g8h9i0b2',
+          'Yarn Name': 'Polyester 60s',
           'Color ID': '65f1a2b3c4d5e6f7g8h9i0b3',
           'Shade Number': 'Shade-45',
           'Tear Weight': '150',
@@ -357,32 +354,11 @@ const BrandPage = () => {
     fileInputRef.current?.click();
   };
 
-  const buildSubtypeMaps = (types: YarnType[]) => {
-    const subtypeById = new Map<
-      string,
-      { id: string; name: string; parentTypeId: string }
-    >();
-    const subtypeByTypeAndName = new Map<string, { id: string; name: string }>();
-
-    types.forEach(type => {
-      (type.details || []).forEach(detail => {
-        const subtypeId = detail.id || detail._id;
-        if (!subtypeId || !detail.subtype) return;
-
-        const entry = { id: subtypeId, name: detail.subtype, parentTypeId: type.id };
-        subtypeById.set(subtypeId, entry);
-        subtypeByTypeAndName.set(`${type.id}|${detail.subtype.trim().toLowerCase()}`, entry);
-      });
-    });
-
-    return { subtypeById, subtypeByTypeAndName };
-  };
 
   const handleExport = async () => {
     try {
-      const [brandResponse, typesResponse, colorsResponse] = await Promise.all([
+      const [brandResponse, colorsResponse] = await Promise.all([
         supplierService.getSuppliers({ page: 1, limit: 10000 }),
-        yarnTypeService.getTypes({ page: 1, limit: 10000 }),
         yarnColorService.getColors({ page: 1, limit: 10000 }),
       ]);
 
@@ -395,23 +371,12 @@ const BrandPage = () => {
         return;
       }
 
-      const types = typesResponse.results || [];
       const colors = colorsResponse.results || [];
 
-      const typeNameToId = new Map(
-        types
-          .filter(type => type?.name && type?.id)
-          .map(type => [type.name.trim().toLowerCase(), type.id] as const),
-      );
       const colorNameToId = new Map(
         colors
           .filter(color => color?.name && color?.id)
           .map(color => [color.name.trim().toLowerCase(), color.id] as const),
-      );
-
-      const { subtypeById, subtypeByTypeAndName } = buildSubtypeMaps(types);
-      const subtypeNameToId = new Map(
-        Array.from(subtypeById.values()).map(entry => [entry.name.trim().toLowerCase(), entry.id] as const),
       );
 
       const normalizeReferenceId = (
@@ -450,8 +415,7 @@ const BrandPage = () => {
           return [
             {
               ...baseRow,
-              'Yarn Type ID': '',
-              'Yarn Subtype ID': '',
+              'Yarn Name': '',
               'Color ID': '',
               'Shade Number': '',
               'Tear Weight': '',
@@ -461,23 +425,8 @@ const BrandPage = () => {
         }
 
         return brand.yarnDetails.map(detail => {
-          let yarnTypeId = normalizeReferenceId(detail.yarnType, typeNameToId);
-          const yarnTypeName =
-            typeof detail.yarnType === 'object' ? detail.yarnType?.name?.trim().toLowerCase() : '';
-          if (!yarnTypeId && yarnTypeName) {
-            yarnTypeId = typeNameToId.get(yarnTypeName) || '';
-          }
-
-          let yarnSubtypeId = normalizeReferenceId(detail.yarnsubtype, subtypeNameToId);
-          const yarnSubtypeName =
-            typeof detail.yarnsubtype === 'object' ? detail.yarnsubtype?.name?.trim().toLowerCase() : '';
-          if ((!yarnSubtypeId || yarnSubtypeId === '') && yarnSubtypeName && yarnTypeId) {
-            const match = subtypeByTypeAndName.get(`${yarnTypeId}|${yarnSubtypeName}`);
-            if (match) {
-              yarnSubtypeId = match.id;
-            }
-          }
-
+          const yarnName = detail.yarnName || getYarnCatalogLabel(detail) || '';
+          
           let colorId = normalizeReferenceId(detail.color, colorNameToId);
           const colorName =
             typeof detail.color === 'object' ? detail.color?.name?.trim().toLowerCase() : '';
@@ -494,8 +443,7 @@ const BrandPage = () => {
 
           return {
             ...baseRow,
-            'Yarn Type ID': yarnTypeId,
-            'Yarn Subtype ID': yarnSubtypeId,
+            'Yarn Name': yarnName,
             'Color ID': colorId,
             'Shade Number': detail.shadeNumber || '',
             'Tear Weight': tearweightValue,
@@ -721,17 +669,16 @@ const BrandPage = () => {
 
           const errorsBeforeDetails = rowErrors.length;
 
-          const yarnTypeId = row['Yarn Type ID']?.toString().trim() ?? '';
-          const yarnSubtypeId = row['Yarn Subtype ID']?.toString().trim() ?? '';
+          const yarnName = row['Yarn Name']?.toString().trim() ?? '';
           const colorId = row['Color ID']?.toString().trim() ?? '';
           const shadeNumber = row['Shade Number']?.toString().trim() ?? '';
           const tearweight = row['Tear Weight']?.toString().trim() ?? '';
-          const hasDetailFields = [yarnTypeId, yarnSubtypeId, colorId, shadeNumber, tearweight].some(field => field.length > 0);
+          const hasDetailFields = [yarnName, colorId, shadeNumber, tearweight].some(field => field.length > 0);
 
           if (hasDetailFields) {
             const detailIssues: string[] = [];
-            if (!yarnTypeId) {
-              detailIssues.push('Yarn Type ID is required when yarn details are provided');
+            if (!yarnName) {
+              detailIssues.push('Yarn Name is required when yarn details are provided');
             }
             if (!colorId) {
               detailIssues.push('Color ID is required when yarn details are provided');
@@ -740,15 +687,12 @@ const BrandPage = () => {
             if (detailIssues.length > 0) {
               rowErrors.push(`Row ${rowNumber}: ${detailIssues.join(', ')}`);
             } else if (rowErrors.length === errorsBeforeDetails) {
-              const detailKey = `${yarnTypeId}|${yarnSubtypeId || ''}|${colorId}|${shadeNumber || ''}|${tearweight || ''}`;
+              const detailKey = `${yarnName}|${colorId}|${shadeNumber || ''}|${tearweight || ''}`;
               if (!accumulator.detailKeys.has(detailKey)) {
                 const detailPayload: SupplierYarnDetail = {
-                  yarnType: yarnTypeId,
+                  yarnName: yarnName,
                   color: colorId,
                 };
-                if (yarnSubtypeId) {
-                  detailPayload.yarnsubtype = yarnSubtypeId;
-                }
                 if (shadeNumber) {
                   detailPayload.shadeNumber = shadeNumber;
                 }
