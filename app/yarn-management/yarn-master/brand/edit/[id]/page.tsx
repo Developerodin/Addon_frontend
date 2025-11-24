@@ -503,12 +503,9 @@ const EditBrandPage = () => {
         yarnDetails: formData.yarnDetails.length
           ? formData.yarnDetails.map<SupplierYarnDetail>((detail) => {
               const normalizedDetail: SupplierYarnDetail = {
-                yarnType: detail.yarnType,
+                yarnName: detail.yarnName.trim(),
                 color: detail.color,
               };
-              if (detail.yarnsubtype.trim()) {
-                normalizedDetail.yarnsubtype = detail.yarnsubtype.trim();
-              }
               if (detail.shadeNumber.trim()) {
                 normalizedDetail.shadeNumber = detail.shadeNumber.trim();
               }
