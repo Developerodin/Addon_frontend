@@ -206,6 +206,8 @@ const YarnIssuePage = () => {
     totalNetWeight: "",
   });
   const [submittingTransaction, setSubmittingTransaction] = useState(false);
+  const [showScanIssuePanel, setShowScanIssuePanel] = useState(false);
+  const [showActivityLogPanel, setShowActivityLogPanel] = useState(false);
 
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Issue");
 
@@ -640,6 +642,7 @@ const YarnIssuePage = () => {
   const handleStartIssuing = (requirementId: string) => {
     setActiveRequirementId(requirementId);
     resetScanState();
+    setShowScanIssuePanel(true);
   };
 
   const handleBarcodeSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -861,14 +864,49 @@ const YarnIssuePage = () => {
     <div className="main-content">
       <Seo title="Yarn Issue" />
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      {/* Page Header */}
+      {/* <div className="box !bg-transparent border-0 shadow-none mb-6">
+        <div className="box-header flex justify-between items-center">
+          <div>
+            <h1 className="box-title text-2xl font-semibold">Yarn Issue</h1>
+            <p className="text-gray-600 mt-1">
+              Issue yarn for production orders
+            </p>
+          </div>
+          
+          <button
+            onClick={() => setShowScanIssuePanel(true)}
+            className="relative p-3 hover:bg-gray-100 rounded-lg transition-all duration-200 group"
+            aria-label="Open Scan & Issue"
+          >
+            <i className="ri-barcode-box-line text-2xl text-gray-600 group-hover:text-gray-900 transition-colors"></i>
+            {activeRequirement && (
+              <span className="absolute top-1 right-1 flex items-center justify-center min-w-[20px] h-5 px-1.5 bg-primary text-white text-xs font-bold rounded-full border-2 border-white shadow-lg">
+                <i className="ri-check-line"></i>
+              </span>
+            )}
+          </button>
+        </div>
+      </div> */}
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-2">
         <div className="xl:col-span-1 space-y-4">
           <div className="box">
             <div className="box-header flex justify-between items-center">
               <h2 className="box-title">Production Orders</h2>
-              <span className="text-xs text-gray-500">
-                {filteredOrders.length} pending
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500">
+                  {filteredOrders.length} pending
+                </span>
+                <button
+                  onClick={() => setShowActivityLogPanel(true)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-md hover:bg-gray-50 hover:border-gray-400 transition-colors flex items-center gap-2 text-sm font-medium text-gray-700"
+                  title="View Issue Activity Log"
+                >
+                  
+                  <span className="hidden sm:inline">Logs</span>
+                </button>
+              </div>
             </div>
             <div className="box-body">
               <div className="relative mb-4">
@@ -888,64 +926,67 @@ const YarnIssuePage = () => {
                   <p>No production orders need yarn issuance.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {filteredOrders.map((order) => {
-                    const status = getOrderStatus(order);
-                    const issuedTotals = order.bom.reduce(
-                      (acc, requirement) => {
-                        const issued = getIssuedQty(requirement);
-                        return {
-                          issued: acc.issued + issued,
-                          required: acc.required + requirement.requiredQty,
-                        };
-                      },
-                      { issued: 0, required: 0 }
-                    );
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border border-gray-300">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
+                          Order
+                        </th>
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
+                          Floor
+                        </th>
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
+                          Date
+                        </th>
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
+                          Issued
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                      {filteredOrders.map((order) => {
+                        const status = getOrderStatus(order);
+                        const issuedTotals = order.bom.reduce(
+                          (acc, requirement) => {
+                            const issued = getIssuedQty(requirement);
+                            return {
+                              issued: acc.issued + issued,
+                              required: acc.required + requirement.requiredQty,
+                            };
+                          },
+                          { issued: 0, required: 0 }
+                        );
 
-                    return (
-                      <button
-                        key={order.id}
-                        className={`w-full text-left border rounded-md px-4 py-3 transition ${
-                          selectedOrder?.id === order.id
-                            ? "border-primary bg-primary/5 shadow-sm"
-                            : "border-gray-200 hover:border-primary/60"
-                        }`}
-                        onClick={() => setSelectedOrderId(order.id)}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <h3 className="text-sm font-semibold text-gray-900">
-                              {order.orderNumber}
-                            </h3>
-                            <p className="text-xs text-gray-500">{order.buyer}</p>
-                          </div>
-                          <span
-                            className={`inline-flex px-2 py-1 text-[11px] font-semibold rounded-full ${orderStatusBadge(
-                              status
-                            )}`}
+                        return (
+                          <tr
+                            key={order.id}
+                            className={`cursor-pointer transition-colors ${
+                              selectedOrder?.id === order.id
+                                ? "bg-primary/5 hover:bg-primary/10"
+                                : "hover:bg-gray-50"
+                            }`}
+                            onClick={() => setSelectedOrderId(order.id)}
                           >
-                            {status}
-                          </span>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
-                          <div className="flex items-center gap-2">
-                            <i className="ri-store-3-line"></i>
-                            {order.floor}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <i className="ri-calendar-line"></i>
-                            {new Date(order.scheduledDate).toLocaleDateString()}
-                          </div>
-                        </div>
-                        <div className="mt-2 text-xs text-gray-500">
-                          <span className="font-medium text-gray-700">
-                            {issuedTotals.issued.toFixed(2)} / {issuedTotals.required.toFixed(2)} kg
-                          </span>{" "}
-                          issued
-                        </div>
-                      </button>
-                    );
-                  })}
+                            <td className="px-3 py-2 text-xs font-medium text-gray-900 border-r border-b border-gray-300">
+                              {order.orderNumber}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-gray-600 border-r border-b border-gray-300">
+                              {order.floor}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-gray-600 border-r border-b border-gray-300">
+                              {new Date(order.scheduledDate).toLocaleDateString()}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-gray-600 border-b border-gray-300">
+                              <span className="font-medium">
+                                {issuedTotals.issued.toFixed(2)} / {issuedTotals.required.toFixed(2)} kg
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -994,16 +1035,16 @@ const YarnIssuePage = () => {
 
               {/* Articles Selection */}
               {selectedOrder.articles && selectedOrder.articles.length > 0 && (
-                <div className="box">
+                <div className="box max-w-[50%]">
                   <div className="box-header">
                     <h3 className="box-title">Select Article</h3>
                   </div>
                   <div className="box-body">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
                       {selectedOrder.articles.map((article) => (
                         <button
                           key={article.id}
-                          className={`text-left border rounded-md px-4 py-3 transition ${
+                          className={`text-center border rounded-md px-2 py-2 transition ${
                             selectedArticleId === article.id
                               ? "border-primary bg-primary/5 shadow-sm"
                               : "border-gray-200 hover:border-primary/60"
@@ -1013,29 +1054,19 @@ const YarnIssuePage = () => {
                             setActiveRequirementId(null);
                           }}
                         >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="text-sm font-semibold text-gray-900">
+                          <div className="flex justify-between items-start gap-1">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-xs font-semibold text-gray-900 truncate">
                                 {article.articleNumber}
                               </h4>
-                              <p className="text-xs text-gray-500 mt-1">
+                              <p className="text-[10px] text-gray-500 mt-0.5">
                                 Qty: {article.plannedQuantity}
                               </p>
                               {article.remarks && (
-                                <p className="text-xs text-gray-400 mt-1">{article.remarks}</p>
+                                <p className="text-[9px] text-gray-400 mt-0.5 truncate">{article.remarks}</p>
                               )}
                             </div>
-                            <span
-                              className={`inline-flex px-2 py-1 text-[10px] font-semibold rounded-full ${
-                                article.status === "In Progress"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : article.status === "Completed"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-gray-100 text-gray-800"
-                              }`}
-                            >
-                              {article.status}
-                            </span>
+                            
                           </div>
                         </button>
                       ))}
@@ -1180,7 +1211,7 @@ const YarnIssuePage = () => {
                                     }`}
                                     onClick={() => handleStartIssuing(requirement.id)}
                                   >
-                                    Issue Yarn
+                                    Issue
                                   </button>
                                 </td>
                               </tr>
@@ -1193,166 +1224,287 @@ const YarnIssuePage = () => {
                   </div>
                 </div>
               )}
-
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <div className="box">
-                  <div className="box-header">
-                    <h3 className="box-title">Scan &amp; Issue</h3>
-                  </div>
-                  <div className="box-body">
-                    {!activeRequirement ? (
-                      <div className="text-center py-12 text-sm text-gray-500">
-                        <i className="ri-focus-2-line text-4xl text-gray-300 mb-2"></i>
-                        <p>Select a yarn item to start issuing.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="border border-dashed border-primary/40 rounded-md p-4 bg-primary/5">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900">
-                                {activeRequirement.yarnName}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {activeRequirement.yarnCode} • {activeRequirement.yarnType}
-                              </p>
-                            </div>
-                            <span
-                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
-                                getRequirementStatus(activeRequirement)
-                              )}`}
-                            >
-                              {getRequirementStatus(activeRequirement)}
-                            </span>
-                          </div>
-                          <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                            <div className="bg-white rounded p-3 border border-gray-100">
-                              <p className="text-gray-500">Required</p>
-                              <p className="text-sm font-medium text-gray-900">
-                                {formatKg(activeRequirement.requiredQty)}
-                              </p>
-                            </div>
-                            <div className="bg-white rounded p-3 border border-gray-100">
-                              <p className="text-gray-500">Issued</p>
-                              <p className="text-sm font-medium text-blue-600">
-                                {formatKg(getIssuedQty(activeRequirement))}
-                              </p>
-                            </div>
-                            <div className="bg-white rounded p-3 border border-gray-100">
-                              <p className="text-gray-500">Short-Term Available</p>
-                              <p className="text-sm font-medium text-green-600">
-                                {formatKg(activeRequirement.shortTermAvailable)}
-                              </p>
-                            </div>
-                            <div className="bg-white rounded p-3 border border-gray-100">
-                              <p className="text-gray-500">Long-Term Available</p>
-                              <p className="text-sm font-medium text-orange-600">
-                                {formatKg(activeRequirement.longTermAvailable)}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <form onSubmit={handleBarcodeSubmit} className="space-y-2">
-                          <label className="form-label text-sm font-semibold text-gray-700">
-                            1. Scan Cone Barcode
-                          </label>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              className="form-control ps-10"
-                              placeholder="Scan or enter cone barcode"
-                              value={barcodeInput}
-                              onChange={(event) => setBarcodeInput(event.target.value)}
-                              disabled={barcodeLoading}
-                            />
-                            <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                          </div>
-                          <button
-                            type="submit"
-                            className="ti-btn ti-btn-primary w-full sm:w-auto whitespace-normal break-words leading-tight px-4 py-2 text-sm"
-                            disabled={barcodeLoading}
-                          >
-                            {barcodeLoading ? (
-                              <>
-                                <span className="animate-spin inline-block mr-2">⟳</span>
-                                Loading...
-                              </>
-                            ) : (
-                              "Scan Barcode"
-                            )}
-                          </button>
-                        </form>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="box">
-                  <div className="box-header flex justify-between items-center">
-                    <h3 className="box-title">Issue Activity Log</h3>
-                    {activeRequirement && (
-                      <span className="text-xs text-gray-500">
-                        {activeRequirement.logs.length} entries
-                      </span>
-                    )}
-                  </div>
-                  <div className="box-body">
-                    {!activeRequirement || activeRequirement.logs.length === 0 ? (
-                      <div className="text-center py-12 text-sm text-gray-500">
-                        <i className="ri-timeline-line text-4xl text-gray-300 mb-2"></i>
-                        <p>No yarn issued for this item yet.</p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full border border-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-200">
-                                Timestamp
-                              </th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-200">
-                                Barcode
-                              </th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-200">
-                                Weight Issued
-                              </th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                                Issued By
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white">
-                            {activeRequirement.logs
-                              .slice()
-                              .reverse()
-                              .map((log) => (
-                                <tr key={log.id} className="hover:bg-gray-50 transition">
-                                  <td className="px-4 py-2 text-sm text-gray-900 border-r border-b border-gray-200">
-                                    {new Date(log.issueDate).toLocaleString()}
-                                  </td>
-                                  <td className="px-4 py-2 text-sm text-gray-900 border-r border-b border-gray-200">
-                                    {log.coneBarcode}
-                                  </td>
-                                  <td className="px-4 py-2 text-sm text-gray-900 border-r border-b border-gray-200">
-                                    {formatKg(log.weightIssued)}
-                                  </td>
-                                  <td className="px-4 py-2 text-sm text-gray-900 border-b border-gray-200">
-                                    {log.issuedBy}
-                                  </td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
             </>
           )}
         </div>
       </div>
+
+      {/* Scan & Issue Side Panel */}
+      {showScanIssuePanel && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity"
+            onClick={() => setShowScanIssuePanel(false)}
+          />
+          {/* Side Panel */}
+          <div className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto">
+            <div className="box h-full flex flex-col">
+              <div className="box-header border-b border-gray-200 flex-shrink-0">
+                <div className="flex justify-between items-center">
+                  <h3 className="box-title text-lg">Scan &amp; Issue</h3>
+                  <button
+                    onClick={() => setShowScanIssuePanel(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    aria-label="Close panel"
+                  >
+                    <i className="ri-close-line text-xl"></i>
+                  </button>
+                </div>
+              </div>
+              <div className="box-body flex-1 overflow-y-auto">
+                {!activeRequirement ? (
+                  <div className="text-center py-12 text-sm text-gray-500">
+                    <i className="ri-focus-2-line text-4xl text-gray-300 mb-2"></i>
+                    <p>Select a yarn item to start issuing.</p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Click "Issue Yarn" button on a requirement to begin.
+                    </p>
+                  </div>
+                ) : activeRequirement ? (
+                  <div className="space-y-4">
+                    <div className="border border-dashed border-primary/40 rounded-md p-4 bg-primary/5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {activeRequirement.yarnName}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {activeRequirement.yarnCode} • {activeRequirement.yarnType}
+                          </p>
+                        </div>
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
+                            getRequirementStatus(activeRequirement)
+                          )}`}
+                        >
+                          {getRequirementStatus(activeRequirement)}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                        <div className="bg-white rounded p-3 border border-gray-100">
+                          <p className="text-gray-500">Required</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {formatKg(activeRequirement.requiredQty)}
+                          </p>
+                        </div>
+                        <div className="bg-white rounded p-3 border border-gray-100">
+                          <p className="text-gray-500">Issued</p>
+                          <p className="text-sm font-medium text-blue-600">
+                            {formatKg(getIssuedQty(activeRequirement))}
+                          </p>
+                        </div>
+                        <div className="bg-white rounded p-3 border border-gray-100">
+                          <p className="text-gray-500">Short-Term Available</p>
+                          <p className="text-sm font-medium text-green-600">
+                            {formatKg(activeRequirement.shortTermAvailable)}
+                          </p>
+                        </div>
+                        <div className="bg-white rounded p-3 border border-gray-100">
+                          <p className="text-gray-500">Long-Term Available</p>
+                          <p className="text-sm font-medium text-orange-600">
+                            {formatKg(activeRequirement.longTermAvailable)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleBarcodeSubmit} className="space-y-2">
+                      <label className="form-label text-sm font-semibold text-gray-700">
+                        1. Scan Cone Barcode
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          className="form-control ps-10"
+                          placeholder="Scan or enter cone barcode"
+                          value={barcodeInput}
+                          onChange={(event) => setBarcodeInput(event.target.value)}
+                          disabled={barcodeLoading}
+                          autoFocus
+                        />
+                        <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                      </div>
+                      <button
+                        type="submit"
+                        className="ti-btn ti-btn-primary w-full whitespace-normal break-words leading-tight px-4 py-2 text-sm"
+                        disabled={barcodeLoading}
+                      >
+                        {barcodeLoading ? (
+                          <>
+                            <span className="animate-spin inline-block mr-2">⟳</span>
+                            Loading...
+                          </>
+                        ) : (
+                          "Scan Barcode"
+                        )}
+                      </button>
+                    </form>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Issue Activity Log Side Panel */}
+      {showActivityLogPanel && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity"
+            onClick={() => setShowActivityLogPanel(false)}
+          />
+          {/* Side Panel */}
+          <div className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto">
+            <div className="box h-full flex flex-col">
+              <div className="box-header border-b border-gray-200 flex-shrink-0">
+                <div className="flex justify-between items-center">
+                  <h3 className="box-title text-lg">Issue Activity Log</h3>
+                  <button
+                    onClick={() => setShowActivityLogPanel(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    aria-label="Close panel"
+                  >
+                    <i className="ri-close-line text-xl"></i>
+                  </button>
+                </div>
+              </div>
+              <div className="box-body flex-1 overflow-y-auto">
+                {!selectedOrder ? (
+                  <div className="text-center py-12 text-sm text-gray-500">
+                    <i className="ri-archive-line text-4xl text-gray-300 mb-2"></i>
+                    <p>Select a production order to view activity log.</p>
+                  </div>
+                ) : !selectedArticle ? (
+                  <div className="text-center py-12 text-sm text-gray-500">
+                    <i className="ri-article-line text-4xl text-gray-300 mb-2"></i>
+                    <p>Select an article to view activity log.</p>
+                  </div>
+                ) : !activeRequirement || activeRequirement.logs.length === 0 ? (
+                  <div className="text-center py-12 text-sm text-gray-500">
+                    <i className="ri-timeline-line text-4xl text-gray-300 mb-2"></i>
+                    <p>No yarn issued for this item yet.</p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Select a yarn requirement and issue yarn to see activity.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Active Requirement Info */}
+                    <div className="border border-dashed border-primary/40 rounded-md p-4 bg-primary/5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {activeRequirement.yarnName}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {activeRequirement.yarnCode} • {activeRequirement.yarnType}
+                          </p>
+                        </div>
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
+                            getRequirementStatus(activeRequirement)
+                          )}`}
+                        >
+                          {getRequirementStatus(activeRequirement)}
+                        </span>
+                      </div>
+                      <div className="mt-3 text-xs text-gray-600">
+                        <span className="font-semibold">{activeRequirement.logs.length}</span> issue
+                        {activeRequirement.logs.length !== 1 ? "s" : ""} recorded
+                      </div>
+                    </div>
+
+                    {/* Activity Log Table */}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full border border-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-200">
+                              Timestamp
+                            </th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-200">
+                              Barcode
+                            </th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-200">
+                              Weight Issued
+                            </th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                              Issued By
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white">
+                          {activeRequirement.logs
+                            .slice()
+                            .reverse()
+                            .map((log) => (
+                              <tr key={log.id} className="hover:bg-gray-50 transition">
+                                <td className="px-4 py-2 text-sm text-gray-900 border-r border-b border-gray-200">
+                                  {new Date(log.issueDate).toLocaleString()}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-900 border-r border-b border-gray-200">
+                                  {log.coneBarcode}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-900 border-r border-b border-gray-200">
+                                  {formatKg(log.weightIssued)}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-900 border-b border-gray-200">
+                                  {log.issuedBy}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Summary */}
+                    <div className="p-3 bg-gray-50 rounded-md">
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <p className="text-gray-500">Required</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {formatKg(activeRequirement.requiredQty)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Issued</p>
+                          <p className="text-sm font-medium text-blue-600">
+                            {formatKg(getIssuedQty(activeRequirement))}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Remaining</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {formatKg(
+                              Math.max(
+                                activeRequirement.requiredQty - getIssuedQty(activeRequirement),
+                                0
+                              )
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Status</p>
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
+                              getRequirementStatus(activeRequirement)
+                            )}`}
+                          >
+                            {getRequirementStatus(activeRequirement)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Issue Modal */}
       {showIssueModal && (
