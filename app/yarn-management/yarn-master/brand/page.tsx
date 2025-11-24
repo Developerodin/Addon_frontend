@@ -291,7 +291,48 @@ const BrandPage = () => {
     'Color ID'?: string;
     'Shade Number'?: string;
     'Tear Weight'?: string;
+    'Yarn Name 1'?: string;
+    'Color ID 1'?: string;
+    'Shade Number 1'?: string;
+    'Tear Weight 1'?: string;
+    'Yarn Name 2'?: string;
+    'Color ID 2'?: string;
+    'Shade Number 2'?: string;
+    'Tear Weight 2'?: string;
+    'Yarn Name 3'?: string;
+    'Color ID 3'?: string;
+    'Shade Number 3'?: string;
+    'Tear Weight 3'?: string;
+    'Yarn Name 4'?: string;
+    'Color ID 4'?: string;
+    'Shade Number 4'?: string;
+    'Tear Weight 4'?: string;
+    'Yarn Name 5'?: string;
+    'Color ID 5'?: string;
+    'Shade Number 5'?: string;
+    'Tear Weight 5'?: string;
+    'Yarn Name 6'?: string;
+    'Color ID 6'?: string;
+    'Shade Number 6'?: string;
+    'Tear Weight 6'?: string;
+    'Yarn Name 7'?: string;
+    'Color ID 7'?: string;
+    'Shade Number 7'?: string;
+    'Tear Weight 7'?: string;
+    'Yarn Name 8'?: string;
+    'Color ID 8'?: string;
+    'Shade Number 8'?: string;
+    'Tear Weight 8'?: string;
+    'Yarn Name 9'?: string;
+    'Color ID 9'?: string;
+    'Shade Number 9'?: string;
+    'Tear Weight 9'?: string;
+    'Yarn Name 10'?: string;
+    'Color ID 10'?: string;
+    'Shade Number 10'?: string;
+    'Tear Weight 10'?: string;
     'Batch Size'?: string | number;
+    [key: string]: string | number | undefined;
   };
 
   const handleDownloadTemplate = () => {
@@ -312,29 +353,19 @@ const BrandPage = () => {
           Country: 'India',
           'GST No': '29ABCDE1234F2Z5',
           Status: 'active',
-          'Yarn Name': 'Cotton 40s',
-          'Color ID': '65f1a2b3c4d5e6f7g8h9i0a3',
-          'Shade Number': 'Shade-21',
-          'Tear Weight': '100',
-          'Batch Size': '50 (optional, read from first row)',
-        },
-        {
-          ID: '',
-          Brand: 'Premier Threads',
-          'Contact Person': 'John Doe',
-          'Contact Number': '+91-9876543210',
-          Email: 'john@example.com',
-          Address: '123 Textile Park',
-          City: 'Coimbatore',
-          State: 'Tamil Nadu',
-          Pincode: '641001',
-          Country: 'India',
-          'GST No': '29ABCDE1234F2Z5',
-          Status: 'active',
-          'Yarn Name': 'Polyester 60s',
-          'Color ID': '65f1a2b3c4d5e6f7g8h9i0b3',
-          'Shade Number': 'Shade-45',
-          'Tear Weight': '150',
+          'Yarn Name 1': 'Cotton 40s',
+          'Color ID 1': '65f1a2b3c4d5e6f7g8h9i0a3',
+          'Shade Number 1': 'Shade-21',
+          'Tear Weight 1': '100',
+          'Yarn Name 2': 'Polyester 60s',
+          'Color ID 2': '65f1a2b3c4d5e6f7g8h9i0b3',
+          'Shade Number 2': 'Shade-45',
+          'Tear Weight 2': '150',
+          'Yarn Name 3': 'Silk 80s',
+          'Color ID 3': '65f1a2b3c4d5e6f7g8h9i0c3',
+          'Shade Number 3': 'Shade-78',
+          'Tear Weight 3': '200',
+          'Batch Size': '50 (optional)',
         },
       ]);
 
@@ -395,8 +426,8 @@ const BrandPage = () => {
         return '';
       };
 
-      const sheetData = exportSource.flatMap(brand => {
-        const baseRow = {
+      const sheetData = exportSource.map(brand => {
+        const baseRow: Record<string, string> = {
           ID: brand.id,
           Brand: brand.brandName,
           'Contact Person': brand.contactPersonName,
@@ -411,45 +442,37 @@ const BrandPage = () => {
           Status: brand.status,
         };
 
-        if (!brand.yarnDetails || brand.yarnDetails.length === 0) {
-          return [
-            {
-              ...baseRow,
-              'Yarn Name': '',
-              'Color ID': '',
-              'Shade Number': '',
-              'Tear Weight': '',
-              'Batch Size': '',
-            },
-          ];
+        // Add yarn details as numbered columns (up to 10)
+        if (brand.yarnDetails && brand.yarnDetails.length > 0) {
+          const maxDetails = Math.min(brand.yarnDetails.length, 10);
+          for (let i = 0; i < maxDetails; i++) {
+            const detail = brand.yarnDetails[i];
+            const index = i + 1;
+            
+            const yarnName = detail.yarnName || getYarnCatalogLabel(detail) || '';
+            
+            let colorId = normalizeReferenceId(detail.color, colorNameToId);
+            const colorName =
+              typeof detail.color === 'object' ? detail.color?.name?.trim().toLowerCase() : '';
+            if (!colorId && colorName) {
+              colorId = colorNameToId.get(colorName) || '';
+            }
+
+            const tearweightValue =
+              typeof detail.tearweight === 'string'
+                ? detail.tearweight
+                : typeof detail.tearweight === 'number'
+                  ? String(detail.tearweight)
+                  : '';
+
+            baseRow[`Yarn Name ${index}`] = yarnName;
+            baseRow[`Color ID ${index}`] = colorId;
+            baseRow[`Shade Number ${index}`] = detail.shadeNumber || '';
+            baseRow[`Tear Weight ${index}`] = tearweightValue;
+          }
         }
 
-        return brand.yarnDetails.map(detail => {
-          const yarnName = detail.yarnName || getYarnCatalogLabel(detail) || '';
-          
-          let colorId = normalizeReferenceId(detail.color, colorNameToId);
-          const colorName =
-            typeof detail.color === 'object' ? detail.color?.name?.trim().toLowerCase() : '';
-          if (!colorId && colorName) {
-            colorId = colorNameToId.get(colorName) || '';
-          }
-
-          const tearweightValue =
-            typeof detail.tearweight === 'string'
-              ? detail.tearweight
-              : typeof detail.tearweight === 'number'
-                ? String(detail.tearweight)
-                : '';
-
-          return {
-            ...baseRow,
-            'Yarn Name': yarnName,
-            'Color ID': colorId,
-            'Shade Number': detail.shadeNumber || '',
-            'Tear Weight': tearweightValue,
-            'Batch Size': '',
-          };
-        });
+        return baseRow;
       });
 
       const workbook = XLSX.utils.book_new();
@@ -669,42 +692,72 @@ const BrandPage = () => {
 
           const errorsBeforeDetails = rowErrors.length;
 
-          const yarnName = row['Yarn Name']?.toString().trim() ?? '';
-          const colorId = row['Color ID']?.toString().trim() ?? '';
-          const shadeNumber = row['Shade Number']?.toString().trim() ?? '';
-          const tearweight = row['Tear Weight']?.toString().trim() ?? '';
-          const hasDetailFields = [yarnName, colorId, shadeNumber, tearweight].some(field => field.length > 0);
+          // Process numbered yarn detail columns (Yarn Name 1, Color ID 1, etc.)
+          const processYarnDetails = () => {
+            const details: Array<{ yarnName: string; colorId: string; shadeNumber: string; tearweight: string }> = [];
 
-          if (hasDetailFields) {
-            const detailIssues: string[] = [];
-            if (!yarnName) {
-              detailIssues.push('Yarn Name is required when yarn details are provided');
+            // Check for numbered columns (1-10)
+            for (let i = 1; i <= 10; i++) {
+              const yarnName = row[`Yarn Name ${i}` as keyof BrandImportRow]?.toString().trim() ?? '';
+              const colorId = row[`Color ID ${i}` as keyof BrandImportRow]?.toString().trim() ?? '';
+              const shadeNumber = row[`Shade Number ${i}` as keyof BrandImportRow]?.toString().trim() ?? '';
+              const tearweight = row[`Tear Weight ${i}` as keyof BrandImportRow]?.toString().trim() ?? '';
+
+              // If at least yarn name or color is provided, consider it a detail entry
+              if (yarnName || colorId) {
+                details.push({ yarnName, colorId, shadeNumber, tearweight });
+              }
             }
-            if (!colorId) {
-              detailIssues.push('Color ID is required when yarn details are provided');
+
+            // Fallback to old format (Yarn Name, Color ID, etc.) for backward compatibility
+            if (details.length === 0) {
+              const yarnName = row['Yarn Name']?.toString().trim() ?? '';
+              const colorId = row['Color ID']?.toString().trim() ?? '';
+              const shadeNumber = row['Shade Number']?.toString().trim() ?? '';
+              const tearweight = row['Tear Weight']?.toString().trim() ?? '';
+
+              if (yarnName || colorId) {
+                details.push({ yarnName, colorId, shadeNumber, tearweight });
+              }
             }
 
-            if (detailIssues.length > 0) {
-              rowErrors.push(`Row ${rowNumber}: ${detailIssues.join(', ')}`);
-            } else if (rowErrors.length === errorsBeforeDetails) {
-              const detailKey = `${yarnName}|${colorId}|${shadeNumber || ''}|${tearweight || ''}`;
-              if (!accumulator.detailKeys.has(detailKey)) {
-                const detailPayload: SupplierYarnDetail = {
-                  yarnName: yarnName,
-                  color: colorId,
-                };
-                if (shadeNumber) {
-                  detailPayload.shadeNumber = shadeNumber;
-                }
-                if (tearweight) {
-                  detailPayload.tearweight = tearweight;
-                }
+            return details;
+          };
 
-                accumulator.detailKeys.add(detailKey);
-                if (!accumulator.supplier.yarnDetails) {
-                  accumulator.supplier.yarnDetails = [];
+          const yarnDetails = processYarnDetails();
+
+          if (yarnDetails.length > 0) {
+            for (const detail of yarnDetails) {
+              const detailIssues: string[] = [];
+              if (!detail.yarnName) {
+                detailIssues.push('Yarn Name is required when yarn details are provided');
+              }
+              if (!detail.colorId) {
+                detailIssues.push('Color ID is required when yarn details are provided');
+              }
+
+              if (detailIssues.length > 0) {
+                rowErrors.push(`Row ${rowNumber}: ${detailIssues.join(', ')}`);
+              } else if (rowErrors.length === errorsBeforeDetails) {
+                const detailKey = `${detail.yarnName}|${detail.colorId}|${detail.shadeNumber || ''}|${detail.tearweight || ''}`;
+                if (!accumulator.detailKeys.has(detailKey)) {
+                  const detailPayload: SupplierYarnDetail = {
+                    yarnName: detail.yarnName,
+                    color: detail.colorId,
+                  };
+                  if (detail.shadeNumber) {
+                    detailPayload.shadeNumber = detail.shadeNumber;
+                  }
+                  if (detail.tearweight) {
+                    detailPayload.tearweight = detail.tearweight;
+                  }
+
+                  accumulator.detailKeys.add(detailKey);
+                  if (!accumulator.supplier.yarnDetails) {
+                    accumulator.supplier.yarnDetails = [];
+                  }
+                  accumulator.supplier.yarnDetails.push(detailPayload);
                 }
-                accumulator.supplier.yarnDetails.push(detailPayload);
               }
             }
           }
