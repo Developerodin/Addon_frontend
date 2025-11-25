@@ -599,7 +599,12 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 			for (const item of menuItems) {
 				if (item === targetObject) {
 					if (theme.dataVerticalStyle == 'doublemenu' && item.active) { return; }
-					item.active = !item.active;
+					// If menu has selected children, keep it open instead of toggling
+					if (hasSelectedChild(item)) {
+						item.active = true;
+					} else {
+						item.active = !item.active;
+					}
 
 					if (item.active) {
 						closeOtherMenus(menuItems, item);

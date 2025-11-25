@@ -118,51 +118,40 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
           
           if (child.type === 'link' && child.path) {
             // Map paths to parent/child structure
-            if (child.path.startsWith('/catalog/')) {
-              const childName = child.title;
-              return hasSubPermission('/catalog', childName);
-            }
-            if (child.path.startsWith('/sales/')) {
-              const childName = child.title;
-              return hasSubPermission('/sales', childName);
-            }
-            if (child.path.startsWith('/production/')) {
-              const childName = child.title;
-              return hasSubPermission('/production', childName);
-            }
+            // Handle yarn-management items that are shown under catalog
             if (child.path.startsWith('/yarn-management/')) {
               const childName = child.title;
               // Handle Dashboard permission
               if (child.path === '/yarn-management/dashboard') {
                 return hasSubPermission('/yarn-management', 'Dashboard');
               }
+              // Handle Cataloguing permission (shown under catalog but uses yarn-management permissions)
+              if (child.path === '/yarn-management/cataloguing') {
+                return hasSubPermission('/yarn-management', 'Cataloguing');
+              }
               // Handle nested Yarn Master permissions
-              // If path is exactly /yarn-management/yarn-master, check Yarn Master permission
               if (child.path === '/yarn-management/yarn-master') {
                 return hasSubPermission('/yarn-management', 'Yarn Master');
-              }
-              // If path is exactly /yarn-management/purchase-management, check Purchase Management permission
-              if (child.path === '/yarn-management/purchase-management') {
-                return hasSubPermission('/yarn-management', 'Purchase Management');
               }
               // If path starts with /yarn-management/yarn-master/, check nested permissions
               if (child.path.startsWith('/yarn-management/yarn-master/')) {
                 const permissionKey = getPermissionKey(childName, child.path);
                 return hasSubPermission('/yarn-management/yarn-master', permissionKey);
               }
+              // Handle Purchase Management
+              if (child.path === '/yarn-management/purchase-management') {
+                return hasSubPermission('/yarn-management', 'Purchase Management');
+              }
               // If path starts with /yarn-management/purchase-management/, check nested permissions
               if (child.path.startsWith('/yarn-management/purchase-management/')) {
                 const permissionKey = getPermissionKey(childName, child.path);
                 return hasSubPermission('/yarn-management/purchase-management', permissionKey);
               }
-              // Handle Purchase Order and Purchase Order Received which are direct links
-              if (child.path === '/yarn-management/purchase') {
-                return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
-              }
-              if (child.path === '/yarn-management/purchase-order-received') {
-                return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
-              }
               return hasSubPermission('/yarn-management', childName);
+            }
+            if (child.path.startsWith('/catalog/')) {
+              const childName = child.title;
+              return hasSubPermission('/catalog', childName);
             }
             if (child.path.startsWith('/warehouse-management/')) {
               const childName = child.title;
@@ -265,23 +254,16 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
           }
           
           if (child.type === 'link' && child.path) {
-            if (child.path.startsWith('/catalog/')) {
-              const childName = child.title;
-              return hasSubPermission('/catalog', childName);
-            }
-            if (child.path.startsWith('/sales/')) {
-              const childName = child.title;
-              return hasSubPermission('/sales', childName);
-            }
-            if (child.path.startsWith('/production/')) {
-              const childName = child.title;
-              return hasSubPermission('/production', childName);
-            }
+            // Handle yarn-management items that may be shown under catalog
             if (child.path.startsWith('/yarn-management/')) {
               const childName = child.title;
               // Handle Dashboard permission
               if (child.path === '/yarn-management/dashboard') {
                 return hasSubPermission('/yarn-management', 'Dashboard');
+              }
+              // Handle Cataloguing permission (shown under catalog but uses yarn-management permissions)
+              if (child.path === '/yarn-management/cataloguing') {
+                return hasSubPermission('/yarn-management', 'Cataloguing');
               }
               // Handle nested Yarn Master permissions
               // If path is exactly /yarn-management/yarn-master, check Yarn Master permission
@@ -310,6 +292,18 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
               }
               return hasSubPermission('/yarn-management', childName);
+            }
+            if (child.path.startsWith('/catalog/')) {
+              const childName = child.title;
+              return hasSubPermission('/catalog', childName);
+            }
+            if (child.path.startsWith('/sales/')) {
+              const childName = child.title;
+              return hasSubPermission('/sales', childName);
+            }
+            if (child.path.startsWith('/production/')) {
+              const childName = child.title;
+              return hasSubPermission('/production', childName);
             }
             if (child.path.startsWith('/warehouse-management/')) {
               const childName = child.title;
