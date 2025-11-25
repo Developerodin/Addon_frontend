@@ -19,15 +19,46 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	const path = usePathname()	
 
 	function closeMenu(keepSelectedActive = false) {
+		console.log('🔴 ========== closeMenu CALLED ==========');
+		const theme = store.getState();
+		// Don't close menus for vertical layout - they should stay open
+		if (theme.dataNavLayout === 'vertical') {
+			console.log('🔴 Skipping closeMenu - vertical layout, menus should stay open');
+			return;
+		}
 		console.log('🔴 closeMenu() called', { 
-			keepSelectedActive, 
+			keepSelectedActive,
+			layout: theme.dataNavLayout,
+			menuitemsLength: menuitems.length,
+			filteredLength: filteredMenuItems?.length,
 			stack: new Error().stack?.split('\n').slice(0, 8).join('\n')
 		});
 		const closeMenudata = (items: any) => {
-			items?.forEach((item: any) => {
+			if (!items || !Array.isArray(items)) {
+				console.log('🔴 closeMenudata: items is not an array or is empty', items);
+				return;
+			}
+			items.forEach((item: any) => {
+				if (!item || item.menutitle) {
+					// Skip menu titles but still process children if any
+					if (item?.children) {
+						closeMenudata(item.children);
+					}
+					return;
+				}
+				const hasSelected = hasSelectedChild(item);
+				console.log('🔴 Processing menu item:', {
+					title: item.title,
+					path: item.path,
+					type: item.type,
+					currentActive: item.active,
+					currentSelected: item.selected,
+					hasSelectedChild: hasSelected,
+					keepSelectedActive
+				});
 				// Don't close menus that are selected or have selected children
-				if (keepSelectedActive && (item.selected || hasSelectedChild(item))) {
-					console.log('✅ Keeping menu open:', item.title, 'selected:', item.selected, 'hasSelectedChild:', hasSelectedChild(item));
+				if (keepSelectedActive && (item.selected || hasSelected)) {
+					console.log('🔴 ✅ Keeping menu open:', item.title, 'selected:', item.selected, 'hasSelectedChild:', hasSelected);
 					// Keep this menu open - don't set active to false
 					// But still process children
 					if (item.children) {
@@ -36,14 +67,18 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 					return;
 				}
 				// Only close if not selected and doesn't have selected children
-				if (!item.selected && !hasSelectedChild(item)) {
-					console.log('❌ Closing menu:', item.title, 'active:', item.active);
+				if (!item.selected && !hasSelected) {
+					console.log('🔴 ❌ Closing menu:', item.title, 'active:', item.active);
 					item.active = false;
 					if (item.children) {
 						closeMenudata(item.children);
 					}
 				} else {
-					console.log('⚠️ Skipping close for:', item.title, 'selected:', item.selected);
+					console.log('🔴 ⚠️ Skipping close for:', item.title, {
+						selected: item.selected,
+						hasSelectedChild: hasSelected,
+						willStayOpen: true
+					});
 					if (item.children) {
 						closeMenudata(item.children);
 					}
@@ -53,11 +88,22 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		closeMenudata(menuitems.length > 0 ? menuitems : filteredMenuItems);
 		setMenuitems((arr: any) => [...arr]);
 		console.log('🔴 closeMenu() completed');
+		console.log('🔴 =========================================');
 	}
 
 	function hasSelectedChild(item: any): boolean {
 		if (!item.children) return false;
-		return item.children.some((child: any) => child.selected || hasSelectedChild(child));
+		const result = item.children.some((child: any) => child.selected || hasSelectedChild(child));
+		if (result) {
+			console.log('🔍 hasSelectedChild TRUE for:', item.title, {
+				children: item.children.map((c: any) => ({
+					title: c.title,
+					selected: c.selected,
+					active: c.active
+				}))
+			});
+		}
+		return result;
 	}
 
 	useEffect(() => {
@@ -69,16 +115,41 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		if (filteredMenuItems && menuitems.length > 0) {
 			const preserveMenuState = (newItems: any[], oldItems: any[]) => {
 				newItems.forEach((newItem: any) => {
-					const oldItem = oldItems.find((old: any) => 
-						old.path === newItem.path || old.title === newItem.title
-					);
+					if (!newItem || newItem.menutitle) {
+						// Skip menu titles but process children
+						if (newItem?.children && oldItems.length > 0) {
+							preserveMenuState(newItem.children, oldItems);
+						}
+						return;
+					}
+					// Match by title first (for menus without paths like Master Catalog), then by path
+					const oldItem = oldItems.find((old: any) => {
+						if (!old || old.menutitle) return false;
+						// For menus without paths, match by title
+						if (!newItem.path && !old.path) {
+							return old.title === newItem.title;
+						}
+						// For menus with paths, match by path or title
+						return old.path === newItem.path || old.title === newItem.title;
+					});
 					if (oldItem) {
+						console.log('🔄 Preserving state for:', newItem.title, {
+							oldActive: oldItem.active,
+							oldSelected: oldItem.selected,
+							newActive: newItem.active,
+							newSelected: newItem.selected
+						});
 						// Preserve active and selected state
 						newItem.active = oldItem.active;
 						newItem.selected = oldItem.selected;
 						if (newItem.children && oldItem.children) {
 							preserveMenuState(newItem.children, oldItem.children);
 						}
+					} else {
+						console.log('🔄 No matching old item found for:', newItem.title, {
+							hasPath: !!newItem.path,
+							path: newItem.path
+						});
 					}
 				});
 			};
@@ -536,6 +607,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	}
 
 	function setMenuUsingUrl(currentPath: any) {
+		console.log('🔵 ========== setMenuUsingUrl CALLED ==========');
 		console.log('🔵 setMenuUsingUrl() called', { currentPath });
 		hasParent = false;
 		hasParentLevel = 1;
@@ -544,23 +616,54 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 			items?.forEach((item: any) => {
 				if (item.path == '') { }
 				else if (item.path === currentPath) {
-					console.log('✅ Found matching path:', item.title, item.path);
+					console.log('🔵 ✅ Found matching path:', item.title, item.path);
 					// Mark this item as selected and active, and keep parent menus open
 					item.selected = true;
 					item.active = true;
 					setSubmenu(null, item);
 				} else {
 					// Only reset selected state - don't reset active if it's a parent
-					item.selected = false;
+					// But don't reset if it's a parent menu without a path (like Master Catalog)
+					if (item.path || item.type !== 'sub') {
+						item.selected = false;
+					}
 				}
 				if (item.children) {
 					setSubmenuRecursively(item.children);
 					// If any child is selected or active, keep this parent menu open
 					const hasSelectedChild = item.children.some((child: any) => child.selected || child.active);
+					console.log('🔵 Checking parent menu:', {
+						title: item.title,
+						path: item.path,
+						type: item.type,
+						hasSelectedChild,
+						children: item.children.map((c: any) => ({
+							title: c.title,
+							path: c.path,
+							selected: c.selected,
+							active: c.active
+						})),
+						currentActive: item.active,
+						currentSelected: item.selected
+					});
 					if (hasSelectedChild) {
-						console.log('✅ Keeping parent menu open:', item.title);
+						console.log('🔵 ✅ Keeping parent menu open:', item.title, 'hasSelectedChild:', hasSelectedChild);
 						item.active = true;
+						// Also set selected to true for parent menus with selected children
+						if (!item.path) {
+							item.selected = true;
+							console.log('🔵 ✅ Set parent menu selected (no path):', item.title);
+						}
+					} else if (!item.path && item.type === 'sub') {
+						// For parent menus without paths, only reset selected if no children are selected
+						console.log('🔵 No selected children - resetting parent:', item.title);
+						item.selected = false;
 					}
+					console.log('🔵 Parent menu final state:', {
+						title: item.title,
+						active: item.active,
+						selected: item.selected
+					});
 				}
 			});
 		};
@@ -568,10 +671,16 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		setSubmenuRecursively(menuitems.length > 0 ? menuitems : filteredMenuItems);
 		setMenuitems((arr: any) => [...arr]);
 		console.log('🔵 setMenuUsingUrl() completed');
+		console.log('🔵 =========================================');
 	}
 	const [previousUrl, setPreviousUrl] = useState("/");
 
 	useEffect(() => {
+		console.log('🔄 useEffect triggered - pathname changed:', {
+			pathname,
+			previousUrl,
+			willCallSetMenuUsingUrl: pathname !== previousUrl
+		});
 
 		// Select the target element
 		const targetElement = document.documentElement;
@@ -586,29 +695,67 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		observer.observe(targetElement, config);
 		let currentPath = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
 		if (currentPath !== previousUrl) {
+			console.log('🔄 Path changed, calling setMenuUsingUrl:', {
+				oldPath: previousUrl,
+				newPath: currentPath
+			});
 			setMenuUsingUrl(currentPath);
 			setPreviousUrl(currentPath);
+		} else {
+			console.log('🔄 Path unchanged, skipping setMenuUsingUrl');
 		}
 	}, [pathname]);
 
 	function toggleSidemenu(event: any, targetObject: any, menuItems = menuitems) {
+		console.log('🟣 ========== toggleSidemenu CALLED ==========');
+		console.log('🟣 toggleSidemenu:', {
+			targetTitle: targetObject?.title,
+			targetActive: targetObject?.active,
+			targetSelected: targetObject?.selected,
+			hasChildren: !!targetObject?.children,
+			hasSelectedChild: hasSelectedChild(targetObject)
+		});
 		const theme = store.getState();
 		let element = event.target;
 		if ((theme.dataNavStyle != "icon-hover" && theme.dataNavStyle != "menu-hover") || (window.innerWidth < 992) || (theme.dataNavLayout != "horizontal") && (theme.dataToggled != "icon-hover-closed" && theme.dataToggled != "menu-hover-closed")) {
 			// {
 			for (const item of menuItems) {
 				if (item === targetObject) {
-					if (theme.dataVerticalStyle == 'doublemenu' && item.active) { return; }
+					console.log('🟣 Found target item:', item.title);
+					if (theme.dataVerticalStyle == 'doublemenu' && item.active) { 
+						console.log('🟣 Double menu already active, returning');
+						return; 
+					}
 					// If menu has selected children, keep it open instead of toggling
-					if (hasSelectedChild(item)) {
+					const hasSelected = hasSelectedChild(item);
+					console.log('🟣 Checking for selected children:', {
+						hasSelected,
+						children: item.children?.map((c: any) => ({
+							title: c.title,
+							selected: c.selected,
+							active: c.active
+						}))
+					});
+					if (hasSelected) {
+						console.log('🟣 Has selected children - keeping menu open');
 						item.active = true;
 					} else {
+						console.log('🟣 No selected children - toggling menu:', {
+							oldActive: item.active,
+							newActive: !item.active
+						});
 						item.active = !item.active;
 					}
 
+					console.log('🟣 Item active state after toggle:', {
+						active: item.active,
+						selected: item.selected
+					});
 					if (item.active) {
+						console.log('🟣 Item is active - closing other menus');
 						closeOtherMenus(menuItems, item);
 					} else {
+						console.log('🟣 Item is inactive - closing');
 						if (theme.dataVerticalStyle == 'doublemenu') {
 							ThemeChanger({ ...theme, dataToggled: "double-menu-close" });
 						}
@@ -618,6 +765,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 				}
 				else if (!item.active) {
 					if (theme.dataVerticalStyle != 'doublemenu') {
+						console.log('🟣 Setting other item inactive:', item.title);
 						item.active = false; // Set active to false for items not matching the target
 					}
 				}
@@ -630,6 +778,11 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 					ThemeChanger({ ...theme, dataToggled: "double-menu-open" });
 				}
 			}
+			console.log('🟣 toggleSidemenu FINAL STATE:', {
+				targetActive: targetObject?.active,
+				targetSelected: targetObject?.selected
+			});
+			console.log('🟣 =========================================');
 			if (element && theme.dataNavLayout == 'horizontal' && (theme.dataNavStyle == 'menu-click' || theme.dataNavStyle == 'icon-click')) {
 				const listItem = element.closest("li");
 				if (listItem) {
@@ -899,7 +1052,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 													</Link>
 													: ""}
 												{levelone.type === "sub" ?
-													<Menuloop MenuItems={levelone} level={level + 1} toggleSidemenu={toggleSidemenu} HoverToggleInnerMenuFn={HoverToggleInnerMenuFn} />
+													<Menuloop MenuItems={levelone} level={level + 1} toggleSidemenu={toggleSidemenu} HoverToggleInnerMenuFn={HoverToggleInnerMenuFn} setMenuitems={setMenuitems} />
 													: ''}
 											</li>
 										</Fragment>
