@@ -71,6 +71,11 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
 
       // Check sub-menu items
       if (item.type === 'sub' && item.children) {
+        // First check if parent menu item has permission (if it has a path)
+        if (item.path && !hasPermission(item.path)) {
+          return false;
+        }
+        
         // Filter children based on permissions
         const filteredChildren = item.children.filter(child => {
           // Handle nested submenus (e.g., Yarn Master, Purchase Management within Yarn Management)
@@ -152,6 +157,14 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             if (child.path.startsWith('/catalog/')) {
               const childName = child.title;
               return hasSubPermission('/catalog', childName);
+            }
+            if (child.path.startsWith('/sales/')) {
+              const childName = child.title;
+              return hasSubPermission('/sales', childName);
+            }
+            if (child.path.startsWith('/production/')) {
+              const childName = child.title;
+              return hasSubPermission('/production', childName);
             }
             if (child.path.startsWith('/warehouse-management/')) {
               const childName = child.title;

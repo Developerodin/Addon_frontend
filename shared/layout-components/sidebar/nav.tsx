@@ -245,6 +245,7 @@ const BaseMenuItems: any = [
     type: "sub",
     active: false,
     selected: false,
+    path: "/production",
     children: [
       {
         icon: ProductionIcon,
