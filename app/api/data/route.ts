@@ -1,9 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
- 
-// type ResponseData = {
-//   message: string
-// }
+import { NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
  
 export async function GET() {
-  return new Response(JSON.stringify({"mess":"helloworld"}));
+  return NextResponse.json({ mess: "helloworld" });
 }
