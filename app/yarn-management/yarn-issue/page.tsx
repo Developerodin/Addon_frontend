@@ -9,12 +9,29 @@ import Cookies from "js-cookie";
 
 type RequirementStatus = "Not Issued" | "Partially Issued" | "Issued";
 
-interface IssueLog {
-  id: string;
-  issueDate: string;
-  coneBarcode: string;
-  weightIssued: number;
-  issuedBy: string;
+interface YarnTransaction {
+  _id: string;
+  yarn: {
+    _id: string;
+    status: string;
+    yarnType: {
+      status: string;
+      _id: string;
+      name: string;
+    };
+    yarnName: string;
+  };
+  yarnName: string;
+  transactionType: string;
+  transactionDate: string;
+  transactionNetWeight: number;
+  transactionTotalWeight: number;
+  transactionTearWeight: number;
+  transactionConeCount: number;
+  orderno: string;
+  createdAt: string;
+  updatedAt: string;
+  __v: number;
 }
 
 interface YarnRequirement {
@@ -26,7 +43,6 @@ interface YarnRequirement {
   tolerancePercent: number;
   shortTermAvailable: number;
   longTermAvailable: number;
-  logs: IssueLog[];
 }
 
 interface Article {
@@ -112,11 +128,14 @@ type YarnSortField =
 
 const ISSUE_TOLERANCE_DEFAULT = 0.2;
 
-const getIssuedQty = (requirement: YarnRequirement) =>
-  requirement.logs.reduce((sum, log) => sum + log.weightIssued, 0);
+const getIssuedQty = (requirement: YarnRequirement, transactions: YarnTransaction[]) => {
+  return transactions
+    .filter(t => t.yarnName === requirement.yarnName && t.transactionType === "yarn_issued")
+    .reduce((sum, t) => sum + t.transactionNetWeight, 0);
+};
 
-const getRequirementStatus = (requirement: YarnRequirement): RequirementStatus => {
-  const issued = getIssuedQty(requirement);
+const getRequirementStatus = (requirement: YarnRequirement, transactions: YarnTransaction[]): RequirementStatus => {
+  const issued = getIssuedQty(requirement, transactions);
   if (issued === 0) {
     return "Not Issued";
   }
@@ -128,13 +147,13 @@ const getRequirementStatus = (requirement: YarnRequirement): RequirementStatus =
   return "Issued";
 };
 
-const getOrderStatus = (order: ProductionOrder): RequirementStatus => {
+const getOrderStatus = (order: ProductionOrder, transactions: YarnTransaction[]): RequirementStatus => {
   // If BOM is empty, order is not issued yet
   if (!order.bom || order.bom.length === 0) {
     return "Not Issued";
   }
   
-  const requirementStatuses = order.bom.map(getRequirementStatus);
+  const requirementStatuses = order.bom.map(req => getRequirementStatus(req, transactions));
   if (requirementStatuses.every((status) => status === "Issued")) {
     return "Issued";
   }
@@ -208,8 +227,91 @@ const YarnIssuePage = () => {
   const [submittingTransaction, setSubmittingTransaction] = useState(false);
   const [showScanIssuePanel, setShowScanIssuePanel] = useState(false);
   const [showActivityLogPanel, setShowActivityLogPanel] = useState(false);
+  const [yarnTransactions, setYarnTransactions] = useState<YarnTransaction[]>([]);
+  const [allYarnTransactions, setAllYarnTransactions] = useState<YarnTransaction[]>([]); // For order status calculations
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
 
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Issue");
+
+  // Fetch all yarn-issued transactions for order status calculations (on initial load)
+  useEffect(() => {
+    const fetchAllTransactions = async () => {
+      if (!hasPermission) return;
+      
+      try {
+        const token = getAccessToken();
+        const response = await fetch(
+          `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch yarn transactions");
+        }
+
+        const data = await response.json();
+        setAllYarnTransactions(data || []);
+      } catch (error) {
+        console.error("Error fetching all yarn transactions:", error);
+        // Don't show toast for this as it's a background fetch
+      }
+    };
+
+    fetchAllTransactions();
+  }, [hasPermission]);
+
+  // Fetch yarn-issued transactions with date filters for logs panel
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      if (!hasPermission || !showActivityLogPanel) return;
+      
+      setTransactionsLoading(true);
+      try {
+        const token = getAccessToken();
+        
+        // Build query parameters for date filtering
+        const queryParams = new URLSearchParams();
+        if (startDate) {
+          queryParams.append("start_date", startDate);
+        }
+        if (endDate) {
+          queryParams.append("end_date", endDate);
+        }
+        
+        const url = `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued${
+          queryParams.toString() ? `?${queryParams.toString()}` : ""
+        }`;
+        
+        const response = await fetch(url, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch yarn transactions");
+        }
+
+        const data = await response.json();
+        setYarnTransactions(data || []);
+      } catch (error) {
+        console.error("Error fetching yarn transactions:", error);
+        toast.error("Failed to load yarn transactions");
+      } finally {
+        setTransactionsLoading(false);
+      }
+    };
+
+    fetchTransactions();
+  }, [hasPermission, showActivityLogPanel, startDate, endDate]);
 
   // Fetch production orders
   useEffect(() => {
@@ -410,7 +512,6 @@ const YarnIssuePage = () => {
             tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
             shortTermAvailable: 0, // Keep for internal use but won't display
             longTermAvailable: 0, // Keep for internal use but won't display
-            logs: [],
           };
         });
 
@@ -484,14 +585,14 @@ const YarnIssuePage = () => {
     }
   }, [orders, selectedOrderId]);
 
+  // Use yarnTransactions directly since API handles filtering
+  const filteredTransactions = yarnTransactions;
+
   const filteredOrders = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
     return orders.filter((order) => {
-      if (getOrderStatus(order) === "Issued") {
-        return false;
-      }
-
+      // Show all orders regardless of status
       if (!query) {
         return true;
       }
@@ -590,12 +691,12 @@ const YarnIssuePage = () => {
           bValue = b.requiredQty;
           break;
         case "issuedQty":
-          aValue = getIssuedQty(a);
-          bValue = getIssuedQty(b);
+          aValue = getIssuedQty(a, allYarnTransactions);
+          bValue = getIssuedQty(b, allYarnTransactions);
           break;
         case "status":
-          aValue = getRequirementStatus(a);
-          bValue = getRequirementStatus(b);
+          aValue = getRequirementStatus(a, allYarnTransactions);
+          bValue = getRequirementStatus(b, allYarnTransactions);
           break;
         default:
           aValue = 0;
@@ -613,7 +714,7 @@ const YarnIssuePage = () => {
 
     console.log("sortedRequirements: returning", data.length, "items");
     return data;
-  }, [selectedOrder, sortField, sortDirection]);
+  }, [selectedOrder, sortField, sortDirection, allYarnTransactions]);
 
   const SortIcon = ({ field }: { field: YarnSortField }) => {
     if (sortField !== field) {
@@ -737,7 +838,7 @@ const YarnIssuePage = () => {
     const yarnCatalogId = activeRequirement.yarnCode;
 
     // Check if we're exceeding the required quantity
-    const currentIssued = getIssuedQty(activeRequirement);
+    const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions);
     const maxAllowed = activeRequirement.requiredQty * (1 + activeRequirement.tolerancePercent);
     if (currentIssued + totalNetWeight > maxAllowed + 0.0001) {
       toast.error(
@@ -777,37 +878,48 @@ const YarnIssuePage = () => {
         throw new Error(errorData.message || "Failed to create transaction");
       }
 
-      // Create log entry for local state
-      const newLog: IssueLog = {
-        id: crypto.randomUUID(),
-        issueDate: new Date().toISOString(),
-        coneBarcode: barcodeInput.trim(),
-        weightIssued: totalNetWeight,
-        issuedBy: "System User",
-      };
-
-      // Update local state
-      setOrders((prev) =>
-        prev.map((order) => {
-          if (order.id !== selectedOrder.id) {
-            return order;
-          }
-
-          return {
-            ...order,
-            bom: order.bom.map((requirement) => {
-              if (requirement.id !== activeRequirement.id) {
-                return requirement;
-              }
-
-              return {
-                ...requirement,
-                logs: [...requirement.logs, newLog],
-              };
-            }),
-          };
-        })
+      // Refresh all transactions after successful issue
+      const refreshResponse = await fetch(
+        `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        }
       );
+
+      if (refreshResponse.ok) {
+        const refreshedData = await refreshResponse.json();
+        setAllYarnTransactions(refreshedData || []);
+        
+        // Also refresh filtered transactions if logs panel is open
+        if (showActivityLogPanel) {
+          const queryParams = new URLSearchParams();
+          if (startDate) {
+            queryParams.append("start_date", startDate);
+          }
+          if (endDate) {
+            queryParams.append("end_date", endDate);
+          }
+          
+          const filteredUrl = `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued${
+            queryParams.toString() ? `?${queryParams.toString()}` : ""
+          }`;
+          
+          const filteredResponse = await fetch(filteredUrl, {
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          });
+          
+          if (filteredResponse.ok) {
+            const filteredData = await filteredResponse.json();
+            setYarnTransactions(filteredData || []);
+          }
+        }
+      }
 
       const updatedTotal = currentIssued + totalNetWeight;
       const statusAfterIssue = updatedTotal + 0.0001 >= activeRequirement.requiredQty ? "Issued" : "Partially Issued";
@@ -946,10 +1058,10 @@ const YarnIssuePage = () => {
                     </thead>
                     <tbody className="bg-white">
                       {filteredOrders.map((order) => {
-                        const status = getOrderStatus(order);
+                        const status = getOrderStatus(order, allYarnTransactions);
                         const issuedTotals = order.bom.reduce(
                           (acc, requirement) => {
-                            const issued = getIssuedQty(requirement);
+                            const issued = getIssuedQty(requirement, allYarnTransactions);
                             return {
                               issued: acc.issued + issued,
                               required: acc.required + requirement.requiredQty,
@@ -1155,12 +1267,12 @@ const YarnIssuePage = () => {
                         </thead>
                         <tbody className="bg-white">
                           {sortedRequirements.map((requirement) => {
-                            const issuedQty = getIssuedQty(requirement);
+                            const issuedQty = getIssuedQty(requirement, allYarnTransactions);
                             const remaining = Math.max(
                               requirement.requiredQty - issuedQty,
                               0
                             );
-                            const status = getRequirementStatus(requirement);
+                            const status = getRequirementStatus(requirement, allYarnTransactions);
                             const isActive = activeRequirementId === requirement.id;
 
                             return (
@@ -1275,10 +1387,10 @@ const YarnIssuePage = () => {
                         </div>
                         <span
                           className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
-                            getRequirementStatus(activeRequirement)
+                            getRequirementStatus(activeRequirement, allYarnTransactions)
                           )}`}
                         >
-                          {getRequirementStatus(activeRequirement)}
+                          {getRequirementStatus(activeRequirement, allYarnTransactions)}
                         </span>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
@@ -1291,7 +1403,7 @@ const YarnIssuePage = () => {
                         <div className="bg-white rounded p-3 border border-gray-100">
                           <p className="text-gray-500">Issued</p>
                           <p className="text-sm font-medium text-blue-600">
-                            {formatKg(getIssuedQty(activeRequirement))}
+                            {formatKg(getIssuedQty(activeRequirement, allYarnTransactions))}
                           </p>
                         </div>
                         <div className="bg-white rounded p-3 border border-gray-100">
@@ -1360,7 +1472,7 @@ const YarnIssuePage = () => {
           <div className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto">
             <div className="box h-full flex flex-col">
               <div className="box-header border-b border-gray-200 flex-shrink-0">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center mb-4">
                   <h3 className="box-title text-lg">Issue Activity Log</h3>
                   <button
                     onClick={() => setShowActivityLogPanel(false)}
@@ -1370,134 +1482,161 @@ const YarnIssuePage = () => {
                     <i className="ri-close-line text-xl"></i>
                   </button>
                 </div>
+                
+                {/* Date Filters */}
+                <div className="space-y-3 pb-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="form-label text-xs font-semibold text-gray-700 mb-1">
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control text-sm"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label text-xs font-semibold text-gray-700 mb-1">
+                        End Date
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control text-sm"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        min={startDate || undefined}
+                      />
+                    </div>
+                  </div>
+                  {(startDate || endDate) && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setStartDate("");
+                          setEndDate("");
+                        }}
+                        className="ti-btn ti-btn-outline w-full text-xs py-1.5"
+                      >
+                        <i className="ri-close-line me-1"></i>
+                        Clear Filters
+                      </button>
+                      {yarnTransactions.length > 0 && (
+                        <p className="text-xs text-gray-500 text-center">
+                          Showing {yarnTransactions.length} transaction{yarnTransactions.length !== 1 ? "s" : ""} for selected date range
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
               <div className="box-body flex-1 overflow-y-auto">
-                {!selectedOrder ? (
+                {transactionsLoading ? (
                   <div className="text-center py-12 text-sm text-gray-500">
-                    <i className="ri-archive-line text-4xl text-gray-300 mb-2"></i>
-                    <p>Select a production order to view activity log.</p>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                    <p>Loading transactions...</p>
                   </div>
-                ) : !selectedArticle ? (
-                  <div className="text-center py-12 text-sm text-gray-500">
-                    <i className="ri-article-line text-4xl text-gray-300 mb-2"></i>
-                    <p>Select an article to view activity log.</p>
-                  </div>
-                ) : !activeRequirement || activeRequirement.logs.length === 0 ? (
+                ) : yarnTransactions.length === 0 ? (
                   <div className="text-center py-12 text-sm text-gray-500">
                     <i className="ri-timeline-line text-4xl text-gray-300 mb-2"></i>
-                    <p>No yarn issued for this item yet.</p>
-                    <p className="text-xs text-gray-400 mt-2">
-                      Select a yarn requirement and issue yarn to see activity.
+                    <p>
+                      {startDate || endDate
+                        ? "No transactions found for the selected date range."
+                        : "No yarn issued transactions found."}
                     </p>
+                    {(startDate || endDate) && (
+                      <button
+                        onClick={() => {
+                          setStartDate("");
+                          setEndDate("");
+                        }}
+                        className="ti-btn ti-btn-outline mt-3 text-xs"
+                      >
+                        Clear Filters
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {/* Active Requirement Info */}
-                    <div className="border border-dashed border-primary/40 rounded-md p-4 bg-primary/5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {activeRequirement.yarnName}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {activeRequirement.yarnCode} • {activeRequirement.yarnType}
-                          </p>
-                        </div>
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
-                            getRequirementStatus(activeRequirement)
-                          )}`}
-                        >
-                          {getRequirementStatus(activeRequirement)}
-                        </span>
-                      </div>
-                      <div className="mt-3 text-xs text-gray-600">
-                        <span className="font-semibold">{activeRequirement.logs.length}</span> issue
-                        {activeRequirement.logs.length !== 1 ? "s" : ""} recorded
-                      </div>
-                    </div>
-
-                    {/* Activity Log Table */}
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full border border-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-200">
-                              Timestamp
-                            </th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-200">
-                              Barcode
-                            </th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-200">
-                              Weight Issued
-                            </th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                              Issued By
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                          {activeRequirement.logs
-                            .slice()
-                            .reverse()
-                            .map((log) => (
-                              <tr key={log.id} className="hover:bg-gray-50 transition">
-                                <td className="px-4 py-2 text-sm text-gray-900 border-r border-b border-gray-200">
-                                  {new Date(log.issueDate).toLocaleString()}
-                                </td>
-                                <td className="px-4 py-2 text-sm text-gray-900 border-r border-b border-gray-200">
-                                  {log.coneBarcode}
-                                </td>
-                                <td className="px-4 py-2 text-sm text-gray-900 border-r border-b border-gray-200">
-                                  {formatKg(log.weightIssued)}
-                                </td>
-                                <td className="px-4 py-2 text-sm text-gray-900 border-b border-gray-200">
-                                  {log.issuedBy}
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Summary */}
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div>
-                          <p className="text-gray-500">Required</p>
-                          <p className="text-sm font-medium text-gray-900">
-                            {formatKg(activeRequirement.requiredQty)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Issued</p>
-                          <p className="text-sm font-medium text-blue-600">
-                            {formatKg(getIssuedQty(activeRequirement))}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Remaining</p>
-                          <p className="text-sm font-medium text-gray-900">
-                            {formatKg(
-                              Math.max(
-                                activeRequirement.requiredQty - getIssuedQty(activeRequirement),
-                                0
-                              )
-                            )}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Status</p>
-                          <span
-                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
-                              getRequirementStatus(activeRequirement)
-                            )}`}
-                          >
-                            {getRequirementStatus(activeRequirement)}
+                    {yarnTransactions.map((transaction) => (
+                      <div
+                        key={transaction._id}
+                        className="border border-gray-200 rounded-lg p-4 bg-white hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                              {transaction.yarnName}
+                            </h4>
+                            <p className="text-xs text-gray-500">
+                              Order: {transaction.orderno}
+                            </p>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {transaction.yarn?.yarnType?.name || "N/A"}
                           </span>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Transaction ID</p>
+                            <p className="text-xs font-mono text-gray-900 break-all">
+                              {transaction._id}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Transaction Type</p>
+                            <p className="text-xs text-gray-900">
+                              {transaction.transactionType}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Transaction Date</p>
+                            <p className="text-xs text-gray-900">
+                              {new Date(transaction.transactionDate).toLocaleString()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Cone Count</p>
+                            <p className="text-xs font-semibold text-gray-900">
+                              {transaction.transactionConeCount}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Net Weight</p>
+                            <p className="text-xs font-semibold text-blue-600">
+                              {transaction.transactionNetWeight} kg
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Total Weight</p>
+                            <p className="text-xs text-gray-900">
+                              {transaction.transactionTotalWeight} kg
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Tear Weight</p>
+                            <p className="text-xs text-gray-900">
+                              {transaction.transactionTearWeight} kg
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-gray-100">
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <div>
+                              <span className="font-medium">Created:</span>{" "}
+                              {new Date(transaction.createdAt).toLocaleString()}
+                            </div>
+                            <div>
+                              <span className="font-medium">Updated:</span>{" "}
+                              {new Date(transaction.updatedAt).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1629,9 +1768,9 @@ const YarnIssuePage = () => {
                     </p>
                     <p className="text-xs text-gray-600 mt-1">
                       <span className="font-semibold">Required:</span> {formatKg(activeRequirement.requiredQty)} |{" "}
-                      <span className="font-semibold">Issued:</span> {formatKg(getIssuedQty(activeRequirement))} |{" "}
+                      <span className="font-semibold">Issued:</span> {formatKg(getIssuedQty(activeRequirement, allYarnTransactions))} |{" "}
                       <span className="font-semibold">Remaining:</span>{" "}
-                      {formatKg(Math.max(activeRequirement.requiredQty - getIssuedQty(activeRequirement), 0))}
+                      {formatKg(Math.max(activeRequirement.requiredQty - getIssuedQty(activeRequirement, allYarnTransactions), 0))}
                     </p>
                   </div>
                 )}

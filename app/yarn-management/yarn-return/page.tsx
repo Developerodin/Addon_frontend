@@ -10,6 +10,8 @@ import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
+import { API_BASE_URL } from "@/shared/data/utilities/api";
+import Cookies from "js-cookie";
 
 type ConeStatus = "Awaiting" | "Returned";
 type OrderStatus = "Awaiting Return" | "In Progress" | "Partial" | "Returned";
@@ -26,17 +28,46 @@ interface Cone {
   balanceWeight?: number;
   status: ConeStatus;
   lastReturnedAt?: string;
+  transactionId?: string; // ID of the issued transaction
+  yarnCatalogId?: string; // Yarn catalog ID for return transaction
+}
+
+interface Article {
+  id: string;
+  _id?: string;
+  articleNumber: string;
+  plannedQuantity: number;
+  linkingType: string;
+  priority: string;
+  status: string;
+  machineId?: any;
+  remarks?: string;
+}
+
+interface ApiProductionOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  priority: string;
+  currentFloor: string;
+  orderNote?: string;
+  articles: Article[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface ProductionOrder {
   id: string;
   productionOrder: string;
+  orderNumber: string;
   floor: string;
   knittingSupervisor: string;
   knittingCompletedAt: string;
   status: OrderStatus;
   cones: Cone[];
   lastUpdated: string;
+  articles?: Article[];
+  hasIssuedTransactions?: boolean; // Track if order has issued transactions
 }
 
 interface ReturnRecord {
@@ -50,19 +81,8 @@ interface ReturnRecord {
   lastUpdated: string;
 }
 
-const FLOORS = [
-  "Knitting Floor",
-  "Linking Floor",
-  "Checking Floor",
-  "Washing Floor",
-  "Boarding Floor",
-  "Branding Floor",
-  "Final Checking Floor",
-  "Machine Floor",
-  "Warehouse Floor",
-];
-
 const getOrderStatusFromCones = (cones: Cone[]): OrderStatus => {
+  if (cones.length === 0) return "Awaiting Return";
   const returned = cones.filter((cone) => cone.status === "Returned").length;
   if (returned === cones.length) {
     return "Returned";
@@ -87,7 +107,7 @@ const buildHistoryRecord = (order: ProductionOrder): ReturnRecord => {
   return {
     id: order.id,
     orderId: order.id,
-    productionOrder: order.productionOrder,
+    productionOrder: order.productionOrder || order.orderNumber,
     knittingCompletedAt: order.knittingCompletedAt,
     status,
     returnedCones,
@@ -96,134 +116,17 @@ const buildHistoryRecord = (order: ProductionOrder): ReturnRecord => {
   };
 };
 
-const SAMPLE_ORDERS: ProductionOrder[] = [
-  {
-    id: "order-1",
-    productionOrder: "PO-2024-001",
-    floor: "Knitting Floor",
-    knittingSupervisor: "Ravi Verma",
-    knittingCompletedAt: "2024-01-20T09:00:00Z",
-    status: "Awaiting Return",
-    lastUpdated: "2024-01-20T09:00:00Z",
-    cones: [
-      {
-        id: "cone-001",
-        barcode: "CON-PO1-001",
-        yarnCode: "COT-001",
-        yarnName: "Cotton Yarn Premium",
-        yarnType: "Cotton",
-        issuedWeight: 1.2,
-        status: "Awaiting",
-      },
-      {
-        id: "cone-002",
-        barcode: "CON-PO1-002",
-        yarnCode: "COT-001",
-        yarnName: "Cotton Yarn Premium",
-        yarnType: "Cotton",
-        issuedWeight: 1.18,
-        status: "Awaiting",
-      },
-      {
-        id: "cone-003",
-        barcode: "CON-PO1-003",
-        yarnCode: "COT-001",
-        yarnName: "Cotton Yarn Premium",
-        yarnType: "Cotton",
-        issuedWeight: 1.22,
-        status: "Awaiting",
-      },
-    ],
-  },
-  {
-    id: "order-2",
-    productionOrder: "PO-2024-002",
-    floor: "Linking Floor",
-    knittingSupervisor: "Priya Nair",
-    knittingCompletedAt: "2024-01-19T18:30:00Z",
-    status: "Partial",
-    lastUpdated: "2024-01-19T19:15:00Z",
-    cones: [
-      {
-        id: "cone-004",
-        barcode: "CON-PO2-001",
-        yarnCode: "POL-002",
-        yarnName: "Polyester Blend",
-        yarnType: "Polyester",
-        issuedWeight: 1.0,
-        status: "Returned",
-        returnedWeight: 0.15,
-        balanceWeight: 0.85,
-        lastReturnedAt: "2024-01-19T19:10:00Z",
-      },
-      {
-        id: "cone-005",
-        barcode: "CON-PO2-002",
-        yarnCode: "POL-002",
-        yarnName: "Polyester Blend",
-        yarnType: "Polyester",
-        issuedWeight: 1.05,
-        status: "Awaiting",
-      },
-      {
-        id: "cone-006",
-        barcode: "CON-PO2-003",
-        yarnCode: "POL-002",
-        yarnName: "Polyester Blend",
-        yarnType: "Polyester",
-        issuedWeight: 0.98,
-        status: "Awaiting",
-      },
-    ],
-  },
-  {
-    id: "order-3",
-    productionOrder: "PO-2024-003",
-    floor: "Checking Floor",
-    knittingSupervisor: "Sunil Iyer",
-    knittingCompletedAt: "2024-01-18T15:00:00Z",
-    status: "Returned",
-    lastUpdated: "2024-01-18T17:45:00Z",
-    cones: [
-      {
-        id: "cone-007",
-        barcode: "CON-PO3-001",
-        yarnCode: "VIS-003",
-        yarnName: "Viscose Rayon",
-        yarnType: "Viscose",
-        issuedWeight: 1.1,
-        status: "Returned",
-        returnedWeight: 0.2,
-        balanceWeight: 0.9,
-        lastReturnedAt: "2024-01-18T16:15:00Z",
-      },
-      {
-        id: "cone-008",
-        barcode: "CON-PO3-002",
-        yarnCode: "VIS-003",
-        yarnName: "Viscose Rayon",
-        yarnType: "Viscose",
-        issuedWeight: 1.12,
-        status: "Returned",
-        returnedWeight: 0.18,
-        balanceWeight: 0.94,
-        lastReturnedAt: "2024-01-18T16:35:00Z",
-      },
-      {
-        id: "cone-009",
-        barcode: "CON-PO3-003",
-        yarnCode: "VIS-003",
-        yarnName: "Viscose Rayon",
-        yarnType: "Viscose",
-        issuedWeight: 1.09,
-        status: "Returned",
-        returnedWeight: 0.2,
-        balanceWeight: 0.89,
-        lastReturnedAt: "2024-01-18T16:55:00Z",
-      },
-    ],
-  },
-];
+const getAccessToken = (): string | null => {
+  if (typeof document === "undefined") return null;
+  try {
+    const tokenFromCookie = Cookies.get("accessToken");
+    if (tokenFromCookie) return tokenFromCookie;
+    const tokenFromStorage = localStorage.getItem("token");
+    return tokenFromStorage;
+  } catch {
+    return null;
+  }
+};
 
 const statusBadgeColor = (status: ReturnStatus | OrderStatus) => {
   switch (status) {
@@ -257,20 +160,220 @@ const YarnReturnPage = () => {
     from: string;
     to: string;
   }>({ from: "", to: "" });
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [submittingReturn, setSubmittingReturn] = useState(false);
 
   const pendingToastShown = useRef(false);
+  const hasPermission = hasSubPermission("/yarn-management", "Yarn Return");
 
+  // Fetch production orders with issued yarn
   useEffect(() => {
-    const seeded = SAMPLE_ORDERS.map((order) => ({
-      ...order,
-      status:
-        order.status === "Returned"
-          ? "Returned"
-          : getOrderStatusFromCones(order.cones),
-    }));
-    setOrders(seeded);
-    setHistory(seeded.map((order) => buildHistoryRecord(order)));
-  }, []);
+    const fetchOrders = async () => {
+      if (!hasPermission) return;
+      
+      setOrdersLoading(true);
+      try {
+        const token = getAccessToken();
+        const response = await fetch(
+          `${API_BASE_URL}/production/orders?page=1&limit=100&sortBy=createdAt&populate=articles`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch production orders");
+        }
+
+        const data = await response.json();
+        const apiOrders: ApiProductionOrder[] = data.results || [];
+
+        // Fetch issued transactions for each order to get cones
+        const ordersWithCones = await Promise.all(
+          apiOrders.map(async (order) => {
+            try {
+              const transactionsResponse = await fetch(
+                `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${order.orderNumber}`,
+                {
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(token && { Authorization: `Bearer ${token}` }),
+                  },
+                }
+              );
+
+              let issuedTransactions: any[] = [];
+              if (transactionsResponse.ok) {
+                const transactionsData = await transactionsResponse.json();
+                // Handle both array and paginated response formats
+                issuedTransactions = Array.isArray(transactionsData)
+                  ? transactionsData
+                  : (transactionsData.results || []);
+                // Filter to only yarn_issued transactions
+                issuedTransactions = issuedTransactions.filter((tx: any) => tx.transactionType === "yarn_issued");
+              }
+
+              // Also fetch returned transactions to check which cones are already returned
+              // Try the specific endpoint first, then fallback to querying all transactions
+              let returnedTransactions: any[] = [];
+              try {
+                // Try specific endpoint
+                const returnedResponse = await fetch(
+                  `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-returned-by-order/${order.orderNumber}`,
+                  {
+                    headers: {
+                      "Content-Type": "application/json",
+                      ...(token && { Authorization: `Bearer ${token}` }),
+                    },
+                  }
+                );
+                if (returnedResponse.ok) {
+                  returnedTransactions = await returnedResponse.json();
+                } else {
+                  // Fallback: query all transactions for this order and filter by type
+                  const allTransactionsResponse = await fetch(
+                    `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${order.orderNumber}`,
+                    {
+                      headers: {
+                        "Content-Type": "application/json",
+                        ...(token && { Authorization: `Bearer ${token}` }),
+                      },
+                    }
+                  );
+                  if (allTransactionsResponse.ok) {
+                    const allTransactions = await allTransactionsResponse.json();
+                    returnedTransactions = Array.isArray(allTransactions)
+                      ? allTransactions.filter((tx: any) => tx.transactionType === "yarn_returned")
+                      : (allTransactions.results || []).filter((tx: any) => tx.transactionType === "yarn_returned");
+                  }
+                }
+              } catch (err) {
+                // API might not exist yet, that's okay
+                console.warn("Returned transactions API not available:", err);
+              }
+
+              // Convert transactions to cones
+              const conesMap = new Map<string, Cone>();
+              
+              // Process issued transactions - create cones for all issued transactions
+              // (already filtered to yarn_issued above, but keeping check for safety)
+              issuedTransactions.forEach((tx: any) => {
+                if (tx.transactionType === "yarn_issued") {
+                  // Use coneBarcode if available, otherwise use transaction ID
+                  const coneBarcode = tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`;
+                  const coneId = coneBarcode;
+                  
+                  // Find matching returned transaction (match by coneBarcode or transaction ID)
+                  const returnedTx = returnedTransactions.find(
+                    (rt: any) => {
+                      if (tx.coneBarcode && rt.coneBarcode) {
+                        return rt.coneBarcode === tx.coneBarcode && rt.transactionType === "yarn_returned";
+                      }
+                      // If no coneBarcode, match by issued transaction ID
+                      return rt.issuedTransactionId === (tx._id || tx.id) && rt.transactionType === "yarn_returned";
+                    }
+                  );
+
+                  // Handle multiple cones in one transaction (numberOfCones > 1)
+                  const numberOfCones = tx.numberOfCones || 1;
+                  const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
+
+                  for (let i = 0; i < numberOfCones; i++) {
+                    const coneIndex = numberOfCones > 1 ? i + 1 : 0;
+                    const uniqueConeId = numberOfCones > 1 ? `${coneId}-${coneIndex}` : coneId;
+                    const uniqueBarcode = numberOfCones > 1 ? `${coneBarcode}-${coneIndex}` : coneBarcode;
+
+                    conesMap.set(uniqueConeId, {
+                      id: uniqueConeId,
+                      barcode: uniqueBarcode,
+                      yarnCode: tx.yarn?.id || tx.yarn || "N/A",
+                      yarnName: tx.yarnName || "Unknown Yarn",
+                      yarnType: tx.yarn?.yarnType?.name || "Unknown",
+                      issuedWeight: weightPerCone,
+                      returnedWeight: returnedTx ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones : undefined,
+                      balanceWeight: returnedTx ? Math.max(
+                        weightPerCone - ((returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones),
+                        0
+                      ) : undefined,
+                      status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
+                      lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
+                      transactionId: tx._id || tx.id,
+                      yarnCatalogId: tx.yarn?.id || tx.yarn,
+                    });
+                  }
+                }
+              });
+
+              const cones = Array.from(conesMap.values());
+              
+              // Count issued transactions (already filtered above)
+              const issuedTxCount = issuedTransactions.length;
+              const hasIssued = issuedTxCount > 0;
+
+              return {
+                id: order.id,
+                productionOrder: order.orderNumber,
+                orderNumber: order.orderNumber,
+                floor: order.currentFloor || "N/A",
+                knittingSupervisor: "N/A", // Not available in API
+                knittingCompletedAt: order.updatedAt || order.createdAt || new Date().toISOString(),
+                status: getOrderStatusFromCones(cones),
+                cones: cones,
+                lastUpdated: order.updatedAt || order.createdAt || new Date().toISOString(),
+                articles: order.articles || [],
+                hasIssuedTransactions: hasIssued, // Track if order has issued transactions
+              };
+            } catch (error) {
+              console.error(`Error fetching transactions for order ${order.orderNumber}:`, error);
+              return {
+                id: order.id,
+                productionOrder: order.orderNumber,
+                orderNumber: order.orderNumber,
+                floor: order.currentFloor || "N/A",
+                knittingSupervisor: "N/A",
+                knittingCompletedAt: order.updatedAt || order.createdAt || new Date().toISOString(),
+                status: "Awaiting Return" as OrderStatus,
+                cones: [],
+                lastUpdated: order.updatedAt || order.createdAt || new Date().toISOString(),
+                articles: order.articles || [],
+                hasIssuedTransactions: false,
+              };
+            }
+          })
+        );
+
+        // Filter orders that have issued transactions (show all orders with issued yarn, even if 0 returned)
+        const ordersWithIssuedCones = ordersWithCones.filter(
+          (order) => {
+            // Show orders that have issued transactions
+            // This includes orders with issued yarn, even if no cones have been returned yet
+            const hasIssued = (order as any).hasIssuedTransactions === true;
+            const hasCones = order.cones.length > 0;
+            return hasIssued || hasCones;
+          }
+        );
+        
+        console.log("Orders with issued cones:", ordersWithIssuedCones.length, ordersWithIssuedCones.map(o => ({
+          orderNumber: o.orderNumber,
+          hasIssuedTransactions: (o as any).hasIssuedTransactions,
+          conesCount: o.cones.length
+        })));
+
+        setOrders(ordersWithIssuedCones);
+        setHistory(ordersWithIssuedCones.map((order) => buildHistoryRecord(order)));
+      } catch (error) {
+        console.error("Error fetching orders:", error);
+        toast.error("Failed to load production orders");
+      } finally {
+        setOrdersLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, [hasPermission]);
 
   const pendingOrders = useMemo(
     () => orders.filter((order) => order.status !== "Returned"),
@@ -307,15 +410,50 @@ const YarnReturnPage = () => {
     }
   }, [pendingOrders]);
 
-  const hasPermission = hasSubPermission("/yarn-management", "Yarn Return");
+  const filteredHistory = useMemo(() => {
+    return history
+      .filter((record) => {
+        if (
+          historySearchTerm &&
+          !record.productionOrder
+            .toLowerCase()
+            .includes(historySearchTerm.toLowerCase())
+        ) {
+          return false;
+        }
+        if (historyStatusFilter !== "all" && record.status !== historyStatusFilter) {
+          return false;
+        }
+        if (historyDateRange.from) {
+          const fromDate = new Date(historyDateRange.from);
+          if (new Date(record.lastUpdated) < fromDate) {
+            return false;
+          }
+        }
+        if (historyDateRange.to) {
+          const toDate = new Date(historyDateRange.to);
+          const recordDate = new Date(record.lastUpdated);
+          recordDate.setHours(0, 0, 0, 0);
+          if (recordDate > toDate) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.lastUpdated).getTime() -
+          new Date(a.lastUpdated).getTime()
+      );
+  }, [history, historyDateRange.from, historyDateRange.to, historySearchTerm, historyStatusFilter]);
 
-  if (isLoading) {
+  if (isLoading || ordersLoading) {
     return (
       <div className="main-content">
         <div className="flex justify-center items-center py-12">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading permissions...</p>
+            <p className="text-gray-600">Loading...</p>
           </div>
         </div>
       </div>
@@ -411,7 +549,7 @@ const YarnReturnPage = () => {
     );
   };
 
-  const handleWeightCapture = () => {
+  const handleWeightCapture = async () => {
     if (!selectedOrder || !activeConeId) {
       toast.error("Scan a cone before capturing weight.");
       return;
@@ -423,103 +561,210 @@ const YarnReturnPage = () => {
       return;
     }
 
-    const updatedOrders = orders.map((order) => {
-      if (order.id !== selectedOrder.id) {
-        return order;
+    const activeCone = selectedOrder.cones.find((c) => c.id === activeConeId);
+    if (!activeCone) {
+      toast.error("Cone not found.");
+      return;
+    }
+
+    setSubmittingReturn(true);
+    try {
+      const token = getAccessToken();
+      const transactionDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
+      const balanceWeight = Math.max(activeCone.issuedWeight - parsedWeight, 0);
+
+      const transactionData = {
+        yarn: activeCone.yarnCatalogId || activeCone.yarnCode,
+        yarnName: activeCone.yarnName,
+        transactionType: "yarn_returned",
+        transactionDate: transactionDate,
+        totalWeight: parsedWeight,
+        totalTearWeight: 0,
+        totalNetWeight: parsedWeight,
+        numberOfCones: 1,
+        orderno: selectedOrder.orderNumber,
+        coneBarcode: activeCone.barcode,
+        balanceWeight: balanceWeight,
+        issuedTransactionId: activeCone.transactionId, // Link to original issue transaction
+      };
+
+      const response = await fetch(`${API_BASE_URL}/yarn-management/yarn-transactions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify(transactionData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to create return transaction");
       }
 
-      const updatedCones = order.cones.map((cone) => {
-        if (cone.id !== activeConeId) {
-          return cone;
+      // Update local state
+      const updatedOrders = orders.map((order) => {
+        if (order.id !== selectedOrder.id) {
+          return order;
         }
-        const balance = Math.max(cone.issuedWeight - parsedWeight, 0);
+
+        const updatedCones = order.cones.map((cone) => {
+          if (cone.id !== activeConeId) {
+            return cone;
+          }
+          return {
+            ...cone,
+            returnedWeight: parsedWeight,
+            balanceWeight: balanceWeight,
+            status: "Returned" as ConeStatus,
+            lastReturnedAt: new Date().toISOString(),
+          };
+        });
+
+        const returnedCount = updatedCones.filter(
+          (cone) => cone.status === "Returned"
+        ).length;
+        let status: OrderStatus = getOrderStatusFromCones(updatedCones);
+
         return {
-          ...cone,
-          returnedWeight: parsedWeight,
-          balanceWeight: balance,
-          status: "Returned" as ConeStatus,
-          lastReturnedAt: new Date().toISOString(),
+          ...order,
+          cones: updatedCones,
+          status,
+          lastUpdated: new Date().toISOString(),
         };
       });
 
-      const returnedCount = updatedCones.filter(
-        (cone) => cone.status === "Returned"
-      ).length;
-      let status: OrderStatus = "In Progress";
-      if (returnedCount === updatedCones.length) {
-        status = "Returned";
-      } else if (returnedCount > 0) {
-        status = "Partial";
-      } else {
-        status = "Awaiting Return";
+      setOrders(updatedOrders);
+      const updatedOrder =
+        updatedOrders.find((order) => order.id === selectedOrder.id) ?? null;
+
+      if (updatedOrder) {
+        upsertHistoryRecord(updatedOrder);
+
+        if (updatedOrder.status === "Returned") {
+          toast.success(
+            `All cones returned for ${updatedOrder.productionOrder}. Production order is now cleared.`
+          );
+          setSelectedOrderId(null);
+        } else {
+          toast.success("Cone marked returned. Continue with the remaining cones.");
+        }
+
+        // Refetch transactions to ensure we have the latest data
+        try {
+          const token = getAccessToken();
+          const transactionsResponse = await fetch(
+            `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${selectedOrder.orderNumber}`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
+              },
+            }
+          );
+
+          if (transactionsResponse.ok) {
+            const issuedTransactions = await transactionsResponse.json();
+            
+            // Fetch returned transactions
+            let returnedTransactions: any[] = [];
+            try {
+              const returnedResponse = await fetch(
+                `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-returned-by-order/${selectedOrder.orderNumber}`,
+                {
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(token && { Authorization: `Bearer ${token}` }),
+                  },
+                }
+              );
+              if (returnedResponse.ok) {
+                returnedTransactions = await returnedResponse.json();
+              }
+            } catch (err) {
+              // Try fallback query
+              try {
+                const allTransactionsResponse = await fetch(
+                  `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${selectedOrder.orderNumber}`,
+                  {
+                    headers: {
+                      "Content-Type": "application/json",
+                      ...(token && { Authorization: `Bearer ${token}` }),
+                    },
+                  }
+                );
+                if (allTransactionsResponse.ok) {
+                  const allTransactions = await allTransactionsResponse.json();
+                  returnedTransactions = Array.isArray(allTransactions)
+                    ? allTransactions.filter((tx: any) => tx.transactionType === "yarn_returned")
+                    : (allTransactions.results || []).filter((tx: any) => tx.transactionType === "yarn_returned");
+                }
+              } catch (e) {
+                console.warn("Could not fetch returned transactions:", e);
+              }
+            }
+
+            // Update cones with latest data
+            const conesMap = new Map<string, Cone>();
+            issuedTransactions.forEach((tx: any) => {
+              if (tx.transactionType === "yarn_issued" && tx.coneBarcode) {
+                const coneId = tx.coneBarcode || tx._id || crypto.randomUUID();
+                const returnedTx = returnedTransactions.find(
+                  (rt: any) => rt.coneBarcode === tx.coneBarcode && rt.transactionType === "yarn_returned"
+                );
+
+                conesMap.set(coneId, {
+                  id: coneId,
+                  barcode: tx.coneBarcode || tx.barcode || "N/A",
+                  yarnCode: tx.yarn?.id || tx.yarn || "N/A",
+                  yarnName: tx.yarnName || "Unknown Yarn",
+                  yarnType: tx.yarn?.yarnType?.name || "Unknown",
+                  issuedWeight: tx.transactionNetWeight || tx.totalNetWeight || 0,
+                  returnedWeight: returnedTx ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) : undefined,
+                  balanceWeight: returnedTx ? Math.max(
+                    (tx.transactionNetWeight || tx.totalNetWeight || 0) - 
+                    (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0),
+                    0
+                  ) : undefined,
+                  status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
+                  lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
+                  transactionId: tx._id || tx.id,
+                  yarnCatalogId: tx.yarn?.id || tx.yarn,
+                });
+              }
+            });
+
+            const updatedCones = Array.from(conesMap.values());
+            setOrders((prev) =>
+              prev.map((order) => {
+                if (order.id !== selectedOrder.id) {
+                  return order;
+                }
+                return {
+                  ...order,
+                  cones: updatedCones,
+                  status: getOrderStatusFromCones(updatedCones),
+                  lastUpdated: new Date().toISOString(),
+                };
+              })
+            );
+          }
+        } catch (error) {
+          console.error("Error refetching transactions:", error);
+          // Don't show error to user, local state is already updated
+        }
       }
 
-      return {
-        ...order,
-        cones: updatedCones,
-        status,
-        lastUpdated: new Date().toISOString(),
-      };
-    });
-
-    setOrders(updatedOrders);
-    const updatedOrder =
-      updatedOrders.find((order) => order.id === selectedOrder.id) ?? null;
-
-    if (updatedOrder) {
-      upsertHistoryRecord(updatedOrder);
-
-      if (updatedOrder.status === "Returned") {
-        toast.success(
-          `All cones returned for ${updatedOrder.productionOrder}. Production order is now cleared.`
-        );
-        setSelectedOrderId(null);
-      } else {
-        toast.success("Cone marked returned. Continue with the remaining cones.");
-      }
+      setActiveConeId(null);
+      setScaleWeight("");
+      setScanValue("");
+    } catch (error) {
+      console.error("Error creating return transaction:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to return cone. Please try again.");
+    } finally {
+      setSubmittingReturn(false);
     }
-
-    setActiveConeId(null);
-    setScaleWeight("");
-    setScanValue("");
   };
-
-  const filteredHistory = useMemo(() => {
-    return history
-      .filter((record) => {
-        if (
-          historySearchTerm &&
-          !record.productionOrder
-            .toLowerCase()
-            .includes(historySearchTerm.toLowerCase())
-        ) {
-          return false;
-        }
-        if (historyStatusFilter !== "all" && record.status !== historyStatusFilter) {
-          return false;
-        }
-        if (historyDateRange.from) {
-          const fromDate = new Date(historyDateRange.from);
-          if (new Date(record.lastUpdated) < fromDate) {
-            return false;
-          }
-        }
-        if (historyDateRange.to) {
-          const toDate = new Date(historyDateRange.to);
-          const recordDate = new Date(record.lastUpdated);
-          recordDate.setHours(0, 0, 0, 0);
-          if (recordDate > toDate) {
-            return false;
-          }
-        }
-        return true;
-      })
-      .sort(
-        (a, b) =>
-          new Date(b.lastUpdated).getTime() -
-          new Date(a.lastUpdated).getTime()
-      );
-  }, [history, historyDateRange.from, historyDateRange.to, historySearchTerm, historyStatusFilter]);
 
   return (
     <div className="main-content">
@@ -790,9 +1035,19 @@ const YarnReturnPage = () => {
                         type="button"
                         className="ti-btn ti-btn-success md:w-auto"
                         onClick={handleWeightCapture}
+                        disabled={submittingReturn}
                       >
-                        <i className="ri-scales-3-line me-2"></i>
-                        Save Weight
+                        {submittingReturn ? (
+                          <>
+                            <span className="animate-spin inline-block mr-2">⟳</span>
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <i className="ri-scales-3-line me-2"></i>
+                            Save Weight
+                          </>
+                        )}
                       </button>
                     </div>
                   ) : (
