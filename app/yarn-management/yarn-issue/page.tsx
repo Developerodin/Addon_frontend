@@ -79,6 +79,7 @@ interface ProductionOrder {
   notes?: string;
   bom: YarnRequirement[];
   articles?: Article[];
+  articleBoms?: Map<string, YarnRequirement[]>; // Store BOM for each article
 }
 
 interface ProductBOMItem {
@@ -161,6 +162,63 @@ const getOrderStatus = (order: ProductionOrder, transactions: YarnTransaction[])
     return "Partially Issued";
   }
   return "Not Issued";
+};
+
+// Get total required and issued quantities across all articles in an order
+const getOrderTotals = (order: ProductionOrder, transactions: YarnTransaction[]) => {
+  const totals = { issued: 0, required: 0 };
+  
+  // If articleBoms exists, calculate total across all articles
+  if (order.articleBoms && order.articleBoms.size > 0) {
+    // Create a map to aggregate yarn requirements by yarn name
+    const aggregatedYarns = new Map<string, { required: number; requirement: YarnRequirement }>();
+    
+    // First, aggregate all requirements by yarn name (sum up required quantities)
+    order.articleBoms.forEach((articleBom) => {
+      articleBom.forEach((requirement) => {
+        const existing = aggregatedYarns.get(requirement.yarnName);
+        if (existing) {
+          // Add to existing required quantity
+          aggregatedYarns.set(requirement.yarnName, {
+            required: existing.required + requirement.requiredQty,
+            requirement: existing.requirement, // Keep the first requirement for getting issued qty
+          });
+        } else {
+          // First time seeing this yarn
+          aggregatedYarns.set(requirement.yarnName, {
+            required: requirement.requiredQty,
+            requirement: requirement,
+          });
+        }
+      });
+    });
+    
+    // Now calculate issued quantity ONCE per unique yarn name and sum up
+    aggregatedYarns.forEach((value) => {
+      totals.required += value.required;
+      // Get issued qty only once per yarn name (not per article)
+      totals.issued += getIssuedQty(value.requirement, transactions);
+    });
+  } else if (order.bom && order.bom.length > 0) {
+    // Fallback to current BOM if articleBoms not available
+    // Create a map to avoid double counting issued qty for same yarn
+    const yarnMap = new Map<string, YarnRequirement>();
+    
+    order.bom.forEach((requirement) => {
+      totals.required += requirement.requiredQty;
+      // Store unique yarn names to avoid counting issued qty multiple times
+      if (!yarnMap.has(requirement.yarnName)) {
+        yarnMap.set(requirement.yarnName, requirement);
+      }
+    });
+    
+    // Get issued qty once per unique yarn name
+    yarnMap.forEach((requirement) => {
+      totals.issued += getIssuedQty(requirement, transactions);
+    });
+  }
+  
+  return totals;
 };
 
 const formatKg = (value: number) => `${value.toFixed(2)} kg`;
@@ -372,205 +430,286 @@ const YarnIssuePage = () => {
     }
   }, [hasPermission]);
 
-  // Fetch product details when article is selected
+  // Fetch product details for a single article
+  const fetchArticleBOM = async (
+    orderId: string,
+    articleId: string,
+    articleNumber: string,
+    articlePlannedQty: number,
+    token: string | null
+  ): Promise<{ yarnRequirements: YarnRequirement[]; styleCode: string } | null> => {
+    try {
+      let product: Product | null = null;
+
+      // Strategy 1: Fetch product by factoryCode
+      try {
+        const searchResponse = await fetch(
+          `${API_BASE_URL}/products/by-code?factoryCode=${encodeURIComponent(articleNumber)}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          }
+        );
+
+        if (searchResponse.ok) {
+          const productData = await searchResponse.json();
+          console.log("Product fetched by factoryCode:", productData);
+          if (productData && productData.bom && Array.isArray(productData.bom) && productData.bom.length > 0) {
+            product = productData;
+            console.log("Product BOM found:", productData.bom);
+          } else {
+            console.warn("Product found but no BOM or empty BOM:", productData);
+          }
+        } else {
+          const errorData = await searchResponse.json().catch(() => ({}));
+          console.warn("Product fetch by factoryCode failed:", searchResponse.status, errorData);
+        }
+      } catch (error) {
+        console.warn("Product fetch by factoryCode failed:", error);
+      }
+
+      // Strategy 2: If not found, try direct fetch
+      if (!product) {
+        try {
+          const directResponse = await fetch(`${API_BASE_URL}/products/${articleNumber}`, {
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          });
+
+          if (directResponse.ok) {
+            const directProduct = await directResponse.json();
+            if (directProduct.bom && directProduct.bom.length > 0) {
+              product = directProduct;
+            }
+          }
+        } catch (error) {
+          console.warn("Direct product fetch failed:", error);
+        }
+      }
+
+      if (!product || !product.bom || !Array.isArray(product.bom) || product.bom.length === 0) {
+        console.error("Product not found or no BOM for article:", articleNumber);
+        return null;
+      }
+
+      // Map product BOM to yarn requirements
+      console.log("Processing BOM, product.bom:", product.bom);
+      const yarnRequirements: YarnRequirement[] = product.bom.map((bomItem, index) => {
+        let yarnCode = `YARN-${index}`;
+        let yarnType = "Unknown";
+        
+        if (typeof bomItem.yarnCatalogId === "string") {
+          yarnCode = bomItem.yarnCatalogId;
+        } else if (bomItem.yarnCatalogId && typeof bomItem.yarnCatalogId === "object") {
+          yarnCode = bomItem.yarnCatalogId.id || yarnCode;
+          if (bomItem.yarnCatalogId.yarnType?.name) {
+            yarnType = bomItem.yarnCatalogId.yarnType.name;
+          }
+        }
+
+        if (yarnType === "Unknown" && bomItem.yarnName) {
+          const parts = bomItem.yarnName.split("-");
+          if (parts.length >= 2) {
+            const lastPart = parts[parts.length - 1];
+            const typeParts = lastPart.split("/");
+            if (typeParts.length > 0 && typeParts[0].trim()) {
+              yarnType = typeParts[0].trim();
+            } else if (lastPart.trim()) {
+              yarnType = lastPart.trim();
+            }
+          }
+        }
+
+        const requiredQtyInGrams = bomItem.quantity * articlePlannedQty;
+        const requiredQtyInKg = requiredQtyInGrams / 1000;
+
+        return {
+          id: `req-${bomItem._id}-${articleId}-${index}`,
+          yarnCode: yarnCode,
+          yarnName: bomItem.yarnName || "Unknown Yarn",
+          yarnType: yarnType,
+          requiredQty: requiredQtyInKg,
+          tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
+          shortTermAvailable: 0,
+          longTermAvailable: 0,
+        };
+      });
+
+      return {
+        yarnRequirements,
+        styleCode: product?.styleCode || articleNumber,
+      };
+    } catch (error) {
+      console.error("Error fetching product for article:", articleNumber, error);
+      return null;
+    }
+  };
+
+  // Fetch BOMs for all articles when order is selected
   useEffect(() => {
-    const fetchProductAndUpdateBOM = async () => {
-      if (!selectedOrderId || !selectedArticleId) {
+    const fetchAllArticleBOMs = async () => {
+      if (!selectedOrderId) {
         return;
       }
 
-      // Get article number from current orders state
       const selectedOrder = orders.find((o) => o.id === selectedOrderId);
-      if (!selectedOrder || !selectedOrder.articles) {
+      if (!selectedOrder || !selectedOrder.articles || selectedOrder.articles.length === 0) {
         return;
       }
-
-      const selectedArticle = selectedOrder.articles.find((a) => a.id === selectedArticleId);
-      if (!selectedArticle) {
-        return;
-      }
-
-      const articleNumber = selectedArticle.articleNumber;
 
       setProductLoading(true);
       try {
         const token = getAccessToken();
-        let product: Product | null = null;
+        const articleBoms = new Map<string, YarnRequirement[]>();
+        let firstStyleCode = "";
 
-        // Strategy 1: Fetch product by factoryCode
-        try {
-          const searchResponse = await fetch(
-            `${API_BASE_URL}/products/by-code?factoryCode=${encodeURIComponent(articleNumber)}`,
-            {
-              headers: {
-                "Content-Type": "application/json",
-                ...(token && { Authorization: `Bearer ${token}` }),
-              },
-            }
+        // Fetch BOM for all articles in parallel
+        const fetchPromises = selectedOrder.articles.map(async (article) => {
+          const result = await fetchArticleBOM(
+            selectedOrderId,
+            article.id,
+            article.articleNumber,
+            article.plannedQuantity || 1,
+            token
           );
-
-          if (searchResponse.ok) {
-            const productData = await searchResponse.json();
-            console.log("Product fetched by factoryCode:", productData);
-            // The API returns a single product object directly, not wrapped in results
-            if (productData && productData.bom && Array.isArray(productData.bom) && productData.bom.length > 0) {
-              product = productData;
-              console.log("Product BOM found:", productData.bom);
-            } else {
-              console.warn("Product found but no BOM or empty BOM:", productData);
-            }
-          } else {
-            const errorData = await searchResponse.json().catch(() => ({}));
-            console.warn("Product fetch by factoryCode failed:", searchResponse.status, errorData);
-          }
-        } catch (error) {
-          console.warn("Product fetch by factoryCode failed:", error);
-        }
-
-        // Strategy 2: If not found, try direct fetch (assuming articleNumber might be product ID)
-        if (!product) {
-          try {
-            const directResponse = await fetch(`${API_BASE_URL}/products/${articleNumber}`, {
-              headers: {
-                "Content-Type": "application/json",
-                ...(token && { Authorization: `Bearer ${token}` }),
-              },
-            });
-
-            if (directResponse.ok) {
-              const directProduct = await directResponse.json();
-              // Verify it has BOM
-              if (directProduct.bom && directProduct.bom.length > 0) {
-                product = directProduct;
-              }
-            }
-          } catch (error) {
-            console.warn("Direct product fetch failed:", error);
-          }
-        }
-
-        if (!product) {
-          console.error("Product not found for article:", articleNumber);
-          toast.error(`Product not found for article ${articleNumber}`);
-          setProductLoading(false);
-          return;
-        }
-
-        if (!product.bom || !Array.isArray(product.bom) || product.bom.length === 0) {
-          console.error("Product found but no BOM:", product);
-          toast.error(`No BOM found for article ${articleNumber}`);
-          setProductLoading(false);
-          return;
-        }
-
-        // Get article planned quantity for calculation
-        const articlePlannedQty = selectedArticle.plannedQuantity || 1;
-
-        // Map product BOM to yarn requirements
-        // BOM quantity is in grams per unit, so multiply by article planned quantity
-        console.log("Processing BOM, product.bom:", product.bom);
-        const yarnRequirements: YarnRequirement[] = product.bom.map((bomItem, index) => {
-          // Handle yarnCatalogId - can be string or populated object
-          let yarnCode = `YARN-${index}`;
-          let yarnType = "Unknown";
           
-          if (typeof bomItem.yarnCatalogId === "string") {
-            yarnCode = bomItem.yarnCatalogId;
-          } else if (bomItem.yarnCatalogId && typeof bomItem.yarnCatalogId === "object") {
-            yarnCode = bomItem.yarnCatalogId.id || yarnCode;
-            // Get yarn type from populated object if available
-            if (bomItem.yarnCatalogId.yarnType?.name) {
-              yarnType = bomItem.yarnCatalogId.yarnType.name;
+          if (result) {
+            articleBoms.set(article.id, result.yarnRequirements);
+            if (!firstStyleCode) {
+              firstStyleCode = result.styleCode;
             }
           }
-
-          // If yarn type not found from populated object, extract from yarnName
-          if (yarnType === "Unknown" && bomItem.yarnName) {
-            const parts = bomItem.yarnName.split("-");
-            if (parts.length >= 2) {
-              const lastPart = parts[parts.length - 1];
-              const typeParts = lastPart.split("/");
-              if (typeParts.length > 0 && typeParts[0].trim()) {
-                yarnType = typeParts[0].trim();
-              } else if (lastPart.trim()) {
-                yarnType = lastPart.trim();
-              }
-            }
-          }
-
-          // Calculate required quantity: BOM quantity (grams per unit) * article planned quantity
-          // Convert grams to kg for display (divide by 1000)
-          const requiredQtyInGrams = bomItem.quantity * articlePlannedQty;
-          const requiredQtyInKg = requiredQtyInGrams / 1000;
-
-          return {
-            id: `req-${bomItem._id}-${index}`,
-            yarnCode: yarnCode,
-            yarnName: bomItem.yarnName || "Unknown Yarn",
-            yarnType: yarnType,
-            requiredQty: requiredQtyInKg, // Store in kg
-            tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
-            shortTermAvailable: 0, // Keep for internal use but won't display
-            longTermAvailable: 0, // Keep for internal use but won't display
-          };
+          
+          return { articleId: article.id, result };
         });
 
-        console.log("Yarn requirements created:", yarnRequirements);
+        await Promise.all(fetchPromises);
 
-        // Update the order with BOM
-        console.log("Updating order with BOM, selectedOrderId:", selectedOrderId, "yarnRequirements:", yarnRequirements);
-        
-        // Use functional update to ensure we have the latest state
+        console.log("All article BOMs fetched:", articleBoms.size);
+
+        // Combine all BOMs for "All" view WITHOUT aggregation
+        const allBoms: YarnRequirement[] = [];
+        articleBoms.forEach((articleBom, articleId) => {
+          articleBom.forEach((requirement) => {
+            allBoms.push({
+              ...requirement,
+              id: `${articleId}-${requirement.id}`,
+            });
+          });
+        });
+
+        // Update the order with all article BOMs
         setOrders((prev) => {
-          // Find the current order to preserve any existing data
-          const currentOrder = prev.find((o) => o.id === selectedOrderId);
-          if (!currentOrder) {
-            console.warn("Order not found in state:", selectedOrderId);
-            return prev;
-          }
-
           const updated = prev.map((order) => {
             if (order.id !== selectedOrderId) {
               return order;
             }
             
-            // Always use the new yarnRequirements for the selected article
+            // Use combined BOM by default (for "All" view)
+            const currentBom = selectedArticleId === "all" || !selectedArticleId 
+              ? allBoms 
+              : articleBoms.get(selectedArticleId) || allBoms;
+            
             const updatedOrder = {
               ...order,
-              styleCode: product?.styleCode || articleNumber,
-              bom: yarnRequirements, // Use the newly created yarn requirements
+              styleCode: firstStyleCode || order.styleCode,
+              bom: currentBom,
+              articleBoms,
             };
-            console.log("Updated order:", updatedOrder, "BOM length:", updatedOrder.bom.length);
+            console.log("Updated order with all BOMs:", updatedOrder);
             return updatedOrder;
           });
           
-          // Verify the update
-          const verifyOrder = updated.find((o) => o.id === selectedOrderId);
-          console.log("Verification - Order in updated array:", {
-            id: verifyOrder?.id,
-            bomLength: verifyOrder?.bom?.length || 0,
-            bom: verifyOrder?.bom,
-          });
-          
-          console.log("All orders after update:", updated);
           return updated;
         });
 
         // Auto-select first requirement
-        if (yarnRequirements.length > 0) {
-          setActiveRequirementId(yarnRequirements[0].id);
+        if (allBoms.length > 0) {
+          setActiveRequirementId(allBoms[0].id);
         }
       } catch (error) {
-        console.error("Error fetching product:", error);
-        toast.error(`Failed to load product details for article ${articleNumber}`);
+        console.error("Error fetching article BOMs:", error);
+        toast.error("Failed to load product details");
       } finally {
         setProductLoading(false);
       }
     };
 
-    fetchProductAndUpdateBOM();
+    fetchAllArticleBOMs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedOrderId, selectedArticleId]);
+  }, [selectedOrderId]);
+
+  // Update displayed BOM when article selection changes
+  useEffect(() => {
+    if (!selectedOrderId || !selectedArticleId) {
+      return;
+    }
+
+    const selectedOrder = orders.find((o) => o.id === selectedOrderId);
+    if (!selectedOrder || !selectedOrder.articleBoms) {
+      return;
+    }
+
+    // Check if "All" is selected
+    if (selectedArticleId === "all") {
+      // Combine all yarn requirements from all articles WITHOUT aggregation
+      const allBoms: YarnRequirement[] = [];
+      
+      selectedOrder.articleBoms.forEach((articleBom, articleId) => {
+        articleBom.forEach((requirement) => {
+          // Keep each requirement separate with unique ID
+          allBoms.push({
+            ...requirement,
+            id: `${articleId}-${requirement.id}`, // Ensure unique ID per article
+          });
+        });
+      });
+      
+      setOrders((prev) => {
+        const updated = prev.map((order) => {
+          if (order.id !== selectedOrderId) {
+            return order;
+          }
+          return {
+            ...order,
+            bom: allBoms,
+          };
+        });
+        return updated;
+      });
+
+      // Auto-select first requirement
+      if (allBoms.length > 0) {
+        setActiveRequirementId(allBoms[0].id);
+      }
+    } else {
+      // Show BOM for specific article
+      const articleBom = selectedOrder.articleBoms.get(selectedArticleId);
+      if (articleBom) {
+        setOrders((prev) => {
+          const updated = prev.map((order) => {
+            if (order.id !== selectedOrderId) {
+              return order;
+            }
+            return {
+              ...order,
+              bom: articleBom,
+            };
+          });
+          return updated;
+        });
+
+        // Auto-select first requirement of this article
+        if (articleBom.length > 0) {
+          setActiveRequirementId(articleBom[0].id);
+        }
+      }
+    }
+  }, [selectedArticleId, selectedOrderId, orders]);
 
   // Debug: Track when orders change
   useEffect(() => {
@@ -616,9 +755,9 @@ const YarnIssuePage = () => {
     if (!selectedOrderId || !filteredOrders.some((order) => order.id === selectedOrderId)) {
       const firstOrder = filteredOrders[0];
       setSelectedOrderId(firstOrder.id);
-      // Auto-select first article if available
+      // Auto-select "All" if articles are available
       if (firstOrder.articles && firstOrder.articles.length > 0) {
-        setSelectedArticleId(firstOrder.articles[0].id);
+        setSelectedArticleId("all");
       }
     }
   }, [filteredOrders, selectedOrderId]);
@@ -878,6 +1017,36 @@ const YarnIssuePage = () => {
         throw new Error(errorData.message || "Failed to create transaction");
       }
 
+      // Update cone issueStatus to "issued" after successful transaction
+      if (coneData && coneData._id) {
+        try {
+          const updateConeResponse = await fetch(
+            `${API_BASE_URL}/yarn-management/yarn-cones/${coneData._id}`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
+              },
+              body: JSON.stringify({
+                issueStatus: "issued",
+                issueDate: new Date().toISOString(),
+                issueWeight: totalNetWeight,
+              }),
+            }
+          );
+
+          if (!updateConeResponse.ok) {
+            console.error("Failed to update cone issueStatus");
+            // Don't throw error here, transaction is already created
+            // Just log it so the transaction isn't rolled back
+          }
+        } catch (coneUpdateError) {
+          console.error("Error updating cone issueStatus:", coneUpdateError);
+          // Don't throw error here, transaction is already created
+        }
+      }
+
       // Refresh all transactions after successful issue
       const refreshResponse = await fetch(
         `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued`,
@@ -1059,16 +1228,7 @@ const YarnIssuePage = () => {
                     <tbody className="bg-white">
                       {filteredOrders.map((order) => {
                         const status = getOrderStatus(order, allYarnTransactions);
-                        const issuedTotals = order.bom.reduce(
-                          (acc, requirement) => {
-                            const issued = getIssuedQty(requirement, allYarnTransactions);
-                            return {
-                              issued: acc.issued + issued,
-                              required: acc.required + requirement.requiredQty,
-                            };
-                          },
-                          { issued: 0, required: 0 }
-                        );
+                        const issuedTotals = getOrderTotals(order, allYarnTransactions);
 
                         return (
                           <tr
@@ -1153,6 +1313,32 @@ const YarnIssuePage = () => {
                   </div>
                   <div className="box-body">
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+                      {/* All Button */}
+                      <button
+                        className={`text-center border rounded-md px-2 py-2 transition ${
+                          selectedArticleId === "all"
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-gray-200 hover:border-primary/60"
+                        }`}
+                        onClick={() => {
+                          setSelectedArticleId("all");
+                          setActiveRequirementId(null);
+                        }}
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <i className="ri-stack-line text-lg text-primary"></i>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-xs font-semibold text-gray-900">
+                              All Articles
+                            </h4>
+                            <p className="text-[10px] text-gray-500 mt-0.5">
+                              Total: {selectedOrder.articles.reduce((sum, a) => sum + (a.plannedQuantity || 0), 0)}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                      
+                      {/* Individual Articles */}
                       {selectedOrder.articles.map((article) => (
                         <button
                           key={article.id}
@@ -1200,13 +1386,20 @@ const YarnIssuePage = () => {
               {!productLoading && (
                 <div className="box">
                   <div className="box-header flex justify-between items-center">
-                    <h3 className="box-title">Bill of Material Yarn Requirements</h3>
+                    <div>
+                      <h3 className="box-title">Bill of Material Yarn Requirements</h3>
+                      {selectedArticleId === "all" && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Showing all requirements from all articles
+                        </p>
+                      )}
+                    </div>
                     <span className="text-xs text-gray-500">
-                      {selectedOrder.bom.length} yarn types
+                      {selectedOrder.bom.length} {selectedOrder.bom.length === 1 ? 'entry' : 'entries'}
                     </span>
                   </div>
                   <div className="box-body">
-                    {!selectedArticle ? (
+                    {!selectedArticle && selectedArticleId !== "all" ? (
                       <div className="text-center py-12 text-gray-500">
                         <i className="ri-article-line text-4xl text-gray-400 mb-2"></i>
                         <p>Select an article to view yarn requirements.</p>
@@ -1315,16 +1508,22 @@ const YarnIssuePage = () => {
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
-                                  <button
-                                    className={`ti-btn w-full md:w-auto whitespace-normal break-words leading-tight px-4 py-2 text-sm ${
-                                      isActive
-                                        ? "ti-btn-primary"
-                                        : "ti-btn-primary ti-btn-outline"
-                                    }`}
-                                    onClick={() => handleStartIssuing(requirement.id)}
-                                  >
-                                    Issue
-                                  </button>
+                                  {status === "Issued" ? (
+                                    <span className="text-xs text-gray-500 italic">
+                                      Fully Issued
+                                    </span>
+                                  ) : (
+                                    <button
+                                      className={`ti-btn w-full md:w-auto whitespace-normal break-words leading-tight px-4 py-2 text-sm ${
+                                        isActive
+                                          ? "ti-btn-primary"
+                                          : "ti-btn-primary ti-btn-outline"
+                                      }`}
+                                      onClick={() => handleStartIssuing(requirement.id)}
+                                    >
+                                      Issue
+                                    </button>
+                                  )}
                                 </td>
                               </tr>
                             );
