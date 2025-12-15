@@ -6,6 +6,7 @@ const nextConfig = {
   swcMinify: true,
   basePath: "",
 	assetPrefix : "",
+  output: 'standalone',
   images: {
     loader: "imgix",
     path: "/",

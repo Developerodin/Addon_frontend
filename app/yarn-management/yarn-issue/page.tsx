@@ -374,7 +374,6 @@ const YarnIssuePage = () => {
   // Fetch production orders
   useEffect(() => {
     const fetchOrders = async () => {
-      console.log("Fetching orders from API...");
       setOrdersLoading(true);
       try {
         const token = getAccessToken();
@@ -649,27 +648,27 @@ const YarnIssuePage = () => {
       return;
     }
 
-    const selectedOrder = orders.find((o) => o.id === selectedOrderId);
-    if (!selectedOrder || !selectedOrder.articleBoms) {
-      return;
-    }
+    setOrders((prev) => {
+      const selectedOrder = prev.find((o) => o.id === selectedOrderId);
+      if (!selectedOrder || !selectedOrder.articleBoms) {
+        return prev;
+      }
 
-    // Check if "All" is selected
-    if (selectedArticleId === "all") {
-      // Combine all yarn requirements from all articles WITHOUT aggregation
-      const allBoms: YarnRequirement[] = [];
-      
-      selectedOrder.articleBoms.forEach((articleBom, articleId) => {
-        articleBom.forEach((requirement) => {
-          // Keep each requirement separate with unique ID
-          allBoms.push({
-            ...requirement,
-            id: `${articleId}-${requirement.id}`, // Ensure unique ID per article
+      // Check if "All" is selected
+      if (selectedArticleId === "all") {
+        // Combine all yarn requirements from all articles WITHOUT aggregation
+        const allBoms: YarnRequirement[] = [];
+        
+        selectedOrder.articleBoms.forEach((articleBom, articleId) => {
+          articleBom.forEach((requirement) => {
+            // Keep each requirement separate with unique ID
+            allBoms.push({
+              ...requirement,
+              id: `${articleId}-${requirement.id}`, // Ensure unique ID per article
+            });
           });
         });
-      });
-      
-      setOrders((prev) => {
+        
         const updated = prev.map((order) => {
           if (order.id !== selectedOrderId) {
             return order;
@@ -679,18 +678,17 @@ const YarnIssuePage = () => {
             bom: allBoms,
           };
         });
-        return updated;
-      });
 
-      // Auto-select first requirement
-      if (allBoms.length > 0) {
-        setActiveRequirementId(allBoms[0].id);
-      }
-    } else {
-      // Show BOM for specific article
-      const articleBom = selectedOrder.articleBoms.get(selectedArticleId);
-      if (articleBom) {
-        setOrders((prev) => {
+        // Auto-select first requirement
+        if (allBoms.length > 0) {
+          setActiveRequirementId(allBoms[0].id);
+        }
+
+        return updated;
+      } else {
+        // Show BOM for specific article
+        const articleBom = selectedOrder.articleBoms.get(selectedArticleId);
+        if (articleBom) {
           const updated = prev.map((order) => {
             if (order.id !== selectedOrderId) {
               return order;
@@ -700,29 +698,32 @@ const YarnIssuePage = () => {
               bom: articleBom,
             };
           });
-          return updated;
-        });
 
-        // Auto-select first requirement of this article
-        if (articleBom.length > 0) {
-          setActiveRequirementId(articleBom[0].id);
+          // Auto-select first requirement of this article
+          if (articleBom.length > 0) {
+            setActiveRequirementId(articleBom[0].id);
+          }
+
+          return updated;
         }
       }
-    }
-  }, [selectedArticleId, selectedOrderId, orders]);
 
-  // Debug: Track when orders change
-  useEffect(() => {
-    console.log("Orders state changed, total orders:", orders.length);
-    const selectedOrderInState = orders.find((o) => o.id === selectedOrderId);
-    if (selectedOrderInState) {
-      console.log("Selected order in orders state:", {
-        id: selectedOrderInState.id,
-        bomLength: selectedOrderInState.bom?.length || 0,
-        bom: selectedOrderInState.bom,
-      });
-    }
-  }, [orders, selectedOrderId]);
+      return prev;
+    });
+  }, [selectedArticleId, selectedOrderId]);
+
+  // Debug: Track when orders change (removed to prevent console spam)
+  // useEffect(() => {
+  //   console.log("Orders state changed, total orders:", orders.length);
+  //   const selectedOrderInState = orders.find((o) => o.id === selectedOrderId);
+  //   if (selectedOrderInState) {
+  //     console.log("Selected order in orders state:", {
+  //       id: selectedOrderInState.id,
+  //       bomLength: selectedOrderInState.bom?.length || 0,
+  //       bom: selectedOrderInState.bom,
+  //     });
+  //   }
+  // }, [orders, selectedOrderId]);
 
   // Use yarnTransactions directly since API handles filtering
   const filteredTransactions = yarnTransactions;
@@ -767,13 +768,13 @@ const YarnIssuePage = () => {
     [filteredOrders, selectedOrderId]
   );
 
-  // Debug: Log when selectedOrder changes
-  useEffect(() => {
-    console.log("selectedOrder changed:", selectedOrder);
-    if (selectedOrder) {
-      console.log("selectedOrder.bom:", selectedOrder.bom, "length:", selectedOrder.bom?.length);
-    }
-  }, [selectedOrder]);
+  // Debug: Log when selectedOrder changes (removed to prevent console spam)
+  // useEffect(() => {
+  //   console.log("selectedOrder changed:", selectedOrder);
+  //   if (selectedOrder) {
+  //     console.log("selectedOrder.bom:", selectedOrder.bom, "length:", selectedOrder.bom?.length);
+  //   }
+  // }, [selectedOrder]);
 
   const selectedArticle = useMemo(() => {
     if (!selectedOrder || !selectedOrder.articles || !selectedArticleId) {
@@ -805,11 +806,9 @@ const YarnIssuePage = () => {
 
   const sortedRequirements = useMemo(() => {
     if (!selectedOrder) {
-      console.log("sortedRequirements: no selectedOrder");
       return [];
     }
 
-    console.log("sortedRequirements: selectedOrder.bom =", selectedOrder.bom, "length =", selectedOrder.bom?.length);
     const data = [...selectedOrder.bom];
 
     data.sort((a, b) => {
@@ -851,7 +850,6 @@ const YarnIssuePage = () => {
       return sortDirection === "asc" ? compareNumber : -compareNumber;
     });
 
-    console.log("sortedRequirements: returning", data.length, "items");
     return data;
   }, [selectedOrder, sortField, sortDirection, allYarnTransactions]);
 
