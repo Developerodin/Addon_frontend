@@ -36,8 +36,8 @@ const AddMachinePage = () => {
     model: '',
     floor: '',
     installationDate: '',
-    maintenanceRequirement: '1 month',
-    status: 'Active',
+    maintenanceRequirement: '',
+    status: '' as any,
     assignedSupervisor: '',
     capacityPerShift: 0,
     capacityPerDay: 0,
@@ -94,63 +94,37 @@ const AddMachinePage = () => {
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<CreateMachineData> = {};
-
-    if (!formData.machineCode.trim()) {
-      newErrors.machineCode = 'Machine code is required';
-    }
-
-    if (!formData.machineNumber.trim()) {
-      newErrors.machineNumber = 'Machine number is required';
-    }
-
-    if (!formData.needleSize.trim()) {
-      newErrors.needleSize = 'Needle size is required';
-    }
-
-    if (!formData.model.trim()) {
-      newErrors.model = 'Model is required';
-    }
-
-    if (!formData.floor.trim()) {
-      newErrors.floor = 'Floor is required';
-    }
-
-    if (!formData.installationDate.trim()) {
-      newErrors.installationDate = 'Installation date is required';
-    }
-
-    if (!formData.maintenanceRequirement.trim()) {
-      newErrors.maintenanceRequirement = 'Maintenance requirement is required';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    // All fields are now optional, no validation needed
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
-      toast.error('Please fix the errors in the form');
-      return;
-    }
+    // Validation removed - all fields are optional
 
     try {
       setIsCreating(true);
       
-      // Prepare the payload
-      const payload = {
-        ...formData,
-        assignedSupervisor: formData.assignedSupervisor || undefined,
-        capacityPerShift: formData.capacityPerShift || undefined,
-        capacityPerDay: formData.capacityPerDay || undefined,
-        lastMaintenanceDate: formData.lastMaintenanceDate || undefined,
-        nextMaintenanceDate: formData.nextMaintenanceDate || undefined,
-        maintenanceNotes: formData.maintenanceNotes || undefined,
-        company: formData.company || undefined,
-        machineType: formData.machineType || undefined
-      };
+      // Prepare the payload - convert empty strings to undefined
+      const payload: any = {};
+      
+      if (formData.machineCode?.trim()) payload.machineCode = formData.machineCode.trim();
+      if (formData.machineNumber?.trim()) payload.machineNumber = formData.machineNumber.trim();
+      if (formData.needleSize?.trim()) payload.needleSize = formData.needleSize.trim();
+      if (formData.model?.trim()) payload.model = formData.model.trim();
+      if (formData.floor?.trim()) payload.floor = formData.floor.trim();
+      if (formData.installationDate?.trim()) payload.installationDate = formData.installationDate.trim();
+      if (formData.maintenanceRequirement?.trim()) payload.maintenanceRequirement = formData.maintenanceRequirement.trim();
+      if (formData.status?.trim()) payload.status = formData.status.trim();
+      if (formData.assignedSupervisor?.trim()) payload.assignedSupervisor = formData.assignedSupervisor.trim();
+      if (formData.capacityPerShift && formData.capacityPerShift > 0) payload.capacityPerShift = formData.capacityPerShift;
+      if (formData.capacityPerDay && formData.capacityPerDay > 0) payload.capacityPerDay = formData.capacityPerDay;
+      if (formData.lastMaintenanceDate?.trim()) payload.lastMaintenanceDate = formData.lastMaintenanceDate.trim();
+      if (formData.nextMaintenanceDate?.trim()) payload.nextMaintenanceDate = formData.nextMaintenanceDate.trim();
+      if (formData.maintenanceNotes?.trim()) payload.maintenanceNotes = formData.maintenanceNotes.trim();
+      if (formData.company?.trim()) payload.company = formData.company.trim();
+      if (formData.machineType?.trim()) payload.machineType = formData.machineType.trim();
 
       const response = await fetch(`${API_BASE_URL}/machines`, {
         method: 'POST',
@@ -214,121 +188,115 @@ const AddMachinePage = () => {
                   {/* Machine Code */}
                   <div className="form-group">
                     <label className="form-label">
-                      Machine Code <span className="text-red-500">*</span>
+                      Machine Code
                     </label>
                     <input
                       type="text"
                       name="machineCode"
                       value={formData.machineCode}
                       onChange={handleInputChange}
-                      className={`form-control ${errors.machineCode ? 'is-invalid' : ''}`}
+                      className="form-control"
                       placeholder="Enter machine code"
                     />
-                    {errors.machineCode && <div className="invalid-feedback">{errors.machineCode}</div>}
                   </div>
 
                   {/* Machine Number */}
                   <div className="form-group">
                     <label className="form-label">
-                      Machine Number <span className="text-red-500">*</span>
+                      Machine Number
                     </label>
                     <input
                       type="text"
                       name="machineNumber"
                       value={formData.machineNumber}
                       onChange={handleInputChange}
-                      className={`form-control ${errors.machineNumber ? 'is-invalid' : ''}`}
+                      className="form-control"
                       placeholder="Enter machine number"
                     />
-                    {errors.machineNumber && <div className="invalid-feedback">{errors.machineNumber}</div>}
                   </div>
 
                   {/* Needle Size */}
                   <div className="form-group">
                     <label className="form-label">
-                      Needle Size <span className="text-red-500">*</span>
+                      Needle Size
                     </label>
                     <input
                       type="text"
                       name="needleSize"
                       value={formData.needleSize}
                       onChange={handleInputChange}
-                      className={`form-control ${errors.needleSize ? 'is-invalid' : ''}`}
+                      className="form-control"
                       placeholder="Enter needle size"
                     />
-                    {errors.needleSize && <div className="invalid-feedback">{errors.needleSize}</div>}
                   </div>
 
                   {/* Model */}
                   <div className="form-group">
                     <label className="form-label">
-                      Model <span className="text-red-500">*</span>
+                      Model
                     </label>
                     <input
                       type="text"
                       name="model"
                       value={formData.model}
                       onChange={handleInputChange}
-                      className={`form-control ${errors.model ? 'is-invalid' : ''}`}
+                      className="form-control"
                       placeholder="Enter model"
                     />
-                    {errors.model && <div className="invalid-feedback">{errors.model}</div>}
                   </div>
 
                   {/* Floor */}
                   <div className="form-group">
                     <label className="form-label">
-                      Floor <span className="text-red-500">*</span>
+                      Floor
                     </label>
                     <input
                       type="text"
                       name="floor"
                       value={formData.floor}
                       onChange={handleInputChange}
-                      className={`form-control ${errors.floor ? 'is-invalid' : ''}`}
+                      className="form-control"
                       placeholder="Enter floor"
                     />
-                    {errors.floor && <div className="invalid-feedback">{errors.floor}</div>}
                   </div>
 
                   {/* Installation Date */}
                   <div className="form-group">
                     <label className="form-label">
-                      Installation Date <span className="text-red-500">*</span>
+                      Installation Date
                     </label>
                     <input
                       type="date"
                       name="installationDate"
                       value={formData.installationDate}
                       onChange={handleInputChange}
-                      className={`form-control ${errors.installationDate ? 'is-invalid' : ''}`}
+                      className="form-control"
                     />
-                    {errors.installationDate && <div className="invalid-feedback">{errors.installationDate}</div>}
                   </div>
 
                   {/* Maintenance Requirement */}
                   <div className="form-group">
                     <label className="form-label">
-                      Maintenance Requirement <span className="text-red-500">*</span>
+                      Maintenance Requirement
                     </label>
                     <select
                       name="maintenanceRequirement"
                       value={formData.maintenanceRequirement}
                       onChange={handleInputChange}
-                      className={`form-select ${errors.maintenanceRequirement ? 'is-invalid' : ''}`}
+                      className="form-select"
                     >
+                      <option value="">Select maintenance requirement</option>
                       <option value="1 month">1 month</option>
                       <option value="3 months">3 months</option>
                       <option value="6 months">6 months</option>
                       <option value="12 months">12 months</option>
                     </select>
-                    {errors.maintenanceRequirement && <div className="invalid-feedback">{errors.maintenanceRequirement}</div>}
                   </div>
 
                   {/* Status */}
                   <div className="form-group">
                     <label className="form-label">
-                      Status <span className="text-red-500">*</span>
+                      Status
                     </label>
                     <select
                       name="status"
@@ -336,6 +304,7 @@ const AddMachinePage = () => {
                       onChange={handleInputChange}
                       className="form-select"
                     >
+                      <option value="">Select status</option>
                       <option value="Active">Active</option>
                       <option value="Under Maintenance">Under Maintenance</option>
                       <option value="Idle">Idle</option>

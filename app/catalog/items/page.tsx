@@ -74,6 +74,7 @@ const ProductListPage = () => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [categories, setCategories] = useState<Array<{id: string, name: string}>>([]);
   const [showMoreExports, setShowMoreExports] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -156,6 +157,28 @@ const ProductListPage = () => {
     }
   };
 
+  // Helper function to gradually increase progress during async operations
+  const animateProgress = (start: number, end: number, duration: number = 800) => {
+    const steps = 15;
+    const increment = (end - start) / steps;
+    const interval = duration / steps;
+    let current = start;
+    let step = 0;
+
+    const timer = setInterval(() => {
+      step++;
+      current = Math.min(start + (increment * step), end);
+      setExportProgress(Math.round(current));
+      
+      if (step >= steps || current >= end) {
+        clearInterval(timer);
+        setExportProgress(Math.round(end));
+      }
+    }, interval);
+
+    return timer;
+  };
+
   const handleBulkDelete = async () => {
     if (selectedProducts.length === 0) return;
     if (!window.confirm(`Are you sure you want to delete ${selectedProducts.length} selected product(s)?`)) return;
@@ -214,7 +237,11 @@ const ProductListPage = () => {
           exportObj['Name'] = product.name;
           break;
         case 'Category':
-          exportObj['Category'] = categoryNameMapping[product.category] || product.category;
+          // Handle category as string or object
+          const categoryId = typeof product.category === 'object' && product.category !== null 
+            ? product.category.id 
+            : product.category;
+          exportObj['Category'] = categoryId ? (categoryNameMapping[categoryId] || getCategoryName(categoryId)) : '';
           break;
         case 'Software Code':
           exportObj['Software Code'] = product.softwareCode;
@@ -245,35 +272,64 @@ const ProductListPage = () => {
 
   const handleExport = async () => {
     try {
+      setExportProgress(0);
       setIsLoading(true);
+      
+      // Start smooth progress animation
+      const progressTimer = animateProgress(0, 15, 300);
+      
+      // Fetch products
       const response = await axios.get(`${API_ENDPOINTS.products}?limit=100000`);
       const data = response.data as ProductsResponse;
+      clearInterval(progressTimer);
+      setExportProgress(25);
+      
+      // Continue animation while fetching categories
+      const progressTimer2 = animateProgress(25, 45, 400);
       
       // Fetch all categories to create reverse mapping
       const categoriesResponse = await axios.get(`${API_BASE_URL}/categories?page=1&limit=10000`);
       const allCategories = categoriesResponse.data.results || [];
+      clearInterval(progressTimer2);
+      setExportProgress(50);
       
       // Create reverse mapping from category ID to category name
       const categoryNameMapping: Record<string, string> = {};
       allCategories.forEach((category: any) => {
         categoryNameMapping[category.id] = category.name;
       });
+      setExportProgress(60);
       
       const wb = XLSX.utils.book_new();
 
       // Create Products sheet with only user-appropriate fields
-      const exportData = data.results.map(product => buildExportData(product, categoryNameMapping));
+      const exportData = data.results.map((product, index) => {
+        if (index % 100 === 0) {
+          // Update progress during data processing
+          setExportProgress(60 + Math.floor((index / data.results.length) * 15));
+        }
+        return buildExportData(product, categoryNameMapping);
+      });
+      setExportProgress(75);
       
       const ws = XLSX.utils.json_to_sheet(exportData);
       XLSX.utils.book_append_sheet(wb, ws, 'Products');
+      setExportProgress(85);
 
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
+      setExportProgress(95);
       saveAs(data2, `products_${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success('Products exported successfully');
+      setExportProgress(100);
+      
+      setTimeout(() => {
+        setExportProgress(null);
+        toast.success('Products exported successfully');
+      }, 500);
     } catch (error) {
       console.error('Error exporting products:', error);
+      setExportProgress(null);
       toast.error('Error exporting products. Please try again.');
     } finally {
       setIsLoading(false);
@@ -282,20 +338,33 @@ const ProductListPage = () => {
 
   const handleExportByAttributes = async () => {
     try {
+      setExportProgress(0);
       setIsLoading(true);
       
       // If no products are selected, show error
       if (selectedProducts.length === 0) {
         toast.error('Please select at least one product to export');
+        setExportProgress(null);
+        setIsLoading(false);
         return;
       }
 
+      // Start smooth progress animation
+      const progressTimer = animateProgress(0, 15, 200);
+      
       // Get only selected products
       const selectedProductsData = products.filter(product => selectedProducts.includes(product.id));
+      clearInterval(progressTimer);
+      setExportProgress(20);
+      
+      // Continue animation while fetching attributes
+      const progressTimer2 = animateProgress(20, 40, 300);
       
       // Fetch all attributes to create reverse mapping
       const attributesResponse = await axios.get(`${API_BASE_URL}/product-attributes?page=1&limit=10000`);
       const allAttributes = attributesResponse.data.results || [];
+      clearInterval(progressTimer2);
+      setExportProgress(45);
       
       // Create reverse mapping: attribute value ID -> { attribute name, attribute value name }
       const reverseMapping: Record<string, { attributeName: string, attributeValueName: string }> = {};
@@ -310,11 +379,16 @@ const ProductListPage = () => {
           }
         });
       });
+      setExportProgress(55);
       
       const wb = XLSX.utils.book_new();
 
       // Create Attributes sheet for selected products only - filter by user type
-      const attributesData = selectedProductsData.flatMap(product => {
+      const attributesData = selectedProductsData.flatMap((product, index) => {
+        if (index % 10 === 0) {
+          // Update progress during data processing
+          setExportProgress(55 + Math.floor((index / selectedProductsData.length) * 20));
+        }
         if (product.attributes && Object.keys(product.attributes).length > 0) {
           return Object.entries(product.attributes)
             .filter(([attrName]) => {
@@ -340,6 +414,7 @@ const ProductListPage = () => {
         }
         return [];
       });
+      setExportProgress(80);
       
       if (attributesData.length > 0) {
         const ws = XLSX.utils.json_to_sheet(attributesData);
@@ -354,14 +429,22 @@ const ProductListPage = () => {
         const ws = XLSX.utils.json_to_sheet(productData);
         XLSX.utils.book_append_sheet(wb, ws, 'Attributes');
       }
+      setExportProgress(90);
 
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
+      setExportProgress(95);
       saveAs(data2, `selected_products_attributes_${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success(`Attributes exported for ${selectedProducts.length} selected product(s)`);
+      setExportProgress(100);
+      
+      setTimeout(() => {
+        setExportProgress(null);
+        toast.success(`Attributes exported for ${selectedProducts.length} selected product(s)`);
+      }, 500);
     } catch (error) {
       console.error('Error exporting attributes:', error);
+      setExportProgress(null);
       toast.error('Error exporting attributes. Please try again.');
     } finally {
       setIsLoading(false);
@@ -370,21 +453,33 @@ const ProductListPage = () => {
 
   const handleExportByBOM = async () => {
     try {
+      setExportProgress(0);
       setIsLoading(true);
       
       // If no products are selected, show error
       if (selectedProducts.length === 0) {
         toast.error('Please select at least one product to export');
+        setExportProgress(null);
+        setIsLoading(false);
         return;
       }
 
+      // Start smooth progress animation
+      const progressTimer = animateProgress(0, 10, 200);
+      
       // Get only selected products
       const selectedProductsData = products.filter(product => selectedProducts.includes(product.id));
+      clearInterval(progressTimer);
+      setExportProgress(15);
+      
+      // Continue animation while fetching yarn catalogs
+      const progressTimer2 = animateProgress(15, 25, 300);
       
       // Fetch all yarn catalogs to create reverse mapping
       let allYarnCatalogs: YarnCatalog[] = [];
       let currentPage = 1;
       let hasMore = true;
+      const totalPagesEstimate = 10; // Estimate for progress calculation
       
       while (hasMore) {
         const response = await yarnCatalogService.getYarnCatalogs({
@@ -395,30 +490,42 @@ const ProductListPage = () => {
         
         allYarnCatalogs = [...allYarnCatalogs, ...(response.results || [])];
         
+        // Update progress during pagination
+        const progressPercent = 25 + Math.min((currentPage / totalPagesEstimate) * 30, 30);
+        setExportProgress(Math.round(progressPercent));
+        
         if (currentPage >= response.totalPages) {
           hasMore = false;
         } else {
           currentPage++;
         }
       }
+      clearInterval(progressTimer2);
+      setExportProgress(55);
       
       // Create reverse mapping from yarn catalog ID to yarn name
       const yarnNameMapping: Record<string, string> = {};
       allYarnCatalogs.forEach((yarn: YarnCatalog) => {
         yarnNameMapping[yarn.id] = yarn.yarnName;
       });
+      setExportProgress(60);
       
       const wb = XLSX.utils.book_new();
 
       // Create BOM sheet for selected products only
-      const bomData = selectedProductsData.flatMap(product => 
-        (product.bom || []).map(bom => ({
+      const bomData = selectedProductsData.flatMap((product, index) => {
+        if (index % 5 === 0) {
+          // Update progress during data processing
+          setExportProgress(60 + Math.floor((index / selectedProductsData.length) * 15));
+        }
+        return (product.bom || []).map(bom => ({
           'Product ID': product.id,
           'Product Name': product.name,
           'Yarn Name': bom.yarnName || yarnNameMapping[bom.yarnCatalogId] || bom.yarnCatalogId,
           'Quantity': bom.quantity
-        }))
-      );
+        }));
+      });
+      setExportProgress(80);
       
       if (bomData.length > 0) {
         const ws = XLSX.utils.json_to_sheet(bomData);
@@ -433,14 +540,22 @@ const ProductListPage = () => {
         const ws = XLSX.utils.json_to_sheet(productData);
         XLSX.utils.book_append_sheet(wb, ws, 'BOM');
       }
+      setExportProgress(90);
 
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
+      setExportProgress(95);
       saveAs(data2, `selected_products_bom_${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success(`BOM exported for ${selectedProducts.length} selected product(s)`);
+      setExportProgress(100);
+      
+      setTimeout(() => {
+        setExportProgress(null);
+        toast.success(`BOM exported for ${selectedProducts.length} selected product(s)`);
+      }, 500);
     } catch (error) {
       console.error('Error exporting BOM:', error);
+      setExportProgress(null);
       toast.error('Error exporting BOM. Please try again.');
     } finally {
       setIsLoading(false);
@@ -449,37 +564,56 @@ const ProductListPage = () => {
 
   const handleExportByProcesses = async () => {
     try {
+      setExportProgress(0);
       setIsLoading(true);
       
       // If no products are selected, show error
       if (selectedProducts.length === 0) {
         toast.error('Please select at least one product to export');
+        setExportProgress(null);
+        setIsLoading(false);
         return;
       }
 
+      // Start smooth progress animation
+      const progressTimer = animateProgress(0, 15, 200);
+      
       // Get only selected products
       const selectedProductsData = products.filter(product => selectedProducts.includes(product.id));
+      clearInterval(progressTimer);
+      setExportProgress(20);
+      
+      // Continue animation while fetching processes
+      const progressTimer2 = animateProgress(20, 35, 300);
       
       // Fetch all processes to create reverse mapping
       const processesResponse = await axios.get(`${API_BASE_URL}/processes?page=1&limit=10000`);
       const processes = processesResponse.data.results;
+      clearInterval(progressTimer2);
+      setExportProgress(45);
       
       // Create reverse mapping from process ID to process name
       const processNameMapping: Record<string, string> = {};
       processes.forEach((process: any) => {
         processNameMapping[process.id] = process.name;
       });
+      setExportProgress(55);
       
       const wb = XLSX.utils.book_new();
 
       // Create Processes sheet for selected products only
-      const processesData = selectedProductsData.flatMap(product => 
-        (product.processes || []).map(process => ({
+      const processesData = selectedProductsData.flatMap((product, index) => {
+        if (index % 5 === 0) {
+          // Update progress during data processing
+          setExportProgress(55 + Math.floor((index / selectedProductsData.length) * 20));
+        }
+        return (product.processes || []).map(process => ({
           'Product ID': product.id,
           'Product Name': product.name,
           'Process Name': processNameMapping[process.processId || process.process || ''] || (process.processId || process.process || '')
-        }))
-      );
+        }));
+      });
+      setExportProgress(80);
       
       if (processesData.length > 0) {
         const ws = XLSX.utils.json_to_sheet(processesData);
@@ -494,14 +628,22 @@ const ProductListPage = () => {
         const ws = XLSX.utils.json_to_sheet(productData);
         XLSX.utils.book_append_sheet(wb, ws, 'Processes');
       }
+      setExportProgress(90);
 
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
+      setExportProgress(95);
       saveAs(data2, `selected_products_processes_${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success(`Processes exported for ${selectedProducts.length} selected product(s)`);
+      setExportProgress(100);
+      
+      setTimeout(() => {
+        setExportProgress(null);
+        toast.success(`Processes exported for ${selectedProducts.length} selected product(s)`);
+      }, 500);
     } catch (error) {
       console.error('Error exporting processes:', error);
+      setExportProgress(null);
       toast.error('Error exporting processes. Please try again.');
     } finally {
       setIsLoading(false);
@@ -1648,6 +1790,15 @@ const ProductListPage = () => {
                   <i className="ri-download-2-line me-2"></i>
                   Export
                 </button>
+                {exportProgress !== null && (
+                  <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
+                    <div
+                      className="bg-primary h-full transition-all duration-200"
+                      style={{ width: `${exportProgress}%` }}
+                    ></div>
+                    <span className="ml-2 text-xs text-gray-700">{exportProgress}%</span>
+                  </div>
+                )}
                 {selectedProducts.length > 0 && (
                   <button
                     type="button"
@@ -1716,6 +1867,19 @@ const ProductListPage = () => {
                         </>
                       )}
                     </div>
+                    
+                    {/* Export Progress Indicator */}
+                    {exportProgress !== null && (
+                      <div className="w-full mb-2">
+                        <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden flex items-center">
+                          <div
+                            className="bg-primary h-full transition-all duration-200"
+                            style={{ width: `${exportProgress}%` }}
+                          ></div>
+                          <span className="ml-2 text-xs text-gray-700">{exportProgress}%</span>
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Import Buttons - Second Row */}
                     <div className="flex flex-wrap gap-2 mb-2">

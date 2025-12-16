@@ -158,7 +158,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               const childName = child.title;
               return hasSubPermission('/catalog', childName);
             }
-            if (child.path.startsWith('/sales/')) {
+            if (child.path === '/sales' || child.path.startsWith('/sales/')) {
               const childName = child.title;
               return hasSubPermission('/sales', childName);
             }
@@ -310,7 +310,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               const childName = child.title;
               return hasSubPermission('/catalog', childName);
             }
-            if (child.path.startsWith('/sales/')) {
+            if (child.path === '/sales' || child.path.startsWith('/sales/')) {
               const childName = child.title;
               return hasSubPermission('/sales', childName);
             }
