@@ -63,7 +63,9 @@ const AgentChat: React.FC = () => {
     "Next months sales forecast for PE Mens Full Rib Navy FL in Mumbai?",
     "Give me AS Mens Pique Black FL analysis",
     "Show me top products",
-    "Give me analytics for Mumbai store?"
+    "Give me analytics for Mumbai store?",
+    "Show me raw materials",
+    "Raw materials by Packing Material"
     
   ]);
   
@@ -74,8 +76,19 @@ const AgentChat: React.FC = () => {
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
   const [thinkingPhase, setThinkingPhase] = useState(0);
+  const [showCommands, setShowCommands] = useState(false);
+  const [filteredCommands, setFilteredCommands] = useState<Array<{command: string; description: string; category?: string; subCommands?: Array<{command: string; description: string}>}>>([]);
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [hoveredCommandIndex, setHoveredCommandIndex] = useState<number | null>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const commandsRef = useRef<HTMLDivElement>(null);
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<Array<{value: string; label: string; articleNumber?: string; orderNumber?: string}>>([]);
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [autocompleteType, setAutocompleteType] = useState<'order' | 'article' | null>(null);
+  const autocompleteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Thinking phases for realistic AI behavior - removed text, just show loader
   const thinkingPhases = [
@@ -804,6 +817,216 @@ const AgentChat: React.FC = () => {
     };
   }, []);
 
+  // Available commands organized by categories with nested sub-commands
+  const commandCategories = [
+    {
+      category: 'Help',
+      commands: [
+        { command: '/commands', description: 'Show available commands' },
+        { command: '/help', description: 'Show help and available commands' },
+      ]
+    },
+    {
+      category: 'Yarn Management',
+      commands: [
+        {
+          command: 'yarn issue',
+          description: 'Get yarn issue records',
+          subCommands: [
+            { command: 'yarn issue', description: 'Get all yarn issue records' },
+            { command: 'yarn issue by order [order number]', description: 'Search by order number (shows yarn issues and articles for that order)' },
+            { command: 'article [article id]', description: 'Search article by article ID' },
+          ]
+        },
+        { command: 'yarn catalog', description: 'Get yarn catalog' },
+        { 
+          command: 'yarn inventory',
+          description: 'Get yarn inventory (includes recent PO status)',
+          subCommands: [
+            { command: 'yarn inventory', description: 'Get yarn inventory with recent PO status' },
+            { command: 'live inventory', description: 'Get live inventory only (without PO status)' },
+            { command: 'recent po status', description: 'Get recent purchase order status' },
+            { command: 'yarn inventory by type [yarn type]', description: 'Get inventory filtered by yarn type' },
+            { command: 'yarn inventory by name [yarn name]', description: 'Search inventory by yarn name' },
+          ]
+        },
+        { command: 'yarn transactions', description: 'Get yarn transactions' },
+        { 
+          command: 'yarn requisitions',
+          description: 'Get yarn requisitions',
+          subCommands: [
+            { command: 'yarn requisitions', description: 'Get all yarn requisitions' },
+            { command: 'yarn requisitions from [date] to [date]', description: 'Get requisitions for a date range' },
+            { command: 'yarn requisitions by status [status]', description: 'Get requisitions filtered by status' },
+          ]
+        },
+        { 
+          command: 'yarn purchase orders',
+          description: 'Get yarn purchase orders',
+          subCommands: [
+            { command: 'yarn purchase orders', description: 'Get all yarn purchase orders' },
+            { command: 'yarn purchase orders from [date] to [date]', description: 'Get purchase orders for a date range' },
+            { command: 'yarn purchase orders by status [status]', description: 'Get purchase orders filtered by status' },
+          ]
+        },
+        { command: 'yarn return', description: 'Get yarn return records' },
+        { command: 'yarn types', description: 'Get yarn types' },
+        { command: 'yarn suppliers', description: 'Get yarn suppliers/brands' },
+        { command: 'yarn colors', description: 'Get yarn colors' },
+        { command: 'yarn blends', description: 'Get yarn blends' },
+        { command: 'yarn count sizes', description: 'Get yarn count sizes' },
+        { command: 'yarn boxes', description: 'Get yarn boxes' },
+        { command: 'yarn cones', description: 'Get yarn cones' },
+      ]
+    },
+    {
+      category: 'Master Catalog',
+      commands: [
+        {
+          command: 'items',
+          description: 'Get master catalog items',
+          subCommands: [
+            { command: 'items', description: 'Get all items (page 1)' },
+            { command: 'items page [number]', description: 'Get items for a specific page (e.g., items page 2)' },
+            { command: 'items by category [category name]', description: 'Get items filtered by category' },
+            { command: 'items search [keyword]', description: 'Search items by keyword' },
+          ]
+        },
+        {
+          command: 'products list',
+          description: 'Get master catalog items',
+          subCommands: [
+            { command: 'products list', description: 'Get all products (page 1)' },
+            { command: 'products list page [number]', description: 'Get products for a specific page' },
+            { command: 'products list by category [category]', description: 'Get products filtered by category' },
+          ]
+        },
+        {
+          command: 'stores',
+          description: 'Get stores list',
+          subCommands: [
+            { command: 'stores', description: 'Get all stores (page 1)' },
+            { command: 'stores page [number]', description: 'Get stores for a specific page (e.g., stores page 2)' },
+            { command: 'stores in [city]', description: 'Get stores filtered by city (e.g., stores in Mumbai, stores in Delhi)' },
+            { command: 'active stores', description: 'Get only active stores' },
+            { command: 'inactive stores', description: 'Get only inactive stores' },
+            { command: 'stores in [city] active', description: 'Get active stores in a specific city (e.g., stores in Mumbai active)' },
+            { command: 'stores in [city] inactive', description: 'Get inactive stores in a specific city' },
+          ]
+        },
+        { command: 'categories', description: 'Get categories' },
+        {
+          command: 'raw materials',
+          description: 'Get raw materials',
+          subCommands: [
+            { command: 'raw materials', description: 'Get all raw materials (page 1)' },
+            { command: 'raw materials page [number]', description: 'Get raw materials for a specific page (e.g., raw materials page 2)' },
+            { command: 'raw materials by [group name]', description: 'Get raw materials filtered by group (e.g., raw materials by Packing Material)' },
+            { command: 'raw materials type [type]', description: 'Get raw materials filtered by type' },
+            { command: 'raw materials brand [brand]', description: 'Get raw materials filtered by brand' },
+            { command: 'raw materials color [color]', description: 'Get raw materials filtered by color (e.g., raw materials color White)' },
+          ]
+        },
+        { command: 'processes', description: 'Get processes' },
+        { command: 'attributes', description: 'Get product attributes' },
+      ]
+    },
+    {
+      category: 'Storage',
+      commands: [
+        {
+          command: 'storage slots',
+          description: 'Get storage slots',
+          subCommands: [
+            { command: 'storage slots', description: 'Get all storage slots (page 1)' },
+            { command: 'storage slots page [number]', description: 'Get storage slots for a specific page' },
+            { command: 'storage slots by location [location]', description: 'Get storage slots filtered by location' },
+          ]
+        },
+      ]
+    },
+    {
+      category: 'Machines',
+      commands: [
+        { command: 'machine statistics', description: 'Get machine statistics' },
+        {
+          command: 'machines on [floor]',
+          description: 'Get machines by floor',
+          subCommands: [
+            { command: 'machines on [floor name]', description: 'Get machines on a specific floor (e.g., Floor 1, Floor 2, Knitting)' },
+            { command: 'machines on Floor 1', description: 'Example: Get machines on Floor 1' },
+            { command: 'machines on Knitting', description: 'Example: Get machines on Knitting floor' },
+          ]
+        },
+        { command: 'active machines', description: 'Get machines by status' },
+        { command: 'idle machines', description: 'Get idle machines' },
+        { command: 'machines under maintenance', description: 'Get machines under maintenance' },
+      ]
+    },
+    {
+      category: 'Production',
+      commands: [
+        { command: 'production orders', description: 'Get production orders' },
+        { command: 'production dashboard', description: 'Get production dashboard' },
+      ]
+    },
+    {
+      category: 'Analytics & Reports',
+      commands: [
+        {
+          command: 'analytics dashboard',
+          description: 'Get analytics dashboard',
+          subCommands: [
+            { command: 'analytics dashboard', description: 'Get overall analytics dashboard' },
+            { command: 'analytics for [city]', description: 'Get analytics for a specific city (e.g., Mumbai, Delhi, Bangalore)' },
+            { command: 'analytics for Mumbai', description: 'Example: Get analytics for Mumbai' },
+          ]
+        },
+        {
+          command: 'brand performance',
+          description: 'Get brand performance data',
+          subCommands: [
+            { command: 'brand performance', description: 'Get brand performance data (all brands). You can also say "show me brand performance" or "brand performance data"' },
+            { command: 'brand performance from [date] to [date]', description: 'Get brand performance for a date range (e.g., brand performance from 2024-01-01 to 2024-12-31)' },
+          ]
+        },
+        {
+          command: 'sales report',
+          description: 'Get sales report',
+          subCommands: [
+            { command: 'sales report', description: 'Get overall sales report (last 30 days)' },
+            { command: 'sales report for [city]', description: 'Get sales report for a specific city' },
+            { command: 'sales report from [date] to [date]', description: 'Get sales report for a date range' },
+            { command: 'sales report for [city] from [date] to [date]', description: 'Get sales report for city and date range' },
+          ]
+        },
+        {
+          command: 'sales data',
+          description: 'Get sales data/transactions',
+          subCommands: [
+            { command: 'sales data', description: 'Get all sales records' },
+            { command: 'sales data in [city]', description: 'Get sales data for a specific city (e.g., sales data in Mumbai)' },
+            { command: 'sales data for [product name]', description: 'Get sales data for a specific product' },
+            { command: 'sales data for store [store name]', description: 'Get sales data for a specific store' },
+            { command: 'sales data from [date] to [date]', description: 'Get sales data for a date range' },
+            { command: 'sales data in [city] from [date] to [date]', description: 'Get sales data filtered by city and date range' },
+          ]
+        },
+        {
+          command: 'top products',
+          description: 'Get top products',
+          subCommands: [
+            { command: 'top products', description: 'Get top products overall' },
+            { command: 'top [number] products', description: 'Get top N products (e.g., top 5 products, top 10 products)' },
+            { command: 'top products in [city]', description: 'Get top products in a specific city (e.g., Mumbai, Delhi)' },
+            { command: 'top [number] products in [city]', description: 'Get top N products in a city (e.g., top 5 products in Mumbai)' },
+          ]
+        },
+        { command: 'product count', description: 'Get total product count' },
+      ]
+    },
+  ];
+
   // Predefined responses
   const predefinedResponses: { [key: string]: string } = {
     'hi': `Hello! I'm your Replenishment AI Agent. I'm here to help you optimize your inventory and supply chain operations. 
@@ -940,6 +1163,102 @@ Would you like me to analyze your current replenishment strategy or help optimiz
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Listen for pagination navigation events
+  useEffect(() => {
+    const handlePaginationNavigate = async (event: CustomEvent) => {
+      const { category, page } = event.detail;
+      const query = `Show ${category} page ${page}`;
+      
+      // Create a user message
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        type: 'user',
+        content: query,
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, userMessage]);
+      setInputValue('');
+      setIsTyping(true);
+      setThinkingPhase(0);
+
+      try {
+        // Start thinking phases
+        const thinkingInterval = cycleThinkingPhases();
+        
+        // Get AI response from API
+        const aiResponse = await generateResponse(query);
+        
+        // Ensure minimum response time
+        const startTime = Date.now();
+        const minResponseTime = 4000;
+        
+        // Wait if response came too quickly
+        const elapsed = Date.now() - startTime;
+        if (elapsed < minResponseTime) {
+          await new Promise(resolve => setTimeout(resolve, minResponseTime - elapsed));
+        }
+        
+        // Clear thinking interval
+        clearInterval(thinkingInterval);
+        
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          type: 'ai',
+          content: aiResponse.content,
+          data: aiResponse.data,
+          html: aiResponse.html,
+          timestamp: new Date()
+        };
+
+        setMessages(prev => [...prev, aiMessage]);
+      } catch (error) {
+        console.error('Error generating response:', error);
+        
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          type: 'ai',
+          content: 'I encountered an error processing your request. Please try again or ask something else.',
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+      } finally {
+        setIsTyping(false);
+        setThinkingPhase(0);
+      }
+    };
+
+    document.addEventListener('paginationNavigate', handlePaginationNavigate as EventListener);
+    
+    return () => {
+      document.removeEventListener('paginationNavigate', handlePaginationNavigate as EventListener);
+    };
+  }, []); // Empty dependency array - functions are stable
+
+  // Handle click outside to close command dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        showCommands &&
+        inputRef.current &&
+        commandsRef.current &&
+        !inputRef.current.contains(event.target as Node) &&
+        !commandsRef.current.contains(event.target as Node)
+      ) {
+        setShowCommands(false);
+      }
+    };
+
+    if (showCommands) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCommands]);
 
   // Initialize speech recognition with multiple fallbacks
   const initializeSpeechRecognition = () => {
@@ -1549,17 +1868,59 @@ Would you like me to analyze your current replenishment strategy or help optimiz
 
       // Apply dark mode and execute scripts only once when message is first rendered
       useEffect(() => {
-        if (messageRef.current && message.html) {
-          // Execute scripts after HTML is rendered
-          setTimeout(async () => {
-            // Extract the main question from the message content for context
-            const mainQuestion = message.content || '';
-            await executeScriptsInHTML(message.html!, mainQuestion, message);
-            onApplyDarkMode(messageRef.current!);
+        if (!messageRef.current || !message.html) return;
+        
+        let timeoutId: NodeJS.Timeout;
+        const clickHandlers: Array<{ button: Element; handler: (e: Event) => void }> = [];
+        
+        // Execute scripts after HTML is rendered
+        timeoutId = setTimeout(async () => {
+          // Check if ref is still valid before accessing it
+          if (!messageRef.current) return;
+          
+          // Extract the main question from the message content for context
+          const mainQuestion = message.content || '';
+          await executeScriptsInHTML(message.html!, mainQuestion, message);
+          
+          // Check again after async operation
+          if (!messageRef.current) return;
+          
+          onApplyDarkMode(messageRef.current);
+          
+          // Initialize pagination button handlers
+          const paginationButtons = messageRef.current.querySelectorAll('.pagination-btn');
+          
+          paginationButtons.forEach(button => {
+            const handler = function(e: Event) {
+              e.preventDefault();
+              e.stopPropagation();
+              
+              const category = (this as HTMLElement).getAttribute('data-category');
+              const page = (this as HTMLElement).getAttribute('data-page');
+              
+              if (category && page) {
+                // Create a custom event that the parent component can listen to
+                const paginationEvent = new CustomEvent('paginationNavigate', {
+                  detail: { category, page },
+                  bubbles: true
+                });
+                document.dispatchEvent(paginationEvent);
+              }
+            };
             
-            // Follow-up functionality removed - not needed with FAQ API
-          }, 100);
-        }
+            button.addEventListener('click', handler);
+            clickHandlers.push({ button, handler });
+          });
+        }, 100);
+        
+        // Cleanup function
+        return () => {
+          clearTimeout(timeoutId);
+          // Remove all event listeners
+          clickHandlers.forEach(({ button, handler }) => {
+            button.removeEventListener('click', handler);
+          });
+        };
       }, [message.id, message.html, message.content]); // Dependencies for message rendering
 
       return (
@@ -1903,20 +2264,209 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
     }
   };
 
+  // Flatten command categories for filtering (preserve subCommands)
+  const getAllCommands = () => {
+    const allCommands: Array<{command: string; description: string; category?: string; subCommands?: Array<{command: string; description: string}>}> = [];
+    commandCategories.forEach(category => {
+      category.commands.forEach(cmd => {
+        // Preserve subCommands when flattening
+        allCommands.push({ 
+          ...cmd, 
+          category: category.category,
+          subCommands: cmd.subCommands || undefined
+        });
+      });
+    });
+    return allCommands;
+  };
+
+  // Handle command autocomplete and order/article autocomplete
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputValue(value);
+
+    // Check if user is typing a command (starts with /)
+    if (value.startsWith('/')) {
+      const query = value.slice(1).toLowerCase();
+      
+      // Filter commands based on query, preserving subCommands
+      const allCommands = getAllCommands();
+      const filtered = allCommands.filter(cmd => {
+        const matchesCommand = cmd.command.toLowerCase().includes(query);
+        const matchesDescription = cmd.description.toLowerCase().includes(query);
+        const matchesCategory = cmd.category?.toLowerCase().includes(query);
+        // Also check sub-commands
+        const matchesSubCommand = cmd.subCommands?.some(sub => 
+          sub.command.toLowerCase().includes(query) || 
+          sub.description.toLowerCase().includes(query)
+        );
+        
+        return matchesCommand || matchesDescription || matchesCategory || matchesSubCommand;
+      }).map(cmd => ({
+        ...cmd,
+        // Ensure subCommands are preserved
+        subCommands: cmd.subCommands || undefined
+      }));
+      
+      setFilteredCommands(filtered);
+      setShowCommands(filtered.length > 0);
+      setSelectedCommandIndex(0);
+      setHoveredCommandIndex(null);
+      setShowAutocomplete(false);
+    } else {
+      setShowCommands(false);
+      setFilteredCommands([]);
+      setHoveredCommandIndex(null);
+      
+      // Check for order number or article ID autocomplete
+      // Pattern: "yarn issue by order ORD-" or "articles for order ORD-" or "article ART"
+      const orderMatch = value.match(/(?:yarn\s+issue\s+by\s+order|articles?\s+(?:for|by)\s+order)\s+(ord-?)?(\d{0,6})/i);
+      const articleMatch = value.match(/article\s+([a-z0-9]{0,24})/i);
+      
+      // Clear previous timeout
+      if (autocompleteTimeoutRef.current) {
+        clearTimeout(autocompleteTimeoutRef.current);
+      }
+      
+      if (orderMatch) {
+        const orderPrefix = orderMatch[1] || '';
+        const orderDigits = orderMatch[2] || '';
+        const query = orderPrefix + orderDigits;
+        
+        setAutocompleteType('order');
+        setShowAutocomplete(true);
+        
+        // Debounce autocomplete requests
+        autocompleteTimeoutRef.current = setTimeout(async () => {
+          const result = await chatbotAPI.getAutocomplete('order', query);
+          if (result.status === 'success' && result.data) {
+            setAutocompleteSuggestions(result.data);
+          }
+        }, 300);
+      } else if (articleMatch) {
+        const articleQuery = articleMatch[1] || '';
+        
+        setAutocompleteType('article');
+        setShowAutocomplete(true);
+        
+        // Debounce autocomplete requests
+        autocompleteTimeoutRef.current = setTimeout(async () => {
+          const result = await chatbotAPI.getAutocomplete('article', articleQuery);
+          if (result.status === 'success' && result.data) {
+            setAutocompleteSuggestions(result.data);
+          }
+        }, 300);
+      } else {
+        setShowAutocomplete(false);
+        setAutocompleteSuggestions([]);
+        setAutocompleteType(null);
+      }
+    }
+  };
+
+  // Handle command selection
+  const selectCommand = (command: string) => {
+    setInputValue(command);
+    setShowCommands(false);
+    setFilteredCommands([]);
+    inputRef.current?.focus();
+  };
+
   // Handle keyboard shortcuts
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      if (showCommands && filteredCommands.length > 0) {
+        // If commands are showing, select the highlighted command
+        selectCommand(filteredCommands[selectedCommandIndex].command);
+      } else {
+        handleSendMessage();
+      }
     }
   };
 
-  // Handle keyboard shortcuts for voice input
+  // Handle keyboard shortcuts for voice input and command navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Ctrl+Shift+M for voice input (only if speech is supported)
     if (isSpeechSupported && e.ctrlKey && e.shiftKey && e.key === 'M') {
       e.preventDefault();
       handleVoiceInput();
+      return;
+    }
+
+    // Handle arrow keys for autocomplete navigation
+    if (showAutocomplete && autocompleteSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const currentIndex = selectedCommandIndex < autocompleteSuggestions.length ? selectedCommandIndex : 0;
+        setSelectedCommandIndex(currentIndex < autocompleteSuggestions.length - 1 ? currentIndex + 1 : currentIndex);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev => prev > 0 ? prev - 1 : 0);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedCommandIndex < autocompleteSuggestions.length) {
+          const suggestion = autocompleteSuggestions[selectedCommandIndex];
+          const currentValue = inputValue;
+          if (autocompleteType === 'order') {
+            const newValue = currentValue.replace(/(?:yarn\s+issue\s+by\s+order|articles?\s+(?:for|by)\s+order)\s+(ord-?)?\d{0,6}/i, 
+              (match) => {
+                const prefix = match.match(/(?:yarn\s+issue\s+by\s+order|articles?\s+(?:for|by)\s+order)\s+/i)?.[0] || '';
+                return prefix + suggestion.value;
+              });
+            setInputValue(newValue);
+          } else {
+            const newValue = currentValue.replace(/article\s+[a-z0-9]{0,24}/i, `article ${suggestion.value}`);
+            setInputValue(newValue);
+          }
+          setShowAutocomplete(false);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowAutocomplete(false);
+        setAutocompleteSuggestions([]);
+      }
+      return;
+    }
+
+    // Handle arrow keys for command navigation
+    if (showCommands && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev => 
+          prev < filteredCommands.length - 1 ? prev + 1 : prev
+        );
+        setHoveredCommandIndex(null);
+        // Scroll into view
+        setTimeout(() => {
+          const allCommandElements = commandsRef.current?.querySelectorAll('[data-command-index]');
+          if (allCommandElements && allCommandElements[selectedCommandIndex + 1]) {
+            (allCommandElements[selectedCommandIndex + 1] as HTMLElement).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev => prev > 0 ? prev - 1 : 0);
+        setHoveredCommandIndex(null);
+        // Scroll into view
+        setTimeout(() => {
+          const allCommandElements = commandsRef.current?.querySelectorAll('[data-command-index]');
+          if (allCommandElements && allCommandElements[selectedCommandIndex - 1]) {
+            (allCommandElements[selectedCommandIndex - 1] as HTMLElement).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowCommands(false);
+        setFilteredCommands([]);
+        setHoveredCommandIndex(null);
+      } else if (e.key === 'ArrowRight' && hoveredCommandIndex === null) {
+        // Show sub-commands for selected command
+        const selectedCmd = filteredCommands[selectedCommandIndex];
+        if (selectedCmd?.subCommands && selectedCmd.subCommands.length > 0) {
+          setHoveredCommandIndex(selectedCommandIndex);
+        }
+      }
     }
   };
 
@@ -1934,15 +2484,198 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
           {/* Main Input Box */}
           <div className="w-full max-w-2xl mb-8">
             <div className="relative">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={handleKeyPress}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask anything about replenishment..."
-                className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all bg-white/90 shadow-lg"
-              />
+              <div className="relative w-full">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={handleInputChange}
+                  onKeyPress={handleKeyPress}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask anything about replenishment... (Type / for commands)"
+                  className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all bg-white/90 shadow-lg"
+                />
+                
+                {/* Autocomplete Dropdown for Order Numbers and Article IDs */}
+                {showAutocomplete && autocompleteSuggestions.length > 0 && (
+                  <div 
+                    className="absolute z-40 w-full mb-2 bg-white border border-gray-300 rounded-xl shadow-lg max-h-60 overflow-y-auto"
+                    style={{ bottom: '100%' }}
+                  >
+                    <div className="px-3 py-2 bg-gray-100 border-b border-gray-200 sticky top-0">
+                      <h4 className="text-xs font-semibold text-gray-600 uppercase">
+                        {autocompleteType === 'order' ? 'Order Numbers' : 'Article IDs'}
+                      </h4>
+                    </div>
+                    {autocompleteSuggestions.map((suggestion, index) => {
+                      const isSelected = index === selectedCommandIndex;
+                      return (
+                      <div
+                        key={index}
+                        onClick={() => {
+                          const currentValue = inputValue;
+                          if (autocompleteType === 'order') {
+                            // Replace order number part
+                            const newValue = currentValue.replace(/(?:yarn\s+issue\s+by\s+order|articles?\s+(?:for|by)\s+order)\s+(ord-?)?\d{0,6}/i, 
+                              (match) => {
+                                const prefix = match.match(/(?:yarn\s+issue\s+by\s+order|articles?\s+(?:for|by)\s+order)\s+/i)?.[0] || '';
+                                return prefix + suggestion.value;
+                              });
+                            setInputValue(newValue);
+                          } else {
+                            // Replace article ID part
+                            const newValue = currentValue.replace(/article\s+[a-z0-9]{0,24}/i, `article ${suggestion.value}`);
+                            setInputValue(newValue);
+                          }
+                          setShowAutocomplete(false);
+                          inputRef.current?.focus();
+                        }}
+                        className={`px-4 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors ${
+                          isSelected ? 'bg-blue-100' : 'hover:bg-blue-50'
+                        }`}
+                      >
+                        <div className="font-medium text-gray-800">{suggestion.value}</div>
+                        {suggestion.label !== suggestion.value && (
+                          <div className="text-xs text-gray-500 mt-1">{suggestion.label}</div>
+                        )}
+                      </div>
+                    )})}
+                  </div>
+                )}
+                
+                {/* Command Autocomplete Dropdown - Appears Above */}
+                {showCommands && filteredCommands.length > 0 && (
+                  <div 
+                    ref={commandsRef}
+                    className="absolute z-50 w-full mb-2 bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-80 overflow-y-auto overflow-x-visible"
+                    style={{ bottom: '100%' }}
+                  >
+                    {/* Group by category */}
+                    {commandCategories.map((category, catIndex) => {
+                      // Get commands from original category, but check if they're in filteredCommands
+                      const categoryCommands = category.commands
+                        .map(originalCmd => {
+                          // Find matching command in filteredCommands to get filtered state
+                          const filteredCmd = filteredCommands.find(c => c.command === originalCmd.command && c.category === category.category);
+                          // Use original command to preserve subCommands, but merge with filtered state
+                          return filteredCmd ? { ...originalCmd, category: category.category } : null;
+                        })
+                        .filter(cmd => cmd !== null) as Array<{command: string; description: string; category?: string; subCommands?: Array<{command: string; description: string}>}>;
+                      
+                      if (categoryCommands.length === 0) return null;
+                      
+                      return (
+                        <div key={catIndex} className="border-b border-slate-700/50 last:border-b-0">
+                          {/* Category Header */}
+                          <div className="px-4 py-2 bg-slate-800/50 sticky top-0 z-10">
+                            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                              {category.category}
+                            </h4>
+                          </div>
+                          
+                          {/* Category Commands */}
+                          {categoryCommands.map((cmd, cmdIndex) => {
+                            const globalIndex = filteredCommands.findIndex(c => c.command === cmd.command && c.category === cmd.category);
+                            const isSelected = globalIndex === selectedCommandIndex;
+                            const isHovered = globalIndex === hoveredCommandIndex;
+                            
+                            return (
+                              <div
+                                key={cmdIndex}
+                                data-command-index={globalIndex}
+                                className="relative overflow-visible"
+                                onMouseEnter={() => {
+                                  // Clear any pending timeout
+                                  if (hoverTimeoutRef.current) {
+                                    clearTimeout(hoverTimeoutRef.current);
+                                    hoverTimeoutRef.current = null;
+                                  }
+                                  setHoveredCommandIndex(globalIndex);
+                                  setSelectedCommandIndex(globalIndex);
+                                }}
+                                onMouseLeave={() => {
+                                  // Delay clearing hover to allow moving to sub-menu
+                                  hoverTimeoutRef.current = setTimeout(() => {
+                                    setHoveredCommandIndex((current) => {
+                                      // Only clear if still hovering over the same item
+                                      return current === globalIndex ? null : current;
+                                    });
+                                  }, 300);
+                                }}
+                              >
+                                <div
+                                  onClick={() => {
+                                    // Only auto-select if no sub-commands
+                                    if (!cmd.subCommands || cmd.subCommands.length === 0) {
+                                      selectCommand(cmd.command);
+                                    }
+                                  }}
+                                  className={`px-4 py-3 cursor-pointer transition-all ${
+                                    isSelected
+                                      ? 'bg-blue-600/20 border-l-4 border-blue-500'
+                                      : isHovered
+                                      ? 'bg-slate-700/50'
+                                      : 'hover:bg-slate-700/30'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                      <code className="text-sm font-semibold text-blue-400">{cmd.command}</code>
+                                      <p className="text-xs text-slate-400 mt-1">{cmd.description}</p>
+                                    </div>
+                                    {cmd.subCommands && cmd.subCommands.length > 0 && (
+                                      <i className={`ri-arrow-${isHovered ? 'down' : 'right'}-s-line text-slate-500 text-lg transition-transform`}></i>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {/* Sub-commands inline expansion */}
+                                {isHovered && cmd.subCommands && cmd.subCommands.length > 0 && (
+                                  <div 
+                                    className="sub-commands-panel w-full bg-slate-900/50 border-t border-slate-700/50"
+                                    onMouseEnter={() => {
+                                      // Clear any pending timeout
+                                      if (hoverTimeoutRef.current) {
+                                        clearTimeout(hoverTimeoutRef.current);
+                                        hoverTimeoutRef.current = null;
+                                      }
+                                      setHoveredCommandIndex(globalIndex);
+                                      setSelectedCommandIndex(globalIndex);
+                                    }}
+                                    onMouseLeave={() => {
+                                      setHoveredCommandIndex(null);
+                                    }}
+                                  >
+                                    <div className="px-4 py-2 bg-slate-800/30 border-b border-slate-700/30">
+                                      <h5 className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Sub-commands</h5>
+                                    </div>
+                                    {cmd.subCommands.map((subCmd, subIndex) => (
+                                      <div
+                                        key={subIndex}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          selectCommand(subCmd.command);
+                                        }}
+                                        className="px-6 py-2.5 cursor-pointer hover:bg-slate-700/40 transition-colors border-b border-slate-700/30 last:border-b-0"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <i className="ri-subtract-line text-blue-400 text-xs"></i>
+                                          <code className="text-sm font-medium text-blue-300">{subCmd.command}</code>
+                                        </div>
+                                        <p className="text-xs text-slate-400 mt-1 ml-5">{subCmd.description}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               
               {/* Voice Button */}
               {isSpeechSupported && (
@@ -2110,17 +2843,200 @@ Please try again in a moment, or ask about one of these areas. I'm here to help 
         <div className="border-t border-gray-200 bg-white/80 backdrop-blur-sm p-4 pt-3">
           <div className="flex items-center space-x-3">
             <div className="flex-1 relative">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={handleKeyPress}
-                onKeyDown={handleKeyDown}
-                placeholder={isSpeechSupported ? "Ask your AI agent anything... (Ctrl+Shift+M for voice)" : "Ask your AI agent anything..."}
-                className={`w-full px-4 py-3 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-white/90 ${
-                  isSpeechSupported ? 'pr-24' : 'pr-12'
-                }`}
-              />
+              <div className="relative">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={handleInputChange}
+                  onKeyPress={handleKeyPress}
+                  onKeyDown={handleKeyDown}
+                  placeholder={isSpeechSupported ? "Ask your AI agent anything... (Type / for commands, Ctrl+Shift+M for voice)" : "Ask your AI agent anything... (Type / for commands)"}
+                  className={`w-full px-4 py-3 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-white/90 ${
+                    isSpeechSupported ? 'pr-24' : 'pr-12'
+                  }`}
+                />
+                
+                {/* Autocomplete Dropdown for Order Numbers and Article IDs */}
+                {showAutocomplete && autocompleteSuggestions.length > 0 && (
+                  <div 
+                    className="absolute z-40 w-full mb-2 bg-white border border-gray-300 rounded-xl shadow-lg max-h-60 overflow-y-auto"
+                    style={{ bottom: '100%' }}
+                  >
+                    <div className="px-3 py-2 bg-gray-100 border-b border-gray-200 sticky top-0">
+                      <h4 className="text-xs font-semibold text-gray-600 uppercase">
+                        {autocompleteType === 'order' ? 'Order Numbers' : 'Article IDs'}
+                      </h4>
+                    </div>
+                    {autocompleteSuggestions.map((suggestion, index) => {
+                      const isSelected = index === selectedCommandIndex;
+                      return (
+                      <div
+                        key={index}
+                        onClick={() => {
+                          const currentValue = inputValue;
+                          if (autocompleteType === 'order') {
+                            // Replace order number part
+                            const newValue = currentValue.replace(/(?:yarn\s+issue\s+by\s+order|articles?\s+(?:for|by)\s+order)\s+(ord-?)?\d{0,6}/i, 
+                              (match) => {
+                                const prefix = match.match(/(?:yarn\s+issue\s+by\s+order|articles?\s+(?:for|by)\s+order)\s+/i)?.[0] || '';
+                                return prefix + suggestion.value;
+                              });
+                            setInputValue(newValue);
+                          } else {
+                            // Replace article ID part
+                            const newValue = currentValue.replace(/article\s+[a-z0-9]{0,24}/i, `article ${suggestion.value}`);
+                            setInputValue(newValue);
+                          }
+                          setShowAutocomplete(false);
+                          inputRef.current?.focus();
+                        }}
+                        className={`px-4 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors ${
+                          isSelected ? 'bg-blue-100' : 'hover:bg-blue-50'
+                        }`}
+                      >
+                        <div className="font-medium text-gray-800">{suggestion.value}</div>
+                        {suggestion.label !== suggestion.value && (
+                          <div className="text-xs text-gray-500 mt-1">{suggestion.label}</div>
+                        )}
+                      </div>
+                    )})}
+                  </div>
+                )}
+                
+                {/* Command Autocomplete Dropdown - Appears Above */}
+                {showCommands && filteredCommands.length > 0 && (
+                  <div 
+                    ref={commandsRef}
+                    className="absolute z-50 w-full mb-2 bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-80 overflow-y-auto overflow-x-visible"
+                    style={{ bottom: '100%' }}
+                  >
+                    {/* Group by category */}
+                    {commandCategories.map((category, catIndex) => {
+                      // Get commands from original category, but check if they're in filteredCommands
+                      const categoryCommands = category.commands
+                        .map(originalCmd => {
+                          // Find matching command in filteredCommands to get filtered state
+                          const filteredCmd = filteredCommands.find(c => c.command === originalCmd.command && c.category === category.category);
+                          // Use original command to preserve subCommands, but merge with filtered state
+                          return filteredCmd ? { ...originalCmd, category: category.category } : null;
+                        })
+                        .filter(cmd => cmd !== null) as Array<{command: string; description: string; category?: string; subCommands?: Array<{command: string; description: string}>}>;
+                      
+                      if (categoryCommands.length === 0) return null;
+                      
+                      return (
+                        <div key={catIndex} className="border-b border-slate-700/50 last:border-b-0">
+                          {/* Category Header */}
+                          <div className="px-4 py-2 bg-slate-800/50 sticky top-0 z-10">
+                            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                              {category.category}
+                            </h4>
+                          </div>
+                          
+                          {/* Category Commands */}
+                          {categoryCommands.map((cmd, cmdIndex) => {
+                            const globalIndex = filteredCommands.findIndex(c => c.command === cmd.command && c.category === cmd.category);
+                            const isSelected = globalIndex === selectedCommandIndex;
+                            const isHovered = globalIndex === hoveredCommandIndex;
+                            
+                            return (
+                              <div
+                                key={cmdIndex}
+                                data-command-index={globalIndex}
+                                className="relative overflow-visible"
+                                onMouseEnter={() => {
+                                  // Clear any pending timeout
+                                  if (hoverTimeoutRef.current) {
+                                    clearTimeout(hoverTimeoutRef.current);
+                                    hoverTimeoutRef.current = null;
+                                  }
+                                  setHoveredCommandIndex(globalIndex);
+                                  setSelectedCommandIndex(globalIndex);
+                                }}
+                                onMouseLeave={() => {
+                                  // Delay clearing hover to allow moving to sub-menu
+                                  hoverTimeoutRef.current = setTimeout(() => {
+                                    setHoveredCommandIndex((current) => {
+                                      // Only clear if still hovering over the same item
+                                      return current === globalIndex ? null : current;
+                                    });
+                                  }, 300);
+                                }}
+                              >
+                                <div
+                                  onClick={() => {
+                                    // Only auto-select if no sub-commands
+                                    if (!cmd.subCommands || cmd.subCommands.length === 0) {
+                                      selectCommand(cmd.command);
+                                    }
+                                  }}
+                                  className={`px-4 py-3 cursor-pointer transition-all ${
+                                    isSelected
+                                      ? 'bg-blue-600/20 border-l-4 border-blue-500'
+                                      : isHovered
+                                      ? 'bg-slate-700/50'
+                                      : 'hover:bg-slate-700/30'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                      <code className="text-sm font-semibold text-blue-400">{cmd.command}</code>
+                                      <p className="text-xs text-slate-400 mt-1">{cmd.description}</p>
+                                    </div>
+                                    {cmd.subCommands && cmd.subCommands.length > 0 && (
+                                      <i className={`ri-arrow-${isHovered ? 'down' : 'right'}-s-line text-slate-500 text-lg transition-transform`}></i>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {/* Sub-commands inline expansion */}
+                                {isHovered && cmd.subCommands && cmd.subCommands.length > 0 && (
+                                  <div 
+                                    className="sub-commands-panel w-full bg-slate-900/50 border-t border-slate-700/50"
+                                    onMouseEnter={() => {
+                                      // Clear any pending timeout
+                                      if (hoverTimeoutRef.current) {
+                                        clearTimeout(hoverTimeoutRef.current);
+                                        hoverTimeoutRef.current = null;
+                                      }
+                                      setHoveredCommandIndex(globalIndex);
+                                      setSelectedCommandIndex(globalIndex);
+                                    }}
+                                    onMouseLeave={() => {
+                                      setHoveredCommandIndex(null);
+                                    }}
+                                  >
+                                    <div className="px-4 py-2 bg-slate-800/30 border-b border-slate-700/30">
+                                      <h5 className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Sub-commands</h5>
+                                    </div>
+                                    {cmd.subCommands.map((subCmd, subIndex) => (
+                                      <div
+                                        key={subIndex}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          selectCommand(subCmd.command);
+                                        }}
+                                        className="px-6 py-2.5 cursor-pointer hover:bg-slate-700/40 transition-colors border-b border-slate-700/30 last:border-b-0"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <i className="ri-subtract-line text-blue-400 text-xs"></i>
+                                          <code className="text-sm font-medium text-blue-300">{subCmd.command}</code>
+                                        </div>
+                                        <p className="text-xs text-slate-400 mt-1 ml-5">{subCmd.description}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               
               {/* Voice Input Button - Only show if speech recognition is supported */}
               {isSpeechSupported && (
