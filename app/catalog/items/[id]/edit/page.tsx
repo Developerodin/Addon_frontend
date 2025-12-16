@@ -98,6 +98,16 @@ const EditProductPage = () => {
   const [totalYarnResults, setTotalYarnResults] = useState(0);
   const yarnsPerPage = 50;
 
+  // Modal states for yarn catalog selection
+  const [isYarnModalOpen, setIsYarnModalOpen] = useState(false);
+  const [selectedBomIndex, setSelectedBomIndex] = useState<number | null>(null);
+  const [modalYarnSearchQuery, setModalYarnSearchQuery] = useState('');
+  const [modalCurrentYarnPage, setModalCurrentYarnPage] = useState(1);
+  const [modalYarnCatalogs, setModalYarnCatalogs] = useState<YarnCatalog[]>([]);
+  const [modalTotalYarnPages, setModalTotalYarnPages] = useState(1);
+  const [modalTotalYarnResults, setModalTotalYarnResults] = useState(0);
+  const [isModalLoading, setIsModalLoading] = useState(false);
+
   const [formData, setFormData] = useState<Product>({
     id: '',
     name: '',
@@ -282,6 +292,39 @@ const EditProductPage = () => {
     return () => clearTimeout(timeoutId);
   }, [currentYarnPage]);
 
+  // Fetch yarn catalogs for modal
+  useEffect(() => {
+    if (!isYarnModalOpen) return;
+
+    const fetchModalYarnCatalogs = async () => {
+      setIsModalLoading(true);
+      try {
+        const response = await yarnCatalogService.getYarnCatalogs({
+          page: modalCurrentYarnPage,
+          limit: yarnsPerPage,
+          yarnName: modalYarnSearchQuery.trim() || undefined,
+          status: 'active'
+        });
+        setModalYarnCatalogs(response.results || []);
+        setModalTotalYarnPages(response.totalPages || 1);
+        setModalTotalYarnResults(response.totalResults || 0);
+      } catch (error) {
+        console.error('Error fetching yarn catalogs for modal:', error);
+        setModalYarnCatalogs([]);
+      } finally {
+        setIsModalLoading(false);
+      }
+    };
+
+    // Debounce search
+    const delay = modalYarnSearchQuery.trim() ? 500 : 0;
+    const timeoutId = setTimeout(() => {
+      fetchModalYarnCatalogs();
+    }, delay);
+
+    return () => clearTimeout(timeoutId);
+  }, [isYarnModalOpen, modalYarnSearchQuery, modalCurrentYarnPage]);
+
   // Debug effect to monitor attributeCategories
   useEffect(() => {
     if (attributeCategories.length > 0) {
@@ -362,7 +405,9 @@ const EditProductPage = () => {
     setFormData(prev => {
       const newBom = [...prev.bom];
       if (field === 'yarnCatalogId') {
-        const selectedYarn = yarnCatalogs.find(y => y.id === value);
+        // Search in both yarnCatalogs and modalYarnCatalogs
+        const selectedYarn = yarnCatalogs.find(y => y.id === value) || 
+                            modalYarnCatalogs.find(y => y.id === value);
         newBom[index] = {
           ...newBom[index],
           yarnCatalogId: value.toString(),
@@ -416,6 +461,36 @@ const EditProductPage = () => {
     }));
   };
 
+  // Open yarn selection modal
+  const handleOpenYarnModal = (index: number) => {
+    setSelectedBomIndex(index);
+    setIsYarnModalOpen(true);
+    setModalYarnSearchQuery('');
+    setModalCurrentYarnPage(1);
+  };
+
+  // Close yarn selection modal
+  const handleCloseYarnModal = () => {
+    setIsYarnModalOpen(false);
+    setSelectedBomIndex(null);
+    setModalYarnSearchQuery('');
+    setModalCurrentYarnPage(1);
+  };
+
+  // Select yarn from modal
+  const handleSelectYarn = (yarn: YarnCatalog) => {
+    if (selectedBomIndex !== null) {
+      handleBomItemChange(selectedBomIndex, 'yarnCatalogId', yarn.id);
+      handleCloseYarnModal();
+    }
+  };
+
+  // Handle modal search
+  const handleModalYarnSearch = (query: string) => {
+    setModalYarnSearchQuery(query);
+    setModalCurrentYarnPage(1); // Reset to first page when search changes
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -440,14 +515,14 @@ const EditProductPage = () => {
         productData.softwareCode = formData.softwareCode;
         productData.internalCode = formData.internalCode;
         productData.vendorCode = formData.vendorCode;
-        productData.category = formData.category.id;
+        productData.category = formData.category?.id || '';
       } else {
         // Other users: All fields
         productData.name = formData.name;
         productData.softwareCode = formData.softwareCode;
         productData.internalCode = formData.internalCode;
         productData.vendorCode = formData.vendorCode;
-        productData.category = formData.category.id;
+        productData.category = formData.category?.id || '';
         productData.factoryCode = formData.factoryCode;
         productData.styleCode = formData.styleCode;
         productData.eanCode = formData.eanCode;
@@ -943,19 +1018,15 @@ const EditProductPage = () => {
                           {formData.bom.map((item, index) => (
                             <tr key={index} className="border-b border-gray-200">
                               <td>
-                                <select
-                                  className="form-select"
-                                  value={item.yarnCatalogId}
-                                  onChange={(e) => handleBomItemChange(index, 'yarnCatalogId', e.target.value)}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenYarnModal(index)}
+                                  className="form-control text-left bg-white cursor-pointer hover:bg-gray-50"
                                   disabled={isLoading}
                                 >
-                                  <option value="">Select Yarn Catalog</option>
-                                  {yarnCatalogs.map((yarn) => (
-                                    <option key={yarn.id} value={yarn.id}>
-                                      {yarn.yarnName}
-                                    </option>
-                                  ))}
-                                </select>
+                                  {item.yarnName || 'Select Yarn Catalog'}
+                                  <i className="ri-arrow-down-s-line float-right mt-1"></i>
+                                </button>
                               </td>
                               <td>
                                 <input
@@ -971,6 +1042,7 @@ const EditProductPage = () => {
                               </td>
                               <td>
                                 <button
+                                  type="button"
                                   onClick={() => removeBomItem(index)}
                                   className="ti-btn ti-btn-danger ti-btn-sm"
                                   disabled={isLoading}
@@ -983,33 +1055,122 @@ const EditProductPage = () => {
                         </tbody>
                       </table>
                     </div>
-                    {totalYarnPages > 1 && (
-                      <div className="flex justify-between items-center mt-4">
-                        <div className="text-sm text-gray-500">
-                          Showing {((currentYarnPage - 1) * yarnsPerPage) + 1} to{' '}
-                          {Math.min(currentYarnPage * yarnsPerPage, totalYarnResults)} of{' '}
-                          {totalYarnResults} yarn catalogs
-                        </div>
-                        <div className="flex space-x-2">
-                          <button
-                            type="button"
-                            onClick={() => setCurrentYarnPage(prev => Math.max(prev - 1, 1))}
-                            disabled={currentYarnPage === 1}
-                            className="ti-btn ti-btn-outline-secondary ti-btn-sm"
-                          >
-                            <i className="ri-arrow-left-s-line"></i>
-                          </button>
-                          <span className="px-3 py-2 text-sm text-gray-600">
-                            Page {currentYarnPage} of {totalYarnPages}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setCurrentYarnPage(prev => Math.min(prev + 1, totalYarnPages))}
-                            disabled={currentYarnPage === totalYarnPages}
-                            className="ti-btn ti-btn-outline-secondary ti-btn-sm"
-                          >
-                            <i className="ri-arrow-right-s-line"></i>
-                          </button>
+
+                    {/* Yarn Catalog Selection Modal */}
+                    {isYarnModalOpen && (
+                      <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+                        <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                          {/* Background overlay */}
+                          <div 
+                            className="fixed inset-0 bg-transparent bg-opacity-75 transition-opacity"
+                            onClick={handleCloseYarnModal}
+                          ></div>
+
+                          {/* Modal panel */}
+                          <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+                            <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                              <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-medium text-gray-900" id="modal-title">
+                                  Select Yarn Catalog
+                                </h3>
+                                <button
+                                  type="button"
+                                  onClick={handleCloseYarnModal}
+                                  className="text-gray-400 hover:text-gray-500"
+                                >
+                                  <i className="ri-close-line text-2xl"></i>
+                                </button>
+                              </div>
+
+                              {/* Search box */}
+                              <div className="mb-4">
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="Search yarn catalog by name..."
+                                  value={modalYarnSearchQuery}
+                                  onChange={(e) => handleModalYarnSearch(e.target.value)}
+                                />
+                              </div>
+
+                              {/* Yarn catalogs list */}
+                              <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+                                {isModalLoading ? (
+                                  <div className="p-8 text-center">
+                                    <i className="ri-loader-4-line animate-spin text-2xl text-gray-400"></i>
+                                    <p className="mt-2 text-gray-500">Loading yarn catalogs...</p>
+                                  </div>
+                                ) : modalYarnCatalogs.length === 0 ? (
+                                  <div className="p-8 text-center">
+                                    <p className="text-gray-500">No yarn catalogs found</p>
+                                  </div>
+                                ) : (
+                                  <table className="table min-w-full">
+                                    <thead className="bg-gray-50 sticky top-0">
+                                      <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yarn Name</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                      {modalYarnCatalogs.map((yarn) => (
+                                        <tr key={yarn.id} className="hover:bg-gray-50">
+                                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                            {yarn.yarnName}
+                                          </td>
+                                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                            {yarn.yarnType?.name || '-'}
+                                          </td>
+                                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSelectYarn(yarn)}
+                                              className="ti-btn ti-btn-primary"
+                                            >
+                                              Select
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+
+                              {/* Pagination */}
+                              {modalTotalYarnResults > 0 && (
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mt-4">
+                                  <div className="text-sm text-gray-500 whitespace-nowrap">
+                                    Showing {((modalCurrentYarnPage - 1) * yarnsPerPage) + 1} to{' '}
+                                    {Math.min(modalCurrentYarnPage * yarnsPerPage, modalTotalYarnResults)} of{' '}
+                                    {modalTotalYarnResults} yarn catalogs
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => setModalCurrentYarnPage(prev => Math.max(prev - 1, 1))}
+                                      disabled={modalCurrentYarnPage === 1 || isModalLoading}
+                                      className="ti-btn ti-btn-outline-secondary whitespace-nowrap"
+                                    >
+                                      <i className="ri-arrow-left-s-line"></i> Previous
+                                    </button>
+                                    <span className="px-4 py-2 text-sm text-gray-600 whitespace-nowrap">
+                                      Page {modalCurrentYarnPage} of {modalTotalYarnPages}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setModalCurrentYarnPage(prev => Math.min(prev + 1, modalTotalYarnPages))}
+                                      disabled={modalCurrentYarnPage === modalTotalYarnPages || isModalLoading}
+                                      className="ti-btn ti-btn-outline-secondary whitespace-nowrap"
+                                    >
+                                      Next <i className="ri-arrow-right-s-line"></i>
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1020,7 +1181,9 @@ const EditProductPage = () => {
                 {!isDesign && !isFinal && activeTab === 'processes' && (
                   <div>
                     {formData.processes.map((proc, index) => {
-                      const currentProcessId = typeof proc.processId === 'object' ? proc.processId.id : proc.processId;
+                      const currentProcessId = typeof proc.processId === 'object' && proc.processId !== null && 'id' in proc.processId 
+                        ? (proc.processId as any).id 
+                        : proc.processId;
                       console.log('Current process:', { proc, currentProcessId });
                       
                       return (

@@ -29,6 +29,8 @@ interface Machine {
   status: 'Active' | 'Under Maintenance' | 'Idle';
   isActive: boolean;
   maintenanceNotes?: string;
+  company?: string;
+  machineType?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -57,6 +59,8 @@ interface ExcelRow {
   'Last Maintenance Date'?: string;
   'Next Maintenance Date'?: string;
   'Maintenance Notes'?: string;
+  'Company'?: string;
+  'Machine Type'?: string;
 }
 
 const MachinesPage = () => {
@@ -251,13 +255,15 @@ const MachinesPage = () => {
         'Capacity Per Day': machine.capacityPerDay || 0,
         'Last Maintenance Date': machine.lastMaintenanceDate ? new Date(machine.lastMaintenanceDate).toLocaleDateString() : '',
         'Next Maintenance Date': machine.nextMaintenanceDate ? new Date(machine.nextMaintenanceDate).toLocaleDateString() : '',
-        'Maintenance Notes': machine.maintenanceNotes || ''
+        'Maintenance Notes': machine.maintenanceNotes || '',
+        'Company': machine.company || '',
+        'Machine Type': machine.machineType || ''
       }));
       const ws = XLSX.utils.json_to_sheet(exportData);
       ws['!cols'] = [
         { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, 
         { wch: 15 }, { wch: 20 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, 
-        { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 20 }
+        { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Machines');
@@ -310,7 +316,9 @@ const MachinesPage = () => {
                 capacityPerDay: row['Capacity Per Day'] ? Number(row['Capacity Per Day']) : undefined,
                 lastMaintenanceDate: row['Last Maintenance Date'] ? new Date(row['Last Maintenance Date']).toISOString() : undefined,
                 nextMaintenanceDate: row['Next Maintenance Date'] ? new Date(row['Next Maintenance Date']).toISOString() : undefined,
-                maintenanceNotes: row['Maintenance Notes'] || undefined
+                maintenanceNotes: row['Maintenance Notes'] || undefined,
+                company: row['Company'] || undefined,
+                machineType: row['Machine Type'] || undefined
               };
               
               let machineId = row['ID'];

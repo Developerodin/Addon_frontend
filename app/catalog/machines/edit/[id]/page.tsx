@@ -27,6 +27,8 @@ interface Machine {
   status: 'Active' | 'Under Maintenance' | 'Idle';
   isActive: boolean;
   maintenanceNotes?: string;
+  company?: string;
+  machineType?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -46,6 +48,8 @@ interface UpdateMachineData {
   lastMaintenanceDate?: string;
   nextMaintenanceDate?: string;
   maintenanceNotes?: string;
+  company?: string;
+  machineType?: string;
 }
 
 const EditMachinePage = () => {
@@ -97,7 +101,9 @@ const EditMachinePage = () => {
     capacityPerDay: 0,
     lastMaintenanceDate: '',
     nextMaintenanceDate: '',
-    maintenanceNotes: ''
+    maintenanceNotes: '',
+    company: '',
+    machineType: ''
   });
 
   const [errors, setErrors] = useState<Partial<UpdateMachineData>>({});
@@ -191,7 +197,9 @@ const EditMachinePage = () => {
         capacityPerDay: currentMachine.capacityPerDay || 0,
         lastMaintenanceDate: currentMachine.lastMaintenanceDate ? new Date(currentMachine.lastMaintenanceDate).toISOString().split('T')[0] : '',
         nextMaintenanceDate: currentMachine.nextMaintenanceDate ? new Date(currentMachine.nextMaintenanceDate).toISOString().split('T')[0] : '',
-        maintenanceNotes: currentMachine.maintenanceNotes || ''
+        maintenanceNotes: currentMachine.maintenanceNotes || '',
+        company: currentMachine.company || '',
+        machineType: currentMachine.machineType || ''
       });
     }
   }, [currentMachine]);
@@ -266,7 +274,9 @@ const EditMachinePage = () => {
         capacityPerDay: formData.capacityPerDay || undefined,
         lastMaintenanceDate: formData.lastMaintenanceDate || undefined,
         nextMaintenanceDate: formData.nextMaintenanceDate || undefined,
-        maintenanceNotes: formData.maintenanceNotes || undefined
+        maintenanceNotes: formData.maintenanceNotes || undefined,
+        company: formData.company || undefined,
+        machineType: formData.machineType || undefined
       };
 
       const response = await fetch(`${API_BASE_URL}/machines/${finalMachineId}`, {
@@ -561,6 +571,32 @@ const EditMachinePage = () => {
                       value={formData.nextMaintenanceDate}
                       onChange={handleInputChange}
                       className="form-control"
+                    />
+                  </div>
+
+                  {/* Company */}
+                  <div className="form-group">
+                    <label className="form-label">Company</label>
+                    <input
+                      type="text"
+                      name="company"
+                      value={formData.company}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter company"
+                    />
+                  </div>
+
+                  {/* Machine Type */}
+                  <div className="form-group">
+                    <label className="form-label">Machine Type</label>
+                    <input
+                      type="text"
+                      name="machineType"
+                      value={formData.machineType}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter machine type"
                     />
                   </div>
                 </div>

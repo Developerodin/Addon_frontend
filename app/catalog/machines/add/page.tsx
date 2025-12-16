@@ -20,6 +20,8 @@ interface CreateMachineData {
   lastMaintenanceDate?: string;
   nextMaintenanceDate?: string;
   maintenanceNotes?: string;
+  company?: string;
+  machineType?: string;
 }
 
 const AddMachinePage = () => {
@@ -41,7 +43,9 @@ const AddMachinePage = () => {
     capacityPerDay: 0,
     lastMaintenanceDate: '',
     nextMaintenanceDate: '',
-    maintenanceNotes: ''
+    maintenanceNotes: '',
+    company: '',
+    machineType: ''
   });
 
   const [errors, setErrors] = useState<Partial<CreateMachineData>>({});
@@ -143,7 +147,9 @@ const AddMachinePage = () => {
         capacityPerDay: formData.capacityPerDay || undefined,
         lastMaintenanceDate: formData.lastMaintenanceDate || undefined,
         nextMaintenanceDate: formData.nextMaintenanceDate || undefined,
-        maintenanceNotes: formData.maintenanceNotes || undefined
+        maintenanceNotes: formData.maintenanceNotes || undefined,
+        company: formData.company || undefined,
+        machineType: formData.machineType || undefined
       };
 
       const response = await fetch(`${API_BASE_URL}/machines`, {
@@ -405,6 +411,32 @@ const AddMachinePage = () => {
                       value={formData.nextMaintenanceDate}
                       onChange={handleInputChange}
                       className="form-control"
+                    />
+                  </div>
+
+                  {/* Company */}
+                  <div className="form-group">
+                    <label className="form-label">Company</label>
+                    <input
+                      type="text"
+                      name="company"
+                      value={formData.company}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter company"
+                    />
+                  </div>
+
+                  {/* Machine Type */}
+                  <div className="form-group">
+                    <label className="form-label">Machine Type</label>
+                    <input
+                      type="text"
+                      name="machineType"
+                      value={formData.machineType}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter machine type"
                     />
                   </div>
                 </div>
