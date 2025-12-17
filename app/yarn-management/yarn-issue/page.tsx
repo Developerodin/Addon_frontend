@@ -1412,6 +1412,9 @@ const YarnIssuePage = () => {
                       <table className="min-w-full border border-gray-300">
                         <thead className="bg-gray-50">
                           <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
+                              Actions
+                            </th>
                             <th
                               className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
                               onClick={() => handleSort("yarnName")}
@@ -1443,16 +1446,13 @@ const YarnIssuePage = () => {
                               Remaining
                             </th>
                             <th
-                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
+                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-b border-gray-300"
                               onClick={() => handleSort("status")}
                             >
                               <div className="flex items-center gap-2">
                                 Status
                                 <SortIcon field="status" />
                               </div>
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
-                              Actions
                             </th>
                           </tr>
                         </thead>
@@ -1473,6 +1473,24 @@ const YarnIssuePage = () => {
                                   isActive ? "bg-primary/5" : ""
                                 }`}
                               >
+                                <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
+                                  {status === "Issued" ? (
+                                    <span className="text-xs text-gray-500 italic">
+                                      Fully Issued
+                                    </span>
+                                  ) : (
+                                    <button
+                                      className={`ti-btn w-full md:w-auto whitespace-normal break-words leading-tight px-4 py-2 text-sm ${
+                                        isActive
+                                          ? "ti-btn-primary"
+                                          : "ti-btn-primary ti-btn-outline"
+                                      }`}
+                                      onClick={() => handleStartIssuing(requirement.id)}
+                                    >
+                                      Issue
+                                    </button>
+                                  )}
+                                </td>
                                 <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
                                   <div className="text-sm font-medium text-gray-900">
                                     {requirement.yarnName}
@@ -1496,7 +1514,7 @@ const YarnIssuePage = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                                   {formatKg(remaining)}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
+                                <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
                                   <span
                                     className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
                                       status
@@ -1504,24 +1522,6 @@ const YarnIssuePage = () => {
                                   >
                                     {status}
                                   </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
-                                  {status === "Issued" ? (
-                                    <span className="text-xs text-gray-500 italic">
-                                      Fully Issued
-                                    </span>
-                                  ) : (
-                                    <button
-                                      className={`ti-btn w-full md:w-auto whitespace-normal break-words leading-tight px-4 py-2 text-sm ${
-                                        isActive
-                                          ? "ti-btn-primary"
-                                          : "ti-btn-primary ti-btn-outline"
-                                      }`}
-                                      onClick={() => handleStartIssuing(requirement.id)}
-                                    >
-                                      Issue
-                                    </button>
-                                  )}
                                 </td>
                               </tr>
                             );
