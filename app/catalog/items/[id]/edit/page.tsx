@@ -480,7 +480,15 @@ const EditProductPage = () => {
   // Select yarn from modal
   const handleSelectYarn = (yarn: YarnCatalog) => {
     if (selectedBomIndex !== null) {
-      handleBomItemChange(selectedBomIndex, 'yarnCatalogId', yarn.id);
+      setFormData(prev => {
+        const newBom = [...prev.bom];
+        newBom[selectedBomIndex] = {
+          ...newBom[selectedBomIndex],
+          yarnCatalogId: yarn.id,
+          yarnName: yarn.yarnName
+        };
+        return { ...prev, bom: newBom };
+      });
       handleCloseYarnModal();
     }
   };
@@ -1031,7 +1039,7 @@ const EditProductPage = () => {
                               <td>
                                 <input
                                   type="number"
-                                  step="0.01"
+                                  step="any"
                                   min="0"
                                   className="form-control"
                                   value={item.quantity}

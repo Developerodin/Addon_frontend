@@ -288,7 +288,13 @@ const AddProductPage = () => {
   // Select yarn from modal
   const handleSelectYarn = (yarn: YarnCatalog) => {
     if (selectedBomIndex !== null) {
-      handleBomItemChange(selectedBomIndex, 'yarnCatalogId', yarn.id);
+      const newBomItems = [...bomItems];
+      newBomItems[selectedBomIndex] = {
+        ...newBomItems[selectedBomIndex],
+        yarnCatalogId: yarn.id,
+        yarnName: yarn.yarnName
+      };
+      setBomItems(newBomItems);
       handleCloseYarnModal();
     }
   };
@@ -306,7 +312,9 @@ const AddProductPage = () => {
   const handleBomItemChange = (index: number, field: 'yarnCatalogId' | 'quantity', value: string | number) => {
     const newBomItems = [...bomItems];
     if (field === 'yarnCatalogId') {
-      const selectedYarn = yarnCatalogs.find(y => y.id === value);
+      // Search in both yarnCatalogs and modalYarnCatalogs
+      const selectedYarn = yarnCatalogs.find(y => y.id === value) || 
+                          modalYarnCatalogs.find(y => y.id === value);
       newBomItems[index] = {
         ...newBomItems[index],
         yarnCatalogId: value.toString(),
@@ -996,7 +1004,7 @@ const AddProductPage = () => {
                               <td>
                                 <input
                                   type="number"
-                                  step="0.01"
+                                  step="any"
                                   min="0"
                                   className="form-control"
                                   value={item.quantity}
