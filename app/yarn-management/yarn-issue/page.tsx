@@ -221,7 +221,20 @@ const getOrderTotals = (order: ProductionOrder, transactions: YarnTransaction[])
   return totals;
 };
 
-const formatKg = (value: number) => `${value.toFixed(2)} kg`;
+const formatKg = (value: number) => {
+  // For very small values, show up to 4 decimal places
+  // Remove trailing zeros but keep at least 2 decimal places
+  const formatted = value.toFixed(4);
+  const trimmed = formatted.replace(/\.?0+$/, '');
+  // Ensure at least 2 decimal places for consistency
+  const parts = trimmed.split('.');
+  if (parts.length === 1) {
+    return `${trimmed}.00 g`;
+  } else if (parts[1].length === 1) {
+    return `${trimmed}0 g`;
+  }
+  return `${trimmed} g`;
+};
 
 const requirementStatusBadge = (status: RequirementStatus) => {
   switch (status) {
@@ -523,15 +536,12 @@ const YarnIssuePage = () => {
           }
         }
 
-        const requiredQtyInGrams = bomItem.quantity * articlePlannedQty;
-        const requiredQtyInKg = requiredQtyInGrams / 1000;
-
         return {
           id: `req-${bomItem._id}-${articleId}-${index}`,
           yarnCode: yarnCode,
           yarnName: bomItem.yarnName || "Unknown Yarn",
           yarnType: yarnType,
-          requiredQty: requiredQtyInKg,
+          requiredQty: bomItem.quantity,
           tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
           shortTermAvailable: 0,
           longTermAvailable: 0,
