@@ -221,11 +221,11 @@ const MachinesPage = () => {
 
   // Filter machines based on search query
   const filteredMachines = machines.filter(machine =>
-    machine.machineCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    machine.machineNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    machine.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    machine.floor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    machine.needleSize.toLowerCase().includes(searchQuery.toLowerCase())
+    (machine.machineCode?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+    (machine.machineNumber?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+    (machine.model?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+    (machine.floor?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+    (machine.needleSize?.toLowerCase() || '').includes(searchQuery.toLowerCase())
   );
 
   // Calculate current machines for the current page
