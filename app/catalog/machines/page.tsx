@@ -125,7 +125,7 @@ const MachinesPage = () => {
     if (selectAll) {
       setSelectedMachines([]);
     } else {
-      setSelectedMachines(filteredMachines.map(machine => getMachineId(machine)));
+      setSelectedMachines(machines.map(machine => getMachineId(machine)));
     }
     setSelectAll(!selectAll);
   };
@@ -219,19 +219,8 @@ const MachinesPage = () => {
     }
   };
 
-  // Filter machines based on search query
-  const filteredMachines = machines.filter(machine =>
-    (machine.machineCode?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-    (machine.machineNumber?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-    (machine.model?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-    (machine.floor?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-    (machine.needleSize?.toLowerCase() || '').includes(searchQuery.toLowerCase())
-  );
-
-  // Calculate current machines for the current page
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentMachines = filteredMachines.slice(startIndex, endIndex);
+  // Note: Pagination and search are handled by the API
+  // The 'machines' state already contains the paginated results for the current page
 
   const handleExport = async () => {
     try {
@@ -596,8 +585,8 @@ const MachinesPage = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {currentMachines.length > 0 ? (
-                        currentMachines.map((machine: Machine, index: number) => (
+                      {machines.length > 0 ? (
+                        machines.map((machine: Machine, index: number) => (
                           <tr 
                             key={getMachineId(machine)} 
                             className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}
