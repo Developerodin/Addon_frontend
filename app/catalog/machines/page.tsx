@@ -82,6 +82,125 @@ const MachinesPage = () => {
     return machine._id || machine.id || '';
   };
 
+  // Helper function to parse dates from Excel in various formats
+  const parseDate = (dateValue: any): string | undefined => {
+    if (!dateValue) return undefined;
+    
+    // If it's already a Date object, convert to ISO string
+    if (dateValue instanceof Date) {
+      return isNaN(dateValue.getTime()) ? undefined : dateValue.toISOString();
+    }
+    
+    // If it's already an ISO string, return it
+    if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateValue)) {
+      const date = new Date(dateValue);
+      return isNaN(date.getTime()) ? undefined : date.toISOString();
+    }
+    
+    // Convert to string and trim
+    const dateStr = String(dateValue).trim();
+    if (!dateStr || dateStr === '') return undefined;
+    
+    // Handle Excel serial date numbers (days since 1900-01-01)
+    if (/^\d+\.?\d*$/.test(dateStr)) {
+      const serialDate = parseFloat(dateStr);
+      if (serialDate > 0 && serialDate < 100000) {
+        // Excel serial date: January 1, 1900 is day 1
+        // Use UTC to avoid timezone shifts
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30)); // December 30, 1899 UTC
+        const date = new Date(excelEpoch.getTime() + serialDate * 24 * 60 * 60 * 1000);
+        return isNaN(date.getTime()) ? undefined : date.toISOString();
+      }
+    }
+    
+    // Try to parse various date formats
+    // Pattern for DD-MM-YYYY, DD/MM/YYYY, MM-DD-YYYY, MM/DD/YYYY, YYYY-MM-DD, YYYY/MM/DD
+    const datePattern = /^(\d{1,4})[-\/](\d{1,2})[-\/](\d{1,4})$/;
+    const match = dateStr.match(datePattern);
+    
+    if (match) {
+      const part1 = parseInt(match[1], 10);
+      const part2 = parseInt(match[2], 10);
+      const part3 = parseInt(match[3], 10);
+      
+      let year: number, month: number, day: number;
+      
+      // Determine format based on part lengths
+      if (match[1].length === 4) {
+        // YYYY-MM-DD or YYYY/MM/DD format
+        year = part1;
+        month = part2 - 1; // Month is 0-indexed
+        day = part3;
+      } else if (match[3].length === 4) {
+        // DD-MM-YYYY or DD/MM/YYYY or MM-DD-YYYY or MM/DD/YYYY
+        if (part1 > 12) {
+          // First part > 12, must be DD-MM-YYYY or DD/MM/YYYY
+          day = part1;
+          month = part2 - 1; // Month is 0-indexed
+          year = part3;
+        } else if (part2 > 12) {
+          // Second part > 12, must be MM-DD-YYYY or MM/DD/YYYY
+          month = part1 - 1; // Month is 0-indexed
+          day = part2;
+          year = part3;
+        } else {
+          // Ambiguous: could be DD-MM-YYYY or MM-DD-YYYY
+          // Try DD-MM-YYYY first (more common in international formats)
+          if (part1 <= 31 && part2 <= 12) {
+            day = part1;
+            month = part2 - 1;
+            year = part3;
+          } else {
+            // Fallback to MM-DD-YYYY
+            month = part1 - 1;
+            day = part2;
+            year = part3;
+          }
+        }
+      } else {
+        // Default to DD-MM-YYYY format
+        day = part1;
+        month = part2 - 1;
+        year = part3;
+        // Adjust year if it's 2 digits (assume 2000s)
+        if (year < 100) {
+          year = year < 50 ? 2000 + year : 1900 + year;
+        }
+      }
+      
+      // Validate and create date at UTC midnight to avoid timezone shifts
+      if (year >= 1900 && year <= 2100 && month >= 0 && month < 12 && day >= 1 && day <= 31) {
+        // Use Date.UTC to create date at UTC midnight, preventing timezone shifts
+        const date = new Date(Date.UTC(year, month, day));
+        // Verify the date is valid (handles invalid dates like Feb 30)
+        if (!isNaN(date.getTime())) {
+          // Double-check the UTC date components match
+          const utcYear = date.getUTCFullYear();
+          const utcMonth = date.getUTCMonth();
+          const utcDay = date.getUTCDate();
+          if (utcYear === year && utcMonth === month && utcDay === day) {
+            return date.toISOString();
+          }
+        }
+      }
+    }
+    
+    // Try native Date parsing as fallback (only if pattern didn't match)
+    // This handles other date formats that don't match our pattern
+    if (!datePattern.test(dateStr)) {
+      const nativeDate = new Date(dateStr);
+      if (!isNaN(nativeDate.getTime())) {
+        // Verify it's a reasonable date (not 1970-01-01 for invalid dates)
+        const year = nativeDate.getFullYear();
+        if (year >= 1900 && year <= 2100) {
+          return nativeDate.toISOString();
+        }
+      }
+    }
+    
+    return undefined;
+  };
+
   // Fetch machines from API (with pagination and search)
   const fetchMachines = async (page = 1, limit = itemsPerPage, search = '') => {
     try {
@@ -125,7 +244,7 @@ const MachinesPage = () => {
     if (selectAll) {
       setSelectedMachines([]);
     } else {
-      setSelectedMachines(filteredMachines.map(machine => getMachineId(machine)));
+      setSelectedMachines(machines.map(machine => getMachineId(machine)));
     }
     setSelectAll(!selectAll);
   };
@@ -219,19 +338,8 @@ const MachinesPage = () => {
     }
   };
 
-  // Filter machines based on search query
-  const filteredMachines = machines.filter(machine =>
-    machine.machineCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    machine.machineNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    machine.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    machine.floor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    machine.needleSize.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Calculate current machines for the current page
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentMachines = filteredMachines.slice(startIndex, endIndex);
+  // Note: Pagination and search are handled by the API
+  // The 'machines' state already contains the paginated results for the current page
 
   const handleExport = async () => {
     try {
@@ -307,15 +415,15 @@ const MachinesPage = () => {
                 needleSize: row['Needle Size'],
                 model: row['Model'],
                 floor: row['Floor'],
-                installationDate: row['Installation Date'] ? new Date(row['Installation Date']).toISOString() : undefined,
+                installationDate: parseDate(row['Installation Date']),
                 maintenanceRequirement: row['Maintenance Requirement'],
                 status: (row['Status']?.toString() === 'Active') ? 'Active' : 
                        (row['Status']?.toString() === 'Under Maintenance') ? 'Under Maintenance' : 'Idle',
                 assignedSupervisor: row['Assigned Supervisor'] || undefined,
                 capacityPerShift: row['Capacity Per Shift'] ? Number(row['Capacity Per Shift']) : undefined,
                 capacityPerDay: row['Capacity Per Day'] ? Number(row['Capacity Per Day']) : undefined,
-                lastMaintenanceDate: row['Last Maintenance Date'] ? new Date(row['Last Maintenance Date']).toISOString() : undefined,
-                nextMaintenanceDate: row['Next Maintenance Date'] ? new Date(row['Next Maintenance Date']).toISOString() : undefined,
+                lastMaintenanceDate: parseDate(row['Last Maintenance Date']),
+                nextMaintenanceDate: parseDate(row['Next Maintenance Date']),
                 maintenanceNotes: row['Maintenance Notes'] || undefined,
                 company: row['Company'] || undefined,
                 machineType: row['Machine Type'] || undefined
@@ -596,8 +704,8 @@ const MachinesPage = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {currentMachines.length > 0 ? (
-                        currentMachines.map((machine: Machine, index: number) => (
+                      {machines.length > 0 ? (
+                        machines.map((machine: Machine, index: number) => (
                           <tr 
                             key={getMachineId(machine)} 
                             className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}

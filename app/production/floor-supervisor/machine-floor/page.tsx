@@ -201,6 +201,16 @@ const MachineFloorPage = () => {
     return machine._id || machine.id || '';
   };
 
+  // Helper function to format date as DD/MM/YYYY
+  const formatDate = (dateString: string | undefined): string => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
   // Fetch machines from API
   const fetchMachines = async () => {
     try {
@@ -631,12 +641,12 @@ const MachineFloorPage = () => {
                           </td>
                           <td className="px-4 py-4">
                             <span className="text-sm text-gray-900">
-                              {machine.lastMaintenanceDate ? new Date(machine.lastMaintenanceDate).toLocaleDateString() : 'N/A'}
+                              {formatDate(machine.lastMaintenanceDate)}
                             </span>
                           </td>
                           <td className="px-4 py-4">
                             <span className="text-sm text-gray-900">
-                              {machine.nextMaintenanceDate ? new Date(machine.nextMaintenanceDate).toLocaleDateString() : 'N/A'}
+                              {formatDate(machine.nextMaintenanceDate)}
                             </span>
                           </td>
                           <td className="px-4 py-4">
@@ -705,10 +715,10 @@ const MachineFloorPage = () => {
                     <strong>Supervisor:</strong> {selectedMachine.assignedSupervisor?.name || 'Not Assigned'}
                   </div>
                   <div className="text-sm text-gray-900">
-                    <strong>Last Maintenance:</strong> {selectedMachine.lastMaintenanceDate ? new Date(selectedMachine.lastMaintenanceDate).toLocaleDateString() : 'N/A'}
+                    <strong>Last Maintenance:</strong> {formatDate(selectedMachine.lastMaintenanceDate)}
                   </div>
                   <div className="text-sm text-gray-900">
-                    <strong>Next Maintenance:</strong> {selectedMachine.nextMaintenanceDate ? new Date(selectedMachine.nextMaintenanceDate).toLocaleDateString() : 'N/A'}
+                    <strong>Next Maintenance:</strong> {formatDate(selectedMachine.nextMaintenanceDate)}
                   </div>
                 </div>
               </div>
