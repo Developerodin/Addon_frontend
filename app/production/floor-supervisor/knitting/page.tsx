@@ -870,150 +870,114 @@ const KnittingFloorSupervisorPage = () => {
               </button>
             </div>
 
-            {/* Article Tabs (blue), matching supervisor modal */}
-            <div className="mb-4">
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {selectedOrder.articles.map((article, idx) => (
-                  <button
-                    key={article.id}
-                    className={`px-3 py-2 text-sm font-medium rounded-md whitespace-nowrap focus:outline-none ${
-                      idx === activeUpdateTabIndex ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                    }`}
-                    onClick={() => {
-                      setActiveUpdateTabIndex(idx);
-                    }}
-                    title={article.articleNumber}
-                  >
-                    {article.articleNumber || `Article ${idx + 1}`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Order Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
               <div>
-                <label className="text-sm font-medium text-gray-600">Priority</label>
+                <label className="text-xs font-medium text-gray-600">Priority</label>
                 <div className="mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(selectedOrder.priority)}`}>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(selectedOrder.priority)}`}>
                     {selectedOrder.priority}
                   </span>
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Status</label>
+                <label className="text-xs font-medium text-gray-600">Status</label>
                 <div className="mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedOrder.status)}`}>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedOrder.status)}`}>
                     {selectedOrder.status}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Modal Content Sections */}
-            {
-              <div className="space-y-6">
-                <h4 className="text-lg font-medium text-gray-900">Update Article Progress</h4>
-
-                {/* Article form uses activeUpdateTabIndex from tabs above */}
-
-                {/* Active Article Form */}
-                {(() => {
-                  const article = selectedOrder.articles[activeUpdateTabIndex];
-                  if (!article) return null;
-                  
-                  const articleId = article.id || article._id;
-                  if (!articleId) return null;
-                  
-                  const currentUpdateData = updateData[articleId] || { 
-                    completedQuantity: 0, 
-                    remarks: article.remarks || '' 
-                  };
-                  
-                  return (
-                    <div className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h5 className="text-md font-medium text-gray-900">{article.articleNumber || 'Unknown Article'}</h5>
-                          <div className="text-sm text-gray-600 mt-1">
-                            <span className="font-medium">Linking Type:</span> {article.linkingType || 'Not specified'}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority)}`}>
-                            {article.priority || 'Unknown'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                        <div>
-                          <label className="form-label">Planned Quantity</label>
-                          <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <label className="form-label">Received from Production</label>
-                          <div className="text-lg font-semibold text-blue-600">
-                            {article.floorQuantities?.knitting?.received || 0}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="form-label">Transferred to Next Floor</label>
-                          <div className="text-lg font-semibold text-green-600">
-                            {article.floorQuantities?.knitting?.transferred || 0}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="form-label">Remaining</label>
-                          <div className="text-lg font-semibold text-orange-600">
-                            {(article.floorQuantities?.knitting?.remaining || 0).toLocaleString()}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <label className="form-label">Knitting Completed Quantity *</label>
-                          <NumericInput
-                            className="py-2"
-                            value={currentUpdateData.completedQuantity}
-                            onChange={(value) => handleQuantityChange(articleId, value)}
-                            // Allow overproduction in knitting floor - no max limit
-                          />
-                          {currentUpdateData.completedQuantity > (article.plannedQuantity || 0) && (
-                            <div className="text-orange-600 font-medium mt-1">
-                              ⚠️ Overproduction: +{currentUpdateData.completedQuantity - (article.plannedQuantity || 0)} pieces
+            {/* Excel-like Table Form */}
+            <div className="border border-gray-300 rounded overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs border-collapse">
+                  <thead className="bg-gray-100 border-b border-gray-300">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Article</th>
+                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Planned</th>
+                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Received</th>
+                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Transferred</th>
+                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Remaining</th>
+                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-yellow-50">Knitting Completed *</th>
+                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-red-50">M4 Defects</th>
+                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {selectedOrder.articles.map((article, idx) => {
+                      const articleId = article.id || article._id;
+                      if (!articleId) return null;
+                      
+                      const currentUpdateData = updateData[articleId] || { 
+                        completedQuantity: 0, 
+                        remarks: article.remarks || '',
+                        m4Quantity: article.floorQuantities?.knitting?.m4Quantity || 0
+                      };
+                      
+                      const plannedQty = article.plannedQuantity || 0;
+                      const receivedQty = article.floorQuantities?.knitting?.received || 0;
+                      const transferredQty = article.floorQuantities?.knitting?.transferred || 0;
+                      const remainingQty = article.floorQuantities?.knitting?.remaining || 0;
+                      const isOverproduction = currentUpdateData.completedQuantity > plannedQty;
+                      
+                      return (
+                        <tr key={articleId} className="hover:bg-gray-50">
+                          <td className="px-2 py-1.5 border-r border-gray-300">
+                            <div className="font-medium text-gray-900">{article.articleNumber || `Article ${idx + 1}`}</div>
+                            <div className="text-gray-500 text-xs mt-0.5">{article.linkingType || 'N/A'}</div>
+                          </td>
+                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{plannedQty.toLocaleString()}</td>
+                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-blue-600 font-medium">{receivedQty.toLocaleString()}</td>
+                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
+                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
+                          <td className="px-2 py-1.5 border-r border-gray-300 bg-yellow-50">
+                            <div className="flex flex-col gap-1">
+                              <NumericInput
+                                className="py-1 text-xs h-7"
+                                value={currentUpdateData.completedQuantity}
+                                onChange={(value) => handleQuantityChange(articleId, value)}
+                              />
+                              {isOverproduction && (
+                                <div className="text-orange-600 text-xs font-medium">
+                                  +{currentUpdateData.completedQuantity - plannedQty}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <div>
-                          <label className="form-label text-red-700 font-medium">M4 Defects (Major Defects)</label>
-                          <NumericInput
-                            className="py-2 border-red-300 focus:border-red-500"
-                            value={currentUpdateData.m4Quantity}
-                            onChange={(value) => handleM4QuantityChange(articleId, value)}
-                          />
-                          <small className="text-red-600">Track major defects from knitting machine</small>
-                        </div>
-                      </div>
-
-                      <div className="mb-4">
-                        <label className="form-label">Remarks</label>
-                        <textarea
-                          className="form-control"
-                          rows={2}
-                          placeholder="Add remarks for this article..."
-                          value={currentUpdateData.remarks}
-                          onChange={(e) => handleRemarksChange(articleId, e.target.value)}
-                        />
-                      </div>
-
-
-                    </div>
-                  );
-                })()}
+                          </td>
+                          <td className="px-2 py-1.5 border-r border-gray-300 bg-red-50">
+                            <NumericInput
+                              className="py-1 text-xs h-7 border-red-300 focus:border-red-500"
+                              value={currentUpdateData.m4Quantity}
+                              onChange={(value) => handleM4QuantityChange(articleId, value)}
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <textarea
+                              className="form-control text-xs py-1 px-2 h-7 resize-none"
+                              rows={1}
+                              placeholder="Remarks..."
+                              value={currentUpdateData.remarks}
+                              onChange={(e) => handleRemarksChange(articleId, e.target.value)}
+                              onFocus={(e) => {
+                                e.target.rows = 2;
+                                e.target.style.height = 'auto';
+                              }}
+                              onBlur={(e) => {
+                                e.target.rows = 1;
+                                e.target.style.height = '1.75rem';
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            }
+            </div>
 
             <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
               <button
@@ -1049,126 +1013,117 @@ const KnittingFloorSupervisorPage = () => {
             </div>
 
             {/* Order Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
               <div>
-                <label className="text-sm font-medium text-gray-600">Priority</label>
+                <label className="text-xs font-medium text-gray-600">Priority</label>
                 <div className="mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(selectedOrder.priority)}`}>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(selectedOrder.priority)}`}>
                     {selectedOrder.priority}
                   </span>
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Status</label>
+                <label className="text-xs font-medium text-gray-600">Status</label>
                 <div className="mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedOrder.status)}`}>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedOrder.status)}`}>
                     {selectedOrder.status}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Articles View with Tabs */}
-            <div className="space-y-6">
+            {/* Articles View with Table */}
+            <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h4 className="text-lg font-medium text-gray-900">Article Details</h4>
+                <h4 className="text-sm font-medium text-gray-900">Article Details</h4>
                 <button
                   onClick={() => setShowLogsSection(!showLogsSection)}
-                  className={`ti-btn ti-btn-sm min-w-[120px] ${showLogsSection ? 'ti-btn-primary' : 'ti-btn-secondary'}`}
+                  className={`ti-btn ti-btn-sm min-w-[120px] text-xs ${showLogsSection ? 'ti-btn-primary' : 'ti-btn-secondary'}`}
                 >
                   <i className="ri-file-list-line me-2"></i>
                   {showLogsSection ? 'Hide Logs' : 'Logs'}
                 </button>
               </div>
 
-              {/* Article Tabs */}
-              <div className="mb-4">
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {selectedOrder.articles.map((article, idx) => (
-                    <button
-                      key={article.id}
-                      className={`px-3 py-2 text-sm font-medium rounded-md whitespace-nowrap focus:outline-none ${
-                        idx === activeViewTabIndex ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                      }`}
-                      onClick={() => {
-                        setActiveViewTabIndex(idx);
-                      }}
-                      title={article.articleNumber}
-                    >
-                      {article.articleNumber || `Article ${idx + 1}`}
-                    </button>
-                  ))}
+              {/* Excel-like Table View */}
+              <div className="border border-gray-300 rounded overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs border-collapse">
+                    <thead className="bg-gray-100 border-b border-gray-300">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Article</th>
+                        <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Planned</th>
+                        <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Received</th>
+                        <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Completed</th>
+                        <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Transferred</th>
+                        <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Remaining</th>
+                        <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-red-50">M4 Defects</th>
+                        <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Progress</th>
+                        <th className="px-2 py-1.5 text-center font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {selectedOrder.articles.map((article, idx) => {
+                        const plannedQty = article.plannedQuantity || 0;
+                        const receivedQty = article.floorQuantities?.knitting?.received || 0;
+                        const completedQty = article.floorQuantities?.knitting?.completed || 0;
+                        const transferredQty = article.floorQuantities?.knitting?.transferred || 0;
+                        const remainingQty = article.floorQuantities?.knitting?.remaining || 0;
+                        const m4Qty = article.floorQuantities?.knitting?.m4Quantity || 0;
+                        const progress = receivedQty > 0 ? Math.round((transferredQty / receivedQty) * 100) : 0;
+                        const isOverproduction = completedQty > plannedQty;
+                        
+                        return (
+                          <tr key={article.id || article._id} className="hover:bg-gray-50">
+                            <td className="px-2 py-1.5 border-r border-gray-300">
+                              <div className="font-medium text-gray-900">{article.articleNumber || `Article ${idx + 1}`}</div>
+                              <div className="text-gray-500 text-xs mt-0.5">{article.linkingType || 'N/A'}</div>
+                              {article.priority && (
+                                <div className="mt-0.5">
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getPriorityBadge(article.priority)}`}>
+                                    {article.priority}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{plannedQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-blue-600 font-medium">{receivedQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300">
+                              <div className="text-green-600 font-medium">{completedQty.toLocaleString()}</div>
+                              {isOverproduction && (
+                                <div className="text-orange-600 text-xs mt-0.5">
+                                  +{completedQty - plannedQty}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 bg-red-50">
+                              {m4Qty > 0 ? (
+                                <span className="text-red-600 font-medium">{m4Qty.toLocaleString()}</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300">
+                              <div className="text-gray-700 font-medium">{progress}%</div>
+                            </td>
+                            <td className="px-2 py-1.5">
+                              {article.remarks ? (
+                                <div className="text-gray-700 text-xs max-w-xs truncate" title={article.remarks}>
+                                  {article.remarks}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-
-              {/* Active Article Details */}
-              {(() => {
-                const article = selectedOrder.articles[activeViewTabIndex];
-                if (!article) return null;
-                
-                return (
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h5 className="text-md font-medium text-gray-900">{article.articleNumber || 'Unknown Article'}</h5>
-                        <div className="text-sm text-gray-600 mt-1">
-                          <span className="font-medium">Linking Type:</span> {article.linkingType || 'Not specified'}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority)}`}>
-                          {article.priority || 'Unknown'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div>
-                        <label className="form-label">Planned Quantity</label>
-                        <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <label className="form-label">Received from Production</label>
-                        <div className="text-lg font-semibold text-blue-600">
-                          {article.floorQuantities?.knitting?.received || 0}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="form-label">Knitting Completed Quantity</label>
-                        <div className="text-lg font-semibold text-green-600">
-                          {article.floorQuantities?.knitting?.transferred || 0}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          Transferred to next floor: {article.floorQuantities?.knitting?.transferred || 0}
-                        </div>
-                        {article.floorQuantities?.knitting?.m4Quantity && article.floorQuantities.knitting.m4Quantity > 0 && (
-                          <div className="text-xs text-red-600 mt-1">
-                            M4 Defects: {article.floorQuantities.knitting.m4Quantity}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {article.remarks && (
-                      <div className="mb-4">
-                        <label className="form-label">Remarks</label>
-                        <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700">
-                          {article.remarks}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between items-center text-sm text-gray-600">
-                      <div>
-                        Remaining: {(article.floorQuantities?.knitting?.remaining || 0).toLocaleString()}
-                      </div>
-                      <div>
-                        Progress: {Math.round(((article.floorQuantities?.knitting?.transferred || 0) / (article.floorQuantities?.knitting?.received || 1)) * 100)}%
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* Logs Section */}
               {showLogsSection && (
