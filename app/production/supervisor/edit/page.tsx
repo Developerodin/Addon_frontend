@@ -436,10 +436,11 @@ const EditOrderContent = () => {
     // Clear error when user starts typing
     const errorKey = `article_${articleIndex}_${field}`;
     if (errors[errorKey]) {
-      setErrors(prev => ({
-        ...prev,
-        [errorKey]: undefined
-      }));
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[errorKey];
+        return newErrors;
+      });
     }
   };
 
@@ -1085,7 +1086,7 @@ const EditOrderContent = () => {
                       <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Factory Code</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product Name</th>
-                        <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Action</th>
+                        <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase w-24">Action</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -1096,7 +1097,7 @@ const EditOrderContent = () => {
                           <td className="px-4 py-2 text-center">
                             <button
                               onClick={() => selectProduct(product)}
-                              className="ti-btn ti-btn-primary ti-btn-sm"
+                              className="ti-btn ti-btn-primary px-4 py-2 min-w-[80px] whitespace-nowrap"
                             >
                               Select
                             </button>

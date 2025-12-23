@@ -246,6 +246,103 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       return undefined;
     }
 
+    const catalogNameNormalized = normalizeText(catalog?.yarnName);
+
+    const selectWithColorPreference = (candidates: SupplierYarnDetail[]) => {
+      if (!candidates || candidates.length === 0) return undefined;
+
+      if (catalog?.colorFamily) {
+        const colorMatched = candidates.find((detail) =>
+          doesCatalogFieldMatchDetail(
+            catalog?.colorFamily,
+            detail?.color,
+            [],
+            { field: "colorFamily" }
+          )
+        );
+        if (colorMatched) {
+          return colorMatched;
+        }
+      }
+
+      return candidates[0];
+    };
+
+    const catalogLinkedDetail = detailsPool.find((detail) => {
+      const detailCatalogId =
+        extractIdFromValue((detail as any)?.yarnCatalog) ||
+        extractIdFromValue(detail?.yarnCatalogId);
+      return detailCatalogId && String(detailCatalogId) === String(catalog.id);
+    });
+
+    if (catalogLinkedDetail) {
+      console.log("[PurchaseForm] Supplier detail matched by catalog id link", {
+        catalogId: catalog.id,
+        catalogName: catalog.yarnName,
+        matchedDetail: {
+          yarnType: catalogLinkedDetail?.yarnType,
+          yarnsubtype: catalogLinkedDetail?.yarnsubtype,
+          color: catalogLinkedDetail?.color,
+          shadeNumber: catalogLinkedDetail?.shadeNumber,
+        },
+      });
+      return catalogLinkedDetail;
+    }
+
+    const nameMatchedDetails = detailsPool.filter((detail) => {
+      const detailName = normalizeText(
+        (detail as any)?.yarnName ||
+        (detail as any)?.yarn ||
+        (detail as any)?.name
+      );
+
+      if (!catalogNameNormalized || !detailName || detailName !== catalogNameNormalized) {
+        return false;
+      }
+
+      const typeMatches = doesCatalogFieldMatchDetail(
+        catalog?.yarnType,
+        detail?.yarnType,
+        [],
+        { field: "yarnType" }
+      );
+      if (!typeMatches) {
+        return false;
+      }
+
+      if (catalog?.yarnSubtype && detail?.yarnsubtype) {
+        const subtypeMatches = doesCatalogFieldMatchDetail(
+          catalog?.yarnSubtype,
+          detail?.yarnsubtype,
+          ["subtype"],
+          { field: "yarnSubtype" }
+        );
+        if (!subtypeMatches) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    if (nameMatchedDetails.length > 0) {
+      const chosenByName = selectWithColorPreference(nameMatchedDetails);
+      if (chosenByName) {
+        console.log("[PurchaseForm] Supplier detail matched by yarn name", {
+          catalogId: catalog.id,
+          catalogName: catalog.yarnName,
+          matchedDetail: {
+            yarnType: chosenByName?.yarnType,
+            yarnsubtype: chosenByName?.yarnsubtype,
+            color: chosenByName?.color,
+            shadeNumber: chosenByName?.shadeNumber,
+          },
+          candidates: nameMatchedDetails.length,
+        });
+        return chosenByName;
+      }
+    }
+
     const matchingDetails = detailsPool.filter((detail, detailIndex) => {
       console.log("[PurchaseForm] Evaluating supplier detail", {
         catalogId: catalog.id,
@@ -285,19 +382,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       return undefined;
     }
 
-    const colorMatchedDetail = matchingDetails.find((detail) => {
-      if (!catalog?.colorFamily || !detail?.color) {
-        return false;
-      }
-      return doesCatalogFieldMatchDetail(
-        catalog?.colorFamily,
-        detail?.color,
-        [],
-        { field: "colorFamily" }
-      );
-    });
-
-    const chosenDetail = colorMatchedDetail ?? matchingDetails[0];
+    const chosenDetail = selectWithColorPreference(matchingDetails);
 
     console.log("[PurchaseForm] Supplier detail matched with catalog", {
       catalogId: catalog.id,
@@ -308,7 +393,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         color: chosenDetail?.color,
         shadeNumber: chosenDetail?.shadeNumber,
       },
-      matchType: colorMatchedDetail ? "type/subtype/color" : "type/subtype",
+      matchType: catalog?.colorFamily ? "type/subtype/color" : "type/subtype",
       totalCandidates: matchingDetails.length,
     });
 
@@ -432,10 +517,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         ]
           .filter(Boolean)
           .join(" • ") || undefined;
-        const shadeCode =
-          matchedDetail.shadeNumber ||
-          catalog?.pantonShade ||
-          catalog?.pantonName;
+        // Use only the supplier detail's shade number; no catalog fallback
+        const shadeCode = matchedDetail.shadeNumber;
 
         const searchableText = [
           displayName,

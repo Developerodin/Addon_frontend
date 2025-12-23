@@ -442,10 +442,9 @@ const BrandPage = () => {
           Status: brand.status,
         };
 
-        // Add yarn details as numbered columns (up to 10)
+        // Add yarn details as numbered columns (unlimited)
         if (brand.yarnDetails && brand.yarnDetails.length > 0) {
-          const maxDetails = Math.min(brand.yarnDetails.length, 10);
-          for (let i = 0; i < maxDetails; i++) {
+          for (let i = 0; i < brand.yarnDetails.length; i++) {
             const detail = brand.yarnDetails[i];
             const index = i + 1;
             
@@ -694,18 +693,34 @@ const BrandPage = () => {
 
           // Process numbered yarn detail columns (Yarn Name 1, Color ID 1, etc.)
           const processYarnDetails = () => {
-            const details: Array<{ yarnName: string; colorId: string; shadeNumber: string; tearweight: string }> = [];
+            const details: Array<{ yarnName: string; colorId: string; shadeNumber: string; tearweight: string; index: number }> = [];
 
-            // Check for numbered columns (1-10)
-            for (let i = 1; i <= 10; i++) {
-              const yarnName = row[`Yarn Name ${i}` as keyof BrandImportRow]?.toString().trim() ?? '';
-              const colorId = row[`Color ID ${i}` as keyof BrandImportRow]?.toString().trim() ?? '';
-              const shadeNumber = row[`Shade Number ${i}` as keyof BrandImportRow]?.toString().trim() ?? '';
-              const tearweight = row[`Tear Weight ${i}` as keyof BrandImportRow]?.toString().trim() ?? '';
+            // Dynamically find all numbered columns by scanning row keys
+            const yarnNamePattern = /^Yarn Name (\d+)$/i;
+            const foundIndices = new Set<number>();
+
+            // First, find all yarn name columns to determine which indices exist
+            Object.keys(row).forEach((key) => {
+              const match = key.match(yarnNamePattern);
+              if (match) {
+                const index = parseInt(match[1], 10);
+                if (!isNaN(index) && index > 0) {
+                  foundIndices.add(index);
+                }
+              }
+            });
+
+            // Process all found indices
+            const sortedIndices = Array.from(foundIndices).sort((a, b) => a - b);
+            for (const index of sortedIndices) {
+              const yarnName = row[`Yarn Name ${index}` as keyof BrandImportRow]?.toString().trim() ?? '';
+              const colorId = row[`Color ID ${index}` as keyof BrandImportRow]?.toString().trim() ?? '';
+              const shadeNumber = row[`Shade Number ${index}` as keyof BrandImportRow]?.toString().trim() ?? '';
+              const tearweight = row[`Tear Weight ${index}` as keyof BrandImportRow]?.toString().trim() ?? '';
 
               // If at least yarn name or color is provided, consider it a detail entry
               if (yarnName || colorId) {
-                details.push({ yarnName, colorId, shadeNumber, tearweight });
+                details.push({ yarnName, colorId, shadeNumber, tearweight, index });
               }
             }
 
@@ -717,11 +732,12 @@ const BrandPage = () => {
               const tearweight = row['Tear Weight']?.toString().trim() ?? '';
 
               if (yarnName || colorId) {
-                details.push({ yarnName, colorId, shadeNumber, tearweight });
+                details.push({ yarnName, colorId, shadeNumber, tearweight, index: 1 });
               }
             }
 
-            return details;
+            // Sort by index to maintain order
+            return details.sort((a, b) => a.index - b.index).map(({ index, ...rest }) => rest);
           };
 
           const yarnDetails = processYarnDetails();
@@ -1018,7 +1034,6 @@ const BrandPage = () => {
                           <th scope="col" className="text-start">Brand</th>
                           <th scope="col" className="text-start">Contact Person</th>
                           <th scope="col" className="text-start">Contact Info</th>
-                          <th scope="col" className="text-start">Yarn Details</th>
                           <th scope="col" className="text-start">Status</th>
                           <th scope="col" className="text-start">Action</th>
                         </tr>
@@ -1061,57 +1076,6 @@ const BrandPage = () => {
                             <td className="align-top">
                               <div className="text-sm">{brand.contactNumber}</div>
                               <div className="text-xs text-primary break-all">{brand.email}</div>
-                            </td>
-                            <td className="align-top">
-                              {brand.yarnDetails && brand.yarnDetails.length > 0 ? (
-                                <div className="flex flex-col gap-1">
-                                  {brand.yarnDetails.map((detail, detailIndex) => {
-                                    const yarnNameLabel =
-                                      getYarnCatalogLabel(detail) || getYarnTypeLabel(detail.yarnType);
-                                    const yarnColorLabel = getYarnColorLabel(detail.color);
-                                    const shadeLabel =
-                                      typeof detail.shadeNumber === 'string' && detail.shadeNumber.trim().length > 0
-                                        ? detail.shadeNumber
-                                        : 'N/A';
-                                    const tearweightLabel =
-                                      typeof detail.tearweight === 'string' && detail.tearweight.trim().length > 0
-                                        ? detail.tearweight
-                                        : typeof detail.tearweight === 'number'
-                                          ? String(detail.tearweight)
-                                          : 'N/A';
-                                    return (
-                                      <div
-                                        key={`${brand.id}-yarn-${detailIndex}`}
-                                        className="px-2 py-1 rounded bg-primary/10 text-primary text-xs"
-                                      >
-                                        <span className="font-semibold">
-                                          {yarnNameLabel || 'Unknown yarn'}
-                                        </span>
-                                        {yarnColorLabel ? (
-                                          <>
-                                            <span className="mx-2">•</span>
-                                            <span>{yarnColorLabel}</span>
-                                          </>
-                                        ) : null}
-                                        {shadeLabel !== 'N/A' ? (
-                                          <>
-                                            <span className="mx-2">•</span>
-                                            <span>{shadeLabel}</span>
-                                          </>
-                                        ) : null}
-                                        {tearweightLabel !== 'N/A' ? (
-                                          <>
-                                            <span className="mx-2">•</span>
-                                            <span>TW: {tearweightLabel}</span>
-                                          </>
-                                        ) : null}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-gray-500">No yarn details provided</span>
-                              )}
                             </td>
                             <td className="align-top">
                               <span

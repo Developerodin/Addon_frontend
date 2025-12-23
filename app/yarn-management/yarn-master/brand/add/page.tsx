@@ -54,6 +54,18 @@ const AddBrandPage = () => {
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [yarnCatalogs, setYarnCatalogs] = useState<YarnCatalog[]>([]);
   const [yarnColors, setYarnColors] = useState<YarnColor[]>([]);
+  
+  // Yarn Name Modal States
+  const [isYarnNameModalOpen, setIsYarnNameModalOpen] = useState(false);
+  const [modalYarnDetailIndex, setModalYarnDetailIndex] = useState<number | null>(null);
+  const [modalSearchTerm, setModalSearchTerm] = useState('');
+  const [modalCurrentPage, setModalCurrentPage] = useState(1);
+  const [modalItemsPerPage, setModalItemsPerPage] = useState(10);
+  const [modalYarns, setModalYarns] = useState<YarnCatalog[]>([]);
+  const [modalTotalPages, setModalTotalPages] = useState(1);
+  const [modalTotalResults, setModalTotalResults] = useState(0);
+  const [isModalLoading, setIsModalLoading] = useState(false);
+  
   const [formData, setFormData] = useState<BrandFormState>({
     brandName: '',
     contactPersonName: '',
@@ -419,6 +431,75 @@ const AddBrandPage = () => {
   );
   const isAddDisabled = isLoadingOptions || yarnCatalogOptions.length === 0 || yarnColorOptions.length === 0;
 
+  // Yarn Name Modal Functions
+  const openYarnNameModal = (yarnDetailIndex: number) => {
+    setModalYarnDetailIndex(yarnDetailIndex);
+    setModalSearchTerm('');
+    setModalCurrentPage(1);
+    setIsYarnNameModalOpen(true);
+  };
+
+  const closeYarnNameModal = () => {
+    setIsYarnNameModalOpen(false);
+    setModalYarnDetailIndex(null);
+    setModalSearchTerm('');
+    setModalCurrentPage(1);
+  };
+
+  const fetchModalYarnCatalogs = useCallback(async () => {
+    setIsModalLoading(true);
+    try {
+      const response = await yarnCatalogService.getYarnCatalogs({
+        page: modalCurrentPage,
+        limit: modalItemsPerPage,
+        yarnName: modalSearchTerm.trim() || undefined,
+        status: 'active',
+      });
+      setModalYarns(response.results || []);
+      setModalTotalPages(response.totalPages || 1);
+      setModalTotalResults(response.totalResults || 0);
+    } catch (error) {
+      console.error('Error fetching yarn catalogs for modal:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to fetch yarn catalogs');
+      setModalYarns([]);
+    } finally {
+      setIsModalLoading(false);
+    }
+  }, [modalCurrentPage, modalItemsPerPage, modalSearchTerm]);
+
+  useEffect(() => {
+    if (isYarnNameModalOpen) {
+      const timeoutId = setTimeout(() => {
+        fetchModalYarnCatalogs();
+      }, 500); // 500ms debounce
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isYarnNameModalOpen, fetchModalYarnCatalogs]);
+
+  const handleSelectYarnFromModal = (yarn: YarnCatalog) => {
+    if (modalYarnDetailIndex !== null) {
+      handleYarnCatalogChange(modalYarnDetailIndex, yarn.id);
+      closeYarnNameModal();
+    }
+  };
+
+  const getPagination = (currentPage: number, totalPages: number) => {
+    const pages: Array<number | '...'> = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 4) pages.push('...');
+      for (let i = Math.max(2, currentPage - 2); i <= Math.min(totalPages - 1, currentPage + 2); i++) {
+        pages.push(i);
+      }
+      if (currentPage < totalPages - 3) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
   return (
     <div className="main-content">
       <Toaster position="top-right" />
@@ -642,20 +723,21 @@ const AddBrandPage = () => {
                               <label className="form-label">
                                 Yarn Name <span className="text-red-500">*</span>
                               </label>
-                              <select
-                                value={detail.yarnCatalogId}
-                                onChange={(e) => handleYarnCatalogChange(index, e.target.value)}
-                                className="form-select"
-                                required
-                                disabled={isLoadingOptions || yarnCatalogOptions.length === 0}
-                              >
-                                <option value="">Select yarn name</option>
-                                {yarnCatalogOptions.map((catalog) => (
-                                  <option key={catalog.id} value={catalog.id}>
-                                    {catalog.yarnName || catalog.yarnType?.name || 'Unnamed yarn'}
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={selectedCatalog?.yarnName || detail.yarnName || ''}
+                                  readOnly
+                                  onClick={() => !isLoadingOptions && yarnCatalogOptions.length > 0 && openYarnNameModal(index)}
+                                  className="form-control cursor-pointer pr-10"
+                                  placeholder="Click to select yarn name"
+                                  required
+                                  disabled={isLoadingOptions || yarnCatalogOptions.length === 0}
+                                />
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                  <i className="ri-arrow-down-s-line text-gray-400"></i>
+                                </div>
+                              </div>
                               {detail.yarnCatalogId && !selectedCatalog && (
                                 <p className="text-xs text-red-500 mt-1">
                                   Selected yarn name is unavailable. Please choose another option.
@@ -743,6 +825,178 @@ const AddBrandPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Yarn Name Selection Modal */}
+      {isYarnNameModalOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity duration-300"
+            onClick={closeYarnNameModal}
+          />
+
+          {/* Modal */}
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div
+              className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden transform transition-all duration-300 flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <i className="ri-file-list-3-line text-xl text-blue-600"></i>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      Select Yarn Name
+                    </h2>
+                    <p className="text-xs text-gray-600">Choose a yarn from the catalog</p>
+                  </div>
+                </div>
+                <button
+                  onClick={closeYarnNameModal}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors duration-200 group"
+                  aria-label="Close modal"
+                >
+                  <i className="ri-close-line text-xl text-gray-500 group-hover:text-gray-900 transition-colors"></i>
+                </button>
+              </div>
+
+              {/* Search and Filters */}
+              <div className="p-4 border-b border-gray-200 flex-shrink-0">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600">Rows per page:</label>
+                    <select
+                      className="form-select w-auto text-sm"
+                      value={modalItemsPerPage}
+                      onChange={(e) => {
+                        setModalItemsPerPage(Number(e.target.value));
+                        setModalCurrentPage(1);
+                      }}
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                  <div className="relative flex-1 max-w-md mx-auto">
+                    <input
+                      type="text"
+                      className="form-control py-2 pr-10"
+                      placeholder="Search by yarn name..."
+                      value={modalSearchTerm}
+                      onChange={(e) => {
+                        setModalSearchTerm(e.target.value);
+                        setModalCurrentPage(1);
+                      }}
+                    />
+                    <button className="absolute end-0 top-0 px-4 h-full">
+                      <i className="ri-search-line text-lg"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="overflow-y-auto flex-1 p-4 min-h-0">
+                {isModalLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : modalYarns.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="text-gray-400 mb-4">
+                      <i className="ri-book-open-line text-4xl"></i>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Yarn Catalogs Found</h3>
+                    <p className="text-gray-500">Try adjusting your search criteria.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {modalYarns.map((yarn) => (
+                      <div
+                        key={yarn.id}
+                        className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">{yarn.yarnName || 'Unnamed Yarn'}</div>
+                          <div className="text-sm text-gray-500 mt-1">
+                            {yarn.yarnType?.name || ''}
+                            {yarn.yarnSubtype && 'subtype' in yarn.yarnSubtype && yarn.yarnSubtype.subtype ? ` / ${String(yarn.yarnSubtype.subtype)}` : ''}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleSelectYarnFromModal(yarn)}
+                          className="ti-btn ti-btn-primary"
+                        >
+                          Select
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Pagination Footer */}
+              {modalYarns.length > 0 && (
+                <div className="flex justify-between items-center p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+                  <div className="text-sm text-gray-500">
+                    Showing {modalTotalResults === 0 ? 0 : (modalCurrentPage - 1) * modalItemsPerPage + 1} to{' '}
+                    {Math.min(modalCurrentPage * modalItemsPerPage, modalTotalResults)} of {modalTotalResults} entries
+                  </div>
+                  <nav aria-label="Page navigation">
+                    <ul className="flex flex-wrap items-center">
+                      <li className={`page-item ${modalCurrentPage === 1 ? 'disabled' : ''}`}>
+                        <button
+                          className="page-link py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                          onClick={() => setModalCurrentPage((prev) => Math.max(prev - 1, 1))}
+                          disabled={modalCurrentPage === 1}
+                        >
+                          Previous
+                        </button>
+                      </li>
+                      {getPagination(modalCurrentPage, modalTotalPages).map((page, idx) =>
+                        page === '...'
+                          ? (
+                              <li key={`ellipsis-${idx}`} className="page-item">
+                                <span className="px-3">...</span>
+                              </li>
+                            )
+                          : (
+                              <li key={page} className="page-item">
+                                <button
+                                  className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
+                                    modalCurrentPage === page
+                                      ? 'bg-primary text-white hover:bg-primary-dark'
+                                      : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                                  }`}
+                                  onClick={() => setModalCurrentPage(Number(page))}
+                                >
+                                  {page}
+                                </button>
+                              </li>
+                            ),
+                      )}
+                      <li className={`page-item ${modalCurrentPage === modalTotalPages ? 'disabled' : ''}`}>
+                        <button
+                          className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                          onClick={() => setModalCurrentPage((prev) => Math.min(prev + 1, modalTotalPages))}
+                          disabled={modalCurrentPage === modalTotalPages}
+                        >
+                          Next
+                        </button>
+                      </li>
+                    </ul>
+                  </nav>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
