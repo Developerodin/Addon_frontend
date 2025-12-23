@@ -2,7 +2,7 @@ const os = require('os');
 const path = require('path');
 
 const hostname = '0.0.0.0';
-const port = parseInt(process.env.PORT || '3000', 10);
+const port = parseInt(process.env.PORT || process.argv[2] || '3000', 10);
 
 // Get network IP addresses
 function getNetworkIPs() {
