@@ -62,6 +62,12 @@ const EditBrandPage = () => {
   const [yarnDetailsPage, setYarnDetailsPage] = useState(1);
   const [yarnDetailsPerPage, setYarnDetailsPerPage] = useState(10);
   
+  // Filter States
+  const [filterYarnName, setFilterYarnName] = useState('');
+  const [filterColor, setFilterColor] = useState('');
+  const [filterShade, setFilterShade] = useState('');
+  const [filterTearWeight, setFilterTearWeight] = useState('');
+  
   // Yarn Name Modal States
   const [isYarnNameModalOpen, setIsYarnNameModalOpen] = useState(false);
   const [modalYarnDetailIndex, setModalYarnDetailIndex] = useState<number | null>(null);
@@ -564,14 +570,49 @@ const EditBrandPage = () => {
   );
   const isAddDisabled = isLoadingOptions || yarnCatalogOptions.length === 0 || yarnColorOptions.length === 0;
 
-  // Pagination for yarn details
+  // Filter yarn details with original indices
+  const filteredYarnDetails = useMemo(() => {
+    return formData.yarnDetails
+      .map((detail, originalIndex) => ({ detail, originalIndex }))
+      .filter(({ detail }) => {
+        const selectedCatalog = detail.yarnCatalogId ? yarnCatalogMap[detail.yarnCatalogId] : undefined;
+        const displayYarnName = selectedCatalog?.yarnName || detail.yarnName || '';
+        
+        // Filter by Yarn Name
+        if (filterYarnName.trim()) {
+          const yarnNameMatch = displayYarnName.toLowerCase().includes(filterYarnName.toLowerCase().trim());
+          if (!yarnNameMatch) return false;
+        }
+        
+        // Filter by Color
+        if (filterColor) {
+          if (detail.color !== filterColor) return false;
+        }
+        
+        // Filter by Shade Number
+        if (filterShade.trim()) {
+          const shadeMatch = detail.shadeNumber.toLowerCase().includes(filterShade.toLowerCase().trim());
+          if (!shadeMatch) return false;
+        }
+        
+        // Filter by Tear Weight
+        if (filterTearWeight.trim()) {
+          const tearWeightMatch = detail.tearweight.toLowerCase().includes(filterTearWeight.toLowerCase().trim());
+          if (!tearWeightMatch) return false;
+        }
+        
+        return true;
+      });
+  }, [formData.yarnDetails, filterYarnName, filterColor, filterShade, filterTearWeight, yarnCatalogMap]);
+
+  // Pagination for yarn details (using filtered results)
   const paginatedYarnDetails = useMemo(() => {
     const startIndex = (yarnDetailsPage - 1) * yarnDetailsPerPage;
     const endIndex = startIndex + yarnDetailsPerPage;
-    return formData.yarnDetails.slice(startIndex, endIndex);
-  }, [formData.yarnDetails, yarnDetailsPage, yarnDetailsPerPage]);
+    return filteredYarnDetails.slice(startIndex, endIndex);
+  }, [filteredYarnDetails, yarnDetailsPage, yarnDetailsPerPage]);
 
-  const totalYarnDetailsPages = Math.ceil(formData.yarnDetails.length / yarnDetailsPerPage);
+  const totalYarnDetailsPages = Math.ceil(filteredYarnDetails.length / yarnDetailsPerPage);
 
   const handleYarnDetailsPageChange = (newPage: number) => {
     setYarnDetailsPage(newPage);
@@ -581,6 +622,22 @@ const EditBrandPage = () => {
     setYarnDetailsPerPage(newPerPage);
     setYarnDetailsPage(1); // Reset to first page when changing items per page
   };
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setYarnDetailsPage(1);
+  }, [filterYarnName, filterColor, filterShade, filterTearWeight]);
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilterYarnName('');
+    setFilterColor('');
+    setFilterShade('');
+    setFilterTearWeight('');
+  };
+
+  // Check if any filter is active
+  const hasActiveFilters = filterYarnName.trim() || filterColor || filterShade.trim() || filterTearWeight.trim();
 
   // Yarn Name Modal Functions
   const openYarnNameModal = (yarnDetailIndex: number) => {
@@ -848,7 +905,15 @@ const EditBrandPage = () => {
                       <h2 className="text-lg font-semibold">Yarn Details</h2>
                       {formData.yarnDetails.length > 0 && (
                         <span className="text-sm text-gray-500">
-                          ({formData.yarnDetails.length} {formData.yarnDetails.length === 1 ? 'entry' : 'entries'})
+                          {hasActiveFilters ? (
+                            <>
+                              ({filteredYarnDetails.length} of {formData.yarnDetails.length} {formData.yarnDetails.length === 1 ? 'entry' : 'entries'})
+                            </>
+                          ) : (
+                            <>
+                              ({formData.yarnDetails.length} {formData.yarnDetails.length === 1 ? 'entry' : 'entries'})
+                            </>
+                          )}
                         </span>
                       )}
                     </div>
@@ -881,8 +946,87 @@ const EditBrandPage = () => {
                     </p>
                   ) : (
                     <>
+                      {/* Filters Section */}
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                            <i className="ri-filter-line"></i>
+                            Filters
+                          </h3>
+                          {hasActiveFilters && (
+                            <button
+                              type="button"
+                              onClick={clearFilters}
+                              className="text-xs text-primary hover:text-primary-dark flex items-center gap-1"
+                            >
+                              <i className="ri-close-line"></i>
+                              Clear Filters
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                          {/* Yarn Name Filter */}
+                          <div>
+                            <label className="form-label text-xs text-gray-600 mb-1">Yarn Name</label>
+                            <input
+                              type="text"
+                              value={filterYarnName}
+                              onChange={(e) => setFilterYarnName(e.target.value)}
+                              className="form-control form-control-sm"
+                              placeholder="Search yarn name..."
+                            />
+                          </div>
+                          
+                          {/* Color Filter */}
+                          <div>
+                            <label className="form-label text-xs text-gray-600 mb-1">Color</label>
+                            <select
+                              value={filterColor}
+                              onChange={(e) => setFilterColor(e.target.value)}
+                              className="form-select form-select-sm"
+                            >
+                              <option value="">All Colors</option>
+                              {yarnColorOptions.map((color) => (
+                                <option key={color.id} value={color.id}>
+                                  {color.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          {/* Shade Number Filter */}
+                          <div>
+                            <label className="form-label text-xs text-gray-600 mb-1">Shade Number</label>
+                            <input
+                              type="text"
+                              value={filterShade}
+                              onChange={(e) => setFilterShade(e.target.value)}
+                              className="form-control form-control-sm"
+                              placeholder="Search shade..."
+                            />
+                          </div>
+                          
+                          {/* Tear Weight Filter */}
+                          <div>
+                            <label className="form-label text-xs text-gray-600 mb-1">Tear Weight</label>
+                            <input
+                              type="text"
+                              value={filterTearWeight}
+                              onChange={(e) => setFilterTearWeight(e.target.value)}
+                              className="form-control form-control-sm"
+                              placeholder="Search tear weight..."
+                            />
+                          </div>
+                        </div>
+                        {hasActiveFilters && (
+                          <div className="text-xs text-gray-600 pt-2 border-t border-gray-200">
+                            Showing {filteredYarnDetails.length} of {formData.yarnDetails.length} entries
+                          </div>
+                        )}
+                      </div>
+
                       {/* Pagination Controls - Top */}
-                      {formData.yarnDetails.length > yarnDetailsPerPage && (
+                      {filteredYarnDetails.length > yarnDetailsPerPage && (
                         <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
                           <div className="flex items-center gap-2">
                             <label className="text-sm text-gray-600">Items per page:</label>
@@ -900,7 +1044,7 @@ const EditBrandPage = () => {
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-600">
                               Page {yarnDetailsPage} of {totalYarnDetailsPages} 
-                              (Showing {((yarnDetailsPage - 1) * yarnDetailsPerPage) + 1} - {Math.min(yarnDetailsPage * yarnDetailsPerPage, formData.yarnDetails.length)} of {formData.yarnDetails.length})
+                              (Showing {filteredYarnDetails.length === 0 ? 0 : ((yarnDetailsPage - 1) * yarnDetailsPerPage) + 1} - {Math.min(yarnDetailsPage * yarnDetailsPerPage, filteredYarnDetails.length)} of {filteredYarnDetails.length})
                             </span>
                             <div className="flex gap-2">
                               <button
@@ -925,40 +1069,61 @@ const EditBrandPage = () => {
                       )}
 
                       {/* Yarn Details Table */}
-                      <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                Yarn Name
-                              </th>
-                              <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                Color
-                              </th>
-                              <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                Shade Number
-                              </th>
-                              <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                Tear Weight
-                              </th>
-                              <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                Actions
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {paginatedYarnDetails.map((detail, displayIndex) => {
-                              const actualIndex = (yarnDetailsPage - 1) * yarnDetailsPerPage + displayIndex;
+                      {filteredYarnDetails.length === 0 ? (
+                        <div className="text-center py-8 border border-gray-200 rounded-lg bg-gray-50">
+                          <div className="text-gray-400 mb-2">
+                            <i className="ri-search-line text-3xl"></i>
+                          </div>
+                          <h3 className="text-sm font-medium text-gray-900 mb-1">No Results Found</h3>
+                          <p className="text-xs text-gray-500">
+                            {hasActiveFilters 
+                              ? 'No yarn details match your filter criteria. Try adjusting your filters.'
+                              : 'No yarn details available.'}
+                          </p>
+                          {hasActiveFilters && (
+                            <button
+                              type="button"
+                              onClick={clearFilters}
+                              className="mt-3 text-xs text-primary hover:text-primary-dark"
+                            >
+                              Clear Filters
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                  Yarn Name
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                  Color
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                  Shade Number
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                  Tear Weight
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                  Actions
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {paginatedYarnDetails.map(({ detail, originalIndex }, displayIndex) => {
                               const selectedCatalog = detail.yarnCatalogId ? yarnCatalogMap[detail.yarnCatalogId] : undefined;
 
                               return (
-                                <tr key={`yarn-detail-${actualIndex}`}>
+                                <tr key={`yarn-detail-${originalIndex}`}>
                                   <td className="px-4 py-3 align-top">
                                     <div className="flex flex-col gap-1">
                                       <button
                                         type="button"
                                         className="ti-btn ti-btn-light justify-between w-full"
-                                        onClick={() => !isLoadingOptions && yarnCatalogOptions.length > 0 && openYarnNameModal(actualIndex)}
+                                        onClick={() => !isLoadingOptions && yarnCatalogOptions.length > 0 && openYarnNameModal(originalIndex)}
                                         disabled={isLoadingOptions || yarnCatalogOptions.length === 0}
                                       >
                                         <span className="truncate text-left">
@@ -981,7 +1146,7 @@ const EditBrandPage = () => {
                                   <td className="px-4 py-3 align-top">
                                     <select
                                       value={detail.color}
-                                      onChange={(e) => handleYarnDetailChange(actualIndex, 'color', e.target.value)}
+                                      onChange={(e) => handleYarnDetailChange(originalIndex, 'color', e.target.value)}
                                       className="form-select"
                                       required
                                       disabled={isLoadingOptions || yarnColorOptions.length === 0}
@@ -998,7 +1163,7 @@ const EditBrandPage = () => {
                                     <input
                                       type="text"
                                       value={detail.shadeNumber}
-                                      onChange={(e) => handleYarnDetailChange(actualIndex, 'shadeNumber', e.target.value)}
+                                      onChange={(e) => handleYarnDetailChange(originalIndex, 'shadeNumber', e.target.value)}
                                       className="form-control"
                                       placeholder="Enter shade number"
                                     />
@@ -1007,7 +1172,7 @@ const EditBrandPage = () => {
                                     <input
                                       type="text"
                                       value={detail.tearweight}
-                                      onChange={(e) => handleYarnDetailChange(actualIndex, 'tearweight', e.target.value)}
+                                      onChange={(e) => handleYarnDetailChange(originalIndex, 'tearweight', e.target.value)}
                                       className="form-control"
                                       placeholder="Enter tear weight"
                                     />
@@ -1017,7 +1182,7 @@ const EditBrandPage = () => {
                                       <button
                                         type="button"
                                         className="ti-btn ti-btn-outline-primary px-2 py-2"
-                                        onClick={() => !isLoadingOptions && openYarnNameModal(actualIndex)}
+                                        onClick={() => !isLoadingOptions && openYarnNameModal(originalIndex)}
                                         disabled={isLoadingOptions}
                                         aria-label="Edit yarn"
                                         title="Edit yarn"
@@ -1027,7 +1192,7 @@ const EditBrandPage = () => {
                                       <button
                                         type="button"
                                         className="ti-btn ti-btn-danger px-2 py-2"
-                                        onClick={() => removeYarnDetail(actualIndex)}
+                                        onClick={() => removeYarnDetail(originalIndex)}
                                         aria-label="Delete yarn"
                                         title="Delete yarn"
                                       >
@@ -1038,12 +1203,13 @@ const EditBrandPage = () => {
                                 </tr>
                               );
                             })}
-                          </tbody>
-                        </table>
-                      </div>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
 
                       {/* Pagination Controls - Bottom */}
-                      {formData.yarnDetails.length > yarnDetailsPerPage && (
+                      {filteredYarnDetails.length > yarnDetailsPerPage && (
                         <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
                           <div className="flex items-center gap-2">
                             <label className="text-sm text-gray-600">Items per page:</label>
@@ -1061,7 +1227,7 @@ const EditBrandPage = () => {
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-600">
                               Page {yarnDetailsPage} of {totalYarnDetailsPages} 
-                              (Showing {((yarnDetailsPage - 1) * yarnDetailsPerPage) + 1} - {Math.min(yarnDetailsPage * yarnDetailsPerPage, formData.yarnDetails.length)} of {formData.yarnDetails.length})
+                              (Showing {filteredYarnDetails.length === 0 ? 0 : ((yarnDetailsPage - 1) * yarnDetailsPerPage) + 1} - {Math.min(yarnDetailsPage * yarnDetailsPerPage, filteredYarnDetails.length)} of {filteredYarnDetails.length})
                             </span>
                             <div className="flex gap-2">
                               <button
