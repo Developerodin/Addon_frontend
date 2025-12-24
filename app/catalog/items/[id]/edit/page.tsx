@@ -8,6 +8,12 @@ import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogSe
 import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
+interface StyleCodeItem {
+  styleCode: string;
+  eanCode: string;
+  mrp: number;
+}
+
 interface Product {
   id: string;
   name: string;
@@ -15,8 +21,9 @@ interface Product {
   internalCode: string;
   vendorCode: string;
   factoryCode: string;
-  styleCode: string;
-  eanCode: string;
+  styleCodes?: StyleCodeItem[];
+  styleCode?: string; // Keep for backward compatibility
+  eanCode?: string; // Keep for backward compatibility
   description: string;
   category?: {
     id: string;
@@ -115,8 +122,7 @@ const EditProductPage = () => {
     internalCode: '',
     vendorCode: '',
     factoryCode: '',
-    styleCode: '',
-    eanCode: '',
+    styleCodes: [{ styleCode: '', eanCode: '', mrp: 0 }],
     description: '',
     category: { id: '', name: '' },
     attributes: {},
@@ -158,6 +164,26 @@ const EditProductPage = () => {
           } else {
             product.category = { id: product.category, name: 'Unknown Category' };
           }
+        }
+
+        // Normalize styleCodes - handle both old (styleCode/eanCode) and new (styleCodes array) formats
+        if (product.styleCodes && Array.isArray(product.styleCodes)) {
+          // New format: already an array
+          product.styleCodes = product.styleCodes.map((sc: any) => ({
+            styleCode: sc.styleCode || '',
+            eanCode: sc.eanCode || '',
+            mrp: sc.mrp || 0
+          }));
+        } else if (product.styleCode || product.eanCode) {
+          // Old format: convert to array
+          product.styleCodes = [{
+            styleCode: product.styleCode || '',
+            eanCode: product.eanCode || '',
+            mrp: 0 // Default MRP for old entries
+          }];
+        } else {
+          // No style codes: initialize with empty entry
+          product.styleCodes = [{ styleCode: '', eanCode: '', mrp: 0 }];
         }
         
         // Defensive: ensure attributes, bom, processes are arrays/objects
@@ -433,6 +459,34 @@ const EditProductPage = () => {
     });
   };
 
+  const handleStyleCodeChange = (index: number, field: 'styleCode' | 'eanCode' | 'mrp', value: string | number) => {
+    setFormData(prev => {
+      const newStyleCodes = [...(prev.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0 }])];
+      newStyleCodes[index] = {
+        ...newStyleCodes[index],
+        [field]: field === 'mrp' ? (typeof value === 'string' ? parseFloat(value) || 0 : value) : value
+      };
+      return { ...prev, styleCodes: newStyleCodes };
+    });
+  };
+
+  const addStyleCode = () => {
+    setFormData(prev => ({
+      ...prev,
+      styleCodes: [...(prev.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0 }]), { styleCode: '', eanCode: '', mrp: 0 }]
+    }));
+  };
+
+  const removeStyleCode = (index: number) => {
+    setFormData(prev => {
+      const currentStyleCodes = prev.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0 }];
+      if (currentStyleCodes.length > 1) {
+        return { ...prev, styleCodes: currentStyleCodes.filter((_, i) => i !== index) };
+      }
+      return prev;
+    });
+  };
+
   const addProcess = () => {
     setFormData(prev => ({
       ...prev,
@@ -513,9 +567,8 @@ const EditProductPage = () => {
         // Production user: Only Factory Code
         productData.factoryCode = formData.factoryCode;
       } else if (isFinal) {
-        // Final user: Only Style Code, EAN Code, Description
-        productData.styleCode = formData.styleCode;
-        productData.eanCode = formData.eanCode;
+        // Final user: Style Codes array and Description
+        productData.styleCodes = (formData.styleCodes || []).filter(sc => sc.styleCode && sc.eanCode && sc.mrp > 0);
         productData.description = formData.description;
       } else if (isDesign) {
         // Design user: Basic fields
@@ -532,8 +585,7 @@ const EditProductPage = () => {
         productData.vendorCode = formData.vendorCode;
         productData.category = formData.category?.id || '';
         productData.factoryCode = formData.factoryCode;
-        productData.styleCode = formData.styleCode;
-        productData.eanCode = formData.eanCode;
+        productData.styleCodes = (formData.styleCodes || []).filter(sc => sc.styleCode && sc.eanCode && sc.mrp > 0);
         productData.description = formData.description;
       }
 
@@ -685,29 +737,71 @@ const EditProductPage = () => {
                         />
                       </div>
                     ) : isFinal ? (
-                      // Final user: Only Style Code, EAN Code, Description
+                      // Final user: Style Codes array and Description
                       <>
-                        <div>
-                          <label className="form-label">Style Code *</label>
-                          <input
-                            type="text"
-                            name="styleCode"
-                            className="form-control"
-                            value={formData.styleCode}
-                            onChange={handleInputChange}
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="form-label">EAN Code *</label>
-                          <input
-                            type="text"
-                            name="eanCode"
-                            className="form-control"
-                            value={formData.eanCode}
-                            onChange={handleInputChange}
-                            required
-                          />
+                        <div className="md:col-span-2">
+                          <div className="flex justify-between items-center mb-4">
+                            <label className="form-label">Style Codes *</label>
+                            <button
+                              type="button"
+                              onClick={addStyleCode}
+                              className="ti-btn ti-btn-primary ti-btn-sm"
+                            >
+                              <i className="ri-add-line me-2"></i> Add Style Code
+                            </button>
+                          </div>
+                          <div className="space-y-4">
+                            {(formData.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0 }]).map((styleCodeItem, index) => (
+                              <div key={index} className="border border-gray-200 rounded-lg p-4">
+                                <div className="flex justify-between items-center mb-3">
+                                  <h4 className="font-medium text-sm">Style Code Entry {index + 1}</h4>
+                                  {(formData.styleCodes || []).length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeStyleCode(index)}
+                                      className="ti-btn ti-btn-danger ti-btn-sm"
+                                    >
+                                      <i className="ri-delete-bin-line"></i>
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div>
+                                    <label className="form-label">Style Code *</label>
+                                    <input
+                                      type="text"
+                                      className="form-control"
+                                      value={styleCodeItem.styleCode}
+                                      onChange={(e) => handleStyleCodeChange(index, 'styleCode', e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="form-label">EAN Code *</label>
+                                    <input
+                                      type="text"
+                                      className="form-control"
+                                      value={styleCodeItem.eanCode}
+                                      onChange={(e) => handleStyleCodeChange(index, 'eanCode', e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="form-label">MRP *</label>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      className="form-control"
+                                      value={styleCodeItem.mrp}
+                                      onChange={(e) => handleStyleCodeChange(index, 'mrp', e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                         <div className="md:col-span-2">
                           <label className="form-label">Description *</label>
@@ -797,27 +891,69 @@ const EditProductPage = () => {
                                 required
                               />
                             </div>
-                            <div>
-                              <label className="form-label">Style Code *</label>
-                              <input
-                                type="text"
-                                name="styleCode"
-                                className="form-control"
-                                value={formData.styleCode}
-                                onChange={handleInputChange}
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label className="form-label">EAN Code *</label>
-                              <input
-                                type="text"
-                                name="eanCode"
-                                className="form-control"
-                                value={formData.eanCode}
-                                onChange={handleInputChange}
-                                required
-                              />
+                            <div className="md:col-span-2">
+                              <div className="flex justify-between items-center mb-4">
+                                <label className="form-label">Style Codes *</label>
+                                <button
+                                  type="button"
+                                  onClick={addStyleCode}
+                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                >
+                                  <i className="ri-add-line me-2"></i> Add Style Code
+                                </button>
+                              </div>
+                              <div className="space-y-4">
+                                {(formData.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0 }]).map((styleCodeItem, index) => (
+                                  <div key={index} className="border border-gray-200 rounded-lg p-4">
+                                    <div className="flex justify-between items-center mb-3">
+                                      <h4 className="font-medium text-sm">Style Code Entry {index + 1}</h4>
+                                      {(formData.styleCodes || []).length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => removeStyleCode(index)}
+                                          className="ti-btn ti-btn-danger ti-btn-sm"
+                                        >
+                                          <i className="ri-delete-bin-line"></i>
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                      <div>
+                                        <label className="form-label">Style Code *</label>
+                                        <input
+                                          type="text"
+                                          className="form-control"
+                                          value={styleCodeItem.styleCode}
+                                          onChange={(e) => handleStyleCodeChange(index, 'styleCode', e.target.value)}
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="form-label">EAN Code *</label>
+                                        <input
+                                          type="text"
+                                          className="form-control"
+                                          value={styleCodeItem.eanCode}
+                                          onChange={(e) => handleStyleCodeChange(index, 'eanCode', e.target.value)}
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="form-label">MRP *</label>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          className="form-control"
+                                          value={styleCodeItem.mrp}
+                                          onChange={(e) => handleStyleCodeChange(index, 'mrp', e.target.value)}
+                                          required
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                             <div className="md:col-span-2">
                               <label className="form-label">Description *</label>
@@ -892,7 +1028,7 @@ const EditProductPage = () => {
                               />
                             </div>
                             <div>
-                              <label className="form-label">Internal Code *</label>
+                              <label className="form-label">Internal Code</label>
                               <input
                                 type="text"
                                 name="internalCode"

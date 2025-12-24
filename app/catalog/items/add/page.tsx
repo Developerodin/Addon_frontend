@@ -123,11 +123,20 @@ const AddProductPage = () => {
     internalCode: '',
     vendorCode: '',
     factoryCode: '',
-    styleCode: '',
-    eanCode: '',
     description: '',
     category: '',
   });
+
+  // Style codes array state
+  interface StyleCodeItem {
+    styleCode: string;
+    eanCode: string;
+    mrp: number;
+  }
+
+  const [styleCodes, setStyleCodes] = useState<StyleCodeItem[]>([
+    { styleCode: '', eanCode: '', mrp: 0 }
+  ]);
 
   // Add image state
   const [productImage, setProductImage] = useState<File | null>(null);
@@ -366,6 +375,38 @@ const AddProductPage = () => {
     }));
   };
 
+  // Handle style code changes
+  const handleStyleCodeChange = (index: number, field: 'styleCode' | 'eanCode' | 'mrp', value: string | number) => {
+    const newStyleCodes = [...styleCodes];
+    if (field === 'mrp') {
+      // Handle MRP: convert string to number, but keep as 0 if empty/invalid
+      const numValue = typeof value === 'string' 
+        ? (value.trim() === '' ? 0 : parseFloat(value)) 
+        : value;
+      newStyleCodes[index] = {
+        ...newStyleCodes[index],
+        mrp: isNaN(numValue) ? 0 : numValue
+      };
+    } else {
+      // Handle styleCode and eanCode: keep as string
+      newStyleCodes[index] = {
+        ...newStyleCodes[index],
+        [field]: value
+      };
+    }
+    setStyleCodes(newStyleCodes);
+  };
+
+  const handleAddStyleCode = () => {
+    setStyleCodes([...styleCodes, { styleCode: '', eanCode: '', mrp: 0 }]);
+  };
+
+  const handleRemoveStyleCode = (index: number) => {
+    if (styleCodes.length > 1) {
+      setStyleCodes(styleCodes.filter((_, i) => i !== index));
+    }
+  };
+
   // Handle image upload
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -377,30 +418,85 @@ const AddProductPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Console log all form data before validation
+    console.log('=== FORM DATA BEFORE VALIDATION ===');
+    console.log('General Form:', generalForm);
+    console.log('Style Codes:', styleCodes);
+    console.log('BOM Items:', bomItems);
+    console.log('Process Items:', processItems);
+    console.log('Attributes:', formData);
+    console.log('User Type - isDesign:', isDesign, 'isProduction:', isProduction, 'isFinal:', isFinal);
+
+    // Helper function to validate style codes
+    const validateStyleCodes = (codes: typeof styleCodes) => {
+      const validationResults = codes.map((sc, index) => {
+        const styleCodeValid = sc.styleCode && sc.styleCode.trim() !== '';
+        const eanCodeValid = sc.eanCode && sc.eanCode.trim() !== '';
+        // MRP should be a valid number >= 0 (0 is allowed per schema)
+        const mrpValue = typeof sc.mrp === 'string' ? parseFloat(sc.mrp) : sc.mrp;
+        const mrpValid = mrpValue !== null && mrpValue !== undefined && !isNaN(mrpValue) && mrpValue >= 0;
+        const isValid = styleCodeValid && eanCodeValid && mrpValid;
+        
+        return {
+          index,
+          styleCode: sc.styleCode,
+          styleCodeValid,
+          eanCode: sc.eanCode,
+          eanCodeValid,
+          mrp: sc.mrp,
+          mrpValue,
+          mrpValid,
+          isValid
+        };
+      });
+      
+      console.log('=== STYLE CODE VALIDATION DETAILS ===');
+      validationResults.forEach(result => {
+        console.log(`Entry ${result.index + 1}:`, result);
+      });
+      
+      return validationResults.some(r => r.isValid);
+    };
+
     // Validate required fields based on user type
     if (isProduction) {
       // Production user: Only Factory Code required
-      if (!generalForm.factoryCode) {
+      if (!generalForm.factoryCode || generalForm.factoryCode.trim() === '') {
         alert('Please fill in all required fields');
         return;
       }
     } else if (isFinal) {
-      // Final user: Only Style Code, EAN Code, Description required
-      if (!generalForm.styleCode || !generalForm.eanCode || !generalForm.description) {
-        alert('Please fill in all required fields');
+      // Final user: Style Codes array and Description required
+      const hasValidStyleCodes = validateStyleCodes(styleCodes);
+      console.log('Final User Validation - hasValidStyleCodes:', hasValidStyleCodes, 'description:', generalForm.description);
+      if (!hasValidStyleCodes || !generalForm.description || generalForm.description.trim() === '') {
+        alert('Please fill in all required fields. At least one style code entry with styleCode, eanCode, and mrp is required.');
         return;
       }
     } else if (isDesign) {
-      if (!generalForm.name || !generalForm.category || !generalForm.internalCode || 
-          !generalForm.vendorCode) {
+      if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category || 
+          !generalForm.internalCode || generalForm.internalCode.trim() === '' || 
+          !generalForm.vendorCode || generalForm.vendorCode.trim() === '') {
         alert('Please fill in all required fields');
         return;
       }
     } else {
-      if (!generalForm.name || !generalForm.category || !generalForm.internalCode || 
-          !generalForm.vendorCode || !generalForm.factoryCode || !generalForm.styleCode || 
-          !generalForm.eanCode || !generalForm.description) {
-        alert('Please fill in all required fields');
+      const hasValidStyleCodes = validateStyleCodes(styleCodes);
+      console.log('Other User Validation - hasValidStyleCodes:', hasValidStyleCodes);
+      console.log('Other fields:', {
+        name: generalForm.name,
+        category: generalForm.category,
+        internalCode: generalForm.internalCode,
+        vendorCode: generalForm.vendorCode,
+        factoryCode: generalForm.factoryCode,
+        description: generalForm.description
+      });
+      if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category || 
+          !generalForm.internalCode || generalForm.internalCode.trim() === '' || 
+          !generalForm.vendorCode || generalForm.vendorCode.trim() === '' || 
+          !generalForm.factoryCode || generalForm.factoryCode.trim() === '' || 
+          !hasValidStyleCodes || !generalForm.description || generalForm.description.trim() === '') {
+        alert('Please fill in all required fields. At least one style code entry with styleCode, eanCode, and mrp is required.');
         return;
       }
     }
@@ -411,33 +507,47 @@ const AddProductPage = () => {
       // Prepare the product data
       const productData: any = {};
 
+      // Filter and prepare style codes - trim strings and ensure valid values
+      const filteredStyleCodes = styleCodes
+        .map(sc => ({
+          styleCode: sc.styleCode ? sc.styleCode.trim() : '',
+          eanCode: sc.eanCode ? sc.eanCode.trim() : '',
+          mrp: sc.mrp !== null && sc.mrp !== undefined && !isNaN(sc.mrp) ? Number(sc.mrp) : 0
+        }))
+        .filter(sc => sc.styleCode !== '' && sc.eanCode !== '' && sc.mrp >= 0);
+
+      console.log('=== FILTERED STYLE CODES ===');
+      console.log('Original styleCodes:', styleCodes);
+      console.log('Filtered styleCodes:', filteredStyleCodes);
+
       if (isProduction) {
         // Production user: Only Factory Code
-        productData.factoryCode = generalForm.factoryCode;
+        productData.factoryCode = generalForm.factoryCode.trim();
       } else if (isFinal) {
-        // Final user: Only Style Code, EAN Code, Description
-        productData.styleCode = generalForm.styleCode;
-        productData.eanCode = generalForm.eanCode;
-        productData.description = generalForm.description;
+        // Final user: Style Codes array and Description
+        productData.styleCodes = filteredStyleCodes;
+        productData.description = generalForm.description.trim();
       } else if (isDesign) {
         // Design user: Basic fields
-        productData.name = generalForm.name;
+        productData.name = generalForm.name.trim();
         productData.softwareCode = softwareCode;
-        productData.internalCode = generalForm.internalCode;
-        productData.vendorCode = generalForm.vendorCode;
+        productData.internalCode = generalForm.internalCode.trim();
+        productData.vendorCode = generalForm.vendorCode.trim();
         productData.category = generalForm.category;
       } else {
         // Other users: All fields
-        productData.name = generalForm.name;
+        productData.name = generalForm.name.trim();
         productData.softwareCode = softwareCode;
-        productData.internalCode = generalForm.internalCode;
-        productData.vendorCode = generalForm.vendorCode;
+        productData.internalCode = generalForm.internalCode.trim();
+        productData.vendorCode = generalForm.vendorCode.trim();
         productData.category = generalForm.category;
-        productData.factoryCode = generalForm.factoryCode;
-        productData.styleCode = generalForm.styleCode;
-        productData.eanCode = generalForm.eanCode;
-        productData.description = generalForm.description;
+        productData.factoryCode = generalForm.factoryCode.trim();
+        productData.styleCodes = filteredStyleCodes;
+        productData.description = generalForm.description.trim();
       }
+
+      console.log('=== PRODUCT DATA TO BE SENT ===');
+      console.log('Product Data:', JSON.stringify(productData, null, 2));
 
       // Attributes - filter based on user type
       let allowedAttributes;
@@ -500,8 +610,13 @@ const AddProductPage = () => {
       }
 
       // Send request
+      console.log('=== SENDING REQUEST ===');
+      console.log('Request Data:', requestData);
+      console.log('Headers:', headers);
+      
       const response = await axios.post(API_ENDPOINTS.createProduct, requestData, { headers });
 
+      console.log('=== RESPONSE RECEIVED ===');
       console.log('Product created:', response.data);
       
       // Show success message
@@ -667,28 +782,72 @@ const AddProductPage = () => {
                         </div>
                       </div>
                     ) : isFinal ? (
-                      // Final user: Only Style Code, EAN Code, Description
+                      // Final user: Style Codes array and Description
                       <div className="col-span-12">
                         <div className="space-y-6">
                           <div>
-                            <label className="form-label">Style Code *</label>
-                            <input 
-                              type="text" 
-                              className="form-control"
-                              value={generalForm.styleCode}
-                              onChange={(e) => handleGeneralChange('styleCode', e.target.value)}
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="form-label">EAN Code *</label>
-                            <input 
-                              type="text" 
-                              className="form-control"
-                              value={generalForm.eanCode}
-                              onChange={(e) => handleGeneralChange('eanCode', e.target.value)}
-                              required
-                            />
+                            <div className="flex justify-between items-center mb-4">
+                              <label className="form-label">Style Codes *</label>
+                              <button
+                                type="button"
+                                onClick={handleAddStyleCode}
+                                className="ti-btn ti-btn-primary ti-btn-sm"
+                              >
+                                <i className="ri-add-line me-2"></i> Add Style Code
+                              </button>
+                            </div>
+                            <div className="space-y-4">
+                              {styleCodes.map((styleCodeItem, index) => (
+                                <div key={index} className="border border-gray-200 rounded-lg p-4">
+                                  <div className="flex justify-between items-center mb-3">
+                                    <h4 className="font-medium text-sm">Style Code Entry {index + 1}</h4>
+                                    {styleCodes.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveStyleCode(index)}
+                                        className="ti-btn ti-btn-danger ti-btn-sm"
+                                      >
+                                        <i className="ri-delete-bin-line"></i>
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                      <label className="form-label">Style Code *</label>
+                                      <input
+                                        type="text"
+                                        className="form-control"
+                                        value={styleCodeItem.styleCode}
+                                        onChange={(e) => handleStyleCodeChange(index, 'styleCode', e.target.value)}
+                                        required
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="form-label">EAN Code *</label>
+                                      <input
+                                        type="text"
+                                        className="form-control"
+                                        value={styleCodeItem.eanCode}
+                                        onChange={(e) => handleStyleCodeChange(index, 'eanCode', e.target.value)}
+                                        required
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="form-label">MRP *</label>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        className="form-control"
+                                        value={styleCodeItem.mrp}
+                                        onChange={(e) => handleStyleCodeChange(index, 'mrp', e.target.value)}
+                                        required
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                           <div>
                             <label className="form-label">Description *</label>
@@ -756,26 +915,68 @@ const AddProductPage = () => {
                                     />
                                   </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="form-label">Style Code *</label>
-                                    <input 
-                                      type="text" 
-                                      className="form-control"
-                                      value={generalForm.styleCode}
-                                      onChange={(e) => handleGeneralChange('styleCode', e.target.value)}
-                                      required
-                                    />
+                                <div>
+                                  <div className="flex justify-between items-center mb-4">
+                                    <label className="form-label">Style Codes *</label>
+                                    <button
+                                      type="button"
+                                      onClick={handleAddStyleCode}
+                                      className="ti-btn ti-btn-primary ti-btn-sm"
+                                    >
+                                      <i className="ri-add-line me-2"></i> Add Style Code
+                                    </button>
                                   </div>
-                                  <div>
-                                    <label className="form-label">EAN Code *</label>
-                                    <input 
-                                      type="text" 
-                                      className="form-control"
-                                      value={generalForm.eanCode}
-                                      onChange={(e) => handleGeneralChange('eanCode', e.target.value)}
-                                      required
-                                    />
+                                  <div className="space-y-4">
+                                    {styleCodes.map((styleCodeItem, index) => (
+                                      <div key={index} className="border border-gray-200 rounded-lg p-4">
+                                        <div className="flex justify-between items-center mb-3">
+                                          <h4 className="font-medium text-sm">Style Code Entry {index + 1}</h4>
+                                          {styleCodes.length > 1 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveStyleCode(index)}
+                                              className="ti-btn ti-btn-danger ti-btn-sm"
+                                            >
+                                              <i className="ri-delete-bin-line"></i>
+                                            </button>
+                                          )}
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                          <div>
+                                            <label className="form-label">Style Code *</label>
+                                            <input
+                                              type="text"
+                                              className="form-control"
+                                              value={styleCodeItem.styleCode}
+                                              onChange={(e) => handleStyleCodeChange(index, 'styleCode', e.target.value)}
+                                              required
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="form-label">EAN Code *</label>
+                                            <input
+                                              type="text"
+                                              className="form-control"
+                                              value={styleCodeItem.eanCode}
+                                              onChange={(e) => handleStyleCodeChange(index, 'eanCode', e.target.value)}
+                                              required
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="form-label">MRP *</label>
+                                            <input
+                                              type="number"
+                                              step="0.01"
+                                              min="0"
+                                              className="form-control"
+                                              value={styleCodeItem.mrp}
+                                              onChange={(e) => handleStyleCodeChange(index, 'mrp', e.target.value)}
+                                              required
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
                                 <div>
