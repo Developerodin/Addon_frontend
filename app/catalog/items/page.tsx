@@ -2474,7 +2474,7 @@ const ProductListPage = () => {
                             />
                           </th>
                           <th className="text-start">Name</th>
-                          {(!isDesign && !isProduction) || isFinal ? <th className="text-start">Style Code</th> : null}
+                          {(!isDesign && !isProduction) || isFinal ? <th className="text-start">Style Codes</th> : null}
                           {!isDesign && !isProduction && <th className="text-start">Internal Code</th>}
                           <th className="text-start">Category</th>
                           <th className="text-start">Factory Code</th>
