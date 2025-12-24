@@ -91,6 +91,7 @@ const ProductListPage = () => {
   const attributesFileInputRef = useRef<HTMLInputElement>(null);
   const bomFileInputRef = useRef<HTMLInputElement>(null);
   const processesFileInputRef = useRef<HTMLInputElement>(null);
+  const styleCodesFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchProducts();
@@ -237,11 +238,11 @@ const ProductListPage = () => {
     if (isProduction) {
       return ['ID', 'Factory Code'];
     } else if (isFinal) {
-      return ['ID', 'Style Code', 'EAN Code', 'Description'];
+      return ['ID', 'Description'];
     } else if (isDesign) {
       return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Vendor Code'];
     } else {
-      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Vendor Code', 'Factory Code', 'Style Code', 'EAN Code', 'Description'];
+      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Vendor Code', 'Factory Code', 'Description'];
     }
   };
 
@@ -277,17 +278,23 @@ const ProductListPage = () => {
         case 'Factory Code':
           exportObj['Factory Code'] = product.factoryCode;
           break;
-        case 'Style Code':
-          exportObj['Style Code'] = product.styleCode;
-          break;
-        case 'EAN Code':
-          exportObj['EAN Code'] = product.eanCode;
-          break;
         case 'Description':
           exportObj['Description'] = product.description;
           break;
       }
     });
+    
+    // Add style codes as numbered columns (only for non-production users, limit to 3 columns to match template)
+    if (!isProduction && product.styleCodes && product.styleCodes.length > 0) {
+      // Limit to only first 3 style codes to match template structure
+      const styleCodesToExport = product.styleCodes.slice(0, 3);
+      styleCodesToExport.forEach((styleCode, index) => {
+        const num = index + 1;
+        exportObj[`Style Code ${num}`] = styleCode.styleCode || '';
+        exportObj[`EAN Code ${num}`] = styleCode.eanCode || '';
+        exportObj[`MRP ${num}`] = styleCode.mrp || 0;
+      });
+    }
     
     return exportObj;
   };
@@ -328,11 +335,11 @@ const ProductListPage = () => {
       const exportData = data.results.map((product, index) => {
         if (index % 100 === 0) {
           // Update progress during data processing
-          setExportProgress(60 + Math.floor((index / data.results.length) * 15));
+          setExportProgress(60 + Math.floor((index / data.results.length) * 10));
         }
         return buildExportData(product, categoryNameMapping);
       });
-      setExportProgress(75);
+      setExportProgress(70);
       
       const ws = XLSX.utils.json_to_sheet(exportData);
       XLSX.utils.book_append_sheet(wb, ws, 'Products');
@@ -414,6 +421,10 @@ const ProductListPage = () => {
         if (product.attributes && Object.keys(product.attributes).length > 0) {
           return Object.entries(product.attributes)
             .filter(([attrName]) => {
+              // Always exclude MRP from attributes (it's now in style codes)
+              if (attrName.toLowerCase() === 'mrp') {
+                return false;
+              }
               // Filter attributes based on user type
               if (isProduction) {
                 return attrName.toLowerCase() === 'needles';
@@ -672,6 +683,83 @@ const ProductListPage = () => {
     }
   };
 
+  const handleExportByStyleCodes = async () => {
+    try {
+      setExportProgress(0);
+      setIsLoading(true);
+      
+      // If no products are selected, show error
+      if (selectedProducts.length === 0) {
+        toast.error('Please select at least one product to export');
+        setExportProgress(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Start smooth progress animation
+      const progressTimer = animateProgress(0, 15, 200);
+      
+      // Get only selected products
+      const selectedProductsData = products.filter(product => selectedProducts.includes(product.id));
+      clearInterval(progressTimer);
+      setExportProgress(20);
+      
+      const wb = XLSX.utils.book_new();
+
+      // Create Style Codes sheet for selected products only
+      const styleCodesData = selectedProductsData.flatMap((product, index) => {
+        if (index % 10 === 0) {
+          // Update progress during data processing
+          setExportProgress(20 + Math.floor((index / selectedProductsData.length) * 60));
+        }
+        if (product.styleCodes && product.styleCodes.length > 0) {
+          return product.styleCodes.map(styleCode => ({
+            'Product ID': product.id,
+            'Product Name': product.name,
+            'Style Code': styleCode.styleCode || '',
+            'EAN Code': styleCode.eanCode || '',
+            'MRP': styleCode.mrp || 0
+          }));
+        }
+        return [];
+      });
+      setExportProgress(85);
+      
+      if (styleCodesData.length > 0) {
+        const ws = XLSX.utils.json_to_sheet(styleCodesData);
+        XLSX.utils.book_append_sheet(wb, ws, 'Style Codes');
+      } else {
+        // If no style codes found, create a sheet with just product info
+        const productData = selectedProductsData.map(product => ({
+          'Product ID': product.id,
+          'Product Name': product.name,
+          'Note': 'No style codes found for this product'
+        }));
+        const ws = XLSX.utils.json_to_sheet(productData);
+        XLSX.utils.book_append_sheet(wb, ws, 'Style Codes');
+      }
+      setExportProgress(90);
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      setExportProgress(95);
+      saveAs(data2, `selected_products_style_codes_${new Date().toISOString().split('T')[0]}.xlsx`);
+      setExportProgress(100);
+      
+      setTimeout(() => {
+        setExportProgress(null);
+        toast.success(`Style codes exported for ${selectedProducts.length} selected product(s)`);
+      }, 500);
+    } catch (error) {
+      console.error('Error exporting style codes:', error);
+      setExportProgress(null);
+      toast.error('Error exporting style codes. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleDownloadTemplate = () => {
     try {
       const wb = XLSX.utils.book_new();
@@ -702,14 +790,24 @@ const ProductListPage = () => {
         if (allowedFields.includes('Factory Code')) {
           row['Factory Code'] = exampleNum === 1 ? '789' : 'FAC-67890';
         }
-        if (allowedFields.includes('Style Code')) {
-          row['Style Code'] = exampleNum === 1 ? 'STY-12345' : 'STY-67890';
-        }
-        if (allowedFields.includes('EAN Code')) {
-          row['EAN Code'] = exampleNum === 1 ? '1234567890123' : '9876543210987';
-        }
         if (allowedFields.includes('Description')) {
           row['Description'] = exampleNum === 1 ? 'Example product description' : 'Another example product';
+        }
+        
+        // Add style code columns (for non-production users)
+        if (!isProduction) {
+          // Add 3 style code entries as examples (users can copy-paste if they need more)
+          row['Style Code 1'] = exampleNum === 1 ? 'STY-12345' : 'STY-67890';
+          row['EAN Code 1'] = exampleNum === 1 ? '1234567890123' : '9876543210987';
+          row['MRP 1'] = exampleNum === 1 ? 299.99 : 199.99;
+          
+          row['Style Code 2'] = exampleNum === 1 ? 'STY-12346' : 'STY-67891';
+          row['EAN Code 2'] = exampleNum === 1 ? '1234567890124' : '9876543210988';
+          row['MRP 2'] = exampleNum === 1 ? 349.99 : 249.99;
+          
+          row['Style Code 3'] = exampleNum === 1 ? 'STY-12347' : 'STY-67892';
+          row['EAN Code 3'] = exampleNum === 1 ? '1234567890125' : '9876543210989';
+          row['MRP 3'] = exampleNum === 1 ? 399.99 : 299.99;
         }
         
         return row;
@@ -723,9 +821,9 @@ const ProductListPage = () => {
       // Add instructions sheet with user-specific requirements
       const getRequiredFields = () => {
         if (isProduction) return 'Factory Code';
-        if (isFinal) return 'Style Code, EAN Code, Description';
+        if (isFinal) return 'Description, and at least one Style Code entry (Style Code 1, EAN Code 1, MRP 1)';
         if (isDesign) return 'Name, Category, Internal Code, Vendor Code';
-        return 'Name, Style Code';
+        return 'Name, and at least one Style Code entry (Style Code 1, EAN Code 1, MRP 1)';
       };
 
       const instructionsTemplate = [
@@ -763,6 +861,18 @@ const ProductListPage = () => {
         },
         {
           'Instructions': '8. If a category name is not found, the product will be created without a category.',
+          '': ''
+        },
+        {
+          'Instructions': '9. Style Codes: Use numbered columns (Style Code 1, EAN Code 1, MRP 1, Style Code 2, EAN Code 2, MRP 2, etc.) to add multiple style codes per product.',
+          '': ''
+        },
+        {
+          'Instructions': '10. Each style code entry requires Style Code, EAN Code, and MRP (all three must be provided for each entry).',
+          '': ''
+        },
+        {
+          'Instructions': '11. You can add unlimited style codes by continuing the numbering (Style Code 3, EAN Code 3, MRP 3, etc.).',
           '': ''
         }
       ];
@@ -1015,6 +1125,91 @@ const ProductListPage = () => {
     }
   };
 
+  const handleDownloadStyleCodesTemplate = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Create Style Codes template
+      const styleCodesTemplateData = [
+        {
+          'Product ID': '680c7a2bc30d1e00643b84e8',
+          'Product Name': 'Example Product 1',
+          'Style Code': 'STY-12345',
+          'EAN Code': '1234567890123',
+          'MRP': 299.99
+        },
+        {
+          'Product ID': '680c7a2bc30d1e00643b84e8',
+          'Product Name': 'Example Product 1',
+          'Style Code': 'STY-12346',
+          'EAN Code': '1234567890124',
+          'MRP': 349.99
+        },
+        {
+          'Product ID': '68246cc23d04e20065d3d60a',
+          'Product Name': 'Example Product 2',
+          'Style Code': 'STY-67890',
+          'EAN Code': '9876543210987',
+          'MRP': 199.99
+        }
+      ];
+      
+      const ws = XLSX.utils.json_to_sheet(styleCodesTemplateData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Style Codes');
+
+      // Add instructions sheet
+      const instructionsTemplate = [
+        {
+          'Instructions': 'How to use Style Codes Import Template:',
+          '': ''
+        },
+        {
+          'Instructions': '1. This template is for updating product style codes only (not creating products).',
+          '': ''
+        },
+        {
+          'Instructions': '2. Product ID is required and must be a valid product ID from your system.',
+          '': ''
+        },
+        {
+          'Instructions': '3. Product Name is for reference only (not used in import).',
+          '': ''
+        },
+        {
+          'Instructions': '4. Style Code, EAN Code, and MRP are all required fields.',
+          '': ''
+        },
+        {
+          'Instructions': '5. MRP must be a positive number (greater than or equal to 0).',
+          '': ''
+        },
+        {
+          'Instructions': '6. Each row represents one style code entry for a product.',
+          '': ''
+        },
+        {
+          'Instructions': '7. Multiple style codes for the same product should be on separate rows.',
+          '': ''
+        },
+        {
+          'Instructions': '8. All style codes in the file will replace existing style codes for each product.',
+          '': ''
+        }
+      ];
+      const wsInstructions = XLSX.utils.json_to_sheet(instructionsTemplate);
+      XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      saveAs(data, 'style_codes_import_template.xlsx');
+      toast.success('Style Codes template downloaded successfully');
+    } catch (error) {
+      console.error('Error generating style codes template:', error);
+      toast.error('Error generating style codes template. Please try again.');
+    }
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1035,23 +1230,41 @@ const ProductListPage = () => {
           const productsData = XLSX.utils.sheet_to_json<any>(productsSheet);
           console.log('Parsed products data:', productsData);
 
+          // Helper function to check if at least one style code entry exists
+          const hasStyleCodeEntry = (row: any): boolean => {
+            const styleCode1 = row['Style Code 1']?.toString().trim();
+            const eanCode1 = row['EAN Code 1']?.toString().trim();
+            const mrp1 = row['MRP 1'];
+            return !!(styleCode1 && eanCode1 && mrp1 !== undefined && mrp1 !== null);
+          };
+
           // Validate required fields based on user type
           const getRequiredFields = () => {
             if (isProduction) return ['Factory Code'];
-            if (isFinal) return ['Style Code', 'EAN Code', 'Description'];
+            if (isFinal) return ['Description'];
             if (isDesign) return ['Name', 'Category', 'Internal Code', 'Vendor Code'];
-            return ['Name', 'Style Code'];
+            return ['Name'];
           };
 
           const requiredFields = getRequiredFields();
           
           // Filter out rows without required fields
           const validProducts = productsData.filter((row: any) => {
-            return requiredFields.every(field => row[field] && row[field].toString().trim() !== '');
+            const hasRequiredFields = requiredFields.every(field => row[field] && row[field].toString().trim() !== '');
+            
+            // For final users and other users (non-design, non-production), also check for at least one style code
+            if (!isProduction && !isDesign) {
+              return hasRequiredFields && hasStyleCodeEntry(row);
+            }
+            
+            return hasRequiredFields;
           });
 
           if (validProducts.length === 0) {
-            const requiredFieldsStr = requiredFields.join(', ');
+            let requiredFieldsStr = requiredFields.join(', ');
+            if (!isProduction && !isDesign) {
+              requiredFieldsStr += ', and at least one Style Code entry (Style Code 1, EAN Code 1, MRP 1)';
+            }
             toast.error(`No valid products found in the Excel file. Please ensure ${requiredFieldsStr} are provided.`);
             setImportProgress(null);
             toast.dismiss(loadingToast);
@@ -1074,19 +1287,66 @@ const ProductListPage = () => {
 
           setImportProgress(50);
 
+          // Helper function to extract style codes from numbered columns
+          const extractStyleCodes = (row: any): StyleCode[] => {
+            const styleCodes: StyleCode[] = [];
+            let index = 1;
+            
+            // Keep looking for numbered columns until we find no more
+            while (true) {
+              const styleCodeKey = `Style Code ${index}`;
+              const eanCodeKey = `EAN Code ${index}`;
+              const mrpKey = `MRP ${index}`;
+              
+              const styleCode = row[styleCodeKey]?.toString().trim();
+              const eanCode = row[eanCodeKey]?.toString().trim();
+              const mrpValue = row[mrpKey];
+              
+              // If we don't find any of the columns for this index, stop
+              if (!styleCode && !eanCode && mrpValue === undefined) {
+                break;
+              }
+              
+              // Only add if we have at least style code and ean code
+              if (styleCode && eanCode) {
+                const mrp = mrpValue !== undefined && mrpValue !== null 
+                  ? (typeof mrpValue === 'string' ? parseFloat(mrpValue) : Number(mrpValue))
+                  : 0;
+                
+                if (!isNaN(mrp) && mrp >= 0) {
+                  styleCodes.push({
+                    styleCode,
+                    eanCode,
+                    mrp
+                  });
+                }
+              }
+              
+              index++;
+            }
+            
+            return styleCodes;
+          };
+
           // Transform data for bulk import with category name mapping - only include allowed fields
           const transformedProducts = validProducts.map((row: any) => {
+            const productId = row['ID'] && row['ID'].toString().trim() !== '' ? row['ID'].toString() : undefined;
             const productData: any = {
-              id: row['ID'] && row['ID'].toString().trim() !== '' ? row['ID'].toString() : undefined, // For updates
+              id: productId, // For updates
             };
+
+            // Extract style codes from numbered columns (for non-production users)
+            const styleCodes = !isProduction ? extractStyleCodes(row) : [];
 
             // Only include fields allowed for this user type
             if (isProduction) {
               productData.factoryCode = row['Factory Code']?.toString() || '';
             } else if (isFinal) {
-              productData.styleCode = row['Style Code']?.toString() || '';
-              productData.eanCode = row['EAN Code']?.toString() || '';
               productData.description = row['Description']?.toString() || '';
+              // Add style codes if available
+              if (styleCodes.length > 0) {
+                productData.styleCodes = styleCodes;
+              }
             } else if (isDesign) {
               const categoryName = row['Category'] || '';
               let categoryId = '';
@@ -1120,14 +1380,16 @@ const ProductListPage = () => {
               }
 
               productData.name = row['Name']?.toString() || '';
-              productData.styleCode = row['Style Code']?.toString() || '';
               productData.internalCode = row['Internal Code']?.toString() || '';
               productData.vendorCode = row['Vendor Code']?.toString() || '';
               productData.factoryCode = row['Factory Code']?.toString() || '';
-              productData.eanCode = row['EAN Code']?.toString() || '';
               productData.description = row['Description']?.toString() || '';
               productData.category = categoryId;
               productData.softwareCode = row['Software Code']?.toString() || undefined;
+              // Add style codes if available
+              if (styleCodes.length > 0) {
+                productData.styleCodes = styleCodes;
+              }
             }
 
             return productData;
@@ -1249,6 +1511,12 @@ const ProductListPage = () => {
             const productId = row['Product ID'].toString().trim();
             const attributeName = row['Attribute Name'].toString().trim();
             const attributeValue = row['Attribute Value'].toString().trim();
+            
+            // Always exclude MRP from attributes (it's now in style codes)
+            if (attributeName.toLowerCase() === 'mrp') {
+              mappingErrors.push(`Product ${productId}: MRP is no longer an attribute. Please use Style Codes sheet instead.`);
+              return;
+            }
             
             // Filter attributes based on user type
             let isAllowed = false;
@@ -1672,6 +1940,138 @@ const ProductListPage = () => {
     }
   };
 
+  const handleImportByStyleCodes = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportProgress(0);
+    const loadingToast = toast.loading('Importing style codes...');
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          // Parse Style Codes Sheet
+          const styleCodesSheet = workbook.Sheets['Style Codes'];
+          if (!styleCodesSheet) {
+            throw new Error('Style Codes sheet not found in the Excel file');
+          }
+          const styleCodesData = XLSX.utils.sheet_to_json<any>(styleCodesSheet);
+          console.log('Parsed style codes data:', styleCodesData);
+
+          // Filter out rows without required fields
+          const validStyleCodes = styleCodesData.filter((row: any) => {
+            return row['Product ID'] && row['Style Code'] && row['EAN Code'] && row['MRP'] !== undefined;
+          });
+
+          if (validStyleCodes.length === 0) {
+            toast.error('No valid style codes found in the Excel file. Please ensure Product ID, Style Code, EAN Code, and MRP are provided.');
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+            return;
+          }
+
+          setImportProgress(50);
+
+          // Group style codes by product ID
+          const productStyleCodes: Record<string, StyleCode[]> = {};
+          const validationErrors: string[] = [];
+
+          validStyleCodes.forEach((row: any) => {
+            const productId = row['Product ID'].toString().trim();
+            const styleCode = row['Style Code'].toString().trim();
+            const eanCode = row['EAN Code'].toString().trim();
+            const mrp = parseFloat(row['MRP']?.toString() || '0');
+            
+            if (isNaN(mrp) || mrp < 0) {
+              validationErrors.push(`Product ${productId}: Invalid MRP value "${row['MRP']}"`);
+              return;
+            }
+            
+            if (!productStyleCodes[productId]) {
+              productStyleCodes[productId] = [];
+            }
+            productStyleCodes[productId].push({
+              styleCode,
+              eanCode,
+              mrp
+            });
+          });
+
+          // Show validation errors if any
+          if (validationErrors.length > 0) {
+            const errorMessages = validationErrors.slice(0, 5).join('\n');
+            if (validationErrors.length > 5) {
+              toast.error(`Some style codes have validation errors:\n${errorMessages}\n...and ${validationErrors.length - 5} more errors`);
+            } else {
+              toast.error(`Some style codes have validation errors:\n${errorMessages}`);
+            }
+          }
+
+          setImportProgress(75);
+
+          // Update each product's style codes
+          let successCount = 0;
+          let errorCount = 0;
+          const errors: string[] = [];
+
+          for (const [productId, styleCodes] of Object.entries(productStyleCodes)) {
+            try {
+              await axios.patch(`${API_ENDPOINTS.products}/${productId}`, {
+                styleCodes: styleCodes
+              });
+              successCount++;
+            } catch (error: any) {
+              errorCount++;
+              const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+              errors.push(`Product ID ${productId}: ${errorMessage}`);
+            }
+          }
+
+          setImportProgress(100);
+          setTimeout(() => {
+            setImportProgress(null);
+            toast.dismiss(loadingToast);
+
+            if (errorCount === 0 && validationErrors.length === 0) {
+              toast.success(`Style codes imported successfully for ${successCount} product(s)!`);
+            } else if (successCount === 0) {
+              toast.error(`Failed to import style codes for all ${errorCount} products.`);
+            } else {
+              toast.success(`Style codes imported: ${successCount} successful, ${errorCount} failed.`);
+            }
+
+            // Show detailed errors if any
+            if (errors.length > 0) {
+              const errorMessages = errors.slice(0, 5).join('\n');
+              if (errors.length > 5) {
+                toast.error(`Some style codes failed to import:\n${errorMessages}\n...and ${errors.length - 5} more errors`);
+              } else {
+                toast.error(`Some style codes failed to import:\n${errorMessages}`);
+              }
+            }
+
+            fetchProducts(); // Refresh the list
+          }, 500);
+
+        } catch (error: any) {
+          setImportProgress(null);
+          toast.dismiss(loadingToast);
+          console.error('Excel processing error:', error);
+          toast.error('Error processing Excel file: ' + (error.message || 'Please check your file format and try again.'));
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      setImportProgress(null);
+      toast.dismiss(loadingToast);
+      toast.error('Error importing style codes. Please try again.');
+    }
+  };
+
   function getPagination(currentPage: number, totalPages: number) {
     const pages = [];
     if (totalPages <= 7) {
@@ -1785,6 +2185,13 @@ const ProductListPage = () => {
                   accept=".xlsx,.xls"
                   onChange={handleImportByProcesses}
                 />
+                <input
+                  type="file"
+                  ref={styleCodesFileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleImportByStyleCodes}
+                />
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -1866,6 +2273,17 @@ const ProductListPage = () => {
                         <i className="ri-download-2-line me-2"></i>
                         Export by Attributes
                       </button>
+                      {!isProduction && (
+                        <button
+                          type="button"
+                          onClick={handleExportByStyleCodes}
+                          className="ti-btn ti-btn-info"
+                          disabled={isLoading}
+                        >
+                          <i className="ri-download-2-line me-2"></i>
+                          Export by Style Codes
+                        </button>
+                      )}
                       {!isDesign && !isFinal && (
                         <>
                           <button
@@ -1914,6 +2332,17 @@ const ProductListPage = () => {
                         <i className="ri-file-excel-2-line me-2"></i>
                         Import by Attributes
                       </button>
+                      {!isProduction && (
+                        <button
+                          type="button"
+                          onClick={() => styleCodesFileInputRef.current?.click()}
+                          className="ti-btn ti-btn-success"
+                          disabled={isLoading}
+                        >
+                          <i className="ri-file-excel-2-line me-2"></i>
+                          Import by Style Codes
+                        </button>
+                      )}
                       {!isDesign && !isFinal && (
                         <>
                           <button
@@ -1949,6 +2378,17 @@ const ProductListPage = () => {
                         <i className="ri-file-download-line me-2"></i>
                         Attributes Template
                       </button>
+                      {!isProduction && (
+                        <button
+                          type="button"
+                          onClick={handleDownloadStyleCodesTemplate}
+                          className="ti-btn ti-btn-outline-secondary"
+                          disabled={isLoading}
+                        >
+                          <i className="ri-file-download-line me-2"></i>
+                          Style Codes Template
+                        </button>
+                      )}
                       {!isDesign && !isFinal && (
                         <>
                           <button
