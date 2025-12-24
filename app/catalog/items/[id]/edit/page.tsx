@@ -745,7 +745,7 @@ const EditProductPage = () => {
                             <button
                               type="button"
                               onClick={addStyleCode}
-                              className="ti-btn ti-btn-primary ti-btn-sm"
+                              className="ti-btn ti-btn-primary"
                             >
                               <i className="ri-add-line me-2"></i> Add Style Code
                             </button>
@@ -897,7 +897,7 @@ const EditProductPage = () => {
                                 <button
                                   type="button"
                                   onClick={addStyleCode}
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
+                                  className="ti-btn ti-btn-primary"
                                 >
                                   <i className="ri-add-line me-2"></i> Add Style Code
                                 </button>

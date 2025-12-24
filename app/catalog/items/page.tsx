@@ -12,6 +12,12 @@ import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 
+interface StyleCode {
+  styleCode: string;
+  eanCode: string;
+  mrp: number;
+}
+
 interface Product {
   id: string;
   name: string;
@@ -29,6 +35,7 @@ interface Product {
   attributes?: Record<string, string>;
   bom?: ProductBOM[];
   processes?: ProductProcess[];
+  styleCodes?: StyleCode[];
 }
 
 interface ProductsResponse {
@@ -77,6 +84,9 @@ const ProductListPage = () => {
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [categories, setCategories] = useState<Array<{id: string, name: string}>>([]);
   const [showMoreExports, setShowMoreExports] = useState(false);
+  const [selectedProductStyleCodes, setSelectedProductStyleCodes] = useState<StyleCode[]>([]);
+  const [isStyleCodesModalOpen, setIsStyleCodesModalOpen] = useState(false);
+  const [selectedProductName, setSelectedProductName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attributesFileInputRef = useRef<HTMLInputElement>(null);
   const bomFileInputRef = useRef<HTMLInputElement>(null);
@@ -155,6 +165,18 @@ const ProductListPage = () => {
     } else {
       setSelectedProducts([...selectedProducts, productId]);
     }
+  };
+
+  const handleViewStyleCodes = (product: Product) => {
+    setSelectedProductStyleCodes(product.styleCodes || []);
+    setSelectedProductName(product.name);
+    setIsStyleCodesModalOpen(true);
+  };
+
+  const handleCloseStyleCodesModal = () => {
+    setIsStyleCodesModalOpen(false);
+    setSelectedProductStyleCodes([]);
+    setSelectedProductName('');
   };
 
   // Helper function to gradually increase progress during async operations
@@ -2018,7 +2040,6 @@ const ProductListPage = () => {
                           <th className="text-start">Factory Code</th>
                           {isFinal && <th className="text-start">EAN Code</th>}
                           {isFinal && <th className="text-start">Description</th>}
-                          {!isDesign && !isFinal && <th className="text-start">Created At</th>}
                           <th className="text-start">Actions</th>
                         </tr>
                       </thead>
@@ -2041,13 +2062,26 @@ const ProductListPage = () => {
                                 {product.name}
                               </Link>
                             </td>
-                            {(!isDesign && !isProduction) || isFinal ? <td>{product.styleCode || ''}</td> : null}
+                            {(!isDesign && !isProduction) || isFinal ? (
+                              <td>
+                                {product.styleCodes && product.styleCodes.length > 0 ? (
+                                  <button
+                                    onClick={() => handleViewStyleCodes(product)}
+                                    className="ti-btn ti-btn-sm ti-btn-outline-primary p-1"
+                                    title={`View ${product.styleCodes.length} Style Code${product.styleCodes.length > 1 ? 's' : ''}`}
+                                  >
+                                    <i className="ri-eye-line"></i>
+                                  </button>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </td>
+                            ) : null}
                             {!isDesign && !isProduction && <td>{product.internalCode || ''}</td>}
                             <td>{getCategoryName(product.category)}</td>
                             <td>{product.factoryCode || ''}</td>
                             {isFinal && <td>{product.eanCode || ''}</td>}
                             {isFinal && <td className="max-w-xs truncate" title={product.description || ''}>{product.description || ''}</td>}
-                            {!isDesign && !isFinal && <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''}</td>}
                             <td>
                               <div className="flex space-x-2">
                                 <Link href={`/catalog/items/${product.id}/edit`} className="ti-btn ti-btn-primary ti-btn-sm">
@@ -2119,6 +2153,60 @@ const ProductListPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Style Codes Modal */}
+      {isStyleCodesModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseStyleCodesModal}>
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold">Style Codes - {selectedProductName}</h2>
+              <button
+                onClick={handleCloseStyleCodesModal}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+            <div className="p-4 overflow-auto">
+              {selectedProductStyleCodes.length > 0 ? (
+                <div className="table-responsive">
+                  <table className="table whitespace-nowrap table-bordered">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="text-start p-3">Style Code</th>
+                        <th className="text-start p-3">EAN Code</th>
+                        <th className="text-start p-3">MRP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedProductStyleCodes.map((styleCodeItem, index) => (
+                        <tr key={index} className="border-b border-gray-200">
+                          <td className="p-3">{styleCodeItem.styleCode || '-'}</td>
+                          <td className="p-3">{styleCodeItem.eanCode || '-'}</td>
+                          <td className="p-3">{styleCodeItem.mrp !== undefined ? styleCodeItem.mrp : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  No style codes available for this product.
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end p-4 border-t border-gray-200">
+              <button
+                onClick={handleCloseStyleCodesModal}
+                className="ti-btn ti-btn-primary"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Toaster position="top-right" />
     </div>
   );
