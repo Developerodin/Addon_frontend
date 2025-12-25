@@ -19,6 +19,7 @@ interface Product {
   name: string;
   softwareCode: string;
   internalCode: string;
+  knittingCode?: string;
   vendorCode: string;
   factoryCode: string;
   styleCodes?: StyleCodeItem[];
@@ -120,6 +121,7 @@ const EditProductPage = () => {
     name: '',
     softwareCode: '',
     internalCode: '',
+    knittingCode: '',
     vendorCode: '',
     factoryCode: '',
     styleCodes: [{ styleCode: '', eanCode: '', mrp: 0 }],
@@ -555,6 +557,87 @@ const EditProductPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Console log all form data before validation
+    console.log('=== FORM DATA BEFORE VALIDATION ===');
+    console.log('Form Data:', formData);
+    console.log('User Type - isDesign:', isDesign, 'isProduction:', isProduction, 'isFinal:', isFinal);
+
+    // Helper function to validate style codes
+    const validateStyleCodes = (codes: typeof formData.styleCodes) => {
+      if (!codes || codes.length === 0) return false;
+      const validationResults = codes.map((sc, index) => {
+        const styleCodeValid = sc.styleCode && sc.styleCode.trim() !== '';
+        const eanCodeValid = sc.eanCode && sc.eanCode.trim() !== '';
+        // MRP should be a valid number >= 0 (0 is allowed per schema)
+        const mrpValue = typeof sc.mrp === 'string' ? parseFloat(sc.mrp) : sc.mrp;
+        const mrpValid = mrpValue !== null && mrpValue !== undefined && !isNaN(mrpValue) && mrpValue >= 0;
+        const isValid = styleCodeValid && eanCodeValid && mrpValid;
+        
+        return {
+          index,
+          styleCode: sc.styleCode,
+          styleCodeValid,
+          eanCode: sc.eanCode,
+          eanCodeValid,
+          mrp: sc.mrp,
+          mrpValue,
+          mrpValid,
+          isValid
+        };
+      });
+      
+      console.log('=== STYLE CODE VALIDATION DETAILS ===');
+      validationResults.forEach(result => {
+        console.log(`Entry ${result.index + 1}:`, result);
+      });
+      
+      return validationResults.some(r => r.isValid);
+    };
+
+    // Validate required fields based on user type
+    if (isProduction) {
+      // Production user: Only Factory Code required
+      if (!formData.factoryCode || formData.factoryCode.trim() === '') {
+        alert('Please fill in all required fields');
+        return;
+      }
+    } else if (isFinal) {
+      // Final user: Style Codes array and Description required
+      const hasValidStyleCodes = validateStyleCodes(formData.styleCodes);
+      console.log('Final User Validation - hasValidStyleCodes:', hasValidStyleCodes, 'description:', formData.description);
+      if (!hasValidStyleCodes || !formData.description || formData.description.trim() === '') {
+        alert('Please fill in all required fields. At least one style code entry with styleCode, eanCode, and mrp is required.');
+        return;
+      }
+    } else if (isDesign) {
+      if (!formData.name || formData.name.trim() === '' || !formData.category || 
+          !formData.internalCode || formData.internalCode.trim() === '' || 
+          !formData.vendorCode || formData.vendorCode.trim() === '') {
+        alert('Please fill in all required fields');
+        return;
+      }
+    } else {
+      const hasValidStyleCodes = validateStyleCodes(formData.styleCodes);
+      console.log('Other User Validation - hasValidStyleCodes:', hasValidStyleCodes);
+      console.log('Other fields:', {
+        name: formData.name,
+        category: formData.category,
+        internalCode: formData.internalCode,
+        vendorCode: formData.vendorCode,
+        factoryCode: formData.factoryCode,
+        description: formData.description
+      });
+      if (!formData.name || formData.name.trim() === '' || !formData.category || 
+          !formData.internalCode || formData.internalCode.trim() === '' || 
+          !formData.vendorCode || formData.vendorCode.trim() === '' || 
+          !formData.factoryCode || formData.factoryCode.trim() === '' || 
+          !hasValidStyleCodes || !formData.description || formData.description.trim() === '') {
+        alert('Please fill in all required fields. At least one style code entry with styleCode, eanCode, and mrp is required.');
+        return;
+      }
+    }
+
     setIsLoading(true);
 
     try {
@@ -563,31 +646,49 @@ const EditProductPage = () => {
       // Prepare the base product data
       const productData: any = {};
 
+      // Filter and prepare style codes - trim strings and ensure valid values
+      const filteredStyleCodes = (formData.styleCodes || [])
+        .map(sc => ({
+          styleCode: sc.styleCode ? sc.styleCode.trim() : '',
+          eanCode: sc.eanCode ? sc.eanCode.trim() : '',
+          mrp: sc.mrp !== null && sc.mrp !== undefined && !isNaN(sc.mrp) ? Number(sc.mrp) : 0
+        }))
+        .filter(sc => sc.styleCode !== '' && sc.eanCode !== '' && sc.mrp >= 0);
+
+      console.log('=== FILTERED STYLE CODES ===');
+      console.log('Original styleCodes:', formData.styleCodes);
+      console.log('Filtered styleCodes:', filteredStyleCodes);
+
       if (isProduction) {
         // Production user: Only Factory Code
-        productData.factoryCode = formData.factoryCode;
+        productData.factoryCode = formData.factoryCode.trim();
       } else if (isFinal) {
         // Final user: Style Codes array and Description
-        productData.styleCodes = (formData.styleCodes || []).filter(sc => sc.styleCode && sc.eanCode && sc.mrp > 0);
-        productData.description = formData.description;
+        productData.styleCodes = filteredStyleCodes;
+        productData.description = formData.description.trim();
       } else if (isDesign) {
         // Design user: Basic fields
-        productData.name = formData.name;
+        productData.name = formData.name.trim();
         productData.softwareCode = formData.softwareCode;
-        productData.internalCode = formData.internalCode;
-        productData.vendorCode = formData.vendorCode;
+        productData.internalCode = formData.internalCode.trim();
+        productData.knittingCode = formData.knittingCode?.trim() || '';
+        productData.vendorCode = formData.vendorCode.trim();
         productData.category = formData.category?.id || '';
       } else {
         // Other users: All fields
-        productData.name = formData.name;
+        productData.name = formData.name.trim();
         productData.softwareCode = formData.softwareCode;
-        productData.internalCode = formData.internalCode;
-        productData.vendorCode = formData.vendorCode;
+        productData.internalCode = formData.internalCode.trim();
+        productData.knittingCode = formData.knittingCode?.trim() || '';
+        productData.vendorCode = formData.vendorCode.trim();
         productData.category = formData.category?.id || '';
-        productData.factoryCode = formData.factoryCode;
-        productData.styleCodes = (formData.styleCodes || []).filter(sc => sc.styleCode && sc.eanCode && sc.mrp > 0);
-        productData.description = formData.description;
+        productData.factoryCode = formData.factoryCode.trim();
+        productData.styleCodes = filteredStyleCodes;
+        productData.description = formData.description.trim();
       }
+
+      console.log('=== PRODUCT DATA TO BE SENT ===');
+      console.log('Product Data:', JSON.stringify(productData, null, 2));
 
       // Attributes - filter based on user type
       let allowedAttributes;
@@ -859,7 +960,7 @@ const EditProductPage = () => {
                               />
                             </div>
                             <div>
-                              <label className="form-label">Internal Code *</label>
+                              <label className="form-label">Internal Code / Design Code *</label>
                               <input
                                 type="text"
                                 name="internalCode"
@@ -867,6 +968,16 @@ const EditProductPage = () => {
                                 value={formData.internalCode}
                                 onChange={handleInputChange}
                                 required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Knitting Code</label>
+                              <input
+                                type="text"
+                                name="knittingCode"
+                                className="form-control"
+                                value={formData.knittingCode || ''}
+                                onChange={handleInputChange}
                               />
                             </div>
                             <div>
@@ -1028,7 +1139,7 @@ const EditProductPage = () => {
                               />
                             </div>
                             <div>
-                              <label className="form-label">Internal Code</label>
+                              <label className="form-label">Internal Code / Design Code</label>
                               <input
                                 type="text"
                                 name="internalCode"
@@ -1036,6 +1147,16 @@ const EditProductPage = () => {
                                 value={formData.internalCode}
                                 onChange={handleInputChange}
                                 required
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Knitting Code</label>
+                              <input
+                                type="text"
+                                name="knittingCode"
+                                className="form-control"
+                                value={formData.knittingCode || ''}
+                                onChange={handleInputChange}
                               />
                             </div>
                             <div>

@@ -23,6 +23,7 @@ interface Product {
   name: string;
   softwareCode: string;
   internalCode: string;
+  knittingCode?: string;
   vendorCode: string;
   factoryCode: string;
   styleCode: string;
@@ -240,9 +241,9 @@ const ProductListPage = () => {
     } else if (isFinal) {
       return ['ID', 'Description'];
     } else if (isDesign) {
-      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Vendor Code'];
+      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Knitting Code', 'Vendor Code'];
     } else {
-      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Vendor Code', 'Factory Code', 'Description'];
+      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Knitting Code', 'Vendor Code', 'Factory Code', 'Description'];
     }
   };
 
@@ -271,6 +272,9 @@ const ProductListPage = () => {
           break;
         case 'Internal Code':
           exportObj['Internal Code'] = product.internalCode;
+          break;
+        case 'Knitting Code':
+          exportObj['Knitting Code'] = product.knittingCode || '';
           break;
         case 'Vendor Code':
           exportObj['Vendor Code'] = product.vendorCode;
@@ -783,6 +787,9 @@ const ProductListPage = () => {
         }
         if (allowedFields.includes('Internal Code')) {
           row['Internal Code'] = exampleNum === 1 ? '123' : 'INT-67890';
+        }
+        if (allowedFields.includes('Knitting Code')) {
+          row['Knitting Code'] = exampleNum === 1 ? 'KNIT-123' : 'KNIT-67890';
         }
         if (allowedFields.includes('Vendor Code')) {
           row['Vendor Code'] = exampleNum === 1 ? '456' : 'VEN-67890';
@@ -1363,6 +1370,7 @@ const ProductListPage = () => {
               productData.name = row['Name']?.toString() || '';
               productData.softwareCode = row['Software Code']?.toString() || undefined;
               productData.internalCode = row['Internal Code']?.toString() || '';
+              productData.knittingCode = row['Knitting Code']?.toString() || '';
               productData.vendorCode = row['Vendor Code']?.toString() || '';
               productData.category = categoryId;
             } else {
@@ -1381,6 +1389,7 @@ const ProductListPage = () => {
 
               productData.name = row['Name']?.toString() || '';
               productData.internalCode = row['Internal Code']?.toString() || '';
+              productData.knittingCode = row['Knitting Code']?.toString() || '';
               productData.vendorCode = row['Vendor Code']?.toString() || '';
               productData.factoryCode = row['Factory Code']?.toString() || '';
               productData.description = row['Description']?.toString() || '';

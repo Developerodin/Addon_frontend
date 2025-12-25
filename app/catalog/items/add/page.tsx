@@ -121,6 +121,7 @@ const AddProductPage = () => {
   const [generalForm, setGeneralForm] = useState({
     name: '',
     internalCode: '',
+    knittingCode: '',
     vendorCode: '',
     factoryCode: '',
     description: '',
@@ -532,6 +533,7 @@ const AddProductPage = () => {
         productData.name = generalForm.name.trim();
         productData.softwareCode = softwareCode;
         productData.internalCode = generalForm.internalCode.trim();
+        productData.knittingCode = generalForm.knittingCode.trim();
         productData.vendorCode = generalForm.vendorCode.trim();
         productData.category = generalForm.category;
       } else {
@@ -539,6 +541,7 @@ const AddProductPage = () => {
         productData.name = generalForm.name.trim();
         productData.softwareCode = softwareCode;
         productData.internalCode = generalForm.internalCode.trim();
+        productData.knittingCode = generalForm.knittingCode.trim();
         productData.vendorCode = generalForm.vendorCode.trim();
         productData.category = generalForm.category;
         productData.factoryCode = generalForm.factoryCode.trim();
@@ -883,7 +886,7 @@ const AddProductPage = () => {
                                     <input type="text" className="form-control" value={softwareCode} readOnly />
                                   </div>
                                   <div>
-                                    <label className="form-label">Internal Code *</label>
+                                    <label className="form-label">Internal Code / Design Code *</label>
                                     <input 
                                       type="text" 
                                       className="form-control"
@@ -892,6 +895,15 @@ const AddProductPage = () => {
                                       required
                                     />
                                   </div>
+                                </div>
+                                <div>
+                                  <label className="form-label">Knitting Code</label>
+                                  <input 
+                                    type="text" 
+                                    className="form-control"
+                                    value={generalForm.knittingCode}
+                                    onChange={(e) => handleGeneralChange('knittingCode', e.target.value)}
+                                  />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
@@ -1009,7 +1021,7 @@ const AddProductPage = () => {
                                     <input type="text" className="form-control" value={softwareCode} readOnly />
                                   </div>
                                   <div>
-                                    <label className="form-label">Internal Code *</label>
+                                    <label className="form-label">Internal Code / Design Code *</label>
                                     <input 
                                       type="text" 
                                       className="form-control"
@@ -1018,6 +1030,15 @@ const AddProductPage = () => {
                                       required
                                     />
                                   </div>
+                                </div>
+                                <div>
+                                  <label className="form-label">Knitting Code</label>
+                                  <input 
+                                    type="text" 
+                                    className="form-control"
+                                    value={generalForm.knittingCode}
+                                    onChange={(e) => handleGeneralChange('knittingCode', e.target.value)}
+                                  />
                                 </div>
                                 <div>
                                   <label className="form-label">Vendor Code *</label>
