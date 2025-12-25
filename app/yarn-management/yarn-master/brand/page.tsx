@@ -37,6 +37,19 @@ const BrandPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
+  const [importErrors, setImportErrors] = useState<Array<{
+    index: number;
+    brandName?: string;
+    email?: string;
+    error: string;
+  }>>([]);
+  const [importSummary, setImportSummary] = useState<{
+    total: number;
+    created: number;
+    updated: number;
+    failed: number;
+    successRate: string;
+  } | null>(null);
 
   const getYarnTypeLabel = (yarnType: SupplierYarnDetail['yarnType']) => {
     if (!yarnType) return 'Unknown type';
@@ -239,6 +252,13 @@ const BrandPage = () => {
     fetchBrands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, itemsPerPage, searchQuery, statusFilter]);
+
+  // Debug effect to track error state changes
+  useEffect(() => {
+    if (importErrors.length > 0) {
+      console.log('[Brand Import] Errors state updated:', importErrors);
+    }
+  }, [importErrors]);
 
   const fetchBrands = async () => {
     setIsLoading(true);
@@ -493,6 +513,8 @@ const BrandPage = () => {
 
     setIsImporting(true);
     setImportProgress(0);
+    setImportErrors([]);
+    setImportSummary(null);
 
     const reader = new FileReader();
 
@@ -809,16 +831,213 @@ const BrandPage = () => {
         };
 
         setImportProgress(85);
-        await supplierService.bulkImportSuppliers(payload);
+        const response = await supplierService.bulkImportSuppliers(payload);
+        
+        // Handle response with errors - do this BEFORE setting progress to 100
+        // Extract errors from response - backend returns 200 OK with error details
+        const responseData = response as any;
+        
+        // Log the raw response first to understand its structure
+        console.log('[Brand Import] Raw Response Type:', typeof response);
+        console.log('[Brand Import] Raw Response:', response);
+        console.log('[Brand Import] Response Keys:', Object.keys(response || {}));
+        console.log('[Brand Import] Response Data:', responseData);
+        console.log('[Brand Import] Response Data Keys:', Object.keys(responseData || {}));
+        
+        // Try multiple ways to extract errors - be very thorough
+        let errors: any[] = [];
+        if (responseData?.details?.errors && Array.isArray(responseData.details.errors)) {
+          errors = responseData.details.errors;
+          console.log('[Brand Import] Found errors in responseData.details.errors');
+        } else if (response?.details?.errors && Array.isArray(response.details.errors)) {
+          errors = response.details.errors;
+          console.log('[Brand Import] Found errors in response.details.errors');
+        } else if (responseData?.errors && Array.isArray(responseData.errors)) {
+          errors = responseData.errors;
+          console.log('[Brand Import] Found errors in responseData.errors');
+        } else if (response?.errors && Array.isArray(response.errors)) {
+          errors = response.errors;
+          console.log('[Brand Import] Found errors in response.errors');
+        } else if (responseData?.data?.details?.errors && Array.isArray(responseData.data.details.errors)) {
+          errors = responseData.data.details.errors;
+          console.log('[Brand Import] Found errors in responseData.data.details.errors');
+        } else if (responseData?.data?.errors && Array.isArray(responseData.data.errors)) {
+          errors = responseData.data.errors;
+          console.log('[Brand Import] Found errors in responseData.data.errors');
+        } else {
+          console.log('[Brand Import] No errors array found in response');
+          // Try to find any error-like structures
+          if (responseData?.details) {
+            console.log('[Brand Import] responseData.details:', responseData.details);
+          }
+          if (responseData?.data) {
+            console.log('[Brand Import] responseData.data:', responseData.data);
+          }
+        }
+        
+        // Extract summary
+        const summary = responseData?.summary || response?.summary || responseData?.data?.summary;
 
-        setImportProgress(100);
+        console.log('[Brand Import] Extracted errors:', errors);
+        console.log('[Brand Import] Errors length:', errors.length);
+        console.log('[Brand Import] Extracted summary:', summary);
+
+        // Always set summary if available
+        if (summary) {
+          setImportSummary({
+            total: summary.total || 0,
+            created: summary.created || 0,
+            updated: summary.updated || 0,
+            failed: summary.failed || 0,
+            successRate: summary.successRate || '0%',
+          });
+        } else {
+          // Clear summary if not present
+          setImportSummary(null);
+        }
+
+        // Process and set errors FIRST - be very thorough in mapping
+        // This ensures errors are set before progress reaches 100, so the progress bar can show error state
+        if (errors && Array.isArray(errors) && errors.length > 0) {
+          const mappedErrors = errors.map((err: any, idx: number) => {
+            // Extract error message from different possible formats
+            let errorMessage = 'Unknown error';
+            if (typeof err === 'string') {
+              errorMessage = err;
+            } else if (err?.error) {
+              errorMessage = err.error;
+            } else if (err?.message) {
+              errorMessage = err.message;
+            } else if (err?.errorMessage) {
+              errorMessage = err.errorMessage;
+            } else if (err?.msg) {
+              errorMessage = err.msg;
+            }
+            
+            return {
+              index: err.index !== undefined ? err.index : idx,
+              brandName: err.brandName || err.brand || err.name || '',
+              email: err.email || err.emailAddress || '',
+              error: errorMessage,
+            };
+          });
+          
+          console.log('[Brand Import] Mapped errors to display:', mappedErrors);
+          console.log('[Brand Import] Setting importErrors state with', mappedErrors.length, 'errors');
+          
+          // Set errors state FIRST, before setting progress to 100
+          setImportErrors(mappedErrors);
+          
+          // Now set progress to 100 - errors are already set, so progress bar will show error state
+          setImportProgress(100);
+
+          // Show appropriate toast message based on results
+          if (summary) {
+            const successCount = (summary.created || 0) + (summary.updated || 0);
+            const failedCount = summary.failed || 0;
+            if (successCount > 0) {
+              toast.success(
+                `Import completed: ${successCount} successful, ${failedCount} failed. See errors below.`,
+                { duration: 6000, icon: '⚠️' }
+              );
+            } else {
+              toast.error(
+                `Import failed: All ${failedCount} item(s) failed. See errors below.`,
+                { duration: 6000 }
+              );
+            }
+          } else {
+            toast.error(
+              `Import completed with ${errors.length} error(s). See errors below.`,
+              { duration: 6000 }
+            );
+          }
+        } else {
+          // No errors array found - check summary for failures
+          console.log('[Brand Import] No errors array found, checking summary');
+          if (summary && summary.failed > 0) {
+            // If summary shows failures but no errors array, create a generic error
+            console.log('[Brand Import] Summary shows failures but no errors array');
+            setImportErrors([{
+              index: 0,
+              brandName: '',
+              email: '',
+              error: `${summary.failed} item(s) failed during import. Please check the backend logs for details.`,
+            }]);
+            // Set progress to 100 after setting errors
+            setImportProgress(100);
+            toast.error(
+              `Import completed with ${summary.failed} failed item(s).`,
+              { duration: 6000 }
+            );
+          } else {
+            // No errors - clear error state and set progress to 100
+            console.log('[Brand Import] No errors found, clearing error state');
+            setImportErrors([]);
+            setImportProgress(100);
+            if (summary && summary.failed === 0) {
+              toast.success(response.message || responseData?.message || 'Brands imported successfully');
+            } else {
+              toast.success(response.message || responseData?.message || 'Brands imported successfully');
+            }
+          }
+        }
+
+        // Refresh the list after a short delay to ensure state is updated
+        // But only if there are no errors, or wait longer if there are errors
+        const hasErrors = errors && Array.isArray(errors) && errors.length > 0;
+        await new Promise(resolve => setTimeout(resolve, hasErrors ? 500 : 100));
         await fetchBrands();
-        toast.success('Brands imported successfully');
+        
+        // Keep progress bar visible for a moment to show completion, then clear it
+        // But keep errors visible - errors persist until user dismisses them
+        setTimeout(() => {
+          setImportProgress(null);
+          // Double-check errors are still set after state updates
+          if (hasErrors) {
+            console.log('[Brand Import] Progress cleared, but errors should still be visible');
+          }
+        }, 2000);
       } catch (error) {
-        console.error('Error processing brand import file:', error);
+        console.error('[Brand Import] Error processing brand import file:', error);
+        
+        // Try to extract errors from the error object if it's a response error
+        let extractedErrors: any[] = [];
+        if (error && typeof error === 'object') {
+          const errorObj = error as any;
+          if (errorObj.response) {
+            const response = errorObj.response;
+            if (response.data?.details?.errors) {
+              extractedErrors = response.data.details.errors;
+            } else if (response.data?.errors) {
+              extractedErrors = response.data.errors;
+            } else if (response.details?.errors) {
+              extractedErrors = response.details.errors;
+            }
+          } else if (errorObj.details?.errors) {
+            extractedErrors = errorObj.details.errors;
+          } else if (errorObj.errors) {
+            extractedErrors = errorObj.errors;
+          }
+        }
+        
+        if (extractedErrors.length > 0) {
+          const mappedErrors = extractedErrors.map((err: any, idx: number) => ({
+            index: err.index !== undefined ? err.index : idx,
+            brandName: err.brandName || err.brand || '',
+            email: err.email || '',
+            error: err.error || err.message || 'Unknown error',
+          }));
+          console.log('[Brand Import] Extracted errors from catch block:', mappedErrors);
+          setImportErrors(mappedErrors);
+        } else {
+          setImportErrors([]);
+        }
+        
+        setImportSummary(null);
         toast.error(error instanceof Error ? error.message : 'Failed to process import file');
-      } finally {
         setImportProgress(null);
+      } finally {
         setIsImporting(false);
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -998,10 +1217,125 @@ const BrandPage = () => {
               {importProgress !== null && (
                 <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
                   <div
-                    className="bg-primary h-3 rounded-full transition-all duration-200"
+                    className={`h-3 rounded-full transition-all duration-200 ${
+                      importProgress === 100 && importErrors.length > 0 
+                        ? 'bg-danger' 
+                        : 'bg-primary'
+                    }`}
                     style={{ width: `${importProgress}%` }}
                   ></div>
-                  <div className="text-xs text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
+                  <div className={`text-xs mt-1 text-right ${
+                    importProgress === 100 && importErrors.length > 0 
+                      ? 'text-danger font-semibold' 
+                      : 'text-gray-600'
+                  }`}>
+                    {importProgress === 100 
+                      ? (importErrors.length > 0 
+                          ? `Import completed with ${importErrors.length} error(s)` 
+                          : 'Import completed')
+                      : `Importing... ${importProgress}%`
+                    }
+                  </div>
+                </div>
+              )}
+
+              {(importSummary || (importErrors && importErrors.length > 0)) && (
+                <div className="mb-4">
+                  {importSummary && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-semibold text-blue-900">Import Summary</h3>
+                        <button
+                          type="button"
+                          className="text-blue-600 hover:text-blue-800 text-sm"
+                          onClick={() => {
+                            setImportSummary(null);
+                            setImportErrors([]);
+                          }}
+                        >
+                          <i className="ri-close-line"></i>
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                        <div>
+                          <span className="text-gray-600">Total:</span>
+                          <span className="ml-2 font-semibold">{importSummary.total}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Created:</span>
+                          <span className="ml-2 font-semibold text-success">{importSummary.created}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Updated:</span>
+                          <span className="ml-2 font-semibold text-info">{importSummary.updated}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Failed:</span>
+                          <span className="ml-2 font-semibold text-danger">{importSummary.failed}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Success Rate:</span>
+                          <span className="ml-2 font-semibold">{importSummary.successRate}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {importErrors && importErrors.length > 0 && (
+                    <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-bold text-red-900 flex items-center gap-2">
+                          <i className="ri-error-warning-fill text-red-600"></i>
+                          Import Errors ({importErrors.length})
+                        </h3>
+                        <button
+                          type="button"
+                          className="text-red-600 hover:text-red-800 text-sm"
+                          onClick={() => {
+                            setImportErrors([]);
+                            setImportSummary(null);
+                          }}
+                        >
+                          <i className="ri-close-line"></i>
+                        </button>
+                      </div>
+                      <div className="max-h-96 overflow-y-auto">
+                        <div className="space-y-2">
+                          {importErrors.map((err, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-white border border-red-200 rounded p-3 text-sm"
+                            >
+                              <div className="flex items-start gap-2">
+                                <i className="ri-error-warning-line text-red-500 mt-0.5"></i>
+                                <div className="flex-1">
+                                  <div className="font-medium text-red-900 mb-1">
+                                    {err.brandName ? `Brand: ${err.brandName}` : `Item #${err.index + 1}`}
+                                    {err.email && (
+                                      <span className="text-gray-600 ml-2">({err.email})</span>
+                                    )}
+                                  </div>
+                                  <div className="text-red-700">
+                                    {err.error.includes('Yarn catalog not found') || err.error.includes('yarnName:') ? (
+                                      <span>
+                                        <strong className="font-semibold">Yarn Catalog Not Found:</strong>{' '}
+                                        {err.error.includes('yarnName:') 
+                                          ? `The yarn "${err.error.match(/yarnName:\s*(.+?)(?:\s|$)/)?.[1] || err.error.split('yarnName:')[1]?.trim() || 'unknown'}" does not exist in the catalog. Please add this yarn to the catalog first.`
+                                          : err.error
+                                        }
+                                      </span>
+                                    ) : (
+                                      <span className="whitespace-pre-wrap">{err.error}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

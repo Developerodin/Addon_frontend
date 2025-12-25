@@ -105,6 +105,24 @@ export interface BulkImportSuppliersResponse {
   createdCount?: number;
   updatedCount?: number;
   failedCount?: number;
+  summary?: {
+    total: number;
+    created: number;
+    updated: number;
+    failed: number;
+    successRate: string;
+    processingTime: string;
+  };
+  details?: {
+    successful: number;
+    errors: Array<{
+      index: number;
+      brandName?: string;
+      email?: string;
+      error: string;
+      id?: string;
+    }>;
+  };
   errors?: Array<{
     index: number;
     message: string;
@@ -241,10 +259,47 @@ class SupplierService {
       throw new Error('At least one supplier is required for bulk import');
     }
 
-    return this.makeRequest<BulkImportSuppliersResponse>('/bulk-import', {
+    const url = `${this.baseURL}/bulk-import`;
+    const token = getAccessToken();
+
+    if (!token) {
+      throw new Error('No access token found. Please login again.');
+    }
+
+    const config: RequestInit = {
       method: 'POST',
+      headers: this.buildHeaders(),
       body: JSON.stringify(payload),
-    });
+    };
+
+    try {
+      const response = await fetch(url, config);
+      const responseData = await response.json().catch(() => ({}));
+
+      // Handle 400 responses that contain structured error data (common for bulk imports)
+      // Backend may return 400 with valid error details in the response body
+      if (response.status === 400 && (responseData.details?.errors || responseData.summary)) {
+        // Return the response data even though status is 400
+        // This allows the UI to display the errors properly
+        return responseData as BulkImportSuppliersResponse;
+      }
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Authentication failed. Please login again.');
+        }
+        throw new Error(responseData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      if (response.status === 204) {
+        return {} as BulkImportSuppliersResponse;
+      }
+
+      return responseData as BulkImportSuppliersResponse;
+    } catch (error) {
+      console.error('Supplier API Error:', error);
+      throw error;
+    }
   }
 }
 
