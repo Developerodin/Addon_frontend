@@ -308,13 +308,26 @@ const ProductListPage = () => {
       setExportProgress(0);
       setIsLoading(true);
       
-      // Start smooth progress animation
-      const progressTimer = animateProgress(0, 15, 300);
+      // Check if products are selected
+      let productsToExport: Product[] = [];
       
-      // Fetch products
-      const response = await axios.get(`${API_ENDPOINTS.products}?limit=100000`);
-      const data = response.data as ProductsResponse;
-      clearInterval(progressTimer);
+      if (selectedProducts.length > 0) {
+        // Export only selected products
+        productsToExport = products.filter(product => selectedProducts.includes(product.id));
+        
+        if (productsToExport.length === 0) {
+          toast.error('No selected products found to export');
+          setExportProgress(null);
+          setIsLoading(false);
+          return;
+        }
+      } else {
+        // Export all products
+        const response = await axios.get(`${API_ENDPOINTS.products}?limit=100000`);
+        const data = response.data as ProductsResponse;
+        productsToExport = data.results;
+      }
+      
       setExportProgress(25);
       
       // Continue animation while fetching categories
@@ -336,10 +349,10 @@ const ProductListPage = () => {
       const wb = XLSX.utils.book_new();
 
       // Create Products sheet with only user-appropriate fields
-      const exportData = data.results.map((product, index) => {
+      const exportData = productsToExport.map((product, index) => {
         if (index % 100 === 0) {
           // Update progress during data processing
-          setExportProgress(60 + Math.floor((index / data.results.length) * 10));
+          setExportProgress(60 + Math.floor((index / productsToExport.length) * 10));
         }
         return buildExportData(product, categoryNameMapping);
       });
@@ -353,12 +366,18 @@ const ProductListPage = () => {
       const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
       setExportProgress(95);
-      saveAs(data2, `products_${new Date().toISOString().split('T')[0]}.xlsx`);
+      const fileName = selectedProducts.length > 0 
+        ? `selected_products_${new Date().toISOString().split('T')[0]}.xlsx`
+        : `products_${new Date().toISOString().split('T')[0]}.xlsx`;
+      saveAs(data2, fileName);
       setExportProgress(100);
       
       setTimeout(() => {
         setExportProgress(null);
-        toast.success('Products exported successfully');
+        const message = selectedProducts.length > 0
+          ? `${selectedProducts.length} selected product(s) exported successfully`
+          : 'Products exported successfully';
+        toast.success(message);
       }, 500);
     } catch (error) {
       console.error('Error exporting products:', error);
@@ -2282,17 +2301,6 @@ const ProductListPage = () => {
                         <i className="ri-download-2-line me-2"></i>
                         Export by Attributes
                       </button>
-                      {!isProduction && (
-                        <button
-                          type="button"
-                          onClick={handleExportByStyleCodes}
-                          className="ti-btn ti-btn-info"
-                          disabled={isLoading}
-                        >
-                          <i className="ri-download-2-line me-2"></i>
-                          Export by Style Codes
-                        </button>
-                      )}
                       {!isDesign && !isFinal && (
                         <>
                           <button
@@ -2341,17 +2349,6 @@ const ProductListPage = () => {
                         <i className="ri-file-excel-2-line me-2"></i>
                         Import by Attributes
                       </button>
-                      {!isProduction && (
-                        <button
-                          type="button"
-                          onClick={() => styleCodesFileInputRef.current?.click()}
-                          className="ti-btn ti-btn-success"
-                          disabled={isLoading}
-                        >
-                          <i className="ri-file-excel-2-line me-2"></i>
-                          Import by Style Codes
-                        </button>
-                      )}
                       {!isDesign && !isFinal && (
                         <>
                           <button
@@ -2387,17 +2384,6 @@ const ProductListPage = () => {
                         <i className="ri-file-download-line me-2"></i>
                         Attributes Template
                       </button>
-                      {!isProduction && (
-                        <button
-                          type="button"
-                          onClick={handleDownloadStyleCodesTemplate}
-                          className="ti-btn ti-btn-outline-secondary"
-                          disabled={isLoading}
-                        >
-                          <i className="ri-file-download-line me-2"></i>
-                          Style Codes Template
-                        </button>
-                      )}
                       {!isDesign && !isFinal && (
                         <>
                           <button

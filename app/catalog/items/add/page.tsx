@@ -477,6 +477,7 @@ const AddProductPage = () => {
     } else if (isDesign) {
       if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category || 
           !generalForm.internalCode || generalForm.internalCode.trim() === '' || 
+          !generalForm.knittingCode || generalForm.knittingCode.trim() === '' ||
           !generalForm.vendorCode || generalForm.vendorCode.trim() === '') {
         alert('Please fill in all required fields');
         return;
@@ -494,6 +495,7 @@ const AddProductPage = () => {
       });
       if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category || 
           !generalForm.internalCode || generalForm.internalCode.trim() === '' || 
+          !generalForm.knittingCode || generalForm.knittingCode.trim() === '' ||
           !generalForm.vendorCode || generalForm.vendorCode.trim() === '' || 
           !generalForm.factoryCode || generalForm.factoryCode.trim() === '' || 
           !hasValidStyleCodes || !generalForm.description || generalForm.description.trim() === '') {
@@ -897,12 +899,13 @@ const AddProductPage = () => {
                                   </div>
                                 </div>
                                 <div>
-                                  <label className="form-label">Knitting Code</label>
+                                  <label className="form-label">Knitting Code *</label>
                                   <input 
                                     type="text" 
                                     className="form-control"
                                     value={generalForm.knittingCode}
                                     onChange={(e) => handleGeneralChange('knittingCode', e.target.value)}
+                                    required
                                   />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -1032,12 +1035,13 @@ const AddProductPage = () => {
                                   </div>
                                 </div>
                                 <div>
-                                  <label className="form-label">Knitting Code</label>
+                                  <label className="form-label">Knitting Code *</label>
                                   <input 
                                     type="text" 
                                     className="form-control"
                                     value={generalForm.knittingCode}
                                     onChange={(e) => handleGeneralChange('knittingCode', e.target.value)}
+                                    required
                                   />
                                 </div>
                                 <div>

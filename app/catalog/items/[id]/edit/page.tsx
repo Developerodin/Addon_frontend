@@ -613,6 +613,7 @@ const EditProductPage = () => {
     } else if (isDesign) {
       if (!formData.name || formData.name.trim() === '' || !formData.category || 
           !formData.internalCode || formData.internalCode.trim() === '' || 
+          !formData.knittingCode || formData.knittingCode.trim() === '' ||
           !formData.vendorCode || formData.vendorCode.trim() === '') {
         alert('Please fill in all required fields');
         return;
@@ -630,6 +631,7 @@ const EditProductPage = () => {
       });
       if (!formData.name || formData.name.trim() === '' || !formData.category || 
           !formData.internalCode || formData.internalCode.trim() === '' || 
+          !formData.knittingCode || formData.knittingCode.trim() === '' ||
           !formData.vendorCode || formData.vendorCode.trim() === '' || 
           !formData.factoryCode || formData.factoryCode.trim() === '' || 
           !hasValidStyleCodes || !formData.description || formData.description.trim() === '') {
@@ -679,7 +681,7 @@ const EditProductPage = () => {
         productData.name = formData.name.trim();
         productData.softwareCode = formData.softwareCode;
         productData.internalCode = formData.internalCode.trim();
-        productData.knittingCode = formData.knittingCode?.trim() || '';
+        productData.knittingCode = (formData.knittingCode || '').trim();
         productData.vendorCode = formData.vendorCode.trim();
         productData.category = formData.category?.id || '';
         productData.factoryCode = formData.factoryCode.trim();
@@ -971,13 +973,14 @@ const EditProductPage = () => {
                               />
                             </div>
                             <div>
-                              <label className="form-label">Knitting Code</label>
+                              <label className="form-label">Knitting Code *</label>
                               <input
                                 type="text"
                                 name="knittingCode"
                                 className="form-control"
                                 value={formData.knittingCode || ''}
                                 onChange={handleInputChange}
+                                required
                               />
                             </div>
                             <div>
@@ -1150,13 +1153,14 @@ const EditProductPage = () => {
                               />
                             </div>
                             <div>
-                              <label className="form-label">Knitting Code</label>
+                              <label className="form-label">Knitting Code *</label>
                               <input
                                 type="text"
                                 name="knittingCode"
                                 className="form-control"
                                 value={formData.knittingCode || ''}
                                 onChange={handleInputChange}
+                                required
                               />
                             </div>
                             <div>
