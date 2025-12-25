@@ -585,8 +585,11 @@ const EditBrandPage = () => {
         }
         
         // Filter by Color
-        if (filterColor) {
-          if (detail.color !== filterColor) return false;
+        if (filterColor.trim()) {
+          const selectedColor = detail.color ? yarnColorOptions.find((color) => color.id === detail.color) : undefined;
+          const colorName = selectedColor?.name || '';
+          const colorMatch = colorName.toLowerCase().includes(filterColor.toLowerCase().trim());
+          if (!colorMatch) return false;
         }
         
         // Filter by Shade Number
@@ -603,7 +606,7 @@ const EditBrandPage = () => {
         
         return true;
       });
-  }, [formData.yarnDetails, filterYarnName, filterColor, filterShade, filterTearWeight, yarnCatalogMap]);
+  }, [formData.yarnDetails, filterYarnName, filterColor, filterShade, filterTearWeight, yarnCatalogMap, yarnColorOptions]);
 
   // Pagination for yarn details (using filtered results)
   const paginatedYarnDetails = useMemo(() => {
@@ -637,7 +640,7 @@ const EditBrandPage = () => {
   };
 
   // Check if any filter is active
-  const hasActiveFilters = filterYarnName.trim() || filterColor || filterShade.trim() || filterTearWeight.trim();
+  const hasActiveFilters = filterYarnName.trim() || filterColor.trim() || filterShade.trim() || filterTearWeight.trim();
 
   // Yarn Name Modal Functions
   const openYarnNameModal = (yarnDetailIndex: number) => {
@@ -980,18 +983,13 @@ const EditBrandPage = () => {
                           {/* Color Filter */}
                           <div>
                             <label className="form-label text-xs text-gray-600 mb-1">Color</label>
-                            <select
+                            <input
+                              type="text"
                               value={filterColor}
                               onChange={(e) => setFilterColor(e.target.value)}
-                              className="form-select form-select-sm"
-                            >
-                              <option value="">All Colors</option>
-                              {yarnColorOptions.map((color) => (
-                                <option key={color.id} value={color.id}>
-                                  {color.name}
-                                </option>
-                              ))}
-                            </select>
+                              className="form-control form-control-sm"
+                              placeholder="Search color..."
+                            />
                           </div>
                           
                           {/* Shade Number Filter */}
