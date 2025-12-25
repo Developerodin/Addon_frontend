@@ -6,6 +6,7 @@ import yarnTypeService, { YarnType } from "@/shared/services/yarnTypeService";
 import yarnCountSizeService, { CountSize } from "@/shared/services/yarnCountSizeService";
 import yarnBlendService, { YarnBlend } from "@/shared/services/yarnBlendService";
 import yarnColorService, { YarnColor } from "@/shared/services/yarnColorService";
+import SearchableSelect, { SearchableSelectOption } from "@/shared/components/SearchableSelect";
 
 interface YarnCatalogFormData {
   yarnName?: string;
@@ -322,21 +323,16 @@ const YarnForm: React.FC<YarnFormProps> = ({
             <label className="form-label">
               Yarn Type <span className="text-red-500">*</span>
             </label>
-            <select
-              name="yarnType"
+            <SearchableSelect
+              options={yarnTypeOptions.map((type) => ({ id: type.id, name: type.name }))}
               value={formData.yarnType}
-              onChange={(e) => handleYarnTypeChange(e.target.value)}
-              className="form-select"
-              required
+              onChange={(value) => handleYarnTypeChange(value)}
+              placeholder="Type to search yarn type..."
               disabled={isLoadingOptions}
-            >
-              <option value="">Select yarn type</option>
-              {yarnTypeOptions.map((type) => (
-                <option key={type.id} value={type.id}>
-                  {type.name}
-                </option>
-              ))}
-            </select>
+              required
+              emptyMessage="No yarn types available"
+              noOptionsMessage="No yarn types match your search"
+            />
           </div>
 
           {/* Yarn Subtype */}
@@ -349,20 +345,15 @@ const YarnForm: React.FC<YarnFormProps> = ({
                 <span className="text-xs text-gray-400 ms-1">(No subtypes available)</span>
               )}
             </label>
-            <select
-              name="yarnSubtype"
-              value={formData.yarnSubtype}
-              onChange={(e) => handleYarnSubtypeChange(e.target.value)}
-              className="form-select"
+            <SearchableSelect
+              options={subtypeOptions.map((subtype) => ({ id: subtype.id, name: subtype.name }))}
+              value={formData.yarnSubtype || ""}
+              onChange={(value) => handleYarnSubtypeChange(value)}
+              placeholder="Type to search yarn subtype..."
               disabled={isLoadingOptions || !formData.yarnType || subtypeOptions.length === 0}
-            >
-              <option value="">Select yarn subtype</option>
-              {subtypeOptions.map((subtype) => (
-                <option key={subtype.id} value={subtype.id}>
-                  {subtype.name}
-                </option>
-              ))}
-            </select>
+              emptyMessage="No subtypes available for selected yarn type"
+              noOptionsMessage="No subtypes match your search"
+            />
           </div>
 
           {/* Count Size */}
@@ -370,21 +361,18 @@ const YarnForm: React.FC<YarnFormProps> = ({
             <label className="form-label">
               Count Size <span className="text-red-500">*</span>
             </label>
-            <select
-              name="countSize"
+            <SearchableSelect
+              options={countSizeOptions.map((countSize) => ({ id: countSize.id, name: countSize.name }))}
               value={formData.countSize}
-              onChange={handleInputChange}
-              className="form-select"
-              required
+              onChange={(value) => {
+                setFormData((prev) => ({ ...prev, countSize: value }));
+              }}
+              placeholder="Type to search count size..."
               disabled={isLoadingOptions || countSizeOptions.length === 0}
-            >
-              <option value="">Select count size</option>
-              {countSizeOptions.map((countSize) => (
-                <option key={countSize.id} value={countSize.id}>
-                  {countSize.name}
-                </option>
-              ))}
-            </select>
+              required
+              emptyMessage="No count sizes available"
+              noOptionsMessage="No count sizes match your search"
+            />
             {formData.yarnSubtype && countSizeOptions.length === 0 && (
               <p className="text-xs text-gray-500 mt-1">No count sizes available for selected subtype</p>
             )}
@@ -395,21 +383,18 @@ const YarnForm: React.FC<YarnFormProps> = ({
             <label className="form-label">
               Blend <span className="text-red-500">*</span>
             </label>
-            <select
-              name="blend"
+            <SearchableSelect
+              options={blendOptions.map((blend) => ({ id: blend.id, name: blend.name }))}
               value={formData.blend}
-              onChange={handleInputChange}
-              className="form-select"
-              required
+              onChange={(value) => {
+                setFormData((prev) => ({ ...prev, blend: value }));
+              }}
+              placeholder="Type to search blend..."
               disabled={isLoadingOptions}
-            >
-              <option value="">Select blend</option>
-              {blendOptions.map((blend) => (
-                <option key={blend.id} value={blend.id}>
-                  {blend.name}
-                </option>
-              ))}
-            </select>
+              required
+              emptyMessage="No blends available"
+              noOptionsMessage="No blends match your search"
+            />
           </div>
 
           {/* Color Family */}
@@ -417,24 +402,20 @@ const YarnForm: React.FC<YarnFormProps> = ({
             <label className="form-label">
               Color Family <span className="text-xs text-gray-400">(Optional)</span>
             </label>
-            <select
-              name="colorFamily"
-              value={formData.colorFamily}
-              onChange={handleInputChange}
-              className="form-select"
+            <SearchableSelect
+              options={colorOptions.map((color) => ({
+                id: color.id,
+                name: `${color.name}${color.colorCode ? ` (${color.colorCode})` : ''}`,
+              }))}
+              value={formData.colorFamily || ""}
+              onChange={(value) => {
+                setFormData((prev) => ({ ...prev, colorFamily: value }));
+              }}
+              placeholder="Type to search color..."
               disabled={isLoadingOptions}
-            >
-              <option value="">Select color family</option>
-              {colorOptions.length === 0 && !isLoadingOptions ? (
-                <option value="" disabled>No colors available. Please add colors in Color Master.</option>
-              ) : (
-                colorOptions.map((color) => (
-                  <option key={color.id} value={color.id}>
-                    {color.name} {color.colorCode ? `(${color.colorCode})` : ''}
-                  </option>
-                ))
-              )}
-            </select>
+              emptyMessage="No colors available. Please add colors in Color Master."
+              noOptionsMessage="No colors match your search"
+            />
             {colorOptions.length === 0 && !isLoadingOptions && (
               <p className="text-xs text-warning mt-1">
                 <i className="ri-alert-line me-1"></i>
