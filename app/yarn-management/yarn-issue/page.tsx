@@ -137,11 +137,12 @@ const getIssuedQty = (requirement: YarnRequirement, transactions: YarnTransactio
 
 const getRequirementStatus = (requirement: YarnRequirement, transactions: YarnTransaction[]): RequirementStatus => {
   const issued = getIssuedQty(requirement, transactions);
-  if (issued === 0) {
+  const issuedInGrams = issued * 1000; // Convert kg to grams for comparison
+  if (issuedInGrams === 0) {
     return "Not Issued";
   }
 
-  if (issued + 0.0001 < requirement.requiredQty) {
+  if (issuedInGrams + 0.0001 < requirement.requiredQty) {
     return "Partially Issued";
   }
 
@@ -234,6 +235,22 @@ const formatKg = (value: number) => {
     return `${trimmed}0 g`;
   }
   return `${trimmed} g`;
+};
+
+const formatKgDisplay = (valueInGrams: number) => {
+  // Convert grams to kg and format with kg symbol
+  const valueInKg = valueInGrams / 1000;
+  // Format to 2 decimal places, remove trailing zeros
+  const formatted = valueInKg.toFixed(2);
+  const trimmed = formatted.replace(/\.?0+$/, '');
+  // Ensure at least 2 decimal places for consistency
+  const parts = trimmed.split('.');
+  if (parts.length === 1) {
+    return `${trimmed}.00 kg`;
+  } else if (parts[1].length === 1) {
+    return `${trimmed}0 kg`;
+  }
+  return `${trimmed} kg`;
 };
 
 const requirementStatusBadge = (status: RequirementStatus) => {
@@ -541,7 +558,7 @@ const YarnIssuePage = () => {
           yarnCode: yarnCode,
           yarnName: bomItem.yarnName || "Unknown Yarn",
           yarnType: yarnType,
-          requiredQty: bomItem.quantity,
+          requiredQty: bomItem.quantity * articlePlannedQty, // Multiply per-unit quantity by article planned quantity
           tolerancePercent: ISSUE_TOLERANCE_DEFAULT,
           shortTermAvailable: 0,
           longTermAvailable: 0,
@@ -986,8 +1003,10 @@ const YarnIssuePage = () => {
 
     // Check if we're exceeding the required quantity
     const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions);
+    const currentIssuedInGrams = currentIssued * 1000; // Convert kg to grams for comparison
+    const totalNetWeightInGrams = totalNetWeight * 1000; // Convert kg to grams for comparison
     const maxAllowed = activeRequirement.requiredQty * (1 + activeRequirement.tolerancePercent);
-    if (currentIssued + totalNetWeight > maxAllowed + 0.0001) {
+    if (currentIssuedInGrams + totalNetWeightInGrams > maxAllowed + 0.0001) {
       toast.error(
         `Cannot issue more than ${formatKg(maxAllowed)} for ${activeRequirement.yarnName}.`
       );
@@ -1098,8 +1117,8 @@ const YarnIssuePage = () => {
         }
       }
 
-      const updatedTotal = currentIssued + totalNetWeight;
-      const statusAfterIssue = updatedTotal + 0.0001 >= activeRequirement.requiredQty ? "Issued" : "Partially Issued";
+      const updatedTotalInGrams = (currentIssued * 1000) + (totalNetWeight * 1000); // Convert both to grams for comparison
+      const statusAfterIssue = updatedTotalInGrams + 0.0001 >= activeRequirement.requiredQty ? "Issued" : "Partially Issued";
 
       toast.success(
         `${formatKg(totalNetWeight)} issued successfully. Status: ${statusAfterIssue}.`
@@ -1259,7 +1278,7 @@ const YarnIssuePage = () => {
                             </td>
                             <td className="px-3 py-2 text-xs text-gray-600 border-b border-gray-300">
                               <span className="font-medium">
-                                {issuedTotals.issued.toFixed(2)} / {issuedTotals.required.toFixed(2)} kg
+                                {issuedTotals.issued.toFixed(2)} / {(issuedTotals.required / 1000).toFixed(2)} kg
                               </span>
                             </td>
                           </tr>
@@ -1469,8 +1488,9 @@ const YarnIssuePage = () => {
                         <tbody className="bg-white">
                           {sortedRequirements.map((requirement) => {
                             const issuedQty = getIssuedQty(requirement, allYarnTransactions);
+                            const issuedQtyInGrams = issuedQty * 1000; // Convert kg to grams for comparison
                             const remaining = Math.max(
-                              requirement.requiredQty - issuedQty,
+                              requirement.requiredQty - issuedQtyInGrams,
                               0
                             );
                             const status = getRequirementStatus(requirement, allYarnTransactions);
@@ -1510,19 +1530,19 @@ const YarnIssuePage = () => {
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {formatKg(requirement.requiredQty)}
+                                  {formatKgDisplay(requirement.requiredQty)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                                   <span className="font-medium text-blue-600">
-                                    {formatKg(issuedQty)}
+                                    {formatKgDisplay(issuedQtyInGrams)}
                                   </span>
                                   <span className="text-xs text-gray-500">
                                     {" "}
-                                    / {formatKg(requirement.requiredQty)}
+                                    / {formatKgDisplay(requirement.requiredQty)}
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {formatKg(remaining)}
+                                  {formatKgDisplay(remaining)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
                                   <span
@@ -1610,7 +1630,7 @@ const YarnIssuePage = () => {
                         <div className="bg-white rounded p-3 border border-gray-100">
                           <p className="text-gray-500">Issued</p>
                           <p className="text-sm font-medium text-blue-600">
-                            {formatKg(getIssuedQty(activeRequirement, allYarnTransactions))}
+                            {formatKg(getIssuedQty(activeRequirement, allYarnTransactions) * 1000)}
                           </p>
                         </div>
                         <div className="bg-white rounded p-3 border border-gray-100">
@@ -1975,9 +1995,9 @@ const YarnIssuePage = () => {
                     </p>
                     <p className="text-xs text-gray-600 mt-1">
                       <span className="font-semibold">Required:</span> {formatKg(activeRequirement.requiredQty)} |{" "}
-                      <span className="font-semibold">Issued:</span> {formatKg(getIssuedQty(activeRequirement, allYarnTransactions))} |{" "}
+                      <span className="font-semibold">Issued:</span> {formatKg(getIssuedQty(activeRequirement, allYarnTransactions) * 1000)} |{" "}
                       <span className="font-semibold">Remaining:</span>{" "}
-                      {formatKg(Math.max(activeRequirement.requiredQty - getIssuedQty(activeRequirement, allYarnTransactions), 0))}
+                      {formatKg(Math.max(activeRequirement.requiredQty - (getIssuedQty(activeRequirement, allYarnTransactions) * 1000), 0))}
                     </p>
                   </div>
                 )}
