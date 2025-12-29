@@ -50,6 +50,12 @@ const BrandPage = () => {
     failed: number;
     successRate: string;
   } | null>(null);
+  const [skippedYarnNames, setSkippedYarnNames] = useState<Array<{
+    index: number;
+    brandName?: string;
+    email?: string;
+    skippedYarnNames: string[];
+  }>>([]);
 
   const getYarnTypeLabel = (yarnType: SupplierYarnDetail['yarnType']) => {
     if (!yarnType) return 'Unknown type';
@@ -515,6 +521,7 @@ const BrandPage = () => {
     setImportProgress(0);
     setImportErrors([]);
     setImportSummary(null);
+    setSkippedYarnNames([]);
 
     const reader = new FileReader();
 
@@ -878,8 +885,23 @@ const BrandPage = () => {
         // Extract summary
         const summary = responseData?.summary || response?.summary || responseData?.data?.summary;
 
+        // Extract skipped yarn names from response
+        let skippedYarns: any[] = [];
+        if (responseData?.details?.skippedYarnNames && Array.isArray(responseData.details.skippedYarnNames)) {
+          skippedYarns = responseData.details.skippedYarnNames;
+          console.log('[Brand Import] Found skippedYarnNames in responseData.details.skippedYarnNames');
+        } else if ((response as any)?.details?.skippedYarnNames && Array.isArray((response as any).details.skippedYarnNames)) {
+          skippedYarns = (response as any).details.skippedYarnNames;
+          console.log('[Brand Import] Found skippedYarnNames in response.details.skippedYarnNames');
+        } else if (responseData?.data?.details?.skippedYarnNames && Array.isArray(responseData.data.details.skippedYarnNames)) {
+          skippedYarns = responseData.data.details.skippedYarnNames;
+          console.log('[Brand Import] Found skippedYarnNames in responseData.data.details.skippedYarnNames');
+        }
+
         console.log('[Brand Import] Extracted errors:', errors);
         console.log('[Brand Import] Errors length:', errors.length);
+        console.log('[Brand Import] Extracted skippedYarnNames:', skippedYarns);
+        console.log('[Brand Import] Skipped yarn names length:', skippedYarns.length);
         console.log('[Brand Import] Extracted summary:', summary);
 
         // Always set summary if available
@@ -894,6 +916,21 @@ const BrandPage = () => {
         } else {
           // Clear summary if not present
           setImportSummary(null);
+        }
+
+        // Process and set skipped yarn names
+        if (skippedYarns && Array.isArray(skippedYarns) && skippedYarns.length > 0) {
+          const mappedSkippedYarns = skippedYarns.map((item: any) => ({
+            index: item.index !== undefined ? item.index : 0,
+            brandName: item.brandName || item.brand || '',
+            email: item.email || item.emailAddress || '',
+            skippedYarnNames: Array.isArray(item.skippedYarnNames) ? item.skippedYarnNames : [],
+          }));
+          
+          console.log('[Brand Import] Mapped skipped yarn names to display:', mappedSkippedYarns);
+          setSkippedYarnNames(mappedSkippedYarns);
+        } else {
+          setSkippedYarnNames([]);
         }
 
         // Process and set errors FIRST - be very thorough in mapping
@@ -935,11 +972,14 @@ const BrandPage = () => {
           if (summary) {
             const successCount = (summary.created || 0) + (summary.updated || 0);
             const failedCount = summary.failed || 0;
+            const skippedCount = skippedYarns.length > 0 ? skippedYarns.reduce((sum, item) => sum + (item.skippedYarnNames?.length || 0), 0) : 0;
             if (successCount > 0) {
-              toast.success(
-                `Import completed: ${successCount} successful, ${failedCount} failed. See errors below.`,
-                { duration: 6000, icon: '⚠️' }
-              );
+              let message = `Import completed: ${successCount} successful, ${failedCount} failed`;
+              if (skippedCount > 0) {
+                message += `, ${skippedCount} yarn name(s) skipped`;
+              }
+              message += '. See details below.';
+              toast.success(message, { duration: 6000, icon: '⚠️' });
             } else {
               toast.error(
                 `Import failed: All ${failedCount} item(s) failed. See errors below.`,
@@ -947,10 +987,13 @@ const BrandPage = () => {
               );
             }
           } else {
-            toast.error(
-              `Import completed with ${errors.length} error(s). See errors below.`,
-              { duration: 6000 }
-            );
+            const skippedCount = skippedYarns.length > 0 ? skippedYarns.reduce((sum, item) => sum + (item.skippedYarnNames?.length || 0), 0) : 0;
+            let message = `Import completed with ${errors.length} error(s)`;
+            if (skippedCount > 0) {
+              message += ` and ${skippedCount} skipped yarn name(s)`;
+            }
+            message += '. See details below.';
+            toast.error(message, { duration: 6000 });
           }
         } else {
           // No errors array found - check summary for failures
@@ -975,8 +1018,12 @@ const BrandPage = () => {
             console.log('[Brand Import] No errors found, clearing error state');
             setImportErrors([]);
             setImportProgress(100);
-            if (summary && summary.failed === 0) {
-              toast.success(response.message || responseData?.message || 'Brands imported successfully');
+            const skippedCount = skippedYarns.length > 0 ? skippedYarns.reduce((sum, item) => sum + (item.skippedYarnNames?.length || 0), 0) : 0;
+            if (skippedCount > 0) {
+              toast.success(
+                `${response.message || responseData?.message || 'Brands imported successfully'}. ${skippedCount} yarn name(s) were skipped. See details below.`,
+                { duration: 6000, icon: '⚠️' }
+              );
             } else {
               toast.success(response.message || responseData?.message || 'Brands imported successfully');
             }
@@ -1035,6 +1082,7 @@ const BrandPage = () => {
         }
         
         setImportSummary(null);
+        setSkippedYarnNames([]);
         toast.error(error instanceof Error ? error.message : 'Failed to process import file');
         setImportProgress(null);
       } finally {
@@ -1220,6 +1268,8 @@ const BrandPage = () => {
                     className={`h-3 rounded-full transition-all duration-200 ${
                       importProgress === 100 && importErrors.length > 0 
                         ? 'bg-danger' 
+                        : importProgress === 100 && skippedYarnNames.length > 0
+                        ? 'bg-warning'
                         : 'bg-primary'
                     }`}
                     style={{ width: `${importProgress}%` }}
@@ -1227,11 +1277,15 @@ const BrandPage = () => {
                   <div className={`text-xs mt-1 text-right ${
                     importProgress === 100 && importErrors.length > 0 
                       ? 'text-danger font-semibold' 
+                      : importProgress === 100 && skippedYarnNames.length > 0
+                      ? 'text-warning font-semibold'
                       : 'text-gray-600'
                   }`}>
                     {importProgress === 100 
                       ? (importErrors.length > 0 
                           ? `Import completed with ${importErrors.length} error(s)` 
+                          : skippedYarnNames.length > 0
+                          ? `Import completed with ${skippedYarnNames.length} skipped yarn name(s)`
                           : 'Import completed')
                       : `Importing... ${importProgress}%`
                     }
@@ -1239,7 +1293,7 @@ const BrandPage = () => {
                 </div>
               )}
 
-              {(importSummary || (importErrors && importErrors.length > 0)) && (
+              {(importSummary || (importErrors && importErrors.length > 0) || (skippedYarnNames && skippedYarnNames.length > 0)) && (
                 <div className="mb-4">
                   {importSummary && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3">
@@ -1251,6 +1305,7 @@ const BrandPage = () => {
                           onClick={() => {
                             setImportSummary(null);
                             setImportErrors([]);
+                            setSkippedYarnNames([]);
                           }}
                         >
                           <i className="ri-close-line"></i>
@@ -1294,6 +1349,7 @@ const BrandPage = () => {
                           onClick={() => {
                             setImportErrors([]);
                             setImportSummary(null);
+                            setSkippedYarnNames([]);
                           }}
                         >
                           <i className="ri-close-line"></i>
@@ -1327,6 +1383,63 @@ const BrandPage = () => {
                                     ) : (
                                       <span className="whitespace-pre-wrap">{err.error}</span>
                                     )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {skippedYarnNames && skippedYarnNames.length > 0 && (
+                    <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-bold text-yellow-900 flex items-center gap-2">
+                          <i className="ri-alert-line text-yellow-600"></i>
+                          Skipped Yarn Names ({skippedYarnNames.length})
+                        </h3>
+                        <button
+                          type="button"
+                          className="text-yellow-600 hover:text-yellow-800 text-sm"
+                          onClick={() => {
+                            setSkippedYarnNames([]);
+                            setImportSummary(null);
+                            setImportErrors([]);
+                          }}
+                        >
+                          <i className="ri-close-line"></i>
+                        </button>
+                      </div>
+                      <div className="max-h-96 overflow-y-auto">
+                        <div className="space-y-2">
+                          {skippedYarnNames.map((item, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-white border border-yellow-200 rounded p-3 text-sm"
+                            >
+                              <div className="flex items-start gap-2">
+                                <i className="ri-information-line text-yellow-500 mt-0.5"></i>
+                                <div className="flex-1">
+                                  <div className="font-medium text-yellow-900 mb-2">
+                                    {item.brandName ? `Brand: ${item.brandName}` : `Item #${item.index + 1}`}
+                                    {item.email && (
+                                      <span className="text-gray-600 ml-2">({item.email})</span>
+                                    )}
+                                  </div>
+                                  <div className="text-yellow-800">
+                                    <div className="font-semibold mb-1">Skipped Yarn Names:</div>
+                                    <ul className="list-disc list-inside space-y-1 ml-2">
+                                      {item.skippedYarnNames.map((yarnName, yarnIdx) => (
+                                        <li key={yarnIdx} className="text-yellow-700">
+                                          {yarnName}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                    <div className="mt-2 text-xs text-yellow-600 italic">
+                                      These yarn names were not found in the catalog and were skipped. The brand was still processed with the remaining valid yarn details.
+                                    </div>
                                   </div>
                                 </div>
                               </div>
