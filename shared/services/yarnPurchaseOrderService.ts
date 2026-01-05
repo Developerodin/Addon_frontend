@@ -124,7 +124,7 @@ export interface ReceivedLotDetail {
   totalWeight: number;
   numberOfBoxes: number;
   poItems: ReceivedLotPoItem[];
-  status: 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
+  status: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
 }
 
 export interface UpdatePurchaseOrderWithReceivedLotsPayload {

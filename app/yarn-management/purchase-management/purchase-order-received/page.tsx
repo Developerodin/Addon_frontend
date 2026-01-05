@@ -1654,7 +1654,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
       totalWeight: 0,
       numberOfBoxes: 0,
       poItems: [],
-      status: 'lot_qc_pending'
+      status: 'lot_pending'
     }
   ]);
   const [currentStatus, setCurrentStatus] = useState<'goods_received' | 'goods_partially_received'>('goods_partially_received');
@@ -1670,7 +1670,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
           totalWeight: lot.totalWeight || 0,
           numberOfBoxes: lot.numberOfBoxes || 0,
           poItems: lot.poItems || [],
-          status: lot.status || 'lot_qc_pending'
+          status: lot.status || 'lot_pending'
         })));
         
         // Set current status based on order status
@@ -1687,7 +1687,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
           totalWeight: 0,
           numberOfBoxes: 0,
           poItems: [],
-          status: 'lot_qc_pending'
+          status: 'lot_pending'
         }]);
         setCurrentStatus('goods_partially_received');
       }
@@ -1703,7 +1703,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
       totalWeight: 0,
       numberOfBoxes: 0,
       poItems: [],
-      status: 'lot_qc_pending'
+      status: 'lot_pending'
     }]);
   };
 
@@ -1782,8 +1782,14 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
       }
     }
 
+    // Set default status for all lots
+    const lotsWithDefaultStatus = lots.map(lot => ({
+      ...lot,
+      status: 'lot_pending' as const
+    }));
+
     const payload: UpdatePurchaseOrderWithReceivedLotsPayload = {
-      receivedLotDetails: lots,
+      receivedLotDetails: lotsWithDefaultStatus,
       currentStatus
     };
 
@@ -1927,22 +1933,6 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           placeholder="Enter lot number"
                           required
                         />
-                      </div>
-
-                      <div>
-                        <label className="form-label">
-                          Status <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={lot.status}
-                          onChange={(e) => updateLot(lotIndex, 'status', e.target.value)}
-                          className="form-select"
-                          required
-                        >
-                          <option value="lot_qc_pending">Lot QC Pending</option>
-                          <option value="lot_accepted">Lot Accepted</option>
-                          <option value="lot_rejected">Lot Rejected</option>
-                        </select>
                       </div>
 
                       <div>
