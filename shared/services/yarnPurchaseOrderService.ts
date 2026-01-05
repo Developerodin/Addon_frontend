@@ -342,6 +342,30 @@ class YarnPurchaseOrderService {
       body: JSON.stringify(payload),
     });
   }
+
+  async updateLotStatus(
+    poNumber: string,
+    lotNumber: string,
+    lotStatus: 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected'
+  ): Promise<any> {
+    if (!poNumber) {
+      throw new Error('PO Number is required');
+    }
+    if (!lotNumber) {
+      throw new Error('Lot Number is required');
+    }
+
+    const payload = {
+      poNumber,
+      lotNumber,
+      lotStatus,
+    };
+
+    return this.makeRequest<any>(`/lot-status`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
 }
 
 const yarnPurchaseOrderService = new YarnPurchaseOrderService();
