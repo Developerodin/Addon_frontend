@@ -1890,9 +1890,9 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                   <button
                     type="button"
                     onClick={addLot}
-                    className="ti-btn ti-btn-sm ti-btn-primary"
+                    className="ti-btn ti-btn-primary whitespace-nowrap"
                   >
-                    <i className="ri-add-line me-1"></i>
+                    <i className="ri-add-line me-2"></i>
                     Add Lot
                   </button>
                 </div>
@@ -1905,9 +1905,11 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                         <button
                           type="button"
                           onClick={() => removeLot(lotIndex)}
-                          className="text-red-600 hover:text-red-800"
+                          className="ti-btn ti-btn-outline-danger whitespace-nowrap"
+                          title="Remove Lot"
                         >
-                          <i className="ri-delete-bin-line"></i>
+                          <i className="ri-delete-bin-line me-2"></i>
+                          Remove Lot
                         </button>
                       )}
                     </div>
@@ -1994,9 +1996,9 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                         <button
                           type="button"
                           onClick={() => addPoItemToLot(lotIndex)}
-                          className="ti-btn ti-btn-sm ti-btn-outline-primary"
+                          className="ti-btn ti-btn-outline-primary whitespace-nowrap"
                         >
-                          <i className="ri-add-line me-1"></i>
+                          <i className="ri-add-line me-2"></i>
                           Add PO Item
                         </button>
                       </div>
@@ -2040,9 +2042,9 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                             <button
                               type="button"
                               onClick={() => removePoItemFromLot(lotIndex, poItemIndex)}
-                              className="ti-btn ti-btn-sm ti-btn-outline-danger w-full"
+                              className="ti-btn ti-btn-outline-danger whitespace-nowrap w-full"
                             >
-                              <i className="ri-delete-bin-line me-1"></i>
+                              <i className="ri-delete-bin-line me-2"></i>
                               Remove
                             </button>
                           </div>
