@@ -68,7 +68,10 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     'partially_delivered': 'partially delivered',
     'stocked': 'stocked',
     'goods_received': 'goods received',
-    'po_rejected': 'rejected'
+    'goods_partially_received': 'goods partially received',
+    'po_rejected': 'rejected',
+    'po_accepted': 'po_accepted',
+    'po_accepted_partially': 'po_accepted_partially'
   };
   return statusMap[statusCode] || 'submitted to supplier';
 };
@@ -164,32 +167,54 @@ const YarnQCPage = () => {
   const [startDate, setStartDate] = useState<string>(getDefaultStartDate());
   const [endDate, setEndDate] = useState<string>(getDefaultEndDate());
 
-  // Fetch purchase orders with "qc_pending" status from API
+  // Fetch purchase orders with multiple statuses from API
   const fetchPurchaseOrders = async () => {
     setIsLoadingOrders(true);
     try {
-      const params: any = {};
+      const baseParams: any = {};
 
       // Add date filters if provided
       if (startDate) {
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
-        params.start_date = start.toISOString();
+        baseParams.start_date = start.toISOString();
       }
       if (endDate) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
-        params.end_date = end.toISOString();
+        baseParams.end_date = end.toISOString();
       }
 
-      // Filter by "qc_pending" status
-      params.status_code = 'qc_pending';
+      // Fetch orders with all required statuses
+      const statusesToFetch = [
+        'goods_partially_received',
+        'goods_received',
+        'qc_pending',
+        'po_rejected',
+        'po_accepted',
+        'po_accepted_partially'
+      ];
 
-      const response = await yarnPurchaseOrderService.getPurchaseOrders(params);
+      // Fetch all statuses in parallel
+      const responses = await Promise.all(
+        statusesToFetch.map(status => 
+          yarnPurchaseOrderService.getPurchaseOrders({ ...baseParams, status_code: status })
+        )
+      );
+
+      // Combine results from all API calls
+      const allOrders: any[] = [];
+      responses.forEach((response) => {
+        const ordersData = Array.isArray(response) ? response : (response.results || []);
+        allOrders.push(...ordersData);
+      });
+
+      // Deduplicate by order ID
+      const uniqueOrders = allOrders.filter((order, index, self) => 
+        index === self.findIndex((o) => (o._id || o.id) === (order._id || order.id))
+      );
       
-      // Handle both array and object with results property
-      const ordersData = Array.isArray(response) ? response : (response.results || []);
-      const mappedOrders = ordersData.map(mapAPIOrderToComponent);
+      const mappedOrders = uniqueOrders.map(mapAPIOrderToComponent);
       setOrders(mappedOrders);
     } catch (error) {
       console.error('Failed to fetch purchase orders:', error);
@@ -271,6 +296,9 @@ const YarnQCPage = () => {
       case 'partially delivered': return 'bg-orange-100 text-orange-800';
       case 'stocked': return 'bg-emerald-100 text-emerald-800';
       case 'goods received': return 'bg-green-100 text-green-800';
+      case 'goods partially received': return 'bg-amber-100 text-amber-800';
+      case 'po_accepted': return 'bg-green-100 text-green-800';
+      case 'po_accepted_partially': return 'bg-cyan-100 text-cyan-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -318,7 +346,7 @@ const YarnQCPage = () => {
             <div className="box-header flex justify-between items-center">
               <div>
                 <h1 className="box-title text-2xl font-semibold">Yarn QC</h1>
-                <p className="text-gray-600 mt-1">Quality control for yarn purchases - QC Pending Orders</p>
+                <p className="text-gray-600 mt-1">Quality control for yarn purchases - Orders pending QC, received, and QC processed</p>
               </div>
             </div>
           </div>
@@ -380,10 +408,10 @@ const YarnQCPage = () => {
             </div>
           </div>
 
-          {/* QC Pending Orders Table */}
+          {/* QC Orders Table */}
           <div className="box">
             <div className="box-header">
-              <h3 className="box-title">QC Pending Orders ({filteredAndSortedOrders.length})</h3>
+              <h3 className="box-title">QC Orders ({filteredAndSortedOrders.length})</h3>
             </div>
             <div className="box-body">
               {isLoadingOrders ? (
@@ -396,11 +424,11 @@ const YarnQCPage = () => {
                   <div className="text-gray-400 mb-4">
                     <i className="ri-inbox-line text-4xl"></i>
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No QC Pending Orders</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No QC Orders Found</h3>
                   <p className="text-gray-500 mb-4">
                     {searchTerm
                       ? "No orders match your search criteria. Try adjusting your search term."
-                      : "No purchase orders found with QC pending status for the selected period."}
+                      : "No purchase orders found with QC pending, received, or processed statuses for the selected period."}
                   </p>
                 </div>
               ) : (

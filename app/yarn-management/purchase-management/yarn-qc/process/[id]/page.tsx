@@ -7,7 +7,7 @@ import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
-import yarnBoxService, { YarnBox, UpdateQCStatusPayload } from "@/shared/services/yarnBoxService";
+import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 import { FileUploadService } from "@/shared/services/fileUploadService";
 
 interface ReceivedItem {
@@ -21,6 +21,20 @@ interface ReceivedItem {
   unitPrice: number;
   totalPrice: number;
   qualityStatus: 'Approved' | 'Rejected' | 'Pending';
+}
+
+interface ReceivedLotPoItem {
+  poItem: string;
+  receivedQuantity: number;
+}
+
+interface ReceivedLotDetail {
+  lotNumber: string;
+  numberOfCones: number;
+  totalWeight: number;
+  numberOfBoxes: number;
+  status: 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
+  poItems: ReceivedLotPoItem[];
 }
 
 interface ReceivedOrder {
@@ -47,6 +61,7 @@ interface ReceivedOrder {
     numberOfBoxes?: number;
     totalWeight?: number;
   };
+  receivedLotDetails?: ReceivedLotDetail[];
 }
 
 // Helper function to convert API status code to display format
@@ -60,6 +75,7 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     'partially_delivered': 'partially delivered',
     'stocked': 'stocked',
     'goods_received': 'goods received',
+    'goods_partially_received': 'goods partially received',
     'po_rejected': 'rejected'
   };
   return statusMap[statusCode] || 'submitted to supplier';
@@ -68,6 +84,19 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
 // Helper function to map API response to ReceivedOrder format
 const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
   const poItems = apiOrder.poItems || apiOrder.items || apiOrder.orderItems || [];
+  
+  // Map received lot details
+  const receivedLotDetails: ReceivedLotDetail[] = (apiOrder.receivedLotDetails || []).map((lot: any) => ({
+    lotNumber: lot.lotNumber || lot.lot_number || '',
+    numberOfCones: lot.numberOfCones || lot.number_of_cones || 0,
+    totalWeight: lot.totalWeight || lot.total_weight || 0,
+    numberOfBoxes: lot.numberOfBoxes || lot.number_of_boxes || 0,
+    status: lot.status || 'lot_qc_pending',
+    poItems: (lot.poItems || []).map((poItem: any) => ({
+      poItem: poItem.poItem || poItem.po_item || '',
+      receivedQuantity: poItem.receivedQuantity || poItem.received_quantity || 0
+    }))
+  }));
   
   return {
     id: apiOrder._id || apiOrder.id || '',
@@ -103,7 +132,8 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
       numberOfCones: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfCones || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_cones,
       numberOfBoxes: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfBoxes || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_boxes,
       totalWeight: (apiOrder.packListDetails || apiOrder.packlistDetails)?.totalWeight || (apiOrder.packListDetails || apiOrder.packlistDetails)?.total_weight
-    } : undefined
+    } : undefined,
+    receivedLotDetails: receivedLotDetails.length > 0 ? receivedLotDetails : undefined
   };
 };
 
@@ -196,10 +226,34 @@ const ProcessQCOrderPage = () => {
       case 'submitted to supplier': return 'bg-blue-100 text-blue-800';
       case 'stocked': return 'bg-emerald-100 text-emerald-800';
       case 'goods received': return 'bg-green-100 text-green-800';
+      case 'goods partially received': return 'bg-amber-100 text-amber-800';
       case 'po_accepted': return 'bg-green-100 text-green-800';
       case 'po_rejected': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getLotStatusColor = (status: string) => {
+    switch (status) {
+      case 'lot_qc_pending': return 'bg-yellow-100 text-yellow-800';
+      case 'lot_accepted': return 'bg-green-100 text-green-800';
+      case 'lot_rejected': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getLotStatusDisplay = (status: string) => {
+    switch (status) {
+      case 'lot_qc_pending': return 'QC Pending';
+      case 'lot_accepted': return 'Accepted';
+      case 'lot_rejected': return 'Rejected';
+      default: return status;
+    }
+  };
+
+  // Helper to get PO item details by ID
+  const getPoItemDetails = (poItemId: string) => {
+    return order?.items.find(item => item.id === poItemId);
   };
 
   // Handle barcode scan - fetch box details by barcode
@@ -327,6 +381,13 @@ const ProcessQCOrderPage = () => {
     setIsSubmitting(true);
     
     try {
+      // Check if lot number is available
+      if (!scannedBox.lotNumber) {
+        toast.error('Lot number is missing from box details. Cannot update QC status.');
+        setIsSubmitting(false);
+        return;
+      }
+
       // Prepare mediaUrl object from uploadedMedia
       const mediaUrl: Record<string, string> = {};
       uploadedMedia.forEach((media) => {
@@ -339,45 +400,29 @@ const ProcessQCOrderPage = () => {
         mediaUrl[`${keyPrefix}${existingIndex + 1}`] = media.url;
       });
 
-      // Map QC status to API format
-      const apiStatus = qcStatus === 'QC Accepted' ? 'qc_approved' : 'qc_rejected';
-
-      // Prepare payload
-      const payload: UpdateQCStatusPayload = {
+      // Map QC status to lot status format
+      const lotStatus = qcStatus === 'QC Accepted' ? 'lot_accepted' : 'lot_rejected';
+      
+      // Prepare payload for lot status QC approve API
+      const lotStatusPayload = {
         poNumber: scannedBox.poNumber,
-        status: apiStatus,
-        user: user.id,
-        username: user.email || user.username || qcBy.trim(),
-        date: new Date().toISOString(),
+        lotNumber: scannedBox.lotNumber,
+        lotStatus: lotStatus,
+        updated_by: {
+          username: user.email || user.username || qcBy.trim(),
+          user_id: user.id
+        },
+        notes: qcNotes.trim() || `QC ${qcStatus === 'QC Accepted' ? 'approved' : 'rejected'}`,
         remarks: qcNotes.trim() || undefined,
         mediaUrl: Object.keys(mediaUrl).length > 0 ? mediaUrl : undefined
       };
 
-      console.log('Updating QC status with payload:', payload);
+      console.log('Updating lot QC status with payload:', lotStatusPayload);
       
-      // Call API to update QC status for boxes
-      await yarnBoxService.updateQCStatus(payload);
-      
-      // Also update PO order status
-      if (order && order.id) {
-        const poStatus = qcStatus === 'QC Accepted' ? 'po_accepted' : 'po_rejected';
-        const poStatusNotes = qcNotes.trim() || `QC ${qcStatus === 'QC Accepted' ? 'approved' : 'rejected'}`;
-        
-        try {
-          await yarnPurchaseOrderService.updatePurchaseOrderStatus(
-            order.id,
-            poStatus as PurchaseOrderStatus,
-            user.id,
-            user.email || user.username || qcBy.trim(),
-            poStatusNotes
-          );
-          console.log('PO status updated successfully');
-        } catch (poError) {
-          console.error('Failed to update PO status:', poError);
-          // Don't fail the whole operation if PO update fails, but log it
-          toast.error('QC status updated but failed to update PO status');
-        }
-      }
+      // Call API to update lot QC status (primary API call - replaces box QC status API)
+      // This API handles the lot status update and PO status update internally
+      await yarnPurchaseOrderService.updateLotStatusQCApprove(lotStatusPayload);
+      console.log('Lot status and PO status updated successfully');
       
       toast.success(`QC ${qcStatus === 'QC Accepted' ? 'accepted' : 'rejected'} successfully`);
       
@@ -537,6 +582,98 @@ const ProcessQCOrderPage = () => {
               )}
             </div>
           </div>
+
+          {/* Received Lot Details Section */}
+          {order.receivedLotDetails && order.receivedLotDetails.length > 0 && (
+            <div className="box mb-6">
+              <div className="box-header">
+                <h3 className="box-title">
+                  <i className="ri-stack-line me-2"></i>
+                  Received Lot Details ({order.receivedLotDetails.length})
+                </h3>
+              </div>
+              <div className="box-body">
+                <div className="space-y-4">
+                  {order.receivedLotDetails.map((lot, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-primary/10 text-primary rounded-full w-10 h-10 flex items-center justify-center font-semibold">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <h4 className="text-base font-semibold text-gray-900">Lot: {lot.lotNumber}</h4>
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 ${getLotStatusColor(lot.status)}`}>
+                              {getLotStatusDisplay(lot.status)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        <div>
+                          <p className="text-xs uppercase text-gray-500 mb-1">Number of Boxes</p>
+                          <p className="text-sm font-semibold text-gray-900">{lot.numberOfBoxes}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase text-gray-500 mb-1">Number of Cones</p>
+                          <p className="text-sm font-semibold text-gray-900">{lot.numberOfCones}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase text-gray-500 mb-1">Total Weight (kg)</p>
+                          <p className="text-sm font-semibold text-gray-900">{lot.totalWeight}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase text-gray-500 mb-1">PO Items</p>
+                          <p className="text-sm font-semibold text-gray-900">{lot.poItems.length}</p>
+                        </div>
+                      </div>
+
+                      {/* PO Items in this lot */}
+                      {lot.poItems.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-gray-300">
+                          <p className="text-xs uppercase text-gray-500 mb-2 font-semibold">PO Items in this Lot</p>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead className="bg-gray-100">
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Yarn Name</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Size/Count</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Shade Code</th>
+                                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 uppercase">Received Qty</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {lot.poItems.map((poItem, poItemIndex) => {
+                                  const itemDetails = getPoItemDetails(poItem.poItem);
+                                  return (
+                                    <tr key={poItemIndex} className="hover:bg-gray-50">
+                                      <td className="px-3 py-2 text-gray-900">
+                                        {itemDetails?.yarnName || 'N/A'}
+                                      </td>
+                                      <td className="px-3 py-2 text-gray-600">
+                                        {itemDetails?.sizeCount || 'N/A'}
+                                      </td>
+                                      <td className="px-3 py-2 text-gray-600">
+                                        {itemDetails?.shadeCode || 'N/A'}
+                                      </td>
+                                      <td className="px-3 py-2 text-right text-gray-900 font-medium">
+                                        {poItem.receivedQuantity} kg
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Barcode Scanner Section */}
           <div className="box mb-6">

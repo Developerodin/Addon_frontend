@@ -157,35 +157,53 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
     };
   };
 
-  // Fetch PO accepted orders
+  // Fetch orders with multiple statuses
   const fetchUnallocatedOrders = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params: any = {
-        status_code: "po_accepted",
-      };
+      const baseParams: any = {};
 
       // Add date filters if provided
       if (startDate) {
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
-        params.start_date = start.toISOString();
+        baseParams.start_date = start.toISOString();
       }
       if (endDate) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
-        params.end_date = end.toISOString();
+        baseParams.end_date = end.toISOString();
       }
 
-      const response = await yarnPurchaseOrderService.getPurchaseOrders(params);
+      // Fetch orders with all required statuses
+      const statusesToFetch = [
+        'po_accepted',
+        'po_accepted_partially',
+        'goods_partially_received',
+        'goods_received'
+      ];
 
-      // Handle both array and object with results property
-      const ordersData = Array.isArray(response)
-        ? response
-        : response.results || [];
+      // Fetch all statuses in parallel
+      const responses = await Promise.all(
+        statusesToFetch.map(status => 
+          yarnPurchaseOrderService.getPurchaseOrders({ ...baseParams, status_code: status })
+        )
+      );
+
+      // Combine results from all API calls
+      const allOrders: any[] = [];
+      responses.forEach((response) => {
+        const ordersData = Array.isArray(response) ? response : (response.results || []);
+        allOrders.push(...ordersData);
+      });
+
+      // Deduplicate by order ID
+      const uniqueOrders = allOrders.filter((order, index, self) => 
+        index === self.findIndex((o) => (o._id || o.id) === (order._id || order.id))
+      );
       
       // Map API response to component format
-      const mappedOrders = ordersData.map(mapAPIOrderToComponent);
+      const mappedOrders = uniqueOrders.map(mapAPIOrderToComponent);
       setOrders(mappedOrders);
     } catch (error) {
       console.error("Failed to fetch unallocated orders:", error);
@@ -214,6 +232,37 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
 
       setIsLoadingBoxes(true);
       try {
+        // Find the selected order to get its ID
+        const selectedOrder = orders.find(order => order.orderNumber === selectedPO);
+        if (!selectedOrder) {
+          toast.error("Selected purchase order not found");
+          setBoxes([]);
+          setIsLoadingBoxes(false);
+          return;
+        }
+
+        // Fetch full order details to get receivedLotDetails
+        const fullOrderDetails = await yarnPurchaseOrderService.getPurchaseOrderById(selectedOrder.id);
+        
+        // Get accepted lot numbers from receivedLotDetails
+        const acceptedLotNumbers: string[] = [];
+        if (fullOrderDetails && (fullOrderDetails as any).receivedLotDetails) {
+          const receivedLotDetails = (fullOrderDetails as any).receivedLotDetails || [];
+          acceptedLotNumbers.push(
+            ...receivedLotDetails
+              .filter((lot: any) => lot.status === 'lot_accepted')
+              .map((lot: any) => lot.lotNumber)
+          );
+        }
+
+        // If no accepted lots found, show no boxes
+        if (acceptedLotNumbers.length === 0) {
+          setBoxes([]);
+          setIsLoadingBoxes(false);
+          return;
+        }
+
+        // Fetch boxes for the selected PO
         const response = await yarnBoxService.getYarnBoxes({
           po_number: selectedPO,
         });
@@ -228,9 +277,15 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
           boxesData = [response as YarnBox];
         }
 
-        // Filter boxes where storedStatus is false
+        // Filter boxes:
+        // 1. storedStatus is false (unallocated)
+        // 2. lotNumber matches one of the accepted lots
         const unallocatedBoxes = boxesData.filter(
-          (box: any) => box.storedStatus === false || box.storedStatus === undefined
+          (box: any) => {
+            const isUnallocated = box.storedStatus === false || box.storedStatus === undefined;
+            const isFromAcceptedLot = box.lotNumber && acceptedLotNumbers.includes(box.lotNumber);
+            return isUnallocated && isFromAcceptedLot;
+          }
         );
 
         setBoxes(unallocatedBoxes);
@@ -248,7 +303,7 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
     };
 
     fetchBoxes();
-  }, [selectedPO]);
+  }, [selectedPO, orders]);
 
   // Use all orders for the dropdown (no filtering needed)
   const filteredOrders = orders;
@@ -299,7 +354,28 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
       setAllocatingBoxId(null);
       setStorageRackCode("");
 
-      // Refresh boxes list
+      // Find the selected order to get its ID
+      const selectedOrder = orders.find(order => order.orderNumber === selectedPO);
+      if (!selectedOrder) {
+        toast.error("Selected purchase order not found");
+        return;
+      }
+
+      // Fetch full order details to get receivedLotDetails
+      const fullOrderDetails = await yarnPurchaseOrderService.getPurchaseOrderById(selectedOrder.id);
+      
+      // Get accepted lot numbers from receivedLotDetails
+      const acceptedLotNumbers: string[] = [];
+      if (fullOrderDetails && (fullOrderDetails as any).receivedLotDetails) {
+        const receivedLotDetails = (fullOrderDetails as any).receivedLotDetails || [];
+        acceptedLotNumbers.push(
+          ...receivedLotDetails
+            .filter((lot: any) => lot.status === 'lot_accepted')
+            .map((lot: any) => lot.lotNumber)
+        );
+      }
+
+      // Fetch boxes for the selected PO
       const response = await yarnBoxService.getYarnBoxes({
         po_number: selectedPO,
       });
@@ -313,9 +389,15 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
         boxesData = [response as YarnBox];
       }
 
-      // Filter boxes where storedStatus is false
+      // Filter boxes:
+      // 1. storedStatus is false (unallocated)
+      // 2. lotNumber matches one of the accepted lots
       const unallocatedBoxes = boxesData.filter(
-        (box: any) => box.storedStatus === false || box.storedStatus === undefined
+        (box: any) => {
+          const isUnallocated = box.storedStatus === false || box.storedStatus === undefined;
+          const isFromAcceptedLot = box.lotNumber && acceptedLotNumbers.includes(box.lotNumber);
+          return isUnallocated && isFromAcceptedLot;
+        }
       );
 
       setBoxes(unallocatedBoxes);
@@ -346,7 +428,7 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
         <div>
           <h3 className="box-title">Unallocated Boxes</h3>
           <p className="text-sm text-gray-600 mt-1">
-            Purchase orders with PO Accepted status awaiting box allocation
+            Purchase orders with PO Accepted, Partially Accepted, Goods Received, or Partially Received status - showing boxes from accepted lots only
           </p>
         </div>
         <button
@@ -423,7 +505,7 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
           )}
           {filteredOrders.length === 0 && !isLoading && (
             <p className="text-sm text-gray-500 mt-2">
-              No purchase orders with PO Accepted status found for the selected date range.
+              No purchase orders found for the selected date range.
             </p>
           )}
         </div>
