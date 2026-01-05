@@ -366,6 +366,31 @@ class YarnPurchaseOrderService {
       body: JSON.stringify(payload),
     });
   }
+
+  async updateLotStatusQCApprove(payload: {
+    poNumber: string;
+    lotNumber: string;
+    lotStatus: 'lot_accepted' | 'lot_rejected';
+    updated_by: {
+      username: string;
+      user_id: string;
+    };
+    notes?: string;
+    remarks?: string;
+    mediaUrl?: Record<string, string>;
+  }): Promise<any> {
+    if (!payload.poNumber) {
+      throw new Error('PO Number is required');
+    }
+    if (!payload.lotNumber) {
+      throw new Error('Lot Number is required');
+    }
+
+    return this.makeRequest<any>(`/lot-status-qc-approve`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
 }
 
 const yarnPurchaseOrderService = new YarnPurchaseOrderService();
