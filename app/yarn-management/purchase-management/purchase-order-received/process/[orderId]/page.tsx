@@ -1214,21 +1214,21 @@ const ProcessOrderPage = () => {
                             ({lotBoxes.length} {lotBoxes.length === 1 ? 'box' : 'boxes'})
                           </span>
                         </h4>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <button
                             type="button"
                             onClick={handlePrintLotBarcodes}
-                            className="ti-btn ti-btn-sm ti-btn-primary"
+                            className="ti-btn ti-btn-primary whitespace-nowrap px-3 py-2"
                             title={`Print barcodes for ${lotNumber}`}
                           >
-                            <i className="ri-printer-line me-1"></i>
+                            <i className="ri-printer-line me-2"></i>
                             Print Lot Barcodes
                           </button>
                           <button
                             type="button"
                             onClick={() => handleSendLotForQC(lotNumber, lotBoxes)}
                             disabled={!isLotCompleted || isUpdatingOrderStatus}
-                            className={`ti-btn ti-btn-sm ${
+                            className={`ti-btn whitespace-nowrap px-3 py-2 ${
                               isLotCompleted && !isUpdatingOrderStatus
                                 ? 'ti-btn-success'
                                 : 'ti-btn-light opacity-50 cursor-not-allowed'
@@ -1237,12 +1237,12 @@ const ProcessOrderPage = () => {
                           >
                             {isUpdatingOrderStatus ? (
                               <>
-                                <i className="ri-loader-4-line animate-spin me-1"></i>
+                                <i className="ri-loader-4-line animate-spin me-2"></i>
                                 Sending...
                               </>
                             ) : (
                               <>
-                                <i className="ri-checkbox-circle-line me-1"></i>
+                                <i className="ri-checkbox-circle-line me-2"></i>
                                 Send Lot for QC
                               </>
                             )}
@@ -1251,7 +1251,7 @@ const ProcessOrderPage = () => {
                             type="button"
                             onClick={() => handleRejectLot(lotNumber, lotBoxes)}
                             disabled={!isLotCompleted || isUpdatingOrderStatus}
-                            className={`ti-btn ti-btn-sm ${
+                            className={`ti-btn whitespace-nowrap px-3 py-2 ${
                               isLotCompleted && !isUpdatingOrderStatus
                                 ? 'ti-btn-danger'
                                 : 'ti-btn-light opacity-50 cursor-not-allowed'
@@ -1260,12 +1260,12 @@ const ProcessOrderPage = () => {
                           >
                             {isUpdatingOrderStatus ? (
                               <>
-                                <i className="ri-loader-4-line animate-spin me-1"></i>
+                                <i className="ri-loader-4-line animate-spin me-2"></i>
                                 Rejecting...
                               </>
                             ) : (
                               <>
-                                <i className="ri-close-circle-line me-1"></i>
+                                <i className="ri-close-circle-line me-2"></i>
                                 Reject Lot
                               </>
                             )}
