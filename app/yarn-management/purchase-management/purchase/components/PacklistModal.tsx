@@ -5,6 +5,9 @@ import { toast } from "react-hot-toast";
 export interface PacklistDetails {
   packingNumber: string;
   courierName: string;
+  courierNumber?: string;
+  vehicleNumber?: string;
+  challanNumber?: string;
   dispatchDate: string;
   estimatedDeliveryDate: string;
   numberOfCones: number;
@@ -49,6 +52,9 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
   const [formData, setFormData] = useState<PacklistDetails>({
     packingNumber: "",
     courierName: "",
+    courierNumber: "",
+    vehicleNumber: "",
+    challanNumber: "",
     dispatchDate: new Date().toISOString().split('T')[0],
     estimatedDeliveryDate: "",
     numberOfCones: 0,
@@ -74,6 +80,9 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
       setFormData({
         packingNumber: "",
         courierName: "",
+        courierNumber: "",
+        vehicleNumber: "",
+        challanNumber: "",
         dispatchDate: new Date().toISOString().split('T')[0],
         estimatedDeliveryDate: order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : "",
         numberOfCones: 0,
@@ -124,6 +133,9 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
       setFormData({
         packingNumber: "",
         courierName: "",
+        courierNumber: "",
+        vehicleNumber: "",
+        challanNumber: "",
         dispatchDate: new Date().toISOString().split('T')[0],
         estimatedDeliveryDate: order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : "",
         numberOfCones: 0,
@@ -260,6 +272,50 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                       className="form-control"
                       placeholder="Enter courier name"
                       required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="form-label">
+                      Courier Number
+                    </label>
+                    <input
+                      type="text"
+                      name="courierNumber"
+                      value={formData.courierNumber || ''}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter courier number"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label">
+                      Vehicle Number
+                    </label>
+                    <input
+                      type="text"
+                      name="vehicleNumber"
+                      value={formData.vehicleNumber || ''}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter vehicle number"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label">
+                      Challan Number
+                    </label>
+                    <input
+                      type="text"
+                      name="challanNumber"
+                      value={formData.challanNumber || ''}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter challan number"
                     />
                   </div>
                 </div>

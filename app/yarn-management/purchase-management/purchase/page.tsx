@@ -25,17 +25,20 @@ interface PurchaseOrder {
   notes: string;
   createdAt: string;
   updatedAt: string;
-  packlistDetails?: {
-    packingNumber?: string;
-    trackingNumber?: string; // Legacy field name from API
-    courierName?: string;
-    dispatchDate?: string;
-    estimatedDeliveryDate?: string;
-    expectedArrivalDate?: string; // Legacy field name from API
-    numberOfCones?: number;
-    numberOfBoxes?: number;
-    totalWeight?: number;
-  };
+    packlistDetails?: {
+      packingNumber?: string;
+      trackingNumber?: string; // Legacy field name from API
+      courierName?: string;
+      courierNumber?: string;
+      vehicleNumber?: string;
+      challanNumber?: string;
+      dispatchDate?: string;
+      estimatedDeliveryDate?: string;
+      expectedArrivalDate?: string; // Legacy field name from API
+      numberOfCones?: number;
+      numberOfBoxes?: number;
+      totalWeight?: number;
+    };
 }
 
 interface PurchaseItem {
@@ -125,6 +128,9 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
       packingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number,
       trackingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number,
       courierName: (apiOrder.packListDetails || apiOrder.packlistDetails)?.courierName || (apiOrder.packListDetails || apiOrder.packlistDetails)?.courier_name,
+      courierNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.courierNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.courier_number,
+      vehicleNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.vehicleNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.vehicle_number,
+      challanNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.challanNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.challan_number,
       dispatchDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatchDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatch_date,
       estimatedDeliveryDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date,
       expectedArrivalDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date,
@@ -1024,6 +1030,24 @@ const PurchasePage = () => {
                         <div>
                           <label className="text-xs font-medium text-gray-600">Courier</label>
                           <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.courierName}</div>
+                        </div>
+                      )}
+                      {selectedOrder.packlistDetails.courierNumber && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-600">Courier Number</label>
+                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.courierNumber}</div>
+                        </div>
+                      )}
+                      {selectedOrder.packlistDetails.vehicleNumber && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-600">Vehicle Number</label>
+                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.vehicleNumber}</div>
+                        </div>
+                      )}
+                      {selectedOrder.packlistDetails.challanNumber && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-600">Challan Number</label>
+                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.challanNumber}</div>
                         </div>
                       )}
                       {selectedOrder.packlistDetails.dispatchDate && (

@@ -16,6 +16,9 @@ export interface PurchaseOrderItem {
 export interface PacklistDetails {
   packingNumber: string;
   courierName: string;
+  courierNumber: string;
+  vehicleNumber: string;
+  challanNumber: string;
   dispatchDate: string;
   estimatedDeliveryDate: string;
   numberOfCones: number;
@@ -35,6 +38,7 @@ export type PurchaseOrderStatus =
   | 'partially delivered'
   | 'stocked'
   | 'goods received'
+  | 'goods partially received'
   | 'po_accepted'
   | 'po_rejected';
 
@@ -107,6 +111,25 @@ export interface UpdatePurchaseOrderPayload {
   gst: number;
   total: number;
   currentStatus: string;
+}
+
+export interface ReceivedLotPoItem {
+  poItem: string;
+  receivedQuantity: number;
+}
+
+export interface ReceivedLotDetail {
+  lotNumber: string;
+  numberOfCones: number;
+  totalWeight: number;
+  numberOfBoxes: number;
+  poItems: ReceivedLotPoItem[];
+  status: 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
+}
+
+export interface UpdatePurchaseOrderWithReceivedLotsPayload {
+  receivedLotDetails: ReceivedLotDetail[];
+  currentStatus: 'goods_received' | 'goods_partially_received';
 }
 
 const getAccessToken = (): string | null => {
@@ -214,6 +237,9 @@ class YarnPurchaseOrderService {
       packListDetails: {
         packingNumber: string;
         courierName: string;
+        courierNumber: string;
+        vehicleNumber: string;
+        challanNumber: string;
         dispatchDate: string;
         estimatedDeliveryDate: string;
         numberOfCones: number;
@@ -225,6 +251,9 @@ class YarnPurchaseOrderService {
       packListDetails: {
         packingNumber: packlistDetails.packingNumber,
         courierName: packlistDetails.courierName,
+        courierNumber: packlistDetails.courierNumber || '',
+        vehicleNumber: packlistDetails.vehicleNumber || '',
+        challanNumber: packlistDetails.challanNumber || '',
         dispatchDate: packlistDetails.dispatchDate,
         estimatedDeliveryDate: packlistDetails.estimatedDeliveryDate,
         numberOfCones: packlistDetails.numberOfCones,
@@ -275,6 +304,7 @@ class YarnPurchaseOrderService {
       'partially delivered': 'partially_delivered',
       'stocked': 'stocked',
       'goods received': 'goods_received',
+      'goods partially received': 'goods_partially_received',
       'po_accepted': 'po_accepted',
       'po_rejected': 'po_rejected',
     };
@@ -289,6 +319,20 @@ class YarnPurchaseOrderService {
   }
 
   async updatePurchaseOrder(orderId: string, payload: UpdatePurchaseOrderPayload): Promise<PurchaseOrder> {
+    if (!orderId) {
+      throw new Error('Order ID is required');
+    }
+
+    return this.makeRequest<PurchaseOrder>(`/${orderId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updatePurchaseOrderWithReceivedLots(
+    orderId: string,
+    payload: UpdatePurchaseOrderWithReceivedLotsPayload
+  ): Promise<PurchaseOrder> {
     if (!orderId) {
       throw new Error('Order ID is required');
     }

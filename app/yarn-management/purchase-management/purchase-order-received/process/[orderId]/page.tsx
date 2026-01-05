@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -109,6 +109,7 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
 const ProcessOrderPage = () => {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { hasSubPermission, isLoading } = useNavigation();
   const user = useSelector((state: any) => state.auth?.user);
   const orderId = params?.orderId as string;
@@ -133,6 +134,13 @@ const ProcessOrderPage = () => {
   const [updatingBoxId, setUpdatingBoxId] = useState<string | null>(null);
   const [selectedBoxForDetails, setSelectedBoxForDetails] = useState<YarnBox | null>(null);
   const [isUpdatingOrderStatus, setIsUpdatingOrderStatus] = useState(false);
+  const [lotData, setLotData] = useState<{
+    poNumber: string;
+    lotDetails: Array<{
+      lotNumber: string;
+      numberOfBoxes: number;
+    }>;
+  } | null>(null);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -147,6 +155,20 @@ const ProcessOrderPage = () => {
     console.log('Process page - orderId from params:', orderId);
     console.log('Process page - params:', params);
   }, [hasPurchaseManagement, hasPurchaseOrderReceived, hasPermission, isLoading, orderId, params]);
+
+  // Read lot data from query params
+  useEffect(() => {
+    const lotDataParam = searchParams?.get('lotData');
+    if (lotDataParam) {
+      try {
+        const parsed = JSON.parse(lotDataParam);
+        setLotData(parsed);
+        console.log('Process page - Lot data received:', parsed);
+      } catch (error) {
+        console.error('Failed to parse lot data:', error);
+      }
+    }
+  }, [searchParams]);
 
   // Reset selected status when modal opens
   useEffect(() => {
@@ -319,6 +341,37 @@ const ProcessOrderPage = () => {
     return `${id.substring(0, 4)}...${id.substring(id.length - 3)}`;
   };
 
+  // Group boxes by lot number
+  const boxesByLot = useMemo(() => {
+    const grouped: Record<string, YarnBox[]> = {};
+    const unassigned: YarnBox[] = [];
+
+    boxes.forEach((box) => {
+      const boxId = box._id || box.id || box.boxId;
+      const data = boxData[boxId];
+      const lotNumber = data?.lotNumber?.trim() || box.lotNumber?.trim() || '';
+
+      if (lotNumber) {
+        if (!grouped[lotNumber]) {
+          grouped[lotNumber] = [];
+        }
+        grouped[lotNumber].push(box);
+      } else {
+        unassigned.push(box);
+      }
+    });
+
+    // Sort lot numbers naturally (LOT1, LOT2, etc.)
+    const sortedLots = Object.keys(grouped).sort((a, b) => {
+      const aNum = parseInt(a.replace(/\D/g, '')) || 0;
+      const bNum = parseInt(b.replace(/\D/g, '')) || 0;
+      if (aNum !== bNum) return aNum - bNum;
+      return a.localeCompare(b);
+    });
+
+    return { grouped, sortedLots, unassigned };
+  }, [boxes, boxData]);
+
   // Check if all boxes have weight captured
   const areAllBoxesCompleted = useMemo(() => {
     if (boxes.length === 0) return false;
@@ -351,6 +404,101 @@ const ProcessOrderPage = () => {
       'stocked': 'stocked'
     };
     return statusMap[status] || status;
+  };
+
+  // Check if all boxes in a lot are completed
+  const areAllBoxesInLotCompleted = (lotBoxes: YarnBox[]): boolean => {
+    if (lotBoxes.length === 0) return false;
+    
+    return lotBoxes.every((box) => {
+      const boxId = box._id || box.id || box.boxId;
+      const data = boxData[boxId];
+      return data && 
+             data.yarnName && 
+             data.lotNumber && 
+             data.boxWeight && 
+             parseFloat(data.boxWeight) > 0 &&
+             data.numberOfCones && 
+             parseInt(data.numberOfCones) > 0;
+    });
+  };
+
+  // Handle sending lot for QC
+  const handleSendLotForQC = async (lotNumber: string, lotBoxes: YarnBox[]) => {
+    if (!user || !user.id || !user.email) {
+      toast.error('User information not available. Please login again.');
+      return;
+    }
+
+    if (!areAllBoxesInLotCompleted(lotBoxes)) {
+      toast.error(`All boxes in ${lotNumber} must be completed before sending for QC`);
+      return;
+    }
+
+    setIsUpdatingOrderStatus(true);
+    try {
+      await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+        orderId,
+        'QC pending' as PurchaseOrderStatus,
+        user.id,
+        user.email,
+        `Lot ${lotNumber} sent for quality check (${lotBoxes.length} boxes)`
+      );
+
+      toast.success(`Lot ${lotNumber} sent for QC successfully`);
+      
+      // Refresh order data
+      const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+      const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
+      setOrder(mappedOrder);
+    } catch (error) {
+      console.error('Failed to send lot for QC:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to send lot for QC');
+    } finally {
+      setIsUpdatingOrderStatus(false);
+    }
+  };
+
+  // Handle rejecting lot
+  const handleRejectLot = async (lotNumber: string, lotBoxes: YarnBox[]) => {
+    if (!user || !user.id || !user.email) {
+      toast.error('User information not available. Please login again.');
+      return;
+    }
+
+    if (!areAllBoxesInLotCompleted(lotBoxes)) {
+      toast.error(`All boxes in ${lotNumber} must be completed before rejecting`);
+      return;
+    }
+
+    const confirmReject = window.confirm(
+      `Are you sure you want to reject Lot ${lotNumber}? This action will mark the lot as rejected.`
+    );
+
+    if (!confirmReject) return;
+
+    setIsUpdatingOrderStatus(true);
+    try {
+      await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+        orderId,
+        'rejected' as PurchaseOrderStatus,
+        user.id,
+        user.email,
+        `Lot ${lotNumber} rejected (${lotBoxes.length} boxes)`
+      );
+
+      toast.success(`Lot ${lotNumber} rejected successfully`);
+      
+      // Refresh order data
+      const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+      const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
+      setOrder(mappedOrder);
+    } catch (error) {
+      console.error('Failed to reject lot:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to reject lot');
+    } finally {
+      setIsUpdatingOrderStatus(false);
+    }
   };
 
   // Update order status
@@ -542,12 +690,58 @@ const ProcessOrderPage = () => {
       return;
     }
     
-    // Create a print-friendly HTML with all box barcodes
+    // Create a print-friendly HTML with all box barcodes grouped by lot
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       toast.error('Please allow popups to print barcodes');
       return;
     }
+
+    // Build lot-wise barcode sections
+    const lotSections = boxesByLot.sortedLots.map((lotNumber) => {
+      const lotBoxes = boxesByLot.grouped[lotNumber];
+      return `
+        <div class="lot-section" style="page-break-after: always; margin-bottom: 40px;">
+          <h3 class="lot-header" style="background: #f0f0f0; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+            <i class="ri-box-3-line"></i> Lot Number: ${lotNumber} (${lotBoxes.length} boxes)
+          </h3>
+          <div class="barcode-container">
+            ${lotBoxes.map((box) => {
+              return `
+                <div class="barcode-item">
+                  <div class="barcode-label">Box ID</div>
+                  <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
+                  <div class="barcode-label">Barcode</div>
+                  <div class="barcode-value">${box.barcode}</div>
+                  <div class="box-info" style="margin-top: 5px; color: #666;">Lot: ${lotNumber}</div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Add unassigned boxes section if any
+    const unassignedSection = boxesByLot.unassigned.length > 0 ? `
+      <div class="lot-section" style="page-break-after: always; margin-bottom: 40px;">
+        <h3 class="lot-header" style="background: #fff3cd; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+          <i class="ri-error-warning-line"></i> Unassigned Boxes (${boxesByLot.unassigned.length} boxes)
+        </h3>
+        <div class="barcode-container">
+          ${boxesByLot.unassigned.map((box) => {
+            return `
+              <div class="barcode-item">
+                <div class="barcode-label">Box ID</div>
+                <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
+                <div class="barcode-label">Barcode</div>
+                <div class="barcode-value">${box.barcode}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    ` : '';
 
     const barcodeHTML = `
       <!DOCTYPE html>
@@ -558,6 +752,23 @@ const ProcessOrderPage = () => {
             body {
               font-family: Arial, sans-serif;
               padding: 20px;
+            }
+            .header-info {
+              background: #e9ecef;
+              padding: 15px;
+              margin-bottom: 20px;
+              border-radius: 5px;
+            }
+            .lot-section {
+              margin-bottom: 40px;
+            }
+            .lot-header {
+              background: #f0f0f0;
+              padding: 15px;
+              margin-bottom: 20px;
+              border-radius: 5px;
+              font-size: 18px;
+              font-weight: bold;
             }
             .barcode-container {
               display: grid;
@@ -594,24 +805,22 @@ const ProcessOrderPage = () => {
               .barcode-container {
                 grid-template-columns: repeat(3, 1fr);
               }
+              .lot-section {
+                page-break-after: always;
+              }
+              .lot-section:last-child {
+                page-break-after: auto;
+              }
             }
           </style>
         </head>
         <body>
-          <h2>Box Barcodes - ${order.orderNumber}</h2>
-          <p>PO Number: ${order.purchaseOrderNumber} | Supplier: ${order.supplier} | Total Boxes: ${boxes.length}</p>
-          <div class="barcode-container">
-            ${boxes.map((box) => {
-              return `
-                <div class="barcode-item">
-                  <div class="barcode-label">Box ID</div>
-                  <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
-                  <div class="barcode-label">Barcode</div>
-                  <div class="barcode-value">${box.barcode}</div>
-                </div>
-              `;
-            }).join('')}
+          <div class="header-info">
+            <h2 style="margin: 0 0 10px 0;">Box Barcodes - ${order.orderNumber}</h2>
+            <p style="margin: 0;">PO Number: ${order.purchaseOrderNumber} | Supplier: ${order.supplier} | Total Boxes: ${boxes.length}</p>
           </div>
+          ${lotSections}
+          ${unassignedSection}
         </body>
       </html>
     `;
@@ -621,7 +830,7 @@ const ProcessOrderPage = () => {
     
     setTimeout(() => {
       printWindow.print();
-      toast.success(`${boxes.length} box barcode(s) printed successfully`);
+      toast.success(`${boxes.length} box barcode(s) printed successfully (grouped by lot)`);
     }, 250);
   };
 
@@ -867,23 +1076,205 @@ const ProcessOrderPage = () => {
                   <p className="text-gray-500">No boxes found for this order</p>
               </div>
               ) : (
-              <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300">
-                  <thead className="bg-gray-50">
-                    <tr>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box ID</th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Qty</th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lot Number</th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box Weight (kg)</th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. of Cones</th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white">
-                      {boxes.map((box) => {
+              <div className="space-y-6">
+                {/* Render boxes grouped by lot */}
+                {boxesByLot.sortedLots.map((lotNumber) => {
+                  const lotBoxes = boxesByLot.grouped[lotNumber];
+                  const handlePrintLotBarcodes = () => {
+                    if (!order || lotBoxes.length === 0) {
+                      toast.error('No boxes available to print');
+                      return;
+                    }
+                    
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) {
+                      toast.error('Please allow popups to print barcodes');
+                      return;
+                    }
+
+                    const barcodeHTML = `
+                      <!DOCTYPE html>
+                      <html>
+                        <head>
+                          <title>Print Barcodes - ${order.orderNumber} - ${lotNumber}</title>
+                          <style>
+                            body {
+                              font-family: Arial, sans-serif;
+                              padding: 20px;
+                            }
+                            .header-info {
+                              background: #e9ecef;
+                              padding: 15px;
+                              margin-bottom: 20px;
+                              border-radius: 5px;
+                            }
+                            .lot-header {
+                              background: #f0f0f0;
+                              padding: 15px;
+                              margin-bottom: 20px;
+                              border-radius: 5px;
+                              font-size: 18px;
+                              font-weight: bold;
+                            }
+                            .barcode-container {
+                              display: grid;
+                              grid-template-columns: repeat(3, 1fr);
+                              gap: 20px;
+                              margin-top: 20px;
+                            }
+                            .barcode-item {
+                              border: 1px solid #ddd;
+                              padding: 15px;
+                              text-align: center;
+                              page-break-inside: avoid;
+                            }
+                            .barcode-label {
+                              font-size: 12px;
+                              color: #666;
+                              margin-bottom: 5px;
+                            }
+                            .barcode-value {
+                              font-family: 'Courier New', monospace;
+                              font-size: 18px;
+                              font-weight: bold;
+                              margin: 10px 0;
+                              padding: 10px;
+                              background: #f5f5f5;
+                              border: 1px dashed #ccc;
+                            }
+                            .box-info {
+                              font-size: 11px;
+                              color: #333;
+                              margin-top: 5px;
+                            }
+                            @media print {
+                              .barcode-container {
+                                grid-template-columns: repeat(3, 1fr);
+                              }
+                            }
+                          </style>
+                        </head>
+                        <body>
+                          <div class="header-info">
+                            <h2 style="margin: 0 0 10px 0;">Box Barcodes - ${order.orderNumber}</h2>
+                            <p style="margin: 0;">PO Number: ${order.purchaseOrderNumber} | Supplier: ${order.supplier}</p>
+                          </div>
+                          <div class="lot-header">
+                            <i class="ri-box-3-line"></i> Lot Number: ${lotNumber} (${lotBoxes.length} boxes)
+                          </div>
+                          <div class="barcode-container">
+                            ${lotBoxes.map((box) => {
+                              return `
+                                <div class="barcode-item">
+                                  <div class="barcode-label">Box ID</div>
+                                  <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
+                                  <div class="barcode-label">Barcode</div>
+                                  <div class="barcode-value">${box.barcode}</div>
+                                  <div class="box-info" style="margin-top: 5px; color: #666;">Lot: ${lotNumber}</div>
+                                </div>
+                              `;
+                            }).join('')}
+                          </div>
+                        </body>
+                      </html>
+                    `;
+
+                    printWindow.document.write(barcodeHTML);
+                    printWindow.document.close();
+                    
+                    setTimeout(() => {
+                      printWindow.print();
+                      toast.success(`${lotBoxes.length} box barcode(s) printed for ${lotNumber}`);
+                    }, 250);
+                  };
+
+                  const isLotCompleted = areAllBoxesInLotCompleted(lotBoxes);
+
+                  return (
+                    <div key={lotNumber} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-primary/10 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                        <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                          <i className="ri-box-3-line text-primary"></i>
+                          Lot Number: <span className="text-primary">{lotNumber}</span>
+                          <span className="text-xs font-normal text-gray-600 ml-2">
+                            ({lotBoxes.length} {lotBoxes.length === 1 ? 'box' : 'boxes'})
+                          </span>
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handlePrintLotBarcodes}
+                            className="ti-btn ti-btn-sm ti-btn-primary"
+                            title={`Print barcodes for ${lotNumber}`}
+                          >
+                            <i className="ri-printer-line me-1"></i>
+                            Print Lot Barcodes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSendLotForQC(lotNumber, lotBoxes)}
+                            disabled={!isLotCompleted || isUpdatingOrderStatus}
+                            className={`ti-btn ti-btn-sm ${
+                              isLotCompleted && !isUpdatingOrderStatus
+                                ? 'ti-btn-success'
+                                : 'ti-btn-light opacity-50 cursor-not-allowed'
+                            }`}
+                            title={`Send ${lotNumber} for QC`}
+                          >
+                            {isUpdatingOrderStatus ? (
+                              <>
+                                <i className="ri-loader-4-line animate-spin me-1"></i>
+                                Sending...
+                              </>
+                            ) : (
+                              <>
+                                <i className="ri-checkbox-circle-line me-1"></i>
+                                Send Lot for QC
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectLot(lotNumber, lotBoxes)}
+                            disabled={!isLotCompleted || isUpdatingOrderStatus}
+                            className={`ti-btn ti-btn-sm ${
+                              isLotCompleted && !isUpdatingOrderStatus
+                                ? 'ti-btn-danger'
+                                : 'ti-btn-light opacity-50 cursor-not-allowed'
+                            }`}
+                            title={`Reject ${lotNumber}`}
+                          >
+                            {isUpdatingOrderStatus ? (
+                              <>
+                                <i className="ri-loader-4-line animate-spin me-1"></i>
+                                Rejecting...
+                              </>
+                            ) : (
+                              <>
+                                <i className="ri-close-circle-line me-1"></i>
+                                Reject Lot
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse border border-gray-300">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box ID</th>
+                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
+                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
+                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
+                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Qty</th>
+                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lot Number</th>
+                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box Weight (kg)</th>
+                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. of Cones</th>
+                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white">
+                            {lotBoxes.map((box) => {
                         const boxId = box._id || box.id || box.boxId;
                         const isActive = activeBoxId === boxId;
                         // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
@@ -1081,11 +1472,248 @@ const ProcessOrderPage = () => {
                           )}
                         </td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+                })}
+
+                {/* Unassigned boxes section */}
+                {boxesByLot.unassigned.length > 0 && (
+                  <div className="border border-yellow-200 rounded-lg overflow-hidden bg-yellow-50/30">
+                    <div className="bg-yellow-100 px-4 py-3 border-b border-yellow-200">
+                      <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                        <i className="ri-error-warning-line text-yellow-600"></i>
+                        Unassigned Boxes
+                        <span className="text-xs font-normal text-gray-600 ml-2">
+                          ({boxesByLot.unassigned.length} {boxesByLot.unassigned.length === 1 ? 'box' : 'boxes'} - Please assign lot numbers)
+                        </span>
+                      </h4>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full border-collapse border border-gray-300">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box ID</th>
+                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
+                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
+                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
+                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Qty</th>
+                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lot Number</th>
+                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box Weight (kg)</th>
+                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. of Cones</th>
+                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white">
+                          {boxesByLot.unassigned.map((box) => {
+                            const boxId = box._id || box.id || box.boxId;
+                            const isActive = activeBoxId === boxId;
+                            const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
+                              ? box.yarnName 
+                              : '';
+                            
+                            const data = boxData[boxId] || {
+                              yarnName: defaultYarnName,
+                              shadeCode: box.shadeCode || '',
+                              orderQty: box.orderQty || 0,
+                              lotNumber: box.lotNumber || '',
+                              boxWeight: box.boxWeight?.toString() || '',
+                              numberOfCones: box.numberOfCones?.toString() || ''
+                            };
+                            const isUpdating = updatingBoxId === boxId;
+
+                            return (
+                              <tr 
+                                key={boxId}
+                                className={`hover:bg-gray-50 ${
+                                  isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
+                                }`}
+                              >
+                                <td className="border border-gray-300 px-4 py-3">
+                                  <button
+                                    onClick={() => setSelectedBoxForDetails(box)}
+                                    className="text-sm font-medium text-primary hover:text-primary-dark hover:underline cursor-pointer"
+                                    title="Click to view full details"
+                                  >
+                                    {truncateId(box.boxId)}
+                                  </button>
+                                </td>
+                                <td className="border border-gray-300 px-4 py-3">
+                                  <button
+                                    onClick={() => setSelectedBoxForDetails(box)}
+                                    className="text-sm text-gray-900 font-mono text-primary hover:text-primary-dark hover:underline cursor-pointer"
+                                    title="Click to view full details"
+                                  >
+                                    {truncateId(box.barcode)}
+                                  </button>
+                                </td>
+                                <td className="border border-gray-300 px-4 py-3">
+                                  {isActive ? (
+                                    <select
+                                      className="form-select text-sm"
+                                      value={data.yarnName}
+                                      onChange={(e) => handleYarnNameChange(boxId, e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
+                                          if (nextInput) {
+                                            (nextInput as HTMLInputElement).focus();
+                                          }
+                                        }
+                                      }}
+                                    >
+                                      <option value="">Select Yarn Name</option>
+                                      {order?.items.map((item) => (
+                                        <option key={item.id} value={item.yarnName}>
+                                          {item.yarnName}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="text-sm text-gray-900">{data.yarnName || '-'}</span>
+                                  )}
+                                </td>
+                                <td className="border border-gray-300 px-4 py-3">
+                                  {isActive ? (
+                                    <input
+                                      type="text"
+                                      className="form-control text-sm"
+                                      value={data.shadeCode}
+                                      readOnly
+                                      tabIndex={-1}
+                                    />
+                                  ) : (
+                                    <span className="text-sm text-gray-900">{data.shadeCode || '-'}</span>
+                                  )}
+                                </td>
+                                <td className="border border-gray-300 px-4 py-3">
+                                  {isActive ? (
+                                    <input
+                                      type="number"
+                                      className="form-control text-sm"
+                                      value={data.orderQty}
+                                      readOnly
+                                      tabIndex={-1}
+                                    />
+                                  ) : (
+                                    <span className="text-sm text-gray-900">{data.orderQty || '-'}</span>
+                                  )}
+                                </td>
+                                <td className="border border-gray-300 px-4 py-3">
+                                  {isActive ? (
+                                    <input
+                                      type="text"
+                                      className="form-control text-sm border-yellow-300 focus:border-yellow-500"
+                                      value={data.lotNumber}
+                                      onChange={(e) => {
+                                        setBoxData(prev => ({
+                                          ...prev,
+                                          [boxId]: { ...prev[boxId], lotNumber: e.target.value }
+                                        }));
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
+                                          if (nextInput) {
+                                            (nextInput as HTMLInputElement).focus();
+                                          }
+                                        }
+                                      }}
+                                      placeholder="Enter lot number"
+                                    />
+                                  ) : (
+                                    <span className="text-sm text-yellow-600 font-medium">{data.lotNumber || 'Not assigned'}</span>
+                                  )}
+                                </td>
+                                <td className="border border-gray-300 px-4 py-3">
+                                  {isActive ? (
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      className="form-control text-sm"
+                                      value={data.boxWeight}
+                                      onChange={(e) => {
+                                        setBoxData(prev => ({
+                                          ...prev,
+                                          [boxId]: { ...prev[boxId], boxWeight: e.target.value }
+                                        }));
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
+                                          if (nextInput) {
+                                            (nextInput as HTMLInputElement).focus();
+                                          }
+                                        }
+                                      }}
+                                      placeholder="0.00"
+                                    />
+                                  ) : (
+                                    <span className="text-sm text-gray-900">{data.boxWeight || '-'}</span>
+                                  )}
+                                </td>
+                                <td className="border border-gray-300 px-4 py-3">
+                                  {isActive ? (
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      className="form-control text-sm"
+                                      value={data.numberOfCones}
+                                      onChange={(e) => {
+                                        setBoxData(prev => ({
+                                          ...prev,
+                                          [boxId]: { ...prev[boxId], numberOfCones: e.target.value }
+                                        }));
+                                      }}
+                                      onKeyDown={async (e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          await handleUpdateBox(box);
+                                        }
+                                      }}
+                                      placeholder="0"
+                                    />
+                                  ) : (
+                                    <span className="text-sm text-gray-900">{data.numberOfCones || '-'}</span>
+                                  )}
+                                </td>
+                                <td className="border border-gray-300 px-4 py-3">
+                                  {isUpdating ? (
+                                    <div className="flex items-center gap-2">
+                                      <i className="ri-loader-4-line animate-spin text-primary"></i>
+                                      <span className="text-xs text-gray-500">Updating...</span>
+                                    </div>
+                                  ) : isActive ? (
+                                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                      Active
+                                    </span>
+                                  ) : data.yarnName && data.lotNumber && data.boxWeight && data.numberOfCones ? (
+                                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                      Completed
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                      Pending
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
               )}
             </div>
           </div>

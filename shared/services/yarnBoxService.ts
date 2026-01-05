@@ -90,9 +90,14 @@ export interface CreateYarnBoxPayload {
   numberofboxes: number;
 }
 
+export interface LotDetail {
+  lotNumber: string;
+  numberOfBoxes: number;
+}
+
 export interface CreateBulkYarnBoxPayload {
   poNumber: string;
-  numberOfBoxes: number;
+  lotDetails: LotDetail[];
 }
 
 const getAccessToken = (): string | null => {

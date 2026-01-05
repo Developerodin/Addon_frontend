@@ -6,7 +6,11 @@ import { useRouter } from "next/navigation";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
-import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
+import yarnPurchaseOrderService, { 
+  PurchaseOrderStatus,
+  ReceivedLotDetail,
+  UpdatePurchaseOrderWithReceivedLotsPayload
+} from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { CreateBulkYarnBoxPayload } from "@/shared/services/yarnBoxService";
 
 interface ReceiptProcessingDetails {
@@ -44,6 +48,7 @@ interface PurchaseOrder {
     numberOfBoxes?: number;
     totalWeight?: number;
   };
+  receivedLotDetails?: ReceivedLotDetail[];
 }
 
 interface PurchaseItem {
@@ -89,6 +94,7 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     'partially_delivered': 'partially delivered',
     'stocked': 'stocked',
     'goods_received': 'goods received',
+    'goods_partially_received': 'goods partially received',
     'po_rejected': 'rejected'
   };
   return statusMap[statusCode] || 'submitted to supplier';
@@ -104,7 +110,8 @@ const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
     'QC pending': 'qc_pending',
     'partially delivered': 'partially_delivered',
     'stocked': 'stocked',
-    'goods received': 'goods_received'
+    'goods received': 'goods_received',
+    'goods partially received': 'goods_partially_received'
   };
   return statusMap[status] || 'submitted_to_supplier';
 };
@@ -156,7 +163,8 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
       numberOfCones: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfCones || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_cones,
       numberOfBoxes: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfBoxes || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_boxes,
       totalWeight: (apiOrder.packListDetails || apiOrder.packlistDetails)?.totalWeight || (apiOrder.packListDetails || apiOrder.packlistDetails)?.total_weight
-    } : undefined
+    } : undefined,
+    receivedLotDetails: apiOrder.receivedLotDetails || apiOrder.received_lot_details || undefined
   };
 };
 
@@ -202,7 +210,7 @@ const PurchaseOrderReceivedPage = () => {
   // Check permission
   const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
 
-  // Fetch purchase orders with "in transit" and "goods_received" status from API
+  // Fetch purchase orders with "in_transit", "goods_received", and "goods_partially_received" status from API
   const fetchPurchaseOrders = async () => {
     setIsLoadingOrders(true);
     try {
@@ -230,8 +238,13 @@ const PurchaseOrderReceivedPage = () => {
       const goodsReceivedResponse = await yarnPurchaseOrderService.getPurchaseOrders(goodsReceivedParams);
       const goodsReceivedData = Array.isArray(goodsReceivedResponse) ? goodsReceivedResponse : (goodsReceivedResponse.results || []);
 
-      // Combine both results
-      const allOrdersData = [...inTransitData, ...goodsReceivedData];
+      // Fetch orders with "goods_partially_received" status
+      const goodsPartiallyReceivedParams = { ...baseParams, status_code: 'goods_partially_received' };
+      const goodsPartiallyReceivedResponse = await yarnPurchaseOrderService.getPurchaseOrders(goodsPartiallyReceivedParams);
+      const goodsPartiallyReceivedData = Array.isArray(goodsPartiallyReceivedResponse) ? goodsPartiallyReceivedResponse : (goodsPartiallyReceivedResponse.results || []);
+
+      // Combine all results
+      const allOrdersData = [...inTransitData, ...goodsReceivedData, ...goodsPartiallyReceivedData];
       
       // Remove duplicates based on order ID
       const uniqueOrders = allOrdersData.filter((order, index, self) => 
@@ -303,6 +316,9 @@ const PurchaseOrderReceivedPage = () => {
   } | null>(null);
   const [isStatusSubmitting, setIsStatusSubmitting] = useState(false);
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
+  const [goodsReceivedModalOpen, setGoodsReceivedModalOpen] = useState(false);
+  const [orderForGoodsReceived, setOrderForGoodsReceived] = useState<PurchaseOrder | null>(null);
+  const [isSubmittingGoodsReceived, setIsSubmittingGoodsReceived] = useState(false);
 
   const selectedOrder = useMemo(
     () => orders.find(order => order.id === selectedOrderId) ?? null,
@@ -599,6 +615,8 @@ const PurchaseOrderReceivedPage = () => {
       case 'QC pending': return 'bg-yellow-100 text-yellow-800';
       case 'partially delivered': return 'bg-orange-100 text-orange-800';
       case 'stocked': return 'bg-emerald-100 text-emerald-800';
+      case 'goods received': return 'bg-green-100 text-green-800';
+      case 'goods partially received': return 'bg-amber-100 text-amber-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -634,6 +652,49 @@ const PurchaseOrderReceivedPage = () => {
       toast.error(error instanceof Error ? error.message : "Failed to update status");
     } finally {
       setIsStatusSubmitting(false);
+    }
+  };
+
+  const handleOpenGoodsReceivedModal = async (order: PurchaseOrder) => {
+    try {
+      // Fetch full order details to get latest receivedLotDetails
+      const fullOrderDetails = await yarnPurchaseOrderService.getPurchaseOrderById(order.id);
+      const mappedOrder = mapAPIOrderToComponent(fullOrderDetails);
+      setOrderForGoodsReceived(mappedOrder);
+      setGoodsReceivedModalOpen(true);
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+      toast.error('Failed to load order details');
+      // Fallback to using the order from list
+      setOrderForGoodsReceived(order);
+      setGoodsReceivedModalOpen(true);
+    }
+  };
+
+  const handleGoodsReceivedSubmit = async (payload: UpdatePurchaseOrderWithReceivedLotsPayload) => {
+    if (!orderForGoodsReceived) {
+      toast.error('Order not found');
+      return;
+    }
+
+    setIsSubmittingGoodsReceived(true);
+    try {
+      await yarnPurchaseOrderService.updatePurchaseOrderWithReceivedLots(
+        orderForGoodsReceived.id,
+        payload
+      );
+
+      // Refresh orders list
+      await fetchPurchaseOrders();
+      
+      toast.success('Purchase order updated with received lot details successfully');
+      setGoodsReceivedModalOpen(false);
+      setOrderForGoodsReceived(null);
+    } catch (error) {
+      console.error('Failed to update order:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update order');
+    } finally {
+      setIsSubmittingGoodsReceived(false);
     }
   };
 
@@ -747,11 +808,11 @@ const PurchaseOrderReceivedPage = () => {
                   <div className="text-gray-400 mb-4">
                     <i className="ri-inbox-line text-4xl"></i>
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Orders in Transit</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Orders Found</h3>
                   <p className="text-gray-500 mb-4">
                     {searchTerm
                       ? "No orders match your search criteria. Try adjusting your search term."
-                      : "No purchase orders found in transit status for the selected period."}
+                      : "No purchase orders found (In Transit, Goods Received, or Goods Partially Received) for the selected period."}
                   </p>
                 </div>
               ) : (
@@ -849,96 +910,152 @@ const PurchaseOrderReceivedPage = () => {
                           </td>
                           <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex items-center gap-2">
-                              {processedOrders.includes(order.id) ? (
-                                <button
-                                  disabled
-                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-green-300 bg-green-50 px-3 py-1 text-sm text-green-700 cursor-not-allowed h-8"
-                                  title="Order has been processed"
-                                >
-                                  <i className="ri-checkbox-circle-line"></i>
-                                  PROCESSED
-                                </button>
-                              ) : (
+                              {/* For "in transit" status: show only "Goods Received" button */}
+                              {order.status === 'in transit' && (
                                 <button
                                   type="button"
                                   onClick={async (e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    
-                                    if (processingOrderId === order.id) {
-                                      console.log('Already processing this order');
-                                      return;
-                                    }
-                                    
-                                    console.log('Process button clicked for order:', order.id, order.orderNumber);
-                                    setProcessingOrderId(order.id);
-                                    
-                                    try {
-                                      // Get packlist details
-                                      const packlistDetails = order.packlistDetails;
-                                      console.log('Packlist details:', packlistDetails);
-                                      const numberOfBoxes = packlistDetails?.numberOfBoxes || 0;
-                                      console.log('Number of boxes:', numberOfBoxes);
+                                    await handleOpenGoodsReceivedModal(order);
+                                  }}
+                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-primary bg-primary text-white px-3 py-1 text-sm hover:bg-primary/90 transition h-8"
+                                  title="Mark goods as received"
+                                >
+                                  <i className="ri-checkbox-circle-line"></i>
+                                  Goods Received
+                                </button>
+                              )}
 
-                                      if (!numberOfBoxes || numberOfBoxes === 0) {
-                                        console.error('Number of boxes not found');
-                                        toast.error('Number of boxes not found in packlist details');
-                                        setProcessingOrderId(null);
+                              {/* For "goods partially received" or "goods received" status: show both "Process" and "Goods Received" buttons */}
+                              {(order.status === 'goods partially received' || order.status === 'goods received') && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={async (e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      
+                                      if (processingOrderId === order.id) {
+                                        console.log('Already processing this order');
                                         return;
                                       }
+                                      
+                                      console.log('Process button clicked for order:', order.id, order.orderNumber);
+                                      setProcessingOrderId(order.id);
+                                      
+                                      try {
+                                        // Fetch full order details to get receivedLotDetails
+                                        const fullOrderDetails = await yarnPurchaseOrderService.getPurchaseOrderById(order.id);
+                                        const mappedOrder = mapAPIOrderToComponent(fullOrderDetails);
+                                        
+                                        // Check if receivedLotDetails exist
+                                        if (!mappedOrder.receivedLotDetails || mappedOrder.receivedLotDetails.length === 0) {
+                                          toast.error('Please fill Goods Received details first before processing');
+                                          setProcessingOrderId(null);
+                                          return;
+                                        }
 
-                                      // Check if boxes already exist for this order
-                                      console.log('Checking for existing boxes...');
-                                      const existingBoxes = await yarnBoxService.getYarnBoxes({
-                                        po_number: order.orderNumber,
-                                        cones_issued: false
-                                      });
-                                      console.log('Existing boxes response:', existingBoxes);
+                                        // Format lot details for process page - ensure proper structure
+                                        const lotDetails = mappedOrder.receivedLotDetails
+                                          .filter(lot => lot.lotNumber && lot.numberOfBoxes > 0) // Filter out invalid lots
+                                          .map(lot => ({
+                                            lotNumber: lot.lotNumber.trim(),
+                                            numberOfBoxes: lot.numberOfBoxes
+                                          }));
 
-                                      // If boxes don't exist, create them in bulk
-                                      if (!existingBoxes.results || existingBoxes.results.length === 0) {
-                                        console.log('No existing boxes found, creating bulk boxes...');
-                                        const bulkPayload: CreateBulkYarnBoxPayload = {
-                                          poNumber: order.orderNumber,
-                                          numberOfBoxes: numberOfBoxes
+                                        // Validate that we have at least one valid lot
+                                        if (lotDetails.length === 0) {
+                                          toast.error('No valid lot details found. Please ensure all lots have a lot number and number of boxes.');
+                                          setProcessingOrderId(null);
+                                          return;
+                                        }
+
+                                        // Create process data payload with correct structure
+                                        const processData = {
+                                          poNumber: mappedOrder.orderNumber,
+                                          lotDetails: lotDetails
                                         };
-                                        console.log('Bulk payload:', bulkPayload);
 
-                                        const result = await yarnBoxService.createBulkYarnBoxes(bulkPayload);
-                                        console.log('Bulk boxes created:', result);
-                                        toast.success(`${numberOfBoxes} yarn box(es) created successfully`);
-                                      } else {
-                                        console.log('Boxes already exist, skipping creation');
-                                        toast.success('Boxes already exist for this order');
+                                        console.log('Process data to pass:', JSON.stringify(processData, null, 2));
+
+                                        // Check if boxes already exist for this order
+                                        console.log('Checking for existing boxes...');
+                                        const existingBoxes = await yarnBoxService.getYarnBoxes({
+                                          po_number: mappedOrder.orderNumber,
+                                          cones_issued: false
+                                        });
+                                        console.log('Existing boxes response:', existingBoxes);
+
+                                        // If boxes don't exist, create them based on lot details
+                                        if (!existingBoxes.results || existingBoxes.results.length === 0) {
+                                          console.log('No existing boxes found, creating bulk boxes...');
+                                          
+                                          // Validate that we have lot details
+                                          if (lotDetails.length === 0) {
+                                            toast.error('Cannot create boxes without lot details. Please check lot details.');
+                                            setProcessingOrderId(null);
+                                            return;
+                                          }
+
+                                          // Create bulk payload with lotDetails structure
+                                          const bulkPayload: CreateBulkYarnBoxPayload = {
+                                            poNumber: mappedOrder.orderNumber,
+                                            lotDetails: lotDetails
+                                          };
+                                          console.log('Bulk payload:', JSON.stringify(bulkPayload, null, 2));
+
+                                          const result = await yarnBoxService.createBulkYarnBoxes(bulkPayload);
+                                          console.log('Bulk boxes created:', result);
+                                          const totalBoxesCreated = lotDetails.reduce((sum, lot) => sum + lot.numberOfBoxes, 0);
+                                          toast.success(`${totalBoxesCreated} yarn box(es) created successfully`);
+                                        } else {
+                                          console.log('Boxes already exist, skipping creation');
+                                          toast.success('Boxes already exist for this order');
+                                        }
+
+                                        // Navigate to process page with lot details as query params
+                                        console.log('Navigating to process page with lot details...');
+                                        const queryParams = new URLSearchParams({
+                                          lotData: JSON.stringify(processData)
+                                        });
+                                        router.push(`/yarn-management/purchase-management/purchase-order-received/process/${order.id}?${queryParams.toString()}`);
+                                      } catch (error) {
+                                        console.error('Failed to process order:', error);
+                                        toast.error(error instanceof Error ? error.message : 'Failed to process order');
+                                        setProcessingOrderId(null);
                                       }
-
-                                      // Navigate to process page
-                                      console.log('Navigating to process page...');
-                                      router.push(`/yarn-management/purchase-management/purchase-order-received/process/${order.id}`);
-                                    } catch (error) {
-                                      console.error('Failed to process order:', error);
-                                      toast.error(error instanceof Error ? error.message : 'Failed to process order');
-                                    } finally {
-                                      // Don't reset processingOrderId here if navigation is successful
-                                      // It will be reset when component unmounts or when user comes back
-                                    }
-                                  }}
-                                  disabled={processingOrderId === order.id}
-                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:border-primary hover:text-primary transition h-8 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title="Process receipt workflow"
-                                >
-                                  {processingOrderId === order.id ? (
-                                    <>
-                                      <i className="ri-loader-4-line animate-spin"></i>
-                                      Processing...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <i className="ri-box-3-line"></i>
-                                      Process
-                                    </>
-                                  )}
-                                </button>
+                                    }}
+                                    disabled={processingOrderId === order.id}
+                                    className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:border-primary hover:text-primary transition h-8 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Process receipt workflow"
+                                  >
+                                    {processingOrderId === order.id ? (
+                                      <>
+                                        <i className="ri-loader-4-line animate-spin"></i>
+                                        Processing...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <i className="ri-box-3-line"></i>
+                                        Process
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={async (e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      await handleOpenGoodsReceivedModal(order);
+                                    }}
+                                    className="inline-flex items-center justify-center gap-2 rounded-md border border-primary bg-primary text-white px-3 py-1 text-sm hover:bg-primary/90 transition h-8"
+                                    title="Mark goods as received"
+                                  >
+                                    <i className="ri-checkbox-circle-line"></i>
+                                    Goods Received
+                                  </button>
+                                </>
                               )}
                             </div>
                           </td>
@@ -1076,6 +1193,19 @@ const PurchaseOrderReceivedPage = () => {
           </div>
         </div>
       ) : null}
+
+      {orderForGoodsReceived && (
+        <GoodsReceivedModal
+          isOpen={goodsReceivedModalOpen}
+          onClose={() => {
+            setGoodsReceivedModalOpen(false);
+            setOrderForGoodsReceived(null);
+          }}
+          order={orderForGoodsReceived}
+          onSubmit={handleGoodsReceivedSubmit}
+          isSubmitting={isSubmittingGoodsReceived}
+        />
+      )}
     </>
   );
 };
@@ -1497,6 +1627,466 @@ const ReceiptStatusModal: React.FC<ReceiptStatusModalProps> = ({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+interface GoodsReceivedModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  order: PurchaseOrder;
+  onSubmit: (payload: UpdatePurchaseOrderWithReceivedLotsPayload) => Promise<void>;
+  isSubmitting: boolean;
+}
+
+const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
+  isOpen,
+  onClose,
+  order,
+  onSubmit,
+  isSubmitting
+}) => {
+  const [lots, setLots] = useState<ReceivedLotDetail[]>([
+    {
+      lotNumber: '',
+      numberOfCones: 0,
+      totalWeight: 0,
+      numberOfBoxes: 0,
+      poItems: [],
+      status: 'lot_qc_pending'
+    }
+  ]);
+  const [currentStatus, setCurrentStatus] = useState<'goods_received' | 'goods_partially_received'>('goods_partially_received');
+
+  useEffect(() => {
+    if (isOpen) {
+      // Load existing data if available, otherwise reset form
+      if (order.receivedLotDetails && order.receivedLotDetails.length > 0) {
+        // Load existing received lot details
+        setLots(order.receivedLotDetails.map(lot => ({
+          lotNumber: lot.lotNumber || '',
+          numberOfCones: lot.numberOfCones || 0,
+          totalWeight: lot.totalWeight || 0,
+          numberOfBoxes: lot.numberOfBoxes || 0,
+          poItems: lot.poItems || [],
+          status: lot.status || 'lot_qc_pending'
+        })));
+        
+        // Set current status based on order status
+        if (order.status === 'goods received') {
+          setCurrentStatus('goods_received');
+        } else {
+          setCurrentStatus('goods_partially_received');
+        }
+      } else {
+        // Reset form when modal opens with no existing data
+        setLots([{
+          lotNumber: '',
+          numberOfCones: 0,
+          totalWeight: 0,
+          numberOfBoxes: 0,
+          poItems: [],
+          status: 'lot_qc_pending'
+        }]);
+        setCurrentStatus('goods_partially_received');
+      }
+    }
+  }, [isOpen, order]);
+
+  if (!isOpen) return null;
+
+  const addLot = () => {
+    setLots([...lots, {
+      lotNumber: '',
+      numberOfCones: 0,
+      totalWeight: 0,
+      numberOfBoxes: 0,
+      poItems: [],
+      status: 'lot_qc_pending'
+    }]);
+  };
+
+  const removeLot = (index: number) => {
+    if (lots.length > 1) {
+      setLots(lots.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateLot = (index: number, field: keyof ReceivedLotDetail, value: any) => {
+    const updatedLots = [...lots];
+    updatedLots[index] = { ...updatedLots[index], [field]: value };
+    setLots(updatedLots);
+  };
+
+  const addPoItemToLot = (lotIndex: number) => {
+    const updatedLots = [...lots];
+    updatedLots[lotIndex].poItems.push({
+      poItem: '',
+      receivedQuantity: 0
+    });
+    setLots(updatedLots);
+  };
+
+  const removePoItemFromLot = (lotIndex: number, poItemIndex: number) => {
+    const updatedLots = [...lots];
+    updatedLots[lotIndex].poItems = updatedLots[lotIndex].poItems.filter((_, i) => i !== poItemIndex);
+    setLots(updatedLots);
+  };
+
+  const updatePoItem = (lotIndex: number, poItemIndex: number, field: 'poItem' | 'receivedQuantity', value: string | number) => {
+    const updatedLots = [...lots];
+    updatedLots[lotIndex].poItems[poItemIndex] = {
+      ...updatedLots[lotIndex].poItems[poItemIndex],
+      [field]: value
+    };
+    setLots(updatedLots);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validation
+    for (let i = 0; i < lots.length; i++) {
+      const lot = lots[i];
+      if (!lot.lotNumber.trim()) {
+        toast.error(`Lot ${i + 1}: Lot Number is required`);
+        return;
+      }
+      if (lot.numberOfCones <= 0) {
+        toast.error(`Lot ${i + 1}: Number of Cones must be greater than 0`);
+        return;
+      }
+      if (lot.totalWeight <= 0) {
+        toast.error(`Lot ${i + 1}: Total Weight must be greater than 0`);
+        return;
+      }
+      if (lot.numberOfBoxes <= 0) {
+        toast.error(`Lot ${i + 1}: Number of Boxes must be greater than 0`);
+        return;
+      }
+      if (lot.poItems.length === 0) {
+        toast.error(`Lot ${i + 1}: At least one PO Item is required`);
+        return;
+      }
+      for (let j = 0; j < lot.poItems.length; j++) {
+        const poItem = lot.poItems[j];
+        if (!poItem.poItem) {
+          toast.error(`Lot ${i + 1}, PO Item ${j + 1}: PO Item is required`);
+          return;
+        }
+        if (poItem.receivedQuantity <= 0) {
+          toast.error(`Lot ${i + 1}, PO Item ${j + 1}: Received Quantity must be greater than 0`);
+          return;
+        }
+      }
+    }
+
+    const payload: UpdatePurchaseOrderWithReceivedLotsPayload = {
+      receivedLotDetails: lots,
+      currentStatus
+    };
+
+    await onSubmit(payload);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div 
+          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+          onClick={onClose}
+        ></div>
+
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full max-h-[90vh] overflow-y-auto">
+          <form onSubmit={handleSubmit}>
+            <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Goods Received - {order.orderNumber}
+                </h3>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="text-gray-400 hover:text-gray-500"
+                  disabled={isSubmitting}
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+
+              {/* Order Details */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">Order Details</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">PO Number</label>
+                    <div className="mt-1 text-gray-900 font-medium">{order.orderNumber}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Supplier</label>
+                    <div className="mt-1 text-gray-900">{order.supplier}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Order Date</label>
+                    <div className="mt-1 text-gray-900">{new Date(order.orderDate).toLocaleDateString()}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Total Amount</label>
+                    <div className="mt-1 text-gray-900 font-medium">₹{order.totalAmount.toLocaleString()}</div>
+                  </div>
+                </div>
+                {order.items && order.items.length > 0 && (
+                  <div className="mt-4">
+                    <label className="text-xs font-medium text-gray-600 mb-2 block">Order Items</label>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs border border-gray-200">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            <th className="px-2 py-1 text-left border border-gray-200">Yarn Name</th>
+                            <th className="px-2 py-1 text-left border border-gray-200">Size/Count</th>
+                            <th className="px-2 py-1 text-left border border-gray-200">Shade Code</th>
+                            <th className="px-2 py-1 text-right border border-gray-200">Quantity</th>
+                            <th className="px-2 py-1 text-right border border-gray-200">Rate</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {order.items.map((item, idx) => (
+                            <tr key={idx} className="bg-white">
+                              <td className="px-2 py-1 border border-gray-200">{item.yarnName}</td>
+                              <td className="px-2 py-1 border border-gray-200">{item.sizeCount}</td>
+                              <td className="px-2 py-1 border border-gray-200">{item.shadeCode}</td>
+                              <td className="px-2 py-1 text-right border border-gray-200">{item.quantity.toLocaleString()}</td>
+                              <td className="px-2 py-1 text-right border border-gray-200">₹{item.rate.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Current Status */}
+              <div className="mb-6">
+                <label className="form-label">
+                  Current Status <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={currentStatus}
+                  onChange={(e) => setCurrentStatus(e.target.value as 'goods_received' | 'goods_partially_received')}
+                  className="form-select"
+                  required
+                >
+                  <option value="goods_partially_received">Goods Partially Received</option>
+                  <option value="goods_received">Goods Received</option>
+                </select>
+              </div>
+
+              {/* Lots */}
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-sm font-semibold text-gray-700">Received Lot Details</h4>
+                  <button
+                    type="button"
+                    onClick={addLot}
+                    className="ti-btn ti-btn-sm ti-btn-primary"
+                  >
+                    <i className="ri-add-line me-1"></i>
+                    Add Lot
+                  </button>
+                </div>
+
+                {lots.map((lot, lotIndex) => (
+                  <div key={lotIndex} className="border border-gray-200 rounded-lg p-4 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h5 className="text-sm font-medium text-gray-800">Lot {lotIndex + 1}</h5>
+                      {lots.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLot(lotIndex)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <i className="ri-delete-bin-line"></i>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="form-label">
+                          Lot Number <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={lot.lotNumber}
+                          onChange={(e) => updateLot(lotIndex, 'lotNumber', e.target.value)}
+                          className="form-control"
+                          placeholder="Enter lot number"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="form-label">
+                          Status <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={lot.status}
+                          onChange={(e) => updateLot(lotIndex, 'status', e.target.value)}
+                          className="form-select"
+                          required
+                        >
+                          <option value="lot_qc_pending">Lot QC Pending</option>
+                          <option value="lot_accepted">Lot Accepted</option>
+                          <option value="lot_rejected">Lot Rejected</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="form-label">
+                          Number of Cones <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={lot.numberOfCones}
+                          onChange={(e) => updateLot(lotIndex, 'numberOfCones', parseInt(e.target.value) || 0)}
+                          className="form-control"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="form-label">
+                          Total Weight (kg) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={lot.totalWeight}
+                          onChange={(e) => updateLot(lotIndex, 'totalWeight', parseFloat(e.target.value) || 0)}
+                          className="form-control"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="form-label">
+                          Number of Boxes <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={lot.numberOfBoxes}
+                          onChange={(e) => updateLot(lotIndex, 'numberOfBoxes', parseInt(e.target.value) || 0)}
+                          className="form-control"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* PO Items */}
+                    <div className="mt-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="form-label">PO Items <span className="text-red-500">*</span></label>
+                        <button
+                          type="button"
+                          onClick={() => addPoItemToLot(lotIndex)}
+                          className="ti-btn ti-btn-sm ti-btn-outline-primary"
+                        >
+                          <i className="ri-add-line me-1"></i>
+                          Add PO Item
+                        </button>
+                      </div>
+
+                      {lot.poItems.map((poItem, poItemIndex) => (
+                        <div key={poItemIndex} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3 p-3 bg-gray-50 rounded">
+                          <div>
+                            <label className="form-label">
+                              PO Item <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={poItem.poItem}
+                              onChange={(e) => updatePoItem(lotIndex, poItemIndex, 'poItem', e.target.value)}
+                              className="form-select"
+                              required
+                            >
+                              <option value="">Select PO Item</option>
+                              {order.items.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.yarnName} - {item.sizeCount} - {item.shadeCode} (Qty: {item.quantity})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="form-label">
+                              Received Quantity <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={poItem.receivedQuantity}
+                              onChange={(e) => updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', parseInt(e.target.value) || 0)}
+                              className="form-control"
+                              required
+                            />
+                          </div>
+
+                          <div className="flex items-end">
+                            <button
+                              type="button"
+                              onClick={() => removePoItemFromLot(lotIndex, poItemIndex)}
+                              className="ti-btn ti-btn-sm ti-btn-outline-danger w-full"
+                            >
+                              <i className="ri-delete-bin-line me-1"></i>
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {lot.poItems.length === 0 && (
+                        <p className="text-xs text-gray-500">No PO items added. Click "Add PO Item" to add items.</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+              <button
+                type="submit"
+                className="ti-btn ti-btn-primary w-full sm:ml-3 sm:w-auto"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <i className="ri-loader-4-line animate-spin me-2"></i>
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-check-line me-2"></i>
+                    Update Order
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="ti-btn ti-btn-light mt-3 sm:mt-0 w-full sm:w-auto"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
