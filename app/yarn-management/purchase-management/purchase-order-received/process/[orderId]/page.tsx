@@ -22,6 +22,14 @@ interface ReceivedItem {
   qualityStatus: 'Approved' | 'Rejected' | 'Pending';
 }
 
+interface ReceivedLotDetail {
+  lotNumber: string;
+  numberOfCones: number;
+  totalWeight: number;
+  numberOfBoxes: number;
+  status: 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
+}
+
 interface ReceivedOrder {
   id: string;
   orderNumber: string;
@@ -46,6 +54,7 @@ interface ReceivedOrder {
     numberOfBoxes?: number;
     totalWeight?: number;
   };
+  receivedLotDetails?: ReceivedLotDetail[];
 }
 
 // Helper function to convert API status code to display format
@@ -59,7 +68,9 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     'partially_delivered': 'partially delivered',
     'stocked': 'stocked',
     'goods_received': 'goods received',
-    'po_rejected': 'rejected'
+    'goods_partially_received': 'goods partially received',
+    'po_rejected': 'rejected',
+    'po_accepted': 'po_accepted'
   };
   return statusMap[statusCode] || 'submitted to supplier';
 };
@@ -67,6 +78,17 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
 // Helper function to map API response to ReceivedOrder format
 const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
   const poItems = apiOrder.poItems || apiOrder.items || apiOrder.orderItems || [];
+  
+  // Map receivedLotDetails if available
+  const receivedLotDetails: ReceivedLotDetail[] | undefined = apiOrder.receivedLotDetails 
+    ? apiOrder.receivedLotDetails.map((lot: any) => ({
+        lotNumber: lot.lotNumber || lot.lot_number || '',
+        numberOfCones: lot.numberOfCones || lot.number_of_cones || 0,
+        totalWeight: lot.totalWeight || lot.total_weight || 0,
+        numberOfBoxes: lot.numberOfBoxes || lot.number_of_boxes || 0,
+        status: lot.status || 'lot_qc_pending' as 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected'
+      }))
+    : undefined;
   
   return {
     id: apiOrder._id || apiOrder.id || '',
@@ -102,7 +124,8 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
       numberOfCones: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfCones || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_cones,
       numberOfBoxes: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfBoxes || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_boxes,
       totalWeight: (apiOrder.packListDetails || apiOrder.packListDetails)?.totalWeight || (apiOrder.packListDetails || apiOrder.packlistDetails)?.total_weight
-    } : undefined
+    } : undefined,
+    receivedLotDetails
   };
 };
 
@@ -286,7 +309,39 @@ const ProcessOrderPage = () => {
       case 'submitted to supplier': return 'bg-blue-100 text-blue-800';
       case 'stocked': return 'bg-emerald-100 text-emerald-800';
       case 'goods received': return 'bg-green-100 text-green-800';
+      case 'goods partially received': return 'bg-yellow-100 text-yellow-800';
+      case 'po_accepted': return 'bg-green-100 text-green-800';
+      case 'po_rejected': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Get lot status by lot number
+  const getLotStatus = (lotNumber: string): 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected' | null => {
+    if (!order?.receivedLotDetails || !lotNumber) return null;
+    
+    const normalizedLotNumber = lotNumber.trim().toUpperCase();
+    const lot = order.receivedLotDetails.find(lot => {
+      const receivedLotNumber = (lot.lotNumber || '').trim().toUpperCase();
+      return receivedLotNumber === normalizedLotNumber;
+    });
+    
+    return lot?.status || null;
+  };
+
+  // Get lot status display text and color
+  const getLotStatusDisplay = (status: 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected' | null) => {
+    if (!status) return { text: 'Pending', color: 'bg-gray-100 text-gray-800' };
+    
+    switch (status) {
+      case 'lot_qc_pending':
+        return { text: 'QC Pending', color: 'bg-blue-100 text-blue-800' };
+      case 'lot_accepted':
+        return { text: 'Accepted', color: 'bg-green-100 text-green-800' };
+      case 'lot_rejected':
+        return { text: 'Rejected', color: 'bg-red-100 text-red-800' };
+      default:
+        return { text: 'Pending', color: 'bg-gray-100 text-gray-800' };
     }
   };
 
@@ -425,8 +480,8 @@ const ProcessOrderPage = () => {
 
   // Handle sending lot for QC
   const handleSendLotForQC = async (lotNumber: string, lotBoxes: YarnBox[]) => {
-    if (!user || !user.id || !user.email) {
-      toast.error('User information not available. Please login again.');
+    if (!order) {
+      toast.error('Order information not available');
       return;
     }
 
@@ -437,12 +492,10 @@ const ProcessOrderPage = () => {
 
     setIsUpdatingOrderStatus(true);
     try {
-      await yarnPurchaseOrderService.updatePurchaseOrderStatus(
-        orderId,
-        'QC pending' as PurchaseOrderStatus,
-        user.id,
-        user.email,
-        `Lot ${lotNumber} sent for quality check (${lotBoxes.length} boxes)`
+      await yarnPurchaseOrderService.updateLotStatus(
+        order.orderNumber,
+        lotNumber,
+        'lot_qc_pending'
       );
 
       toast.success(`Lot ${lotNumber} sent for QC successfully`);
@@ -461,8 +514,8 @@ const ProcessOrderPage = () => {
 
   // Handle rejecting lot
   const handleRejectLot = async (lotNumber: string, lotBoxes: YarnBox[]) => {
-    if (!user || !user.id || !user.email) {
-      toast.error('User information not available. Please login again.');
+    if (!order) {
+      toast.error('Order information not available');
       return;
     }
 
@@ -479,12 +532,10 @@ const ProcessOrderPage = () => {
 
     setIsUpdatingOrderStatus(true);
     try {
-      await yarnPurchaseOrderService.updatePurchaseOrderStatus(
-        orderId,
-        'rejected' as PurchaseOrderStatus,
-        user.id,
-        user.email,
-        `Lot ${lotNumber} rejected (${lotBoxes.length} boxes)`
+      await yarnPurchaseOrderService.updateLotStatus(
+        order.orderNumber,
+        lotNumber,
+        'lot_rejected'
       );
 
       toast.success(`Lot ${lotNumber} rejected successfully`);
@@ -974,61 +1025,6 @@ const ProcessOrderPage = () => {
                   <p className="text-sm text-gray-700">{order.notes}</p>
                 </div>
               )}
-              
-              {/* Action Buttons */}
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="flex flex-col sm:flex-row gap-3 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateOrderStatus('qc_pending', 'Order sent for quality check')}
-                    disabled={!areAllBoxesCompleted || isUpdatingOrderStatus}
-                    className={`ti-btn ${
-                      areAllBoxesCompleted && !isUpdatingOrderStatus
-                        ? 'ti-btn-primary'
-                        : 'ti-btn-light opacity-50 cursor-not-allowed'
-                    }`}
-                  >
-                    {isUpdatingOrderStatus ? (
-                      <>
-                        <i className="ri-loader-4-line animate-spin me-2"></i>
-                        Updating...
-                      </>
-                    ) : (
-                      <>
-                        <i className="ri-checkbox-circle-line me-2"></i>
-                        Send for QC
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateOrderStatus('po_rejected', 'Order rejected')}
-                    disabled={!areAllBoxesCompleted || isUpdatingOrderStatus}
-                    className={`ti-btn ${
-                      areAllBoxesCompleted && !isUpdatingOrderStatus
-                        ? 'ti-btn-danger'
-                        : 'ti-btn-light opacity-50 cursor-not-allowed'
-                    }`}
-                  >
-                    {isUpdatingOrderStatus ? (
-                      <>
-                        <i className="ri-loader-4-line animate-spin me-2"></i>
-                        Updating...
-                      </>
-                    ) : (
-                      <>
-                        <i className="ri-close-circle-line me-2"></i>
-                        Reject Order
-                      </>
-                    )}
-                  </button>
-                </div>
-                {!areAllBoxesCompleted && (
-                  <p className="text-xs text-gray-500 mt-2 text-right">
-                    Complete all box entries (yarn name, lot number, weight, and cones) to enable actions
-                  </p>
-                )}
-              </div>
             </div>
                     </div>
 
@@ -1190,12 +1186,30 @@ const ProcessOrderPage = () => {
 
                   const isLotCompleted = areAllBoxesInLotCompleted(lotBoxes);
 
+                  const lotStatus = getLotStatus(lotNumber);
+                  const lotStatusDisplay = getLotStatusDisplay(lotStatus);
+
+                  // Debug logging
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log(`Lot ${lotNumber} status:`, lotStatus, 'from receivedLotDetails:', order?.receivedLotDetails);
+                  }
+
                   return (
                     <div key={lotNumber} className="border border-gray-200 rounded-lg overflow-hidden">
                       <div className="bg-primary/10 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
-                        <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                        <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
                           <i className="ri-box-3-line text-primary"></i>
-                          Lot Number: <span className="text-primary">{lotNumber}</span>
+                          <span>Lot Number: <span className="text-primary font-bold">{lotNumber}</span></span>
+                          {lotStatus && (
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full ${lotStatusDisplay.color}`}>
+                              <i className={`ri-${
+                                lotStatus === 'lot_qc_pending' ? 'time-line' : 
+                                lotStatus === 'lot_accepted' ? 'check-line' : 
+                                'close-line'
+                              }`}></i>
+                              {lotStatusDisplay.text}
+                            </span>
+                          )}
                           <span className="text-xs font-normal text-gray-600 ml-2">
                             ({lotBoxes.length} {lotBoxes.length === 1 ? 'box' : 'boxes'})
                           </span>
