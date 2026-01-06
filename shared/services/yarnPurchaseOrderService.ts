@@ -39,6 +39,8 @@ export type PurchaseOrderStatus =
   | 'stocked'
   | 'goods received'
   | 'goods partially received'
+  | 'PO accepted'
+  | 'PO accepted partially'
   | 'po_accepted'
   | 'po_rejected';
 
@@ -389,6 +391,16 @@ class YarnPurchaseOrderService {
     return this.makeRequest<any>(`/lot-status-qc-approve`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
+    });
+  }
+
+  async deletePurchaseOrder(purchaseOrderId: string): Promise<void> {
+    if (!purchaseOrderId) {
+      throw new Error('Purchase Order ID is required');
+    }
+
+    return this.makeRequest<void>(`/${purchaseOrderId}`, {
+      method: 'DELETE',
     });
   }
 }

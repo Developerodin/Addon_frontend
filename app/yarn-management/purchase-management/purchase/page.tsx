@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
-import { PurchaseOrderStatus } from "./components/PurchaseForm";
+import { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import PacklistModal, { PacklistDetails } from "./components/PacklistModal";
 import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
 
@@ -64,7 +64,9 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     'partially_delivered': 'partially delivered',
     'stocked': 'stocked',
     'goods_received': 'goods received',
-    'po_accepted': 'po_accepted',
+    'goods_partially_received': 'goods partially received',
+    'po_accepted': 'PO accepted',
+    'po_accepted_partially': 'PO accepted partially',
     'po_rejected': 'rejected'
   };
   return statusMap[statusCode] || 'submitted to supplier';
@@ -81,6 +83,9 @@ const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
     'partially delivered': 'partially_delivered',
     'stocked': 'stocked',
     'goods received': 'goods_received',
+    'goods partially received': 'goods_partially_received',
+    'PO accepted': 'po_accepted',
+    'PO accepted partially': 'po_accepted_partially',
     'po_accepted': 'po_accepted',
     'po_rejected': 'po_rejected'
   };
@@ -170,6 +175,7 @@ const PurchasePage = () => {
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [detailedOrderData, setDetailedOrderData] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Check permission
   const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
@@ -504,6 +510,30 @@ const PurchasePage = () => {
     }
   };
 
+  const handleDeleteOrder = async (order: PurchaseOrder) => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to delete Purchase Order ${order.orderNumber}?\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await yarnPurchaseOrderService.deletePurchaseOrder(order.id);
+      toast.success(`Purchase Order ${order.orderNumber} deleted successfully`);
+      // Refresh orders list
+      await fetchPurchaseOrders();
+    } catch (error) {
+      console.error('Failed to delete purchase order:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete purchase order');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -523,6 +553,11 @@ const PurchasePage = () => {
       case 'QC pending': return 'bg-yellow-100 text-yellow-800';
       case 'partially delivered': return 'bg-orange-100 text-orange-800';
       case 'stocked': return 'bg-emerald-100 text-emerald-800';
+      case 'goods received': return 'bg-teal-100 text-teal-800';
+      case 'goods partially received': return 'bg-amber-100 text-amber-800';
+      case 'PO accepted': return 'bg-green-100 text-green-800';
+      case 'PO accepted partially': return 'bg-lime-100 text-lime-800';
+      case 'po_accepted': return 'bg-green-100 text-green-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -590,6 +625,12 @@ const PurchasePage = () => {
                       onChange={(e) => setStatusFilter(e.target.value)}
                     >
                       <option value="submitted to supplier">Submitted to Supplier</option>
+                      <option value="in transit">In Transit</option>
+                      <option value="goods partially received">Goods Partially Received</option>
+                      <option value="goods received">Goods Received</option>
+                      <option value="QC pending">QC Pending</option>
+                      <option value="PO accepted">PO Accepted</option>
+                      <option value="PO accepted partially">PO Accepted Partially</option>
                       <option value="rejected">Rejected</option>
                     </select>
                   <button className="ti-btn ti-btn-light">
@@ -748,6 +789,14 @@ const PurchasePage = () => {
                                 >
                                   <i className="ri-edit-line text-lg"></i>
                                 </Link>
+                                <button
+                                  onClick={() => handleDeleteOrder(order)}
+                                  className="text-red-600 hover:text-red-900 flex items-center justify-center"
+                                  title="Delete"
+                                  disabled={isDeleting}
+                                >
+                                  <i className="ri-delete-bin-line text-lg"></i>
+                                </button>
                                 {order.status === 'submitted to supplier' && (
                                   <button
                                     onClick={() => handleStatusUpdate(order.id, 'in transit')}
