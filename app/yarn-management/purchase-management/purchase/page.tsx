@@ -8,6 +8,7 @@ import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
 import { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import PacklistModal, { PacklistDetails } from "./components/PacklistModal";
+import UpdatePacklistModal from "./components/UpdatePacklistModal";
 import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
 
 interface PurchaseOrder {
@@ -38,7 +39,21 @@ interface PurchaseOrder {
       numberOfCones?: number;
       numberOfBoxes?: number;
       totalWeight?: number;
+      notes?: string;
     };
+    packListDetailsArray?: Array<{
+      packingNumber?: string;
+      courierName?: string;
+      courierNumber?: string;
+      vehicleNumber?: string;
+      challanNumber?: string;
+      dispatchDate?: string;
+      estimatedDeliveryDate?: string;
+      numberOfCones?: number;
+      numberOfBoxes?: number;
+      totalWeight?: number;
+      notes?: string;
+    }>;
 }
 
 interface PurchaseItem {
@@ -129,20 +144,86 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
     notes: apiOrder.notes || apiOrder.remarks || '',
     createdAt: apiOrder.createDate || apiOrder.createdAt || apiOrder.created_at || new Date().toISOString(),
     updatedAt: apiOrder.lastUpdateDate || apiOrder.updatedAt || apiOrder.updated_at || new Date().toISOString(),
-    packlistDetails: (apiOrder.packListDetails || apiOrder.packlistDetails) ? {
-      packingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number,
-      trackingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number,
-      courierName: (apiOrder.packListDetails || apiOrder.packlistDetails)?.courierName || (apiOrder.packListDetails || apiOrder.packlistDetails)?.courier_name,
-      courierNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.courierNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.courier_number,
-      vehicleNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.vehicleNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.vehicle_number,
-      challanNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.challanNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.challan_number,
-      dispatchDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatchDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatch_date,
-      estimatedDeliveryDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date,
-      expectedArrivalDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date,
-      numberOfCones: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfCones || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_cones,
-      numberOfBoxes: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfBoxes || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_boxes,
-      totalWeight: (apiOrder.packListDetails || apiOrder.packlistDetails)?.totalWeight || (apiOrder.packListDetails || apiOrder.packlistDetails)?.total_weight
-    } : undefined
+    packlistDetails: (() => {
+      const packListData = apiOrder.packListDetails || apiOrder.packlistDetails;
+      if (!packListData) return undefined;
+      
+      // Handle array case (new backend format)
+      if (Array.isArray(packListData) && packListData.length > 0) {
+        // Return the first entry for backward compatibility
+        const firstEntry = packListData[0];
+        return {
+          packingNumber: firstEntry?.packingNumber || firstEntry?.packing_number || firstEntry?.trackingNumber || firstEntry?.tracking_number || '',
+          trackingNumber: firstEntry?.trackingNumber || firstEntry?.tracking_number || firstEntry?.packingNumber || firstEntry?.packing_number || '',
+          courierName: firstEntry?.courierName || firstEntry?.courier_name || '',
+          courierNumber: firstEntry?.courierNumber || firstEntry?.courier_number || '',
+          vehicleNumber: firstEntry?.vehicleNumber || firstEntry?.vehicle_number || '',
+          challanNumber: firstEntry?.challanNumber || firstEntry?.challan_number || '',
+          dispatchDate: firstEntry?.dispatchDate || firstEntry?.dispatch_date || '',
+          estimatedDeliveryDate: firstEntry?.estimatedDeliveryDate || firstEntry?.estimated_delivery_date || firstEntry?.expectedArrivalDate || firstEntry?.expected_arrival_date || '',
+          expectedArrivalDate: firstEntry?.expectedArrivalDate || firstEntry?.expected_arrival_date || firstEntry?.estimatedDeliveryDate || firstEntry?.estimated_delivery_date || '',
+          numberOfCones: firstEntry?.numberOfCones || firstEntry?.number_of_cones || 0,
+          numberOfBoxes: firstEntry?.numberOfBoxes || firstEntry?.number_of_boxes || 0,
+          totalWeight: firstEntry?.totalWeight || firstEntry?.total_weight || 0,
+          notes: firstEntry?.notes || ''
+        };
+      }
+      
+      // Handle single object case (legacy format)
+      return {
+        packingNumber: packListData?.packingNumber || packListData?.packing_number || packListData?.trackingNumber || packListData?.tracking_number || '',
+        trackingNumber: packListData?.trackingNumber || packListData?.tracking_number || packListData?.packingNumber || packListData?.packing_number || '',
+        courierName: packListData?.courierName || packListData?.courier_name || '',
+        courierNumber: packListData?.courierNumber || packListData?.courier_number || '',
+        vehicleNumber: packListData?.vehicleNumber || packListData?.vehicle_number || '',
+        challanNumber: packListData?.challanNumber || packListData?.challan_number || '',
+        dispatchDate: packListData?.dispatchDate || packListData?.dispatch_date || '',
+        estimatedDeliveryDate: packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || packListData?.expectedArrivalDate || packListData?.expected_arrival_date || '',
+        expectedArrivalDate: packListData?.expectedArrivalDate || packListData?.expected_arrival_date || packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || '',
+        numberOfCones: packListData?.numberOfCones || packListData?.number_of_cones || 0,
+        numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes || 0,
+        totalWeight: packListData?.totalWeight || packListData?.total_weight || 0,
+        notes: packListData?.notes || ''
+      };
+    })(),
+    packListDetailsArray: (() => {
+      const packListData = apiOrder.packListDetails || apiOrder.packlistDetails;
+      if (!packListData) return undefined;
+      
+      // If it's an array, return it as-is
+      if (Array.isArray(packListData)) {
+        return packListData.map((entry: any) => ({
+          packingNumber: entry?.packingNumber || entry?.packing_number || entry?.trackingNumber || entry?.tracking_number || '',
+          courierName: entry?.courierName || entry?.courier_name || '',
+          courierNumber: entry?.courierNumber || entry?.courier_number || '',
+          vehicleNumber: entry?.vehicleNumber || entry?.vehicle_number || '',
+          challanNumber: entry?.challanNumber || entry?.challan_number || '',
+          dispatchDate: entry?.dispatchDate || entry?.dispatch_date || '',
+          estimatedDeliveryDate: entry?.estimatedDeliveryDate || entry?.estimated_delivery_date || entry?.expectedArrivalDate || entry?.expected_arrival_date || '',
+          numberOfCones: entry?.numberOfCones || entry?.number_of_cones || 0,
+          numberOfBoxes: entry?.numberOfBoxes || entry?.number_of_boxes || 0,
+          totalWeight: entry?.totalWeight || entry?.total_weight || 0,
+          notes: entry?.notes || '',
+          poItems: entry?.poItems || (Array.isArray(entry?.poItems) ? entry.poItems : [])
+        }));
+      }
+      
+      // If it's a single object, convert to array
+      return [{
+        packingNumber: packListData?.packingNumber || packListData?.packing_number || packListData?.trackingNumber || packListData?.tracking_number || '',
+        courierName: packListData?.courierName || packListData?.courier_name || '',
+        courierNumber: packListData?.courierNumber || packListData?.courier_number || '',
+        vehicleNumber: packListData?.vehicleNumber || packListData?.vehicle_number || '',
+        challanNumber: packListData?.challanNumber || packListData?.challan_number || '',
+        dispatchDate: packListData?.dispatchDate || packListData?.dispatch_date || '',
+        estimatedDeliveryDate: packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || packListData?.expectedArrivalDate || packListData?.expected_arrival_date || '',
+        numberOfCones: packListData?.numberOfCones || packListData?.number_of_cones || 0,
+        numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes || 0,
+        totalWeight: packListData?.totalWeight || packListData?.total_weight || 0,
+        notes: packListData?.notes || '',
+        poItems: packListData?.poItems || (Array.isArray(packListData?.poItems) ? packListData.poItems : [])
+      }];
+    })()
   };
 };
 
@@ -170,6 +251,8 @@ const PurchasePage = () => {
   const [packlistModalOpen, setPacklistModalOpen] = useState(false);
   const [orderForPacklist, setOrderForPacklist] = useState<PurchaseOrder | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [updatePacklistModalOpen, setUpdatePacklistModalOpen] = useState(false);
+  const [orderForUpdatePacklist, setOrderForUpdatePacklist] = useState<PurchaseOrder | null>(null);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
@@ -457,7 +540,7 @@ const PurchasePage = () => {
     await updateOrderStatus(orderId, newStatus);
   };
 
-  const handlePacklistSubmit = async (details: PacklistDetails) => {
+  const handlePacklistSubmit = async (details: PacklistDetails[]) => {
     if (!orderForPacklist) {
       toast.error('Order not found');
       return;
@@ -468,24 +551,36 @@ const PurchasePage = () => {
       return;
     }
 
+    if (!details || details.length === 0) {
+      toast.error('At least one packlist entry is required');
+      return;
+    }
+
     setIsUpdatingStatus(true);
     try {
-      // Handle file upload if packlist file is provided
-      if (details.packlistFile) {
+      // Handle file upload if packlist file is provided (from any entry)
+      const entryWithFile = details.find(d => d.packlistFile);
+      if (entryWithFile?.packlistFile) {
         // TODO: Implement API call to upload packlist file
-        // Example: await uploadPacklistFile(orderForPacklist.id, details.packlistFile);
+        // Example: await uploadPacklistFile(orderForPacklist.id, entryWithFile.packlistFile);
         console.log('Packlist file to upload:', {
-          fileName: details.packlistFileName,
-          fileSize: details.packlistFile.size,
-          fileType: details.packlistFile.type
+          fileName: entryWithFile.packlistFileName,
+          fileSize: entryWithFile.packlistFile.size,
+          fileType: entryWithFile.packlistFile.type
         });
       }
 
-      // First API call: Update order with packlist details
+      // First API call: Update order with packlist details (array)
       await yarnPurchaseOrderService.updatePurchaseOrderWithPacklist(
         orderForPacklist.id,
         details
       );
+
+      // Combine notes from all entries for status update
+      const combinedNotes = details
+        .map(d => d.notes)
+        .filter(Boolean)
+        .join('; ') || 'Shipment collected by courier';
 
       // Second API call: Update status to "in transit"
       await yarnPurchaseOrderService.updatePurchaseOrderStatus(
@@ -493,18 +588,62 @@ const PurchasePage = () => {
         'in transit',
         user.id,
         user.email, // Using email as username, adjust if your API expects different field
-        details.notes || 'Shipment collected by courier'
+        combinedNotes
       );
       
       // Refresh orders list
       await fetchPurchaseOrders();
       
-      toast.success('Purchase order updated and marked as in transit successfully');
+      toast.success(`Purchase order updated with ${details.length} packlist ${details.length === 1 ? 'entry' : 'entries'} and marked as in transit successfully`);
       setPacklistModalOpen(false);
       setOrderForPacklist(null);
     } catch (error) {
       console.error('Failed to update order:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to update order');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const handleUpdatePacklistSubmit = async (details: PacklistDetails[]) => {
+    if (!orderForUpdatePacklist) {
+      toast.error('Order not found');
+      return;
+    }
+
+    if (!details || details.length === 0) {
+      toast.error('At least one packlist entry is required');
+      return;
+    }
+
+    setIsUpdatingStatus(true);
+    try {
+      // Handle file upload if packlist file is provided (from any entry)
+      const entryWithFile = details.find(d => d.packlistFile);
+      if (entryWithFile?.packlistFile) {
+        // TODO: Implement API call to upload packlist file
+        console.log('Packlist file to upload:', {
+          fileName: entryWithFile.packlistFileName,
+          fileSize: entryWithFile.packlistFile.size,
+          fileType: entryWithFile.packlistFile.type
+        });
+      }
+
+      // Update order with packlist details (array) - no status change
+      await yarnPurchaseOrderService.updatePurchaseOrderWithPacklist(
+        orderForUpdatePacklist.id,
+        details
+      );
+      
+      // Refresh orders list
+      await fetchPurchaseOrders();
+      
+      toast.success(`Packlist details updated successfully with ${details.length} ${details.length === 1 ? 'entry' : 'entries'}`);
+      setUpdatePacklistModalOpen(false);
+      setOrderForUpdatePacklist(null);
+    } catch (error) {
+      console.error('Failed to update packlist:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update packlist');
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -806,6 +945,20 @@ const PurchasePage = () => {
                                     Mark in Transit
                                   </button>
                                 )}
+                                {(order.status === 'goods received' || 
+                                  order.status === 'in transit' || 
+                                  order.status === 'goods partially received') && (
+                                  <button
+                                    onClick={() => {
+                                      setOrderForUpdatePacklist(order);
+                                      setUpdatePacklistModalOpen(true);
+                                    }}
+                                    className="text-xs border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded px-3 py-1 h-7 font-medium"
+                                    title="Update Packlist"
+                                  >
+                                    Update Packlist
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -837,6 +990,7 @@ const PurchasePage = () => {
             expectedDelivery: orderForPacklist.expectedDelivery,
             totalAmount: orderForPacklist.totalAmount,
             items: orderForPacklist.items.map(item => ({
+              id: item.id,
               yarnName: item.yarnName,
               sizeCount: item.sizeCount,
               shadeCode: item.shadeCode,
@@ -844,6 +998,36 @@ const PurchasePage = () => {
               rate: item.rate
             }))
           }}
+          isSubmitting={isUpdatingStatus}
+        />
+      )}
+
+      {/* Update Packlist Modal */}
+      {orderForUpdatePacklist && (
+        <UpdatePacklistModal
+          isOpen={updatePacklistModalOpen}
+          onClose={() => {
+            setUpdatePacklistModalOpen(false);
+            setOrderForUpdatePacklist(null);
+          }}
+          onSubmit={handleUpdatePacklistSubmit}
+          order={{
+            id: orderForUpdatePacklist.id,
+            orderNumber: orderForUpdatePacklist.orderNumber,
+            supplier: orderForUpdatePacklist.supplier,
+            orderDate: orderForUpdatePacklist.orderDate,
+            expectedDelivery: orderForUpdatePacklist.expectedDelivery,
+            totalAmount: orderForUpdatePacklist.totalAmount,
+            items: orderForUpdatePacklist.items.map(item => ({
+              id: item.id,
+              yarnName: item.yarnName,
+              sizeCount: item.sizeCount,
+              shadeCode: item.shadeCode,
+              quantity: item.quantity,
+              rate: item.rate
+            }))
+          }}
+          existingPacklistData={orderForUpdatePacklist.packListDetailsArray || (orderForUpdatePacklist.packlistDetails ? [orderForUpdatePacklist.packlistDetails] : undefined)}
           isSubmitting={isUpdatingStatus}
         />
       )}

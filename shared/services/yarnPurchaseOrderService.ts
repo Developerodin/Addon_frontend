@@ -228,40 +228,54 @@ class YarnPurchaseOrderService {
 
   async updatePurchaseOrderWithPacklist(
     orderId: string,
-    packlistDetails: PacklistDetails
+    packlistDetails: PacklistDetails[]
   ): Promise<PurchaseOrder> {
     if (!orderId) {
       throw new Error('Order ID is required');
     }
 
+    if (!packlistDetails || packlistDetails.length === 0) {
+      throw new Error('At least one packlist detail is required');
+    }
+
+    // Combine notes from all entries (or use the first one)
+    const combinedNotes = packlistDetails
+      .map(d => d.notes)
+      .filter(Boolean)
+      .join('; ') || 'Update packing details';
+
     const payload: {
       notes?: string;
-      packListDetails: {
+      packListDetails: Array<{
         packingNumber: string;
         courierName: string;
-        courierNumber: string;
-        vehicleNumber: string;
-        challanNumber: string;
+        courierNumber?: string;
+        vehicleNumber?: string;
+        challanNumber?: string;
         dispatchDate: string;
         estimatedDeliveryDate: string;
         numberOfCones: number;
         numberOfBoxes: number;
         totalWeight: number;
-      };
+        notes?: string;
+        poItems?: string[];
+      }>;
     } = {
-      notes: packlistDetails.notes || 'Update packing details',
-      packListDetails: {
-        packingNumber: packlistDetails.packingNumber,
-        courierName: packlistDetails.courierName,
-        courierNumber: packlistDetails.courierNumber || '',
-        vehicleNumber: packlistDetails.vehicleNumber || '',
-        challanNumber: packlistDetails.challanNumber || '',
-        dispatchDate: packlistDetails.dispatchDate,
-        estimatedDeliveryDate: packlistDetails.estimatedDeliveryDate,
-        numberOfCones: packlistDetails.numberOfCones,
-        numberOfBoxes: packlistDetails.numberOfBoxes,
-        totalWeight: packlistDetails.totalWeight,
-      },
+      notes: combinedNotes,
+      packListDetails: packlistDetails.map(detail => ({
+        packingNumber: detail.packingNumber,
+        courierName: detail.courierName,
+        courierNumber: detail.courierNumber || '',
+        vehicleNumber: detail.vehicleNumber || '',
+        challanNumber: detail.challanNumber || '',
+        dispatchDate: detail.dispatchDate,
+        estimatedDeliveryDate: detail.estimatedDeliveryDate,
+        numberOfCones: detail.numberOfCones,
+        numberOfBoxes: detail.numberOfBoxes,
+        totalWeight: detail.totalWeight,
+        notes: detail.notes || '',
+        poItems: detail.poItems || [],
+      })),
     };
 
     return this.makeRequest<PurchaseOrder>(`/${orderId}`, {

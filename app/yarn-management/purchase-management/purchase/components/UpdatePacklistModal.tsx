@@ -1,23 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
-
-export interface PacklistDetails {
-  packingNumber: string;
-  courierName: string;
-  courierNumber?: string;
-  vehicleNumber?: string;
-  challanNumber?: string;
-  dispatchDate: string;
-  estimatedDeliveryDate: string;
-  numberOfCones: number;
-  numberOfBoxes: number;
-  totalWeight: number;
-  notes?: string;
-  packlistFile?: File;
-  packlistFileName?: string;
-  poItems?: string[]; // Array of PO item IDs
-}
+import { PacklistDetails } from "./PacklistModal";
 
 interface PurchaseOrder {
   id: string;
@@ -36,56 +20,101 @@ interface PurchaseOrder {
   }>;
 }
 
-interface PacklistModalProps {
+interface ExistingPacklistData {
+  packingNumber?: string;
+  courierName?: string;
+  courierNumber?: string;
+  vehicleNumber?: string;
+  challanNumber?: string;
+  dispatchDate?: string;
+  estimatedDeliveryDate?: string;
+  numberOfCones?: number;
+  numberOfBoxes?: number;
+  totalWeight?: number;
+  notes?: string;
+  poItems?: string[];
+}
+
+interface UpdatePacklistModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (details: PacklistDetails[]) => Promise<void>;
   order: PurchaseOrder | null;
+  existingPacklistData?: ExistingPacklistData | ExistingPacklistData[];
   isSubmitting?: boolean;
 }
 
-const PacklistModal: React.FC<PacklistModalProps> = ({
+// Helper function to normalize existing packlist data to PacklistDetails format
+const normalizePacklistData = (
+  data: ExistingPacklistData | ExistingPacklistData[] | undefined,
+  order?: PurchaseOrder | null
+): PacklistDetails[] => {
+  if (!data) {
+    return [
+      {
+        packingNumber: "",
+        courierName: "",
+        courierNumber: "",
+        vehicleNumber: "",
+        challanNumber: "",
+        dispatchDate: new Date().toISOString().split('T')[0],
+        estimatedDeliveryDate: order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : "",
+        numberOfCones: 0,
+        numberOfBoxes: 0,
+        totalWeight: 0,
+        notes: ""
+      }
+    ];
+  }
+
+  const dataArray = Array.isArray(data) ? data : [data];
+  
+  return dataArray.map(item => {
+    // Format dates to YYYY-MM-DD format
+    const formatDate = (dateStr?: string) => {
+      if (!dateStr) return "";
+      try {
+        const date = new Date(dateStr);
+        return date.toISOString().split('T')[0];
+      } catch {
+        return "";
+      }
+    };
+
+    return {
+      packingNumber: item.packingNumber || "",
+      courierName: item.courierName || "",
+      courierNumber: item.courierNumber || "",
+      vehicleNumber: item.vehicleNumber || "",
+      challanNumber: item.challanNumber || "",
+      dispatchDate: formatDate(item.dispatchDate) || new Date().toISOString().split('T')[0],
+      estimatedDeliveryDate: formatDate(item.estimatedDeliveryDate) || (order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : ""),
+      numberOfCones: item.numberOfCones || 0,
+      numberOfBoxes: item.numberOfBoxes || 0,
+      totalWeight: item.totalWeight || 0,
+      notes: item.notes || "",
+      poItems: Array.isArray(item.poItems) ? item.poItems : (item.poItems ? [item.poItems] : [])
+    };
+  });
+};
+
+const UpdatePacklistModal: React.FC<UpdatePacklistModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
   order,
+  existingPacklistData,
   isSubmitting = false
 }) => {
-  const [packlistEntries, setPacklistEntries] = useState<PacklistDetails[]>([
-    {
-      packingNumber: "",
-      courierName: "",
-      courierNumber: "",
-      vehicleNumber: "",
-      challanNumber: "",
-      dispatchDate: new Date().toISOString().split('T')[0],
-      estimatedDeliveryDate: "",
-      numberOfCones: 0,
-      numberOfBoxes: 0,
-      totalWeight: 0,
-      notes: "",
-      poItems: []
-    }
-  ]);
+  const [packlistEntries, setPacklistEntries] = useState<PacklistDetails[]>([]);
+  const prevIsOpenRef = React.useRef(false);
 
-  // Pre-fill estimated delivery date from order when modal opens
+  // Initialize form with existing data when modal opens
   useEffect(() => {
-    if (isOpen && order?.expectedDelivery) {
-      const expectedDate = new Date(order.expectedDelivery).toISOString().split('T')[0];
-      setPacklistEntries(prev => 
-        prev.map((entry, idx) => 
-          idx === 0 
-            ? { ...entry, estimatedDeliveryDate: expectedDate }
-            : entry
-        )
-      );
-    }
-  }, [isOpen, order]);
-
-  // Reset form when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setPacklistEntries([
+    // Only initialize when modal transitions from closed to open
+    if (isOpen && !prevIsOpenRef.current) {
+      const normalizedData = normalizePacklistData(existingPacklistData, order);
+      const initialEntries = normalizedData.length > 0 ? normalizedData : [
         {
           packingNumber: "",
           courierName: "",
@@ -100,9 +129,23 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
           notes: "",
           poItems: []
         }
-      ]);
+      ];
+      // Ensure poItems is always an array
+      const entriesWithPoItems = initialEntries.map(entry => ({
+        ...entry,
+        poItems: Array.isArray(entry.poItems) ? entry.poItems : []
+      }));
+      setPacklistEntries(entriesWithPoItems);
     }
-  }, [isOpen, order]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, existingPacklistData, order]);
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setPacklistEntries([]);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -148,24 +191,8 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
 
     try {
       await onSubmit(packlistEntries);
-      // Reset form on success
-      setPacklistEntries([
-        {
-          packingNumber: "",
-          courierName: "",
-          courierNumber: "",
-          vehicleNumber: "",
-          challanNumber: "",
-          dispatchDate: new Date().toISOString().split('T')[0],
-          estimatedDeliveryDate: order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : "",
-          numberOfCones: 0,
-          numberOfBoxes: 0,
-          totalWeight: 0,
-          notes: ""
-        }
-      ]);
     } catch (error) {
-      console.error("Packlist submission error:", error);
+      console.error("Packlist update error:", error);
     }
   };
 
@@ -195,7 +222,11 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
     );
   };
 
-  const addNewEntry = () => {
+  const addNewEntry = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setPacklistEntries(prev => [
       ...prev,
       {
@@ -233,12 +264,15 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
         ></div>
 
         {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full max-h-[90vh] overflow-y-auto">
+        <div 
+          className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full max-h-[90vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
           <form onSubmit={handleSubmit}>
             <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Mark Order as In Transit - {order?.orderNumber}
+                  Update Packlist Details - {order?.orderNumber}
                 </h3>
                 <button
                   type="button"
@@ -305,12 +339,12 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
               )}
 
               <p className="text-sm text-gray-600 mb-4">
-                Please provide packlist details to update the order status to "In Transit". You can add multiple packlist entries.
+                Update packlist details below. You can modify existing entries or add new ones.
               </p>
 
               <div className="space-y-6">
                 {packlistEntries.map((entry, entryIndex) => (
-                  <div key={entryIndex} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                  <div key={`packlist-entry-${entryIndex}`} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="text-md font-semibold text-gray-800">
                         Packlist Entry {entryIndex + 1}
@@ -318,7 +352,11 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                       {packlistEntries.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => removeEntry(entryIndex)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            removeEntry(entryIndex);
+                          }}
                           className="text-red-600 hover:text-red-800 text-sm font-medium"
                           disabled={isSubmitting}
                         >
@@ -567,7 +605,11 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                 <div className="flex justify-center">
                   <button
                     type="button"
-                    onClick={addNewEntry}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      addNewEntry(e);
+                    }}
                     className="ti-btn ti-btn-outline-primary"
                     disabled={isSubmitting}
                   >
@@ -591,8 +633,8 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                   </>
                 ) : (
                   <>
-                    <i className="ri-check-line me-2"></i>
-                    Update to In Transit
+                    <i className="ri-save-line me-2"></i>
+                    Update Packlist
                   </>
                 )}
               </button>
@@ -612,5 +654,5 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
   );
 };
 
-export default PacklistModal;
+export default UpdatePacklistModal;
 
