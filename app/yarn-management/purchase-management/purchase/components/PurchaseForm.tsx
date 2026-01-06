@@ -13,7 +13,12 @@ export type PurchaseOrderStatus =
   | 'rejected' 
   | 'QC pending' 
   | 'partially delivered' 
-  | 'stocked';
+  | 'stocked'
+  | 'goods received'
+  | 'goods partially received'
+  | 'PO accepted'
+  | 'PO accepted partially'
+  | 'po_accepted';
 
 export interface YarnPurchaseItem {
   id: string;
