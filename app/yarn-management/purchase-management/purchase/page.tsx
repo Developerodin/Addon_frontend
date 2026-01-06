@@ -1249,57 +1249,173 @@ const PurchasePage = () => {
                     </div>
 
                 {/* Packlist Details */}
-                {selectedOrder.packlistDetails && (
-                  <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-                    <label className="text-sm font-medium text-gray-700 mb-3 block">Packlist Details</label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {(selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber) && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600">Packing/Tracking Number</label>
-                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber}</div>
-                        </div>
+                {((selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0) || selectedOrder.packlistDetails) && (
+                  <div className="mb-6">
+                    <label className="text-sm font-medium text-gray-700 mb-3 block">
+                      Packlist Details
+                      {selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0 && (
+                        <span className="text-xs text-gray-500 ml-2">
+                          ({selectedOrder.packListDetailsArray.length} {selectedOrder.packListDetailsArray.length === 1 ? 'entry' : 'entries'})
+                        </span>
                       )}
-                      {selectedOrder.packlistDetails.courierName && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600">Courier</label>
-                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.courierName}</div>
-                        </div>
-                      )}
-                      {selectedOrder.packlistDetails.courierNumber && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600">Courier Number</label>
-                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.courierNumber}</div>
-                        </div>
-                      )}
-                      {selectedOrder.packlistDetails.vehicleNumber && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600">Vehicle Number</label>
-                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.vehicleNumber}</div>
-                        </div>
-                      )}
-                      {selectedOrder.packlistDetails.challanNumber && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600">Challan Number</label>
-                          <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.challanNumber}</div>
-                        </div>
-                      )}
-                      {selectedOrder.packlistDetails.dispatchDate && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600">Dispatch Date</label>
-                          <div className="mt-1 text-sm text-gray-900">
-                            {new Date(selectedOrder.packlistDetails.dispatchDate).toLocaleDateString()}
+                    </label>
+                    
+                    {/* Display all packlist entries from array */}
+                    {selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0 ? (
+                      <div className="space-y-4">
+                        {selectedOrder.packListDetailsArray.map((packlistEntry, index) => (
+                          <div key={index} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-sm font-semibold text-gray-800">
+                                Packlist Entry {index + 1}
+                              </h4>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {packlistEntry.packingNumber && (
+                                <div>
+                                  <label className="text-xs font-medium text-gray-600">Packing Number</label>
+                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.packingNumber}</div>
+                                </div>
+                              )}
+                              {packlistEntry.courierName && (
+                                <div>
+                                  <label className="text-xs font-medium text-gray-600">Courier Name</label>
+                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.courierName}</div>
+                                </div>
+                              )}
+                              {packlistEntry.courierNumber && (
+                                <div>
+                                  <label className="text-xs font-medium text-gray-600">Courier Number</label>
+                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.courierNumber}</div>
+                                </div>
+                              )}
+                              {packlistEntry.vehicleNumber && (
+                                <div>
+                                  <label className="text-xs font-medium text-gray-600">Vehicle Number</label>
+                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.vehicleNumber}</div>
+                                </div>
+                              )}
+                              {packlistEntry.challanNumber && (
+                                <div>
+                                  <label className="text-xs font-medium text-gray-600">Challan Number</label>
+                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.challanNumber}</div>
+                                </div>
+                              )}
+                              {packlistEntry.dispatchDate && (
+                                <div>
+                                  <label className="text-xs font-medium text-gray-600">Dispatch Date</label>
+                                  <div className="mt-1 text-sm text-gray-900">
+                                    {new Date(packlistEntry.dispatchDate).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              )}
+                              {packlistEntry.estimatedDeliveryDate && (
+                                <div>
+                                  <label className="text-xs font-medium text-gray-600">Estimated Delivery Date</label>
+                                  <div className="mt-1 text-sm text-gray-900">
+                                    {new Date(packlistEntry.estimatedDeliveryDate).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              )}
+                              {packlistEntry.numberOfCones !== undefined && packlistEntry.numberOfCones > 0 && (
+                                <div>
+                                  <label className="text-xs font-medium text-gray-600">Number of Cones</label>
+                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.numberOfCones}</div>
+                                </div>
+                              )}
+                              {packlistEntry.numberOfBoxes !== undefined && packlistEntry.numberOfBoxes > 0 && (
+                                <div>
+                                  <label className="text-xs font-medium text-gray-600">Number of Boxes</label>
+                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.numberOfBoxes}</div>
+                                </div>
+                              )}
+                              {packlistEntry.totalWeight !== undefined && packlistEntry.totalWeight > 0 && (
+                                <div>
+                                  <label className="text-xs font-medium text-gray-600">Total Weight (kg)</label>
+                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.totalWeight}</div>
+                                </div>
+                              )}
+                              {packlistEntry.poItems && Array.isArray(packlistEntry.poItems) && packlistEntry.poItems.length > 0 && (
+                                <div className="md:col-span-2">
+                                  <label className="text-xs font-medium text-gray-600 mb-2 block">PO Items ({packlistEntry.poItems.length})</label>
+                                  <div className="mt-1">
+                                    {selectedOrder.items
+                                      .filter(item => packlistEntry.poItems?.includes(item.id))
+                                      .map((item, idx) => (
+                                        <div key={idx} className="text-sm text-gray-900 mb-1">
+                                          • {item.yarnName} - {item.sizeCount} - {item.shadeCode} (Qty: {item.quantity})
+                                        </div>
+                                      ))}
+                                  </div>
+                                </div>
+                              )}
+                              {packlistEntry.notes && (
+                                <div className="md:col-span-2">
+                                  <label className="text-xs font-medium text-gray-600">Notes</label>
+                                  <div className="mt-1 text-sm text-gray-900 p-2 bg-white rounded border border-gray-200">
+                                    {packlistEntry.notes}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      /* Fallback to single packlistDetails for backward compatibility */
+                      selectedOrder.packlistDetails && (
+                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {(selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber) && (
+                              <div>
+                                <label className="text-xs font-medium text-gray-600">Packing/Tracking Number</label>
+                                <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber}</div>
+                              </div>
+                            )}
+                            {selectedOrder.packlistDetails.courierName && (
+                              <div>
+                                <label className="text-xs font-medium text-gray-600">Courier</label>
+                                <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.courierName}</div>
+                              </div>
+                            )}
+                            {selectedOrder.packlistDetails.courierNumber && (
+                              <div>
+                                <label className="text-xs font-medium text-gray-600">Courier Number</label>
+                                <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.courierNumber}</div>
+                              </div>
+                            )}
+                            {selectedOrder.packlistDetails.vehicleNumber && (
+                              <div>
+                                <label className="text-xs font-medium text-gray-600">Vehicle Number</label>
+                                <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.vehicleNumber}</div>
+                              </div>
+                            )}
+                            {selectedOrder.packlistDetails.challanNumber && (
+                              <div>
+                                <label className="text-xs font-medium text-gray-600">Challan Number</label>
+                                <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.challanNumber}</div>
+                              </div>
+                            )}
+                            {selectedOrder.packlistDetails.dispatchDate && (
+                              <div>
+                                <label className="text-xs font-medium text-gray-600">Dispatch Date</label>
+                                <div className="mt-1 text-sm text-gray-900">
+                                  {new Date(selectedOrder.packlistDetails.dispatchDate).toLocaleDateString()}
+                                </div>
+                              </div>
+                            )}
+                            {(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate) && (
+                              <div>
+                                <label className="text-xs font-medium text-gray-600">Expected Arrival</label>
+                                <div className="mt-1 text-sm text-gray-900">
+                                  {new Date(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate || '').toLocaleDateString()}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      )}
-                      {(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate) && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600">Expected Arrival</label>
-                          <div className="mt-1 text-sm text-gray-900">
-                            {new Date(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate || '').toLocaleDateString()}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                      )
+                    )}
                   </div>
                 )}
 
