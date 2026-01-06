@@ -1658,11 +1658,22 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     }
   ]);
   const [currentStatus, setCurrentStatus] = useState<'goods_received' | 'goods_partially_received'>('goods_partially_received');
+  // Store original lots to track which ones are existing vs new
+  const [originalLots, setOriginalLots] = useState<Map<string, ReceivedLotDetail>>(new Map());
 
   useEffect(() => {
     if (isOpen) {
       // Load existing data if available, otherwise reset form
       if (order.receivedLotDetails && order.receivedLotDetails.length > 0) {
+        // Create a map of original lots by lotNumber for quick lookup
+        const originalLotsMap = new Map<string, ReceivedLotDetail>();
+        order.receivedLotDetails.forEach(lot => {
+          if (lot.lotNumber) {
+            originalLotsMap.set(lot.lotNumber.trim().toUpperCase(), lot);
+          }
+        });
+        setOriginalLots(originalLotsMap);
+        
         // Load existing received lot details
         setLots(order.receivedLotDetails.map(lot => ({
           lotNumber: lot.lotNumber || '',
@@ -1681,6 +1692,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
         }
       } else {
         // Reset form when modal opens with no existing data
+        setOriginalLots(new Map());
         setLots([{
           lotNumber: '',
           numberOfCones: 0,
@@ -1782,14 +1794,21 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
       }
     }
 
-    // Set default status for all lots
-    const lotsWithDefaultStatus = lots.map(lot => ({
-      ...lot,
-      status: 'lot_pending' as const
-    }));
+    // Preserve existing lot statuses, only set lot_pending for new lots
+    const lotsWithPreservedStatus = lots.map(lot => {
+      const lotNumberKey = lot.lotNumber.trim().toUpperCase();
+      const originalLot = originalLots.get(lotNumberKey);
+      
+      // If this lot exists in original lots, preserve its status
+      // Otherwise, it's a new lot, so set status to lot_pending
+      return {
+        ...lot,
+        status: originalLot ? (originalLot.status || 'lot_pending') : 'lot_pending' as const
+      };
+    });
 
     const payload: UpdatePurchaseOrderWithReceivedLotsPayload = {
-      receivedLotDetails: lotsWithDefaultStatus,
+      receivedLotDetails: lotsWithPreservedStatus,
       currentStatus
     };
 
