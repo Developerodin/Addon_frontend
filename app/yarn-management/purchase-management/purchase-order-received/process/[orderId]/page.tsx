@@ -27,7 +27,7 @@ interface ReceivedLotDetail {
   numberOfCones: number;
   totalWeight: number;
   numberOfBoxes: number;
-  status: 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
+  status: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
 }
 
 interface ReceivedOrder {
@@ -81,13 +81,19 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
   
   // Map receivedLotDetails if available
   const receivedLotDetails: ReceivedLotDetail[] | undefined = apiOrder.receivedLotDetails 
-    ? apiOrder.receivedLotDetails.map((lot: any) => ({
-        lotNumber: lot.lotNumber || lot.lot_number || '',
-        numberOfCones: lot.numberOfCones || lot.number_of_cones || 0,
-        totalWeight: lot.totalWeight || lot.total_weight || 0,
-        numberOfBoxes: lot.numberOfBoxes || lot.number_of_boxes || 0,
-        status: lot.status || 'lot_qc_pending' as 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected'
-      }))
+    ? apiOrder.receivedLotDetails.map((lot: any) => {
+        const normalizedStatus: ReceivedLotDetail['status'] = ['lot_pending', 'lot_qc_pending', 'lot_accepted', 'lot_rejected'].includes(lot.status)
+          ? lot.status
+          : 'lot_pending';
+
+        return {
+          lotNumber: lot.lotNumber || lot.lot_number || '',
+          numberOfCones: lot.numberOfCones || lot.number_of_cones || 0,
+          totalWeight: lot.totalWeight || lot.total_weight || 0,
+          numberOfBoxes: lot.numberOfBoxes || lot.number_of_boxes || 0,
+          status: normalizedStatus
+        };
+      })
     : undefined;
   
   return {
@@ -164,6 +170,8 @@ const ProcessOrderPage = () => {
       numberOfBoxes: number;
     }>;
   } | null>(null);
+  // Store raw input values as strings to allow typing "0" and "0.5"
+  const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -317,7 +325,7 @@ const ProcessOrderPage = () => {
   };
 
   // Get lot status by lot number
-  const getLotStatus = (lotNumber: string): 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected' | null => {
+  const getLotStatus = (lotNumber: string): ReceivedLotDetail['status'] | null => {
     if (!order?.receivedLotDetails || !lotNumber) return null;
     
     const normalizedLotNumber = lotNumber.trim().toUpperCase();
@@ -330,10 +338,12 @@ const ProcessOrderPage = () => {
   };
 
   // Get lot status display text and color
-  const getLotStatusDisplay = (status: 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected' | null) => {
+  const getLotStatusDisplay = (status: ReceivedLotDetail['status'] | null) => {
     if (!status) return { text: 'Pending', color: 'bg-gray-100 text-gray-800' };
     
     switch (status) {
+      case 'lot_pending':
+        return { text: 'Pending', color: 'bg-gray-100 text-gray-800' };
       case 'lot_qc_pending':
         return { text: 'QC Pending', color: 'bg-blue-100 text-blue-800' };
       case 'lot_accepted':
@@ -440,7 +450,7 @@ const ProcessOrderPage = () => {
              data.boxWeight && 
              parseFloat(data.boxWeight) > 0 &&
              data.numberOfCones && 
-             parseInt(data.numberOfCones) > 0;
+             parseFloat(data.numberOfCones) > 0;
     });
   }, [boxes, boxData]);
 
@@ -474,7 +484,7 @@ const ProcessOrderPage = () => {
              data.boxWeight && 
              parseFloat(data.boxWeight) > 0 &&
              data.numberOfCones && 
-             parseInt(data.numberOfCones) > 0;
+             parseFloat(data.numberOfCones) > 0;
     });
   };
 
@@ -650,7 +660,7 @@ const ProcessOrderPage = () => {
         orderQty: data.orderQty,
         lotNumber: data.lotNumber,
         boxWeight: parseFloat(data.boxWeight),
-        numberOfCones: parseInt(data.numberOfCones)
+        numberOfCones: parseFloat(data.numberOfCones)
       };
 
       // Use _id for API call if available, otherwise use boxId
@@ -703,7 +713,7 @@ const ProcessOrderPage = () => {
                  bData.boxWeight && 
                  parseFloat(bData.boxWeight) > 0 &&
                  bData.numberOfCones && 
-                 parseInt(bData.numberOfCones) > 0;
+                 parseFloat(bData.numberOfCones) > 0;
         });
 
         if (allCompleted && user && user.id && user.email) {
@@ -1203,7 +1213,7 @@ const ProcessOrderPage = () => {
                           {lotStatus && (
                             <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full ${lotStatusDisplay.color}`}>
                               <i className={`ri-${
-                                lotStatus === 'lot_qc_pending' ? 'time-line' : 
+                                lotStatus === 'lot_qc_pending' || lotStatus === 'lot_pending' ? 'time-line' : 
                                 lotStatus === 'lot_accepted' ? 'check-line' : 
                                 'close-line'
                               }`}></i>
@@ -1224,52 +1234,57 @@ const ProcessOrderPage = () => {
                             <i className="ri-printer-line me-2"></i>
                             Print Lot Barcodes
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSendLotForQC(lotNumber, lotBoxes)}
-                            disabled={!isLotCompleted || isUpdatingOrderStatus}
-                            className={`ti-btn whitespace-nowrap px-3 py-2 ${
-                              isLotCompleted && !isUpdatingOrderStatus
-                                ? 'ti-btn-success'
-                                : 'ti-btn-light opacity-50 cursor-not-allowed'
-                            }`}
-                            title={`Send ${lotNumber} for QC`}
-                          >
-                            {isUpdatingOrderStatus ? (
-                              <>
-                                <i className="ri-loader-4-line animate-spin me-2"></i>
-                                Sending...
-                              </>
-                            ) : (
-                              <>
-                                <i className="ri-checkbox-circle-line me-2"></i>
-                                Send Lot for QC
-                              </>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRejectLot(lotNumber, lotBoxes)}
-                            disabled={!isLotCompleted || isUpdatingOrderStatus}
-                            className={`ti-btn whitespace-nowrap px-3 py-2 ${
-                              isLotCompleted && !isUpdatingOrderStatus
-                                ? 'ti-btn-danger'
-                                : 'ti-btn-light opacity-50 cursor-not-allowed'
-                            }`}
-                            title={`Reject ${lotNumber}`}
-                          >
-                            {isUpdatingOrderStatus ? (
-                              <>
-                                <i className="ri-loader-4-line animate-spin me-2"></i>
-                                Rejecting...
-                              </>
-                            ) : (
-                              <>
-                                <i className="ri-close-circle-line me-2"></i>
-                                Reject Lot
-                              </>
-                            )}
-                          </button>
+                          {/* Show Send/Reject when not processed or still pending */}
+                          {(!lotStatus || lotStatus === 'lot_pending') && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleSendLotForQC(lotNumber, lotBoxes)}
+                                disabled={!isLotCompleted || isUpdatingOrderStatus}
+                                className={`ti-btn whitespace-nowrap px-3 py-2 ${
+                                  isLotCompleted && !isUpdatingOrderStatus
+                                    ? 'ti-btn-success'
+                                    : 'ti-btn-light opacity-50 cursor-not-allowed'
+                                }`}
+                                title={`Send ${lotNumber} for QC`}
+                              >
+                                {isUpdatingOrderStatus ? (
+                                  <>
+                                    <i className="ri-loader-4-line animate-spin me-2"></i>
+                                    Sending...
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="ri-checkbox-circle-line me-2"></i>
+                                    Send Lot for QC
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRejectLot(lotNumber, lotBoxes)}
+                                disabled={!isLotCompleted || isUpdatingOrderStatus}
+                                className={`ti-btn whitespace-nowrap px-3 py-2 ${
+                                  isLotCompleted && !isUpdatingOrderStatus
+                                    ? 'ti-btn-danger'
+                                    : 'ti-btn-light opacity-50 cursor-not-allowed'
+                                }`}
+                                title={`Reject ${lotNumber}`}
+                              >
+                                {isUpdatingOrderStatus ? (
+                                  <>
+                                    <i className="ri-loader-4-line animate-spin me-2"></i>
+                                    Rejecting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="ri-close-circle-line me-2"></i>
+                                    Reject Lot
+                                  </>
+                                )}
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="overflow-x-auto">
@@ -1280,7 +1295,7 @@ const ProcessOrderPage = () => {
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
-                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Qty</th>
+                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Qty (kg)</th>
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lot Number</th>
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box Weight (kg)</th>
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. of Cones</th>
@@ -1418,12 +1433,45 @@ const ProcessOrderPage = () => {
                               step="0.01"
                               min="0"
                                   className="form-control text-sm"
-                                  value={data.boxWeight}
+                                  value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
+                                    ? rawInputValues[`box-${boxId}-boxWeight`] 
+                                    : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
                                   onChange={(e) => {
+                                    const value = e.target.value;
+                                    const key = `box-${boxId}-boxWeight`;
+                                    
+                                    setRawInputValues(prev => ({
+                                      ...prev,
+                                      [key]: value
+                                    }));
+                                    
                                     setBoxData(prev => ({
                                       ...prev,
-                                      [boxId]: { ...prev[boxId], boxWeight: e.target.value }
+                                      [boxId]: { ...prev[boxId], boxWeight: value }
                                     }));
+                                  }}
+                                  onBlur={(e) => {
+                                    const value = e.target.value;
+                                    const key = `box-${boxId}-boxWeight`;
+                                    const numValue = parseFloat(value);
+                                    
+                                    setRawInputValues(prev => {
+                                      const newValues = { ...prev };
+                                      delete newValues[key];
+                                      return newValues;
+                                    });
+                                    
+                                    if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                      setBoxData(prev => ({
+                                        ...prev,
+                                        [boxId]: { ...prev[boxId], boxWeight: '' }
+                                      }));
+                                    } else {
+                                      setBoxData(prev => ({
+                                        ...prev,
+                                        [boxId]: { ...prev[boxId], boxWeight: value }
+                                      }));
+                                    }
                                   }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
@@ -1445,13 +1493,47 @@ const ProcessOrderPage = () => {
                                 <input
                                   type="number"
                                   min="0"
+                                  step="0.01"
                                   className="form-control text-sm"
-                                  value={data.numberOfCones}
+                                  value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
+                                    ? rawInputValues[`box-${boxId}-numberOfCones`] 
+                                    : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
                                   onChange={(e) => {
+                                    const value = e.target.value;
+                                    const key = `box-${boxId}-numberOfCones`;
+                                    
+                                    setRawInputValues(prev => ({
+                                      ...prev,
+                                      [key]: value
+                                    }));
+                                    
                                     setBoxData(prev => ({
                                       ...prev,
-                                      [boxId]: { ...prev[boxId], numberOfCones: e.target.value }
+                                      [boxId]: { ...prev[boxId], numberOfCones: value }
                                     }));
+                                  }}
+                                  onBlur={(e) => {
+                                    const value = e.target.value;
+                                    const key = `box-${boxId}-numberOfCones`;
+                                    const numValue = parseFloat(value);
+                                    
+                                    setRawInputValues(prev => {
+                                      const newValues = { ...prev };
+                                      delete newValues[key];
+                                      return newValues;
+                                    });
+                                    
+                                    if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                      setBoxData(prev => ({
+                                        ...prev,
+                                        [boxId]: { ...prev[boxId], numberOfCones: '' }
+                                      }));
+                                    } else {
+                                      setBoxData(prev => ({
+                                        ...prev,
+                                        [boxId]: { ...prev[boxId], numberOfCones: value }
+                                      }));
+                                    }
                                   }}
                                   onKeyDown={async (e) => {
                                     if (e.key === 'Enter') {
@@ -1515,7 +1597,7 @@ const ProcessOrderPage = () => {
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
-                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Qty</th>
+                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Qty (kg)</th>
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lot Number</th>
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box Weight (kg)</th>
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. of Cones</th>
@@ -1652,12 +1734,45 @@ const ProcessOrderPage = () => {
                                       step="0.01"
                                       min="0"
                                       className="form-control text-sm"
-                                      value={data.boxWeight}
+                                      value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
+                                        ? rawInputValues[`box-${boxId}-boxWeight`] 
+                                        : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
                                       onChange={(e) => {
+                                        const value = e.target.value;
+                                        const key = `box-${boxId}-boxWeight`;
+                                        
+                                        setRawInputValues(prev => ({
+                                          ...prev,
+                                          [key]: value
+                                        }));
+                                        
                                         setBoxData(prev => ({
                                           ...prev,
-                                          [boxId]: { ...prev[boxId], boxWeight: e.target.value }
+                                          [boxId]: { ...prev[boxId], boxWeight: value }
                                         }));
+                                      }}
+                                      onBlur={(e) => {
+                                        const value = e.target.value;
+                                        const key = `box-${boxId}-boxWeight`;
+                                        const numValue = parseFloat(value);
+                                        
+                                        setRawInputValues(prev => {
+                                          const newValues = { ...prev };
+                                          delete newValues[key];
+                                          return newValues;
+                                        });
+                                        
+                                        if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                          setBoxData(prev => ({
+                                            ...prev,
+                                            [boxId]: { ...prev[boxId], boxWeight: '' }
+                                          }));
+                                        } else {
+                                          setBoxData(prev => ({
+                                            ...prev,
+                                            [boxId]: { ...prev[boxId], boxWeight: value }
+                                          }));
+                                        }
                                       }}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
@@ -1679,13 +1794,47 @@ const ProcessOrderPage = () => {
                                     <input
                                       type="number"
                                       min="0"
+                                      step="0.01"
                                       className="form-control text-sm"
-                                      value={data.numberOfCones}
+                                      value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
+                                        ? rawInputValues[`box-${boxId}-numberOfCones`] 
+                                        : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
                                       onChange={(e) => {
+                                        const value = e.target.value;
+                                        const key = `box-${boxId}-numberOfCones`;
+                                        
+                                        setRawInputValues(prev => ({
+                                          ...prev,
+                                          [key]: value
+                                        }));
+                                        
                                         setBoxData(prev => ({
                                           ...prev,
-                                          [boxId]: { ...prev[boxId], numberOfCones: e.target.value }
+                                          [boxId]: { ...prev[boxId], numberOfCones: value }
                                         }));
+                                      }}
+                                      onBlur={(e) => {
+                                        const value = e.target.value;
+                                        const key = `box-${boxId}-numberOfCones`;
+                                        const numValue = parseFloat(value);
+                                        
+                                        setRawInputValues(prev => {
+                                          const newValues = { ...prev };
+                                          delete newValues[key];
+                                          return newValues;
+                                        });
+                                        
+                                        if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                          setBoxData(prev => ({
+                                            ...prev,
+                                            [boxId]: { ...prev[boxId], numberOfCones: '' }
+                                          }));
+                                        } else {
+                                          setBoxData(prev => ({
+                                            ...prev,
+                                            [boxId]: { ...prev[boxId], numberOfCones: value }
+                                          }));
+                                        }
                                       }}
                                       onKeyDown={async (e) => {
                                         if (e.key === 'Enter') {

@@ -1658,11 +1658,24 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     }
   ]);
   const [currentStatus, setCurrentStatus] = useState<'goods_received' | 'goods_partially_received'>('goods_partially_received');
+  // Store original lots to track which ones are existing vs new
+  const [originalLots, setOriginalLots] = useState<Map<string, ReceivedLotDetail>>(new Map());
+  // Store raw input values as strings to allow typing "0" and "0.5"
+  const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (isOpen) {
       // Load existing data if available, otherwise reset form
       if (order.receivedLotDetails && order.receivedLotDetails.length > 0) {
+        // Create a map of original lots by lotNumber for quick lookup
+        const originalLotsMap = new Map<string, ReceivedLotDetail>();
+        order.receivedLotDetails.forEach(lot => {
+          if (lot.lotNumber) {
+            originalLotsMap.set(lot.lotNumber.trim().toUpperCase(), lot);
+          }
+        });
+        setOriginalLots(originalLotsMap);
+        
         // Load existing received lot details
         setLots(order.receivedLotDetails.map(lot => ({
           lotNumber: lot.lotNumber || '',
@@ -1679,8 +1692,10 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
         } else {
           setCurrentStatus('goods_partially_received');
         }
+        setRawInputValues({});
       } else {
         // Reset form when modal opens with no existing data
+        setOriginalLots(new Map());
         setLots([{
           lotNumber: '',
           numberOfCones: 0,
@@ -1690,6 +1705,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
           status: 'lot_pending'
         }]);
         setCurrentStatus('goods_partially_received');
+        setRawInputValues({});
       }
     }
   }, [isOpen, order]);
@@ -1782,14 +1798,21 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
       }
     }
 
-    // Set default status for all lots
-    const lotsWithDefaultStatus = lots.map(lot => ({
-      ...lot,
-      status: 'lot_pending' as const
-    }));
+    // Preserve existing lot statuses, only set lot_pending for new lots
+    const lotsWithPreservedStatus = lots.map(lot => {
+      const lotNumberKey = lot.lotNumber.trim().toUpperCase();
+      const originalLot = originalLots.get(lotNumberKey);
+      
+      // If this lot exists in original lots, preserve its status
+      // Otherwise, it's a new lot, so set status to lot_pending
+      return {
+        ...lot,
+        status: originalLot ? (originalLot.status || 'lot_pending') : 'lot_pending' as const
+      };
+    });
 
     const payload: UpdatePurchaseOrderWithReceivedLotsPayload = {
-      receivedLotDetails: lotsWithDefaultStatus,
+      receivedLotDetails: lotsWithPreservedStatus,
       currentStatus
     };
 
@@ -1941,9 +1964,50 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                         </label>
                         <input
                           type="number"
-                          min="1"
-                          value={lot.numberOfCones}
-                          onChange={(e) => updateLot(lotIndex, 'numberOfCones', parseInt(e.target.value) || 0)}
+                          min="0.01"
+                          step="0.01"
+                          value={rawInputValues[`lot-${lotIndex}-cones`] !== undefined 
+                            ? rawInputValues[`lot-${lotIndex}-cones`] 
+                            : (lot.numberOfCones === 0 ? '' : lot.numberOfCones)}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const key = `lot-${lotIndex}-cones`;
+                            
+                            // Store raw input value
+                            setRawInputValues(prev => ({
+                              ...prev,
+                              [key]: value
+                            }));
+                            
+                            // Also update the numeric value
+                            if (value === '') {
+                              updateLot(lotIndex, 'numberOfCones', 0);
+                            } else {
+                              const numValue = parseFloat(value);
+                              if (!isNaN(numValue)) {
+                                updateLot(lotIndex, 'numberOfCones', numValue);
+                              }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const value = e.target.value;
+                            const key = `lot-${lotIndex}-cones`;
+                            const numValue = parseFloat(value);
+                            
+                            // Clear raw input value on blur
+                            setRawInputValues(prev => {
+                              const newValues = { ...prev };
+                              delete newValues[key];
+                              return newValues;
+                            });
+                            
+                            // Update numeric value
+                            if (value === '' || isNaN(numValue) || numValue <= 0) {
+                              updateLot(lotIndex, 'numberOfCones', 0);
+                            } else {
+                              updateLot(lotIndex, 'numberOfCones', numValue);
+                            }
+                          }}
                           className="form-control"
                           required
                         />
@@ -1957,8 +2021,44 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           type="number"
                           min="0.01"
                           step="0.01"
-                          value={lot.totalWeight}
-                          onChange={(e) => updateLot(lotIndex, 'totalWeight', parseFloat(e.target.value) || 0)}
+                          value={rawInputValues[`lot-${lotIndex}-totalWeight`] !== undefined 
+                            ? rawInputValues[`lot-${lotIndex}-totalWeight`] 
+                            : (lot.totalWeight === 0 ? '' : lot.totalWeight)}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const key = `lot-${lotIndex}-totalWeight`;
+                            
+                            setRawInputValues(prev => ({
+                              ...prev,
+                              [key]: value
+                            }));
+                            
+                            if (value === '') {
+                              updateLot(lotIndex, 'totalWeight', 0);
+                            } else {
+                              const numValue = parseFloat(value);
+                              if (!isNaN(numValue)) {
+                                updateLot(lotIndex, 'totalWeight', numValue);
+                              }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const value = e.target.value;
+                            const key = `lot-${lotIndex}-totalWeight`;
+                            const numValue = parseFloat(value);
+                            
+                            setRawInputValues(prev => {
+                              const newValues = { ...prev };
+                              delete newValues[key];
+                              return newValues;
+                            });
+                            
+                            if (value === '' || isNaN(numValue) || numValue <= 0) {
+                              updateLot(lotIndex, 'totalWeight', 0);
+                            } else {
+                              updateLot(lotIndex, 'totalWeight', numValue);
+                            }
+                          }}
                           className="form-control"
                           required
                         />
@@ -1970,9 +2070,46 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                         </label>
                         <input
                           type="number"
-                          min="1"
-                          value={lot.numberOfBoxes}
-                          onChange={(e) => updateLot(lotIndex, 'numberOfBoxes', parseInt(e.target.value) || 0)}
+                          min="0.01"
+                          step="0.01"
+                          value={rawInputValues[`lot-${lotIndex}-numberOfBoxes`] !== undefined 
+                            ? rawInputValues[`lot-${lotIndex}-numberOfBoxes`] 
+                            : (lot.numberOfBoxes === 0 ? '' : lot.numberOfBoxes)}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const key = `lot-${lotIndex}-numberOfBoxes`;
+                            
+                            setRawInputValues(prev => ({
+                              ...prev,
+                              [key]: value
+                            }));
+                            
+                            if (value === '') {
+                              updateLot(lotIndex, 'numberOfBoxes', 0);
+                            } else {
+                              const numValue = parseFloat(value);
+                              if (!isNaN(numValue)) {
+                                updateLot(lotIndex, 'numberOfBoxes', numValue);
+                              }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const value = e.target.value;
+                            const key = `lot-${lotIndex}-numberOfBoxes`;
+                            const numValue = parseFloat(value);
+                            
+                            setRawInputValues(prev => {
+                              const newValues = { ...prev };
+                              delete newValues[key];
+                              return newValues;
+                            });
+                            
+                            if (value === '' || isNaN(numValue) || numValue <= 0) {
+                              updateLot(lotIndex, 'numberOfBoxes', 0);
+                            } else {
+                              updateLot(lotIndex, 'numberOfBoxes', numValue);
+                            }
+                          }}
                           className="form-control"
                           required
                         />
@@ -2016,13 +2153,50 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
 
                           <div>
                             <label className="form-label">
-                              Received Quantity <span className="text-red-500">*</span>
+                              Received Quantity (kg) <span className="text-red-500">*</span>
                             </label>
                             <input
                               type="number"
-                              min="1"
-                              value={poItem.receivedQuantity}
-                              onChange={(e) => updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', parseInt(e.target.value) || 0)}
+                              min="0.01"
+                              step="0.01"
+                              value={rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] !== undefined 
+                                ? rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] 
+                                : (poItem.receivedQuantity === 0 ? '' : poItem.receivedQuantity)}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
+                                
+                                setRawInputValues(prev => ({
+                                  ...prev,
+                                  [key]: value
+                                }));
+                                
+                                if (value === '') {
+                                  updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', 0);
+                                } else {
+                                  const numValue = parseFloat(value);
+                                  if (!isNaN(numValue)) {
+                                    updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', numValue);
+                                  }
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const value = e.target.value;
+                                const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
+                                const numValue = parseFloat(value);
+                                
+                                setRawInputValues(prev => {
+                                  const newValues = { ...prev };
+                                  delete newValues[key];
+                                  return newValues;
+                                });
+                                
+                                if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                  updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', 0);
+                                } else {
+                                  updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', numValue);
+                                }
+                              }}
                               className="form-control"
                               required
                             />
