@@ -47,7 +47,20 @@ interface PurchaseOrder {
     numberOfCones?: number;
     numberOfBoxes?: number;
     totalWeight?: number;
+    poItems?: string[];
   };
+  packListDetails?: Array<{
+    packingNumber?: string;
+    trackingNumber?: string;
+    courierName?: string;
+    dispatchDate?: string;
+    estimatedDeliveryDate?: string;
+    expectedArrivalDate?: string;
+    numberOfCones?: number;
+    numberOfBoxes?: number;
+    totalWeight?: number;
+    poItems?: string[];
+  }>;
   receivedLotDetails?: ReceivedLotDetail[];
 }
 
@@ -102,7 +115,7 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
 
 // Helper function to convert display status to API status code
 const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
-  const statusMap: Record<PurchaseOrderStatus, string> = {
+  const statusMap: Partial<Record<PurchaseOrderStatus, string>> = {
     'submitted to supplier': 'submitted_to_supplier',
     'in transit': 'in_transit',
     'delivered': 'delivered',
@@ -111,7 +124,11 @@ const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
     'partially delivered': 'partially_delivered',
     'stocked': 'stocked',
     'goods received': 'goods_received',
-    'goods partially received': 'goods_partially_received'
+    'goods partially received': 'goods_partially_received',
+    'PO accepted': 'po_accepted',
+    'PO accepted partially': 'po_accepted_partially',
+    'po_accepted': 'po_accepted',
+    'po_rejected': 'po_rejected'
   };
   return statusMap[status] || 'submitted_to_supplier';
 };
@@ -153,17 +170,83 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
     notes: apiOrder.notes || apiOrder.remarks || '',
     createdAt: apiOrder.createDate || apiOrder.createdAt || apiOrder.created_at || new Date().toISOString(),
     updatedAt: apiOrder.lastUpdateDate || apiOrder.updatedAt || apiOrder.updated_at || new Date().toISOString(),
-    packlistDetails: (apiOrder.packListDetails || apiOrder.packlistDetails) ? {
-      packingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number,
-      trackingNumber: (apiOrder.packListDetails || apiOrder.packlistDetails)?.trackingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.tracking_number || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packingNumber || (apiOrder.packListDetails || apiOrder.packlistDetails)?.packing_number,
-      courierName: (apiOrder.packListDetails || apiOrder.packlistDetails)?.courierName || (apiOrder.packListDetails || apiOrder.packlistDetails)?.courier_name,
-      dispatchDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatchDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.dispatch_date,
-      estimatedDeliveryDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date,
-      expectedArrivalDate: (apiOrder.packListDetails || apiOrder.packlistDetails)?.expectedArrivalDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.expected_arrival_date || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimatedDeliveryDate || (apiOrder.packListDetails || apiOrder.packlistDetails)?.estimated_delivery_date,
-      numberOfCones: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfCones || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_cones,
-      numberOfBoxes: (apiOrder.packListDetails || apiOrder.packlistDetails)?.numberOfBoxes || (apiOrder.packListDetails || apiOrder.packlistDetails)?.number_of_boxes,
-      totalWeight: (apiOrder.packListDetails || apiOrder.packlistDetails)?.totalWeight || (apiOrder.packListDetails || apiOrder.packlistDetails)?.total_weight
-    } : undefined,
+    packlistDetails: (() => {
+      const packListData = apiOrder.packListDetails || apiOrder.packlistDetails;
+      if (!packListData) return undefined;
+      
+      // If it's an array, take the first entry for backward compatibility
+      if (Array.isArray(packListData) && packListData.length > 0) {
+        const firstEntry = packListData[0];
+        return {
+          packingNumber: firstEntry?.packingNumber || firstEntry?.packing_number || firstEntry?.trackingNumber || firstEntry?.tracking_number,
+          trackingNumber: firstEntry?.trackingNumber || firstEntry?.tracking_number || firstEntry?.packingNumber || firstEntry?.packing_number,
+          courierName: firstEntry?.courierName || firstEntry?.courier_name,
+          dispatchDate: firstEntry?.dispatchDate || firstEntry?.dispatch_date,
+          estimatedDeliveryDate: firstEntry?.estimatedDeliveryDate || firstEntry?.estimated_delivery_date || firstEntry?.expectedArrivalDate || firstEntry?.expected_arrival_date,
+          expectedArrivalDate: firstEntry?.expectedArrivalDate || firstEntry?.expected_arrival_date || firstEntry?.estimatedDeliveryDate || firstEntry?.estimated_delivery_date,
+          numberOfCones: firstEntry?.numberOfCones || firstEntry?.number_of_cones,
+          numberOfBoxes: firstEntry?.numberOfBoxes || firstEntry?.number_of_boxes,
+          totalWeight: firstEntry?.totalWeight || firstEntry?.total_weight,
+          poItems: firstEntry?.poItems || []
+        };
+      }
+      
+      // If it's a single object
+      if (typeof packListData === 'object' && !Array.isArray(packListData)) {
+        return {
+          packingNumber: packListData?.packingNumber || packListData?.packing_number || packListData?.trackingNumber || packListData?.tracking_number,
+          trackingNumber: packListData?.trackingNumber || packListData?.tracking_number || packListData?.packingNumber || packListData?.packing_number,
+          courierName: packListData?.courierName || packListData?.courier_name,
+          dispatchDate: packListData?.dispatchDate || packListData?.dispatch_date,
+          estimatedDeliveryDate: packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || packListData?.expectedArrivalDate || packListData?.expected_arrival_date,
+          expectedArrivalDate: packListData?.expectedArrivalDate || packListData?.expected_arrival_date || packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date,
+          numberOfCones: packListData?.numberOfCones || packListData?.number_of_cones,
+          numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes,
+          totalWeight: packListData?.totalWeight || packListData?.total_weight,
+          poItems: packListData?.poItems || []
+        };
+      }
+      
+      return undefined;
+    })(),
+    packListDetails: (() => {
+      const packListData = apiOrder.packListDetails || apiOrder.packlistDetails;
+      if (!packListData) return undefined;
+      
+      // If it's an array, return it mapped
+      if (Array.isArray(packListData)) {
+        return packListData.map((entry: any) => ({
+          packingNumber: entry?.packingNumber || entry?.packing_number || entry?.trackingNumber || entry?.tracking_number,
+          trackingNumber: entry?.trackingNumber || entry?.tracking_number || entry?.packingNumber || entry?.packing_number,
+          courierName: entry?.courierName || entry?.courier_name,
+          dispatchDate: entry?.dispatchDate || entry?.dispatch_date,
+          estimatedDeliveryDate: entry?.estimatedDeliveryDate || entry?.estimated_delivery_date || entry?.expectedArrivalDate || entry?.expected_arrival_date,
+          expectedArrivalDate: entry?.expectedArrivalDate || entry?.expected_arrival_date || entry?.estimatedDeliveryDate || entry?.estimated_delivery_date,
+          numberOfCones: entry?.numberOfCones || entry?.number_of_cones,
+          numberOfBoxes: entry?.numberOfBoxes || entry?.number_of_boxes,
+          totalWeight: entry?.totalWeight || entry?.total_weight,
+          poItems: entry?.poItems || []
+        }));
+      }
+      
+      // If it's a single object, convert to array
+      if (typeof packListData === 'object' && !Array.isArray(packListData)) {
+        return [{
+          packingNumber: packListData?.packingNumber || packListData?.packing_number || packListData?.trackingNumber || packListData?.tracking_number,
+          trackingNumber: packListData?.trackingNumber || packListData?.tracking_number || packListData?.packingNumber || packListData?.packing_number,
+          courierName: packListData?.courierName || packListData?.courier_name,
+          dispatchDate: packListData?.dispatchDate || packListData?.dispatch_date,
+          estimatedDeliveryDate: packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || packListData?.expectedArrivalDate || packListData?.expected_arrival_date,
+          expectedArrivalDate: packListData?.expectedArrivalDate || packListData?.expected_arrival_date || packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date,
+          numberOfCones: packListData?.numberOfCones || packListData?.number_of_cones,
+          numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes,
+          totalWeight: packListData?.totalWeight || packListData?.total_weight,
+          poItems: packListData?.poItems || []
+        }];
+      }
+      
+      return undefined;
+    })(),
     receivedLotDetails: apiOrder.receivedLotDetails || apiOrder.received_lot_details || undefined
   };
 };
@@ -1735,10 +1818,66 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     setLots(updatedLots);
   };
 
+  // Get all PO item IDs from packlist
+  const getPacklistPoItemIds = (): Set<string> => {
+    const poItemIds = new Set<string>();
+    
+    // Check packListDetails array (preferred)
+    if (order.packListDetails && Array.isArray(order.packListDetails)) {
+      order.packListDetails.forEach((packlist: any) => {
+        if (packlist.poItems && Array.isArray(packlist.poItems)) {
+          packlist.poItems.forEach((id: string) => {
+            if (id) poItemIds.add(String(id));
+          });
+        }
+      });
+    }
+    
+    // Also check packlistDetails (single object, for backward compatibility)
+    if (order.packlistDetails?.poItems && Array.isArray(order.packlistDetails.poItems)) {
+      order.packlistDetails.poItems.forEach((id: string) => {
+        if (id) poItemIds.add(String(id));
+      });
+    }
+    
+    return poItemIds;
+  };
+
+  // Get filtered PO items based on packlist
+  const getFilteredPoItems = () => {
+    const packlistPoItemIds = getPacklistPoItemIds();
+    
+    // Collect all currently selected PO item IDs to preserve existing selections
+    const selectedPoItemIds = new Set<string>();
+    lots.forEach(lot => {
+      lot.poItems.forEach(poItem => {
+        if (poItem.poItem) {
+          selectedPoItemIds.add(String(poItem.poItem));
+        }
+      });
+    });
+    
+    // If no packlist PO items found, return all items
+    if (packlistPoItemIds.size === 0) {
+      return order.items;
+    }
+    
+    // Filter items that match packlist PO item IDs OR are already selected (to preserve existing data)
+    return order.items.filter(item => {
+      const itemId = String(item.id);
+      return packlistPoItemIds.has(itemId) || selectedPoItemIds.has(itemId);
+    });
+  };
+
   const addPoItemToLot = (lotIndex: number) => {
     const updatedLots = [...lots];
+    const filteredItems = getFilteredPoItems();
+    
+    // Auto-select if there's only one option
+    const autoSelectedPoItem = filteredItems.length === 1 ? filteredItems[0].id : '';
+    
     updatedLots[lotIndex].poItems.push({
-      poItem: '',
+      poItem: autoSelectedPoItem,
       receivedQuantity: 0
     });
     setLots(updatedLots);
@@ -2143,7 +2282,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               required
                             >
                               <option value="">Select PO Item</option>
-                              {order.items.map((item) => (
+                              {getFilteredPoItems().map((item) => (
                                 <option key={item.id} value={item.id}>
                                   {item.yarnName} - {item.sizeCount} - {item.shadeCode} (Qty: {item.quantity})
                                 </option>
