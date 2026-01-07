@@ -130,7 +130,23 @@ export interface ReceivedLotDetail {
 
 export interface UpdatePurchaseOrderWithReceivedLotsPayload {
   receivedLotDetails: ReceivedLotDetail[];
-  currentStatus: 'goods_received' | 'goods_partially_received';
+  currentStatus?: 'goods_received' | 'goods_partially_received';
+  packListDetails?: Array<{
+    packingNumber?: string;
+    trackingNumber?: string;
+    courierName?: string;
+    courierNumber?: string;
+    vehicleNumber?: string;
+    challanNumber?: string;
+    dispatchDate?: string;
+    estimatedDeliveryDate?: string;
+    expectedArrivalDate?: string;
+    numberOfCones?: number;
+    numberOfBoxes?: number;
+    totalWeight?: number;
+    notes?: string;
+    poItems?: string[];
+  }>;
 }
 
 const getAccessToken = (): string | null => {

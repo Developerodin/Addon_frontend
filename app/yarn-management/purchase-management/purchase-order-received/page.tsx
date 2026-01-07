@@ -401,6 +401,7 @@ const PurchaseOrderReceivedPage = () => {
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
   const [goodsReceivedModalOpen, setGoodsReceivedModalOpen] = useState(false);
   const [orderForGoodsReceived, setOrderForGoodsReceived] = useState<PurchaseOrder | null>(null);
+  const [rawOrderDataForGoodsReceived, setRawOrderDataForGoodsReceived] = useState<any>(null);
   const [isSubmittingGoodsReceived, setIsSubmittingGoodsReceived] = useState(false);
 
   const selectedOrder = useMemo(
@@ -744,12 +745,15 @@ const PurchaseOrderReceivedPage = () => {
       const fullOrderDetails = await yarnPurchaseOrderService.getPurchaseOrderById(order.id);
       const mappedOrder = mapAPIOrderToComponent(fullOrderDetails);
       setOrderForGoodsReceived(mappedOrder);
+      // Store raw order data to preserve packListDetails in original format
+      setRawOrderDataForGoodsReceived(fullOrderDetails);
       setGoodsReceivedModalOpen(true);
     } catch (error) {
       console.error('Failed to fetch order details:', error);
       toast.error('Failed to load order details');
       // Fallback to using the order from list
       setOrderForGoodsReceived(order);
+      setRawOrderDataForGoodsReceived(null);
       setGoodsReceivedModalOpen(true);
     }
   };
@@ -762,9 +766,64 @@ const PurchaseOrderReceivedPage = () => {
 
     setIsSubmittingGoodsReceived(true);
     try {
+      // Use stored raw order data, or fetch if not available
+      let rawOrderData: any = rawOrderDataForGoodsReceived;
+      if (!rawOrderData) {
+        try {
+          rawOrderData = await yarnPurchaseOrderService.getPurchaseOrderById(orderForGoodsReceived.id);
+        } catch (error) {
+          console.warn('Failed to fetch raw order data, using mapped data:', error);
+        }
+      }
+
+      // Preserve existing packListDetails from the raw API response
+      const packListDetailsToPreserve = rawOrderData?.packListDetails || rawOrderData?.packlistDetails;
+      
+      const payloadWithPackList: UpdatePurchaseOrderWithReceivedLotsPayload = {
+        ...payload,
+        // Only include packListDetails if they exist
+        ...(packListDetailsToPreserve && {
+          packListDetails: Array.isArray(packListDetailsToPreserve)
+            ? packListDetailsToPreserve.map((pack: any) => ({
+                packingNumber: pack.packingNumber || pack.packing_number,
+                trackingNumber: pack.trackingNumber || pack.tracking_number,
+                courierName: pack.courierName || pack.courier_name,
+                courierNumber: pack.courierNumber || pack.courier_number,
+                vehicleNumber: pack.vehicleNumber || pack.vehicle_number,
+                challanNumber: pack.challanNumber || pack.challan_number,
+                dispatchDate: pack.dispatchDate || pack.dispatch_date,
+                estimatedDeliveryDate: pack.estimatedDeliveryDate || pack.estimated_delivery_date,
+                expectedArrivalDate: pack.expectedArrivalDate || pack.expected_arrival_date,
+                numberOfCones: pack.numberOfCones || pack.number_of_cones,
+                numberOfBoxes: pack.numberOfBoxes || pack.number_of_boxes,
+                totalWeight: pack.totalWeight || pack.total_weight,
+                notes: pack.notes,
+                poItems: pack.poItems || pack.po_items || []
+              }))
+            : typeof packListDetailsToPreserve === 'object'
+              ? [{
+                  packingNumber: packListDetailsToPreserve.packingNumber || packListDetailsToPreserve.packing_number,
+                  trackingNumber: packListDetailsToPreserve.trackingNumber || packListDetailsToPreserve.tracking_number,
+                  courierName: packListDetailsToPreserve.courierName || packListDetailsToPreserve.courier_name,
+                  courierNumber: packListDetailsToPreserve.courierNumber || packListDetailsToPreserve.courier_number,
+                  vehicleNumber: packListDetailsToPreserve.vehicleNumber || packListDetailsToPreserve.vehicle_number,
+                  challanNumber: packListDetailsToPreserve.challanNumber || packListDetailsToPreserve.challan_number,
+                  dispatchDate: packListDetailsToPreserve.dispatchDate || packListDetailsToPreserve.dispatch_date,
+                  estimatedDeliveryDate: packListDetailsToPreserve.estimatedDeliveryDate || packListDetailsToPreserve.estimated_delivery_date,
+                  expectedArrivalDate: packListDetailsToPreserve.expectedArrivalDate || packListDetailsToPreserve.expected_arrival_date,
+                  numberOfCones: packListDetailsToPreserve.numberOfCones || packListDetailsToPreserve.number_of_cones,
+                  numberOfBoxes: packListDetailsToPreserve.numberOfBoxes || packListDetailsToPreserve.number_of_boxes,
+                  totalWeight: packListDetailsToPreserve.totalWeight || packListDetailsToPreserve.total_weight,
+                  notes: packListDetailsToPreserve.notes,
+                  poItems: packListDetailsToPreserve.poItems || packListDetailsToPreserve.po_items || []
+                }]
+              : undefined
+        })
+      };
+
       await yarnPurchaseOrderService.updatePurchaseOrderWithReceivedLots(
         orderForGoodsReceived.id,
-        payload
+        payloadWithPackList
       );
 
       // Refresh orders list
@@ -773,6 +832,7 @@ const PurchaseOrderReceivedPage = () => {
       toast.success('Purchase order updated with received lot details successfully');
       setGoodsReceivedModalOpen(false);
       setOrderForGoodsReceived(null);
+      setRawOrderDataForGoodsReceived(null);
     } catch (error) {
       console.error('Failed to update order:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to update order');
@@ -1283,6 +1343,7 @@ const PurchaseOrderReceivedPage = () => {
           onClose={() => {
             setGoodsReceivedModalOpen(false);
             setOrderForGoodsReceived(null);
+            setRawOrderDataForGoodsReceived(null);
           }}
           order={orderForGoodsReceived}
           onSubmit={handleGoodsReceivedSubmit}
@@ -1740,7 +1801,6 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
       status: 'lot_pending'
     }
   ]);
-  const [currentStatus, setCurrentStatus] = useState<'goods_received' | 'goods_partially_received'>('goods_partially_received');
   // Store original lots to track which ones are existing vs new
   const [originalLots, setOriginalLots] = useState<Map<string, ReceivedLotDetail>>(new Map());
   // Store raw input values as strings to allow typing "0" and "0.5"
@@ -1769,12 +1829,6 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
           status: lot.status || 'lot_pending'
         })));
         
-        // Set current status based on order status
-        if (order.status === 'goods received') {
-          setCurrentStatus('goods_received');
-        } else {
-          setCurrentStatus('goods_partially_received');
-        }
         setRawInputValues({});
       } else {
         // Reset form when modal opens with no existing data
@@ -1787,7 +1841,6 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
           poItems: [],
           status: 'lot_pending'
         }]);
-        setCurrentStatus('goods_partially_received');
         setRawInputValues({});
       }
     }
@@ -1951,8 +2004,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     });
 
     const payload: UpdatePurchaseOrderWithReceivedLotsPayload = {
-      receivedLotDetails: lotsWithPreservedStatus,
-      currentStatus
+      receivedLotDetails: lotsWithPreservedStatus
     };
 
     await onSubmit(payload);
@@ -2033,22 +2085,6 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                     </div>
                   </div>
                 )}
-              </div>
-
-              {/* Current Status */}
-              <div className="mb-6">
-                <label className="form-label">
-                  Current Status <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={currentStatus}
-                  onChange={(e) => setCurrentStatus(e.target.value as 'goods_received' | 'goods_partially_received')}
-                  className="form-select"
-                  required
-                >
-                  <option value="goods_partially_received">Goods Partially Received</option>
-                  <option value="goods_received">Goods Received</option>
-                </select>
               </div>
 
               {/* Lots */}
