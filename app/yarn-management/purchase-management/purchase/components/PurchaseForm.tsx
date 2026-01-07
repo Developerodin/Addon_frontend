@@ -1410,8 +1410,12 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       </label>
                       <input
                         type="number"
-                        value={item.rate}
-                        onChange={(e) => updateItem(item.id, { rate: parseFloat(e.target.value) || 0 })}
+                        value={item.rate || ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const numValue = value === "" ? "" : parseFloat(value);
+                          updateItem(item.id, { rate: numValue === "" ? 0 : (isNaN(numValue) ? 0 : numValue) });
+                        }}
                         className="form-control"
                         placeholder="0.00"
                         step="0.01"
@@ -1423,15 +1427,19 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                     {/* Quantity */}
                     <div>
                       <label className="form-label">
-                        Quantity <span className="text-red-500">*</span>
+                        Quantity (kg) <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="number"
-                        value={item.qty}
-                        onChange={(e) => updateItem(item.id, { qty: parseFloat(e.target.value) || 0 })}
+                        value={item.qty || ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const numValue = value === "" ? "" : parseFloat(value);
+                          updateItem(item.id, { qty: numValue === "" ? 0 : (isNaN(numValue) ? 0 : numValue) });
+                        }}
                         className="form-control"
-                        placeholder="0"
-                        step="0.01"
+                        placeholder="0.00"
+                        step="0.001"
                         min="0"
                         required
                       />
@@ -1458,10 +1466,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       </label>
                       <input
                         type="number"
-                        value={item.gst}
-                        onChange={(e) => updateItem(item.id, { gst: parseFloat(e.target.value) || 0 })}
+                        value={item.gst || ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const numValue = value === "" ? "" : parseFloat(value);
+                          updateItem(item.id, { gst: numValue === "" ? 0 : (isNaN(numValue) ? 0 : numValue) });
+                        }}
                         className="form-control"
-                        placeholder="0"
+                        placeholder="0.00"
                         step="0.01"
                         min="0"
                         max="100"

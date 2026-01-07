@@ -128,15 +128,15 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
         toast.error(`Estimated Delivery Date is required for entry ${i + 1}`);
         return;
       }
-      if (entry.numberOfCones <= 0) {
+      if (!entry.numberOfCones || entry.numberOfCones <= 0) {
         toast.error(`Number of Cones must be greater than 0 for entry ${i + 1}`);
         return;
       }
-      if (entry.numberOfBoxes <= 0) {
+      if (!entry.numberOfBoxes || entry.numberOfBoxes <= 0) {
         toast.error(`Number of Boxes must be greater than 0 for entry ${i + 1}`);
         return;
       }
-      if (entry.totalWeight <= 0) {
+      if (!entry.totalWeight || entry.totalWeight <= 0) {
         toast.error(`Total Weight must be greater than 0 for entry ${i + 1}`);
         return;
       }
@@ -176,8 +176,17 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
         idx === index 
           ? {
               ...entry,
-              [name]: name === 'numberOfCones' || name === 'numberOfBoxes' || name === 'totalWeight' 
-                ? (value === '' ? 0 : Number(value)) 
+              [name]: name === 'totalWeight' 
+                ? (() => {
+                    if (value === '') return 0; // Allow empty for clearing
+                    const parsed = parseFloat(value);
+                    if (isNaN(parsed)) return entry.totalWeight || 0;
+                    // Prevent setting to exactly 0
+                    if (parsed === 0) return entry.totalWeight || 0;
+                    return parsed;
+                  })()
+                : name === 'numberOfCones' || name === 'numberOfBoxes'
+                ? (value === '' ? 0 : (isNaN(Number(value)) ? 0 : Number(value)))
                 : value
             }
           : entry
@@ -220,6 +229,28 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
       setPacklistEntries(prev => prev.filter((_, idx) => idx !== index));
     } else {
       toast.error("At least one packlist entry is required");
+    }
+  };
+
+  const handleWeightKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentValue: number | string) => {
+    // Prevent typing "0" when field is empty (would result in just "0")
+    if (e.key === '0') {
+      const input = e.currentTarget;
+      const currentInputValue = input.value;
+      const selectionStart = input.selectionStart || 0;
+      const selectionEnd = input.selectionEnd || 0;
+      
+      // If field is empty and user types "0", prevent it
+      if (currentInputValue === '' && selectionStart === 0 && selectionEnd === 0) {
+        e.preventDefault();
+        return;
+      }
+      
+      // If field only contains "0" and user is trying to type another "0" at the start, prevent it
+      if (currentInputValue === '0' && selectionStart === 0 && selectionEnd === currentInputValue.length) {
+        e.preventDefault();
+        return;
+      }
     }
   };
 
@@ -444,11 +475,12 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                           <input
                             type="number"
                             name="numberOfCones"
-                            value={entry.numberOfCones}
+                            value={entry.numberOfCones || ""}
                             onChange={(e) => handleInputChange(entryIndex, e)}
                             className="form-control"
                             placeholder="0"
                             min="1"
+                            step="1"
                             required
                           />
                         </div>
@@ -460,11 +492,12 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                           <input
                             type="number"
                             name="numberOfBoxes"
-                            value={entry.numberOfBoxes}
+                            value={entry.numberOfBoxes || ""}
                             onChange={(e) => handleInputChange(entryIndex, e)}
                             className="form-control"
                             placeholder="0"
                             min="1"
+                            step="1"
                             required
                           />
                         </div>
@@ -476,12 +509,13 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                           <input
                             type="number"
                             name="totalWeight"
-                            value={entry.totalWeight}
+                            value={entry.totalWeight || ""}
                             onChange={(e) => handleInputChange(entryIndex, e)}
+                            onKeyDown={(e) => handleWeightKeyDown(e, entry.totalWeight || "")}
                             className="form-control"
-                            placeholder="0"
-                            min="0.01"
-                            step="0.01"
+                            placeholder="0.00"
+                            min="0.001"
+                            step="0.001"
                             required
                           />
                         </div>
