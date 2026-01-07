@@ -21,7 +21,6 @@ export interface PacklistDetails {
   challanNumber: string;
   dispatchDate: string;
   estimatedDeliveryDate: string;
-  numberOfCones: number;
   numberOfBoxes: number;
   totalWeight: number;
   notes?: string;
@@ -254,7 +253,6 @@ class YarnPurchaseOrderService {
         challanNumber?: string;
         dispatchDate: string;
         estimatedDeliveryDate: string;
-        numberOfCones: number;
         numberOfBoxes: number;
         totalWeight: number;
         notes?: string;
@@ -270,7 +268,6 @@ class YarnPurchaseOrderService {
         challanNumber: detail.challanNumber || '',
         dispatchDate: detail.dispatchDate,
         estimatedDeliveryDate: detail.estimatedDeliveryDate,
-        numberOfCones: detail.numberOfCones,
         numberOfBoxes: detail.numberOfBoxes,
         totalWeight: detail.totalWeight,
         notes: detail.notes || '',

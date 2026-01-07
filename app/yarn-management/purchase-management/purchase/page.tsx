@@ -36,7 +36,6 @@ interface PurchaseOrder {
       dispatchDate?: string;
       estimatedDeliveryDate?: string;
       expectedArrivalDate?: string; // Legacy field name from API
-      numberOfCones?: number;
       numberOfBoxes?: number;
       totalWeight?: number;
       notes?: string;
@@ -49,7 +48,6 @@ interface PurchaseOrder {
       challanNumber?: string;
       dispatchDate?: string;
       estimatedDeliveryDate?: string;
-      numberOfCones?: number;
       numberOfBoxes?: number;
       totalWeight?: number;
       notes?: string;
@@ -162,7 +160,6 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
           dispatchDate: firstEntry?.dispatchDate || firstEntry?.dispatch_date || '',
           estimatedDeliveryDate: firstEntry?.estimatedDeliveryDate || firstEntry?.estimated_delivery_date || firstEntry?.expectedArrivalDate || firstEntry?.expected_arrival_date || '',
           expectedArrivalDate: firstEntry?.expectedArrivalDate || firstEntry?.expected_arrival_date || firstEntry?.estimatedDeliveryDate || firstEntry?.estimated_delivery_date || '',
-          numberOfCones: firstEntry?.numberOfCones || firstEntry?.number_of_cones || 0,
           numberOfBoxes: firstEntry?.numberOfBoxes || firstEntry?.number_of_boxes || 0,
           totalWeight: firstEntry?.totalWeight || firstEntry?.total_weight || 0,
           notes: firstEntry?.notes || ''
@@ -180,7 +177,6 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
         dispatchDate: packListData?.dispatchDate || packListData?.dispatch_date || '',
         estimatedDeliveryDate: packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || packListData?.expectedArrivalDate || packListData?.expected_arrival_date || '',
         expectedArrivalDate: packListData?.expectedArrivalDate || packListData?.expected_arrival_date || packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || '',
-        numberOfCones: packListData?.numberOfCones || packListData?.number_of_cones || 0,
         numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes || 0,
         totalWeight: packListData?.totalWeight || packListData?.total_weight || 0,
         notes: packListData?.notes || ''
@@ -200,7 +196,6 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
           challanNumber: entry?.challanNumber || entry?.challan_number || '',
           dispatchDate: entry?.dispatchDate || entry?.dispatch_date || '',
           estimatedDeliveryDate: entry?.estimatedDeliveryDate || entry?.estimated_delivery_date || entry?.expectedArrivalDate || entry?.expected_arrival_date || '',
-          numberOfCones: entry?.numberOfCones || entry?.number_of_cones || 0,
           numberOfBoxes: entry?.numberOfBoxes || entry?.number_of_boxes || 0,
           totalWeight: entry?.totalWeight || entry?.total_weight || 0,
           notes: entry?.notes || '',
@@ -217,7 +212,6 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
         challanNumber: packListData?.challanNumber || packListData?.challan_number || '',
         dispatchDate: packListData?.dispatchDate || packListData?.dispatch_date || '',
         estimatedDeliveryDate: packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || packListData?.expectedArrivalDate || packListData?.expected_arrival_date || '',
-        numberOfCones: packListData?.numberOfCones || packListData?.number_of_cones || 0,
         numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes || 0,
         totalWeight: packListData?.totalWeight || packListData?.total_weight || 0,
         notes: packListData?.notes || '',
@@ -1315,12 +1309,6 @@ const PurchasePage = () => {
                                   <div className="mt-1 text-sm text-gray-900">
                                     {new Date(packlistEntry.estimatedDeliveryDate).toLocaleDateString()}
                                   </div>
-                                </div>
-                              )}
-                              {packlistEntry.numberOfCones !== undefined && packlistEntry.numberOfCones > 0 && (
-                                <div>
-                                  <label className="text-xs font-medium text-gray-600">Number of Cones</label>
-                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.numberOfCones}</div>
                                 </div>
                               )}
                               {packlistEntry.numberOfBoxes !== undefined && packlistEntry.numberOfBoxes > 0 && (

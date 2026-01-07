@@ -10,7 +10,6 @@ export interface PacklistDetails {
   challanNumber?: string;
   dispatchDate: string;
   estimatedDeliveryDate: string;
-  numberOfCones: number;
   numberOfBoxes: number;
   totalWeight: number;
   notes?: string;
@@ -60,7 +59,6 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
       challanNumber: "",
       dispatchDate: new Date().toISOString().split('T')[0],
       estimatedDeliveryDate: "",
-      numberOfCones: 0,
       numberOfBoxes: 0,
       totalWeight: 0,
       notes: "",
@@ -94,7 +92,6 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
           challanNumber: "",
           dispatchDate: new Date().toISOString().split('T')[0],
           estimatedDeliveryDate: order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : "",
-          numberOfCones: 0,
           numberOfBoxes: 0,
           totalWeight: 0,
           notes: "",
@@ -128,10 +125,6 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
         toast.error(`Estimated Delivery Date is required for entry ${i + 1}`);
         return;
       }
-      if (!entry.numberOfCones || entry.numberOfCones <= 0) {
-        toast.error(`Number of Cones must be greater than 0 for entry ${i + 1}`);
-        return;
-      }
       if (!entry.numberOfBoxes || entry.numberOfBoxes <= 0) {
         toast.error(`Number of Boxes must be greater than 0 for entry ${i + 1}`);
         return;
@@ -158,10 +151,10 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
           challanNumber: "",
           dispatchDate: new Date().toISOString().split('T')[0],
           estimatedDeliveryDate: order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : "",
-          numberOfCones: 0,
           numberOfBoxes: 0,
           totalWeight: 0,
-          notes: ""
+          notes: "",
+          poItems: []
         }
       ]);
     } catch (error) {
@@ -185,7 +178,7 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                     if (parsed === 0) return entry.totalWeight || 0;
                     return parsed;
                   })()
-                : name === 'numberOfCones' || name === 'numberOfBoxes'
+                : name === 'numberOfBoxes'
                 ? (value === '' ? 0 : (isNaN(Number(value)) ? 0 : Number(value)))
                 : value
             }
@@ -215,7 +208,6 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
         challanNumber: "",
         dispatchDate: new Date().toISOString().split('T')[0],
         estimatedDeliveryDate: order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : "",
-        numberOfCones: 0,
         numberOfBoxes: 0,
         totalWeight: 0,
         notes: "",
@@ -467,24 +459,7 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="form-label">
-                            Number of Cones <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="number"
-                            name="numberOfCones"
-                            value={entry.numberOfCones || ""}
-                            onChange={(e) => handleInputChange(entryIndex, e)}
-                            className="form-control"
-                            placeholder="0"
-                            min="1"
-                            step="1"
-                            required
-                          />
-                        </div>
-
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="form-label">
                             Number of Boxes <span className="text-red-500">*</span>
