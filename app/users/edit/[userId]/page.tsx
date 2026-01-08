@@ -446,8 +446,10 @@ const EditUserPage = () => {
                                                     { key: 'Checking Floor', label: 'Checking Floor' },
                                                     { key: 'Washing Floor', label: 'Washing Floor' },
                                                     { key: 'Boarding Floor', label: 'Boarding Floor' },
-                                                    { key: 'Final Checking Floor', label: 'Final Checking Floor' },
+                                                    { key: 'Silicon Floor', label: 'Silicon Floor' },
+                                                    { key: 'Secondary Checking Floor', label: 'Secondary Checking Floor' },
                                                     { key: 'Branding Floor', label: 'Branding Floor' },
+                                                    { key: 'Final Checking Floor', label: 'Final Checking Floor' },
                                                     { key: 'Machine Floor', label: 'Machine Floor' },
                                                     { key: 'Warehouse Floor', label: 'Warehouse Floor' }
                                                 ].map(subsection => (

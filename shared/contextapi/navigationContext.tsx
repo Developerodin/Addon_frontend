@@ -30,10 +30,12 @@ interface NavigationPermissions {
     'Checking Floor': boolean;
     'Washing Floor': boolean;
     'Boarding Floor': boolean;
-    'Final Checking Floor': boolean;
+    'Silicon Floor': boolean;
+    'Secondary Checking Floor': boolean;
     'Branding Floor': boolean;
-    'Warehouse Floor': boolean;
+    'Final Checking Floor': boolean;
     'Machine Floor': boolean;
+    'Warehouse Floor': boolean;
   };
   'Yarn Management': {
     'Dashboard': boolean;
@@ -103,10 +105,12 @@ const defaultPermissions: NavigationPermissions = {
     'Checking Floor': false,
     'Washing Floor': false,
     'Boarding Floor': false,
-    'Final Checking Floor': false,
+    'Silicon Floor': false,
+    'Secondary Checking Floor': false,
     'Branding Floor': false,
-    'Warehouse Floor': false,
+    'Final Checking Floor': false,
     'Machine Floor': false,
+    'Warehouse Floor': false,
   },
   'Yarn Management': {
     'Dashboard': false,
