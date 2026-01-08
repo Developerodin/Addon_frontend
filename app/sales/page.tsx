@@ -258,6 +258,165 @@ const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose, filters, onA
   );
 };
 
+// Helper function to safely extract material code display value
+const getMaterialCodeDisplay = (materialCode: string | MaterialCode | any): string => {
+  if (!materialCode) return '-';
+  
+  // If it's a string, return it
+  if (typeof materialCode === 'string') {
+    return materialCode;
+  }
+  
+  // If it's a number, convert to string
+  if (typeof materialCode === 'number') {
+    return String(materialCode);
+  }
+  
+  // If it's an object, try to extract a display value
+  if (typeof materialCode === 'object') {
+    // Try styleCode (singular) first - handle if it's an object too
+    if (materialCode.styleCode) {
+      if (typeof materialCode.styleCode === 'string') {
+        return materialCode.styleCode;
+      }
+      if (typeof materialCode.styleCode === 'number') {
+        return String(materialCode.styleCode);
+      }
+      // If styleCode is an object, try to extract from it
+      if (typeof materialCode.styleCode === 'object') {
+        if (materialCode.styleCode.value && typeof materialCode.styleCode.value === 'string') {
+          return materialCode.styleCode.value;
+        }
+        if (materialCode.styleCode.code && typeof materialCode.styleCode.code === 'string') {
+          return materialCode.styleCode.code;
+        }
+      }
+    }
+    
+    // Try styleCodes (plural) - take first if array
+    if (materialCode.styleCodes) {
+      if (Array.isArray(materialCode.styleCodes) && materialCode.styleCodes.length > 0) {
+        const first = materialCode.styleCodes[0];
+        if (typeof first === 'string') return first;
+        if (typeof first === 'number') return String(first);
+      }
+      if (typeof materialCode.styleCodes === 'string') {
+        return materialCode.styleCodes;
+      }
+    }
+    
+    // Try eanCode (from error message)
+    if (materialCode.eanCode && typeof materialCode.eanCode === 'string') {
+      return materialCode.eanCode;
+    }
+    
+    // Try other code fields
+    if (materialCode.internalCode && typeof materialCode.internalCode === 'string') {
+      return materialCode.internalCode;
+    }
+    if (materialCode.vendorCode && typeof materialCode.vendorCode === 'string') {
+      return materialCode.vendorCode;
+    }
+    if (materialCode.factoryCode && typeof materialCode.factoryCode === 'string') {
+      return materialCode.factoryCode;
+    }
+    if (materialCode.softwareCode && typeof materialCode.softwareCode === 'string') {
+      return materialCode.softwareCode;
+    }
+    
+    // Try name as fallback
+    if (materialCode.name && typeof materialCode.name === 'string') {
+      return materialCode.name;
+    }
+    
+    // Last resort: try to stringify the object (but this shouldn't happen)
+    // If we get here, something is wrong with the data structure
+    console.warn('Unable to extract display value from materialCode:', materialCode);
+  }
+  
+  return '-';
+};
+
+// Helper function to get material code ID for links
+const getMaterialCodeId = (materialCode: string | MaterialCode | any): string | null => {
+  if (!materialCode || typeof materialCode !== 'object') return null;
+  return materialCode.id || materialCode._id || null;
+};
+
+// Helper function to safely extract plant display value
+const getPlantDisplay = (plant: string | Plant | any): string => {
+  if (!plant) return '-';
+  
+  // If it's a string, return it
+  if (typeof plant === 'string') {
+    return plant;
+  }
+  
+  // If it's an object, try to extract storeId
+  if (typeof plant === 'object') {
+    if (plant.storeId && typeof plant.storeId === 'string') {
+      return plant.storeId;
+    }
+    if (plant.storeName && typeof plant.storeName === 'string') {
+      return plant.storeName;
+    }
+  }
+  
+  return '-';
+};
+
+// Helper function to get plant ID for links
+const getPlantId = (plant: string | Plant | any): string | null => {
+  if (!plant || typeof plant !== 'object') return null;
+  return plant.id || plant._id || null;
+};
+
+// Helper function to safely extract numeric value (handles objects, strings, numbers)
+const getNumericValue = (value: any, defaultValue: number = 0): number => {
+  if (value === null || value === undefined) return defaultValue;
+  
+  // If it's already a number, return it
+  if (typeof value === 'number') {
+    return isNaN(value) ? defaultValue : value;
+  }
+  
+  // If it's a string, try to parse it
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? defaultValue : parsed;
+  }
+  
+  // If it's an object, try to find a numeric property
+  if (typeof value === 'object') {
+    // Try common numeric property names (ensure they're actually numbers, not objects)
+    if (value.value !== undefined && typeof value.value === 'number' && !isNaN(value.value)) {
+      return value.value;
+    }
+    if (value.amount !== undefined && typeof value.amount === 'number' && !isNaN(value.amount)) {
+      return value.amount;
+    }
+    if (value.price !== undefined && typeof value.price === 'number' && !isNaN(value.price)) {
+      return value.price;
+    }
+    // Check mrp property - but ensure it's a number, not an object
+    if (value.mrp !== undefined) {
+      if (typeof value.mrp === 'number' && !isNaN(value.mrp)) {
+        return value.mrp;
+      }
+      // If mrp is a string, try to parse it
+      if (typeof value.mrp === 'string') {
+        const parsed = parseFloat(value.mrp);
+        if (!isNaN(parsed)) return parsed;
+      }
+    }
+    
+    // Don't try to stringify objects - that's dangerous
+    // Just return default if we can't find a numeric value
+  }
+  
+  return defaultValue;
+};
+
 // Group sales records by date
 const groupSalesByDate = (salesData: SalesRecord[]) => {
   const grouped: { [key: string]: SalesRecord[] } = {};
@@ -863,35 +1022,67 @@ const SalesContent = () => {
                               </td>
                               <td>{new Date(sale.date).toLocaleDateString()}</td>
                               <td>
-                                {sale.plant && typeof sale.plant === 'object' && sale.plant.storeId ? (
-                                  <Link 
-                                    href={`/analytics/store-analysis/${sale.plant.id}`}
-                                    className="text-primary hover:text-primary/80 transition-colors duration-200"
-                                  >
-                                    {sale.plant.storeId}
-                                  </Link>
-                                ) : (
-                                  (sale.plant as Plant)?.storeId || (sale.plant as string) || '-'
-                                )}
+                                {(() => {
+                                  try {
+                                    const plantId = getPlantId(sale.plant);
+                                    let displayValue = getPlantDisplay(sale.plant);
+                                    
+                                    // Ensure displayValue is always a string
+                                    if (typeof displayValue !== 'string') {
+                                      displayValue = String(displayValue || '-');
+                                    }
+                                    
+                                    if (plantId) {
+                                      return (
+                                        <Link 
+                                          href={`/analytics/store-analysis/${plantId}`}
+                                          className="text-primary hover:text-primary/80 transition-colors duration-200"
+                                        >
+                                          {displayValue}
+                                        </Link>
+                                      );
+                                    }
+                                    return <span>{displayValue}</span>;
+                                  } catch (error) {
+                                    console.error('Error rendering plant:', error, sale.plant);
+                                    return <span>-</span>;
+                                  }
+                                })()}
                               </td>
                               <td>
-                                {sale.materialCode && typeof sale.materialCode === 'object' && sale.materialCode.styleCode ? (
-                                  <Link 
-                                    href={`/analytics/product-analysis/${sale.materialCode.id}`}
-                                    className="text-primary hover:text-primary/80 transition-colors duration-200"
-                                  >
-                                    {sale.materialCode.styleCode}
-                                  </Link>
-                                ) : (
-                                  (sale.materialCode as MaterialCode)?.styleCode || (sale.materialCode as string) || '-'
-                                )}
+                                {(() => {
+                                  try {
+                                    const materialCodeId = getMaterialCodeId(sale.materialCode);
+                                    let displayValue = getMaterialCodeDisplay(sale.materialCode);
+                                    
+                                    // Ensure displayValue is always a string
+                                    if (typeof displayValue !== 'string') {
+                                      displayValue = String(displayValue || '-');
+                                    }
+                                    
+                                    if (materialCodeId) {
+                                      return (
+                                        <Link 
+                                          href={`/analytics/product-analysis/${materialCodeId}`}
+                                          className="text-primary hover:text-primary/80 transition-colors duration-200"
+                                        >
+                                          {displayValue}
+                                        </Link>
+                                      );
+                                    }
+                                    return <span>{displayValue}</span>;
+                                  } catch (error) {
+                                    console.error('Error rendering materialCode:', error, sale.materialCode);
+                                    return <span>-</span>;
+                                  }
+                                })()}
                               </td>
-                              <td className="text-right">{sale.quantity}</td>
-                              <td className="text-right">{sale.mrp.toFixed(2)}</td>
-                              <td className="text-right">{(sale.discount || 0).toFixed(2)}</td>
-                              <td className="text-right">{sale.gsv.toFixed(2)}</td>
-                              <td className="text-right">{sale.nsv.toFixed(2)}</td>
-                              <td className="text-right">{(sale.totalTax || 0).toFixed(2)}</td>
+                              <td className="text-right">{getNumericValue(sale.quantity, 0)}</td>
+                              <td className="text-right">{getNumericValue(sale.mrp, 0).toFixed(2)}</td>
+                              <td className="text-right">{getNumericValue(sale.discount, 0).toFixed(2)}</td>
+                              <td className="text-right">{getNumericValue(sale.gsv, 0).toFixed(2)}</td>
+                              <td className="text-right">{getNumericValue(sale.nsv, 0).toFixed(2)}</td>
+                              <td className="text-right">{getNumericValue(sale.totalTax, 0).toFixed(2)}</td>
                               <td>
                                 <div className="flex space-x-2">
                                   {getSaleId(sale) ? (
