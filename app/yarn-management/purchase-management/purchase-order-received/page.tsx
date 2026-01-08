@@ -41,24 +41,32 @@ interface PurchaseOrder {
     packingNumber?: string;
     trackingNumber?: string;
     courierName?: string;
+    courierNumber?: string;
+    vehicleNumber?: string;
+    challanNumber?: string;
     dispatchDate?: string;
     estimatedDeliveryDate?: string;
     expectedArrivalDate?: string;
     numberOfCones?: number;
     numberOfBoxes?: number;
     totalWeight?: number;
+    notes?: string;
     poItems?: string[];
   };
   packListDetails?: Array<{
     packingNumber?: string;
     trackingNumber?: string;
     courierName?: string;
+    courierNumber?: string;
+    vehicleNumber?: string;
+    challanNumber?: string;
     dispatchDate?: string;
     estimatedDeliveryDate?: string;
     expectedArrivalDate?: string;
     numberOfCones?: number;
     numberOfBoxes?: number;
     totalWeight?: number;
+    notes?: string;
     poItems?: string[];
   }>;
   receivedLotDetails?: ReceivedLotDetail[];
@@ -181,12 +189,16 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
           packingNumber: firstEntry?.packingNumber || firstEntry?.packing_number || firstEntry?.trackingNumber || firstEntry?.tracking_number,
           trackingNumber: firstEntry?.trackingNumber || firstEntry?.tracking_number || firstEntry?.packingNumber || firstEntry?.packing_number,
           courierName: firstEntry?.courierName || firstEntry?.courier_name,
+          courierNumber: firstEntry?.courierNumber || firstEntry?.courier_number,
+          vehicleNumber: firstEntry?.vehicleNumber || firstEntry?.vehicle_number,
+          challanNumber: firstEntry?.challanNumber || firstEntry?.challan_number,
           dispatchDate: firstEntry?.dispatchDate || firstEntry?.dispatch_date,
           estimatedDeliveryDate: firstEntry?.estimatedDeliveryDate || firstEntry?.estimated_delivery_date || firstEntry?.expectedArrivalDate || firstEntry?.expected_arrival_date,
           expectedArrivalDate: firstEntry?.expectedArrivalDate || firstEntry?.expected_arrival_date || firstEntry?.estimatedDeliveryDate || firstEntry?.estimated_delivery_date,
           numberOfCones: firstEntry?.numberOfCones || firstEntry?.number_of_cones,
           numberOfBoxes: firstEntry?.numberOfBoxes || firstEntry?.number_of_boxes,
           totalWeight: firstEntry?.totalWeight || firstEntry?.total_weight,
+          notes: firstEntry?.notes,
           poItems: firstEntry?.poItems || []
         };
       }
@@ -197,12 +209,16 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
           packingNumber: packListData?.packingNumber || packListData?.packing_number || packListData?.trackingNumber || packListData?.tracking_number,
           trackingNumber: packListData?.trackingNumber || packListData?.tracking_number || packListData?.packingNumber || packListData?.packing_number,
           courierName: packListData?.courierName || packListData?.courier_name,
+          courierNumber: packListData?.courierNumber || packListData?.courier_number,
+          vehicleNumber: packListData?.vehicleNumber || packListData?.vehicle_number,
+          challanNumber: packListData?.challanNumber || packListData?.challan_number,
           dispatchDate: packListData?.dispatchDate || packListData?.dispatch_date,
           estimatedDeliveryDate: packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || packListData?.expectedArrivalDate || packListData?.expected_arrival_date,
           expectedArrivalDate: packListData?.expectedArrivalDate || packListData?.expected_arrival_date || packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date,
           numberOfCones: packListData?.numberOfCones || packListData?.number_of_cones,
           numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes,
           totalWeight: packListData?.totalWeight || packListData?.total_weight,
+          notes: packListData?.notes,
           poItems: packListData?.poItems || []
         };
       }
@@ -219,12 +235,16 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
           packingNumber: entry?.packingNumber || entry?.packing_number || entry?.trackingNumber || entry?.tracking_number,
           trackingNumber: entry?.trackingNumber || entry?.tracking_number || entry?.packingNumber || entry?.packing_number,
           courierName: entry?.courierName || entry?.courier_name,
+          courierNumber: entry?.courierNumber || entry?.courier_number,
+          vehicleNumber: entry?.vehicleNumber || entry?.vehicle_number,
+          challanNumber: entry?.challanNumber || entry?.challan_number,
           dispatchDate: entry?.dispatchDate || entry?.dispatch_date,
           estimatedDeliveryDate: entry?.estimatedDeliveryDate || entry?.estimated_delivery_date || entry?.expectedArrivalDate || entry?.expected_arrival_date,
           expectedArrivalDate: entry?.expectedArrivalDate || entry?.expected_arrival_date || entry?.estimatedDeliveryDate || entry?.estimated_delivery_date,
           numberOfCones: entry?.numberOfCones || entry?.number_of_cones,
           numberOfBoxes: entry?.numberOfBoxes || entry?.number_of_boxes,
           totalWeight: entry?.totalWeight || entry?.total_weight,
+          notes: entry?.notes,
           poItems: entry?.poItems || []
         }));
       }
@@ -235,12 +255,16 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
           packingNumber: packListData?.packingNumber || packListData?.packing_number || packListData?.trackingNumber || packListData?.tracking_number,
           trackingNumber: packListData?.trackingNumber || packListData?.tracking_number || packListData?.packingNumber || packListData?.packing_number,
           courierName: packListData?.courierName || packListData?.courier_name,
+          courierNumber: packListData?.courierNumber || packListData?.courier_number,
+          vehicleNumber: packListData?.vehicleNumber || packListData?.vehicle_number,
+          challanNumber: packListData?.challanNumber || packListData?.challan_number,
           dispatchDate: packListData?.dispatchDate || packListData?.dispatch_date,
           estimatedDeliveryDate: packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || packListData?.expectedArrivalDate || packListData?.expected_arrival_date,
           expectedArrivalDate: packListData?.expectedArrivalDate || packListData?.expected_arrival_date || packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date,
           numberOfCones: packListData?.numberOfCones || packListData?.number_of_cones,
           numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes,
           totalWeight: packListData?.totalWeight || packListData?.total_weight,
+          notes: packListData?.notes,
           poItems: packListData?.poItems || []
         }];
       }
@@ -2086,6 +2110,90 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Packlist Details */}
+              {(order.packListDetails && order.packListDetails.length > 0) || order.packlistDetails ? (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Packlist Details</h4>
+                  {(() => {
+                    // Handle both array and single object formats
+                    const packListData = order.packListDetails || (order.packlistDetails ? [order.packlistDetails] : []);
+                    
+                    return packListData.map((packlist: any, packIndex: number) => {
+                      // Get PO item names for display
+                      const poItemNames = packlist.poItems && Array.isArray(packlist.poItems) 
+                        ? packlist.poItems.map((poItemId: string) => {
+                            const item = order.items.find((i: any) => String(i.id) === String(poItemId));
+                            return item ? `${item.yarnName} - ${item.sizeCount} - ${item.shadeCode}` : `PO Item ${poItemId}`;
+                          }).join(', ')
+                        : 'N/A';
+
+                      return (
+                        <div key={packIndex} className="mb-4 last:mb-0 p-4 bg-white rounded-lg border border-gray-200">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Packing Number</label>
+                              <div className="mt-1 text-gray-900 font-medium">{packlist.packingNumber || packlist.packing_number || 'N/A'}</div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Courier Name</label>
+                              <div className="mt-1 text-gray-900">{packlist.courierName || packlist.courier_name || 'N/A'}</div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Courier Number</label>
+                              <div className="mt-1 text-gray-900">{packlist.courierNumber || packlist.courier_number || 'N/A'}</div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Vehicle Number</label>
+                              <div className="mt-1 text-gray-900">{packlist.vehicleNumber || packlist.vehicle_number || 'N/A'}</div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Challan Number</label>
+                              <div className="mt-1 text-gray-900">{packlist.challanNumber || packlist.challan_number || 'N/A'}</div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Dispatch Date</label>
+                              <div className="mt-1 text-gray-900">
+                                {packlist.dispatchDate || packlist.dispatch_date 
+                                  ? new Date(packlist.dispatchDate || packlist.dispatch_date).toLocaleDateString()
+                                  : 'N/A'}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Estimated Delivery Date</label>
+                              <div className="mt-1 text-gray-900">
+                                {packlist.estimatedDeliveryDate || packlist.estimated_delivery_date 
+                                  ? new Date(packlist.estimatedDeliveryDate || packlist.estimated_delivery_date).toLocaleDateString()
+                                  : 'N/A'}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Number of Boxes</label>
+                              <div className="mt-1 text-gray-900 font-medium">{packlist.numberOfBoxes || packlist.number_of_boxes || 0}</div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Total Weight (kg)</label>
+                              <div className="mt-1 text-gray-900 font-medium">{packlist.totalWeight || packlist.total_weight || 0}</div>
+                            </div>
+                            {packlist.notes && (
+                              <div className="md:col-span-2 lg:col-span-3">
+                                <label className="text-xs font-medium text-gray-600">Notes</label>
+                                <div className="mt-1 text-gray-900">{packlist.notes}</div>
+                              </div>
+                            )}
+                            {poItemNames && (
+                              <div className="md:col-span-2 lg:col-span-3">
+                                <label className="text-xs font-medium text-gray-600">PO Items</label>
+                                <div className="mt-1 text-gray-900">{poItemNames}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              ) : null}
 
               {/* Lots */}
               <div className="space-y-6">
