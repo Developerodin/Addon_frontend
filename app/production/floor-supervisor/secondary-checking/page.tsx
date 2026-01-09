@@ -1211,7 +1211,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                           {article.linkingType === 'Auto Linking' ? 'Received from Knitting' : 'Received from Linking'}
                         </label>
                         <div className="text-lg font-semibold text-blue-600">
-                          {checkingFloor.data?.received || 0}
+                          {secondaryCheckingFloor.data?.received || 0}
                         </div>
                       </div>
                       <div>
