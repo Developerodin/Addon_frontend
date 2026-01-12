@@ -173,6 +173,7 @@ const ProcessOrderPage = () => {
   } | null>(null);
   // Store raw input values as strings to allow typing "0" and "0.5"
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
+  const [isFetchingWeight, setIsFetchingWeight] = useState(false);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -209,6 +210,49 @@ const ProcessOrderPage = () => {
       setIsSubmittingStatus(false);
     }
   }, [showProcessedModal]);
+
+  // Fetch weight automatically when a row is activated
+  useEffect(() => {
+    const autoFillWeight = async () => {
+      if (!activeBoxId) return;
+
+      const weight = await fetchLatestWeight();
+      if (weight !== null && weight > 0) {
+        // Find the box to get its current data
+        const box = boxes.find(b => {
+          const bId = b._id || b.id || b.boxId;
+          return bId === activeBoxId;
+        });
+
+        if (box) {
+          const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
+            ? box.yarnName 
+            : '';
+          
+          // Update boxData with fetched weight, ensuring all fields exist
+          setBoxData(prev => ({
+            ...prev,
+            [activeBoxId]: {
+              yarnName: prev[activeBoxId]?.yarnName || defaultYarnName,
+              shadeCode: prev[activeBoxId]?.shadeCode || box.shadeCode || '',
+              orderQty: prev[activeBoxId]?.orderQty || box.orderQty || 0,
+              lotNumber: prev[activeBoxId]?.lotNumber || box.lotNumber || '',
+              boxWeight: weight.toString(),
+              numberOfCones: prev[activeBoxId]?.numberOfCones || box.numberOfCones?.toString() || ''
+            }
+          }));
+          
+          // Also update rawInputValues to show the weight in the input field
+          setRawInputValues(prev => ({
+            ...prev,
+            [`box-${activeBoxId}-boxWeight`]: weight.toString()
+          }));
+        }
+      }
+    };
+
+    autoFillWeight();
+  }, [activeBoxId, boxes]);
 
   // Fetch order from API
   useEffect(() => {
@@ -353,6 +397,39 @@ const ProcessOrderPage = () => {
         return { text: 'Rejected', color: 'bg-red-100 text-red-800' };
       default:
         return { text: 'Pending', color: 'bg-gray-100 text-gray-800' };
+    }
+  };
+
+  // Fetch latest weight from API
+  const fetchLatestWeight = async (): Promise<number | null> => {
+    try {
+      setIsFetchingWeight(true);
+      const response = await fetch('http://localhost:7001/api/weight/latest', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      // Extract weight from response: {"weight":0.65,"weightUnit":"kg",...}
+      const weight = data.weight;
+      
+      if (weight !== undefined && weight !== null) {
+        return parseFloat(weight);
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Failed to fetch weight:', error);
+      // Don't show error toast, just log it - weight fetching is optional
+      return null;
+    } finally {
+      setIsFetchingWeight(false);
     }
   };
 
