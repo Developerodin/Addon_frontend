@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
+import JsBarcode from "jsbarcode";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { YarnBox, UpdateYarnBoxPayload } from "@/shared/services/yarnBoxService";
 
@@ -745,6 +746,39 @@ const ProcessOrderPage = () => {
     }
   };
 
+  // Helper function to generate barcode SVG
+  const generateBarcodeSVG = (barcodeValue: string): string => {
+    try {
+      // Create a temporary container div
+      const tempDiv = document.createElement('div');
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      tempDiv.appendChild(svg);
+      
+      // Generate barcode
+      JsBarcode(svg, barcodeValue, {
+        format: "CODE128",
+        width: 2,
+        height: 60,
+        displayValue: true,
+        fontSize: 14,
+        margin: 10,
+        background: "transparent"
+      });
+      
+      // Get the SVG HTML
+      const svgHTML = svg.outerHTML;
+      
+      // Clean up
+      tempDiv.remove();
+      
+      return svgHTML;
+    } catch (error) {
+      console.error('Error generating barcode:', error);
+      // Fallback to text if barcode generation fails
+      return `<div style="font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; padding: 10px;">${barcodeValue}</div>`;
+    }
+  };
+
   const handlePrintAllBarcodes = () => {
     if (!order || boxes.length === 0) {
       toast.error('No boxes available to print');
@@ -768,12 +802,15 @@ const ProcessOrderPage = () => {
           </h3>
           <div class="barcode-container">
             ${lotBoxes.map((box) => {
+              const barcodeSVG = generateBarcodeSVG(box.barcode);
               return `
                 <div class="barcode-item">
                   <div class="barcode-label">Box ID</div>
                   <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
                   <div class="barcode-label">Barcode</div>
-                  <div class="barcode-value">${box.barcode}</div>
+                  <div class="barcode-value" style="display: flex; justify-content: center; align-items: center; padding: 10px;">
+                    ${barcodeSVG}
+                  </div>
                   <div class="box-info" style="margin-top: 5px; color: #666;">Lot: ${lotNumber}</div>
                 </div>
               `;
@@ -791,12 +828,15 @@ const ProcessOrderPage = () => {
         </h3>
         <div class="barcode-container">
           ${boxesByLot.unassigned.map((box) => {
+            const barcodeSVG = generateBarcodeSVG(box.barcode);
             return `
               <div class="barcode-item">
                 <div class="barcode-label">Box ID</div>
                 <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
                 <div class="barcode-label">Barcode</div>
-                <div class="barcode-value">${box.barcode}</div>
+                <div class="barcode-value" style="display: flex; justify-content: center; align-items: center; padding: 10px;">
+                  ${barcodeSVG}
+                </div>
               </div>
             `;
           }).join('')}
@@ -856,6 +896,13 @@ const ProcessOrderPage = () => {
               padding: 10px;
               background: #f5f5f5;
               border: 1px dashed #ccc;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+            }
+            .barcode-value svg {
+              max-width: 100%;
+              height: auto;
             }
             .box-info {
               font-size: 11px;
@@ -1147,6 +1194,13 @@ const ProcessOrderPage = () => {
                               padding: 10px;
                               background: #f5f5f5;
                               border: 1px dashed #ccc;
+                              display: flex;
+                              justify-content: center;
+                              align-items: center;
+                            }
+                            .barcode-value svg {
+                              max-width: 100%;
+                              height: auto;
                             }
                             .box-info {
                               font-size: 11px;
@@ -1170,12 +1224,15 @@ const ProcessOrderPage = () => {
                           </div>
                           <div class="barcode-container">
                             ${lotBoxes.map((box) => {
+                              const barcodeSVG = generateBarcodeSVG(box.barcode);
                               return `
                                 <div class="barcode-item">
                                   <div class="barcode-label">Box ID</div>
                                   <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
                                   <div class="barcode-label">Barcode</div>
-                                  <div class="barcode-value">${box.barcode}</div>
+                                  <div class="barcode-value" style="display: flex; justify-content: center; align-items: center; padding: 10px;">
+                                    ${barcodeSVG}
+                                  </div>
                                   <div class="box-info" style="margin-top: 5px; color: #666;">Lot: ${lotNumber}</div>
                                 </div>
                               `;

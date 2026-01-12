@@ -30,6 +30,7 @@
     "filepond-plugin-image-preview": "^4.6.12",
     "firebase": "^10.11.0",
     "js-cookie": "3.0.5",
+    "jsbarcode": "^3.12.3",
     "next": "14.2.1",
     "preline": "1.9.0",
     "react": "^18",
