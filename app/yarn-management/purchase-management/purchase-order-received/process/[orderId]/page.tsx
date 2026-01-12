@@ -856,6 +856,61 @@ const ProcessOrderPage = () => {
     }
   };
 
+  // Helper function to get box details for printing
+  const getBoxPrintDetails = (box: YarnBox) => {
+    const boxId = box._id || box.id || box.boxId;
+    const data = boxData[boxId];
+    const yarnName = data?.yarnName || box.yarnName || '';
+    const shadeCode = data?.shadeCode || box.shadeCode || '';
+    
+    // Try to find matching order item to get additional details
+    let yarnColour = '';
+    let shadeName = '';
+    
+    if (order && yarnName) {
+      const matchingItem = order.items.find(item => item.yarnName === yarnName);
+      if (matchingItem) {
+        // Use yarnCode as shade number if available
+        shadeName = matchingItem.shadeCode || shadeCode || '';
+        
+        // Try to extract yarn colour from yarnName (format: count/size-colour-type/sub-type)
+        // Yarn name format is typically: "40s-Red-Cotton/Combed" or similar
+        if (matchingItem.yarnCode) {
+          // yarnCode might contain shade information
+          shadeName = matchingItem.yarnCode;
+        }
+        
+        // Extract colour from yarnName if it follows the pattern
+        if (yarnName.includes('-')) {
+          const parts = yarnName.split('-');
+          // Usually format is: count-colour-type/subtype
+          if (parts.length >= 2) {
+            yarnColour = parts[1] || '';
+          }
+        }
+      }
+    }
+    
+    // If yarnName contains colour info, try to extract it
+    if (!yarnColour && yarnName) {
+      const parts = yarnName.split('-');
+      if (parts.length >= 2) {
+        yarnColour = parts[1] || '';
+      }
+    }
+    
+    // Use shadeCode as shade number (shade number = shade code)
+    const shadeNumber = shadeCode || '-';
+    
+    return {
+      yarnName: yarnName || '-',
+      shadeCode: shadeNumber,
+      shadeNumber: shadeNumber,
+      yarnColour: yarnColour || shadeCode || '-',
+      shadeName: shadeName || shadeCode || '-'
+    };
+  };
+
   const handlePrintAllBarcodes = () => {
     if (!order || boxes.length === 0) {
       toast.error('No boxes available to print');
@@ -880,15 +935,41 @@ const ProcessOrderPage = () => {
           <div class="barcode-container">
             ${lotBoxes.map((box) => {
               const barcodeSVG = generateBarcodeSVG(box.barcode);
+              const details = getBoxPrintDetails(box);
               return `
                 <div class="barcode-item">
-                  <div class="barcode-label">Box ID</div>
-                  <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
-                  <div class="barcode-label">Barcode</div>
-                  <div class="barcode-value" style="display: flex; justify-content: center; align-items: center; padding: 10px;">
-                    ${barcodeSVG}
+                  <div class="box-header-info">
+                    <div class="barcode-label">Box ID</div>
+                    <div class="box-info" style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">${box.boxId}</div>
                   </div>
-                  <div class="box-info" style="margin-top: 5px; color: #666;">Lot: ${lotNumber}</div>
+                  <div class="barcode-section">
+                    <div class="barcode-label">Barcode</div>
+                    <div class="barcode-value">
+                      ${barcodeSVG}
+                    </div>
+                  </div>
+                  <div class="box-details-section">
+                    <div class="detail-row">
+                      <span class="detail-label">Yarn Name:</span>
+                      <span class="detail-value">${details.yarnName}</span>
+                    </div>
+                    <div class="detail-row">
+                      <span class="detail-label">Shade Number:</span>
+                      <span class="detail-value">${details.shadeCode}</span>
+                    </div>
+                    <div class="detail-row">
+                      <span class="detail-label">Yarn Colour:</span>
+                      <span class="detail-value">${details.yarnColour}</span>
+                    </div>
+                    <div class="detail-row">
+                      <span class="detail-label">Shade Name:</span>
+                      <span class="detail-value">${details.shadeName}</span>
+                    </div>
+                    <div class="detail-row lot-info">
+                      <span class="detail-label">Lot:</span>
+                      <span class="detail-value">${lotNumber}</span>
+                    </div>
+                  </div>
                 </div>
               `;
             }).join('')}
@@ -906,13 +987,36 @@ const ProcessOrderPage = () => {
         <div class="barcode-container">
           ${boxesByLot.unassigned.map((box) => {
             const barcodeSVG = generateBarcodeSVG(box.barcode);
+            const details = getBoxPrintDetails(box);
             return `
               <div class="barcode-item">
-                <div class="barcode-label">Box ID</div>
-                <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
-                <div class="barcode-label">Barcode</div>
-                <div class="barcode-value" style="display: flex; justify-content: center; align-items: center; padding: 10px;">
-                  ${barcodeSVG}
+                <div class="box-header-info">
+                  <div class="barcode-label">Box ID</div>
+                  <div class="box-info" style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">${box.boxId}</div>
+                </div>
+                <div class="barcode-section">
+                  <div class="barcode-label">Barcode</div>
+                  <div class="barcode-value">
+                    ${barcodeSVG}
+                  </div>
+                </div>
+                <div class="box-details-section">
+                  <div class="detail-row">
+                    <span class="detail-label">Yarn Name:</span>
+                    <span class="detail-value">${details.yarnName}</span>
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">Shade Number:</span>
+                    <span class="detail-value">${details.shadeCode}</span>
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">Yarn Colour:</span>
+                    <span class="detail-value">${details.yarnColour}</span>
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">Shade Name:</span>
+                    <span class="detail-value">${details.shadeName}</span>
+                  </div>
                 </div>
               </div>
             `;
@@ -950,45 +1054,97 @@ const ProcessOrderPage = () => {
             }
             .barcode-container {
               display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 20px;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 25px;
               margin-top: 20px;
             }
             .barcode-item {
-              border: 1px solid #ddd;
-              padding: 15px;
+              border: 2px solid #ddd;
+              padding: 20px;
               text-align: center;
               page-break-inside: avoid;
+              min-height: 400px;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              background: #fff;
+              border-radius: 8px;
+            }
+            .box-header-info {
+              margin-bottom: 12px;
             }
             .barcode-label {
-              font-size: 12px;
+              font-size: 11px;
               color: #666;
               margin-bottom: 5px;
+              font-weight: 600;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            .barcode-section {
+              margin: 15px 0;
             }
             .barcode-value {
               font-family: 'Courier New', monospace;
-              font-size: 18px;
-              font-weight: bold;
               margin: 10px 0;
-              padding: 10px;
+              padding: 15px;
               background: #f5f5f5;
               border: 1px dashed #ccc;
               display: flex;
               justify-content: center;
               align-items: center;
+              border-radius: 4px;
             }
             .barcode-value svg {
               max-width: 100%;
               height: auto;
             }
-            .box-info {
-              font-size: 11px;
+            .box-details-section {
+              margin-top: 15px;
+              padding-top: 15px;
+              border-top: 1px solid #e0e0e0;
+              text-align: left;
+            }
+            .detail-row {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 8px;
+              font-size: 12px;
+            }
+            .detail-row:last-child {
+              margin-bottom: 0;
+            }
+            .detail-label {
+              font-weight: 600;
+              color: #555;
+              min-width: 100px;
+            }
+            .detail-value {
               color: #333;
-              margin-top: 5px;
+              font-weight: 500;
+              text-align: right;
+              flex: 1;
+              word-break: break-word;
+            }
+            .detail-row.lot-info {
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 1px solid #e0e0e0;
+              font-weight: 600;
+            }
+            .box-info {
+              font-size: 13px;
+              color: #333;
             }
             @media print {
               .barcode-container {
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
+              }
+              .barcode-item {
+                min-height: 420px;
+                padding: 18px;
               }
               .lot-section {
                 page-break-after: always;
@@ -1248,45 +1404,97 @@ const ProcessOrderPage = () => {
                             }
                             .barcode-container {
                               display: grid;
-                              grid-template-columns: repeat(3, 1fr);
-                              gap: 20px;
+                              grid-template-columns: repeat(2, 1fr);
+                              gap: 25px;
                               margin-top: 20px;
                             }
                             .barcode-item {
-                              border: 1px solid #ddd;
-                              padding: 15px;
+                              border: 2px solid #ddd;
+                              padding: 20px;
                               text-align: center;
                               page-break-inside: avoid;
+                              min-height: 400px;
+                              display: flex;
+                              flex-direction: column;
+                              justify-content: space-between;
+                              background: #fff;
+                              border-radius: 8px;
+                            }
+                            .box-header-info {
+                              margin-bottom: 12px;
                             }
                             .barcode-label {
-                              font-size: 12px;
+                              font-size: 11px;
                               color: #666;
                               margin-bottom: 5px;
+                              font-weight: 600;
+                              text-transform: uppercase;
+                              letter-spacing: 0.5px;
+                            }
+                            .barcode-section {
+                              margin: 15px 0;
                             }
                             .barcode-value {
                               font-family: 'Courier New', monospace;
-                              font-size: 18px;
-                              font-weight: bold;
                               margin: 10px 0;
-                              padding: 10px;
+                              padding: 15px;
                               background: #f5f5f5;
                               border: 1px dashed #ccc;
                               display: flex;
                               justify-content: center;
                               align-items: center;
+                              border-radius: 4px;
                             }
                             .barcode-value svg {
                               max-width: 100%;
                               height: auto;
                             }
-                            .box-info {
-                              font-size: 11px;
+                            .box-details-section {
+                              margin-top: 15px;
+                              padding-top: 15px;
+                              border-top: 1px solid #e0e0e0;
+                              text-align: left;
+                            }
+                            .detail-row {
+                              display: flex;
+                              justify-content: space-between;
+                              align-items: center;
+                              margin-bottom: 8px;
+                              font-size: 12px;
+                            }
+                            .detail-row:last-child {
+                              margin-bottom: 0;
+                            }
+                            .detail-label {
+                              font-weight: 600;
+                              color: #555;
+                              min-width: 100px;
+                            }
+                            .detail-value {
                               color: #333;
-                              margin-top: 5px;
+                              font-weight: 500;
+                              text-align: right;
+                              flex: 1;
+                              word-break: break-word;
+                            }
+                            .detail-row.lot-info {
+                              margin-top: 10px;
+                              padding-top: 10px;
+                              border-top: 1px solid #e0e0e0;
+                              font-weight: 600;
+                            }
+                            .box-info {
+                              font-size: 13px;
+                              color: #333;
                             }
                             @media print {
                               .barcode-container {
-                                grid-template-columns: repeat(3, 1fr);
+                                grid-template-columns: repeat(2, 1fr);
+                                gap: 20px;
+                              }
+                              .barcode-item {
+                                min-height: 420px;
+                                padding: 18px;
                               }
                             }
                           </style>
@@ -1302,15 +1510,41 @@ const ProcessOrderPage = () => {
                           <div class="barcode-container">
                             ${lotBoxes.map((box) => {
                               const barcodeSVG = generateBarcodeSVG(box.barcode);
+                              const details = getBoxPrintDetails(box);
                               return `
                                 <div class="barcode-item">
-                                  <div class="barcode-label">Box ID</div>
-                                  <div class="box-info" style="font-weight: bold; margin-bottom: 10px;">${box.boxId}</div>
-                                  <div class="barcode-label">Barcode</div>
-                                  <div class="barcode-value" style="display: flex; justify-content: center; align-items: center; padding: 10px;">
-                                    ${barcodeSVG}
+                                  <div class="box-header-info">
+                                    <div class="barcode-label">Box ID</div>
+                                    <div class="box-info" style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">${box.boxId}</div>
                                   </div>
-                                  <div class="box-info" style="margin-top: 5px; color: #666;">Lot: ${lotNumber}</div>
+                                  <div class="barcode-section">
+                                    <div class="barcode-label">Barcode</div>
+                                    <div class="barcode-value">
+                                      ${barcodeSVG}
+                                    </div>
+                                  </div>
+                                  <div class="box-details-section">
+                                    <div class="detail-row">
+                                      <span class="detail-label">Yarn Name:</span>
+                                      <span class="detail-value">${details.yarnName}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                      <span class="detail-label">Shade Number:</span>
+                                      <span class="detail-value">${details.shadeCode}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                      <span class="detail-label">Yarn Colour:</span>
+                                      <span class="detail-value">${details.yarnColour}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                      <span class="detail-label">Shade Name:</span>
+                                      <span class="detail-value">${details.shadeName}</span>
+                                    </div>
+                                    <div class="detail-row lot-info">
+                                      <span class="detail-label">Lot:</span>
+                                      <span class="detail-value">${lotNumber}</span>
+                                    </div>
+                                  </div>
                                 </div>
                               `;
                             }).join('')}
