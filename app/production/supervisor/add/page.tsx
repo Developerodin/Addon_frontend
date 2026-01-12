@@ -79,6 +79,7 @@ const AddOrderPage = () => {
 
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [isLoadingMachines, setIsLoadingMachines] = useState(true);
   const [showProductModal, setShowProductModal] = useState(false);
@@ -87,6 +88,13 @@ const AddOrderPage = () => {
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [yarnCatalogs, setYarnCatalogs] = useState<YarnCatalogMap>({});
+
+  // Valid production floors
+  const validProductionFloors = [
+    'Knitting', 'Linking', 'Checking', 'Washing', 'Boarding', 
+    'Silicon', 'Secondary Checking', 'Branding', 'Final Checking', 
+    'Warehouse', 'Dispatch'
+  ];
 
   // Fetch machines from API
   const fetchMachines = async () => {
@@ -105,7 +113,11 @@ const AddOrderPage = () => {
       
       const data = await response.json();
       const machinesArray = Array.isArray(data.results) ? data.results : [];
-      setMachines(machinesArray);
+      // Filter machines to only include those with valid production floors
+      const validMachines = machinesArray.filter((machine: Machine) => 
+        validProductionFloors.includes(machine.floor)
+      );
+      setMachines(validMachines);
     } catch (error) {
       console.error('Error fetching machines:', error);
       toast.error('Failed to load machines');
@@ -393,6 +405,7 @@ const AddOrderPage = () => {
     }
 
     setIsSubmitting(true);
+    setApiError(null); // Clear previous errors
     
     try {
       const orderData: CreateOrderRequest = {
@@ -408,17 +421,49 @@ const AddOrderPage = () => {
         orderNote: formData.orderNote || undefined
       };
 
+      console.log('Submitting order data:', orderData);
       const response = await productionService.createOrder(orderData);
+      console.log('Order creation response:', response);
       
       if (response.success) {
         toast.success('Production order created successfully!');
         router.push('/production/supervisor');
       } else {
-        toast.error(response.error?.message || 'Failed to create order');
+        // Extract error message with better handling
+        const errorMessage = response.error?.message || 'Failed to create order';
+        const errorCode = response.error?.code || 'UNKNOWN_ERROR';
+        const errorDetails = response.error?.details || [];
+        
+        console.error('Order creation error:', {
+          code: errorCode,
+          message: errorMessage,
+          details: errorDetails,
+          fullError: response.error,
+          fullResponse: response
+        });
+        
+        // Set API error state for display
+        setApiError(errorMessage);
+        
+        // Show error in toast
+        toast.error(errorMessage, {
+          duration: 6000,
+        });
+        
+        // Also show alert for critical errors
+        alert(`Error: ${errorMessage}\n\nPlease check the form and try again.`);
       }
     } catch (error: any) {
       console.error('Error creating order:', error);
-      toast.error(error.message || 'Failed to create order');
+      // This should rarely happen now since service returns errors in ApiResponse format
+      const errorMessage = error?.message || 'Failed to create order';
+      
+      // Set API error state
+      setApiError(errorMessage);
+      
+      // Show both toast and alert for unexpected errors
+      toast.error(errorMessage, { duration: 6000 });
+      alert(`Unexpected Error: ${errorMessage}\n\nPlease try again or contact support if the issue persists.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -441,6 +486,7 @@ const AddOrderPage = () => {
       orderNote: ''
     });
     setErrors({});
+    setApiError(null);
   };
 
   return (
@@ -491,6 +537,32 @@ const AddOrderPage = () => {
           <div className="box">
             <div className="box-body p-4">
               <form onSubmit={handleSubmit}>
+                {/* API Error Display */}
+                {apiError && (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <i className="ri-error-warning-line text-red-600 text-xl"></i>
+                      </div>
+                      <div className="ml-3 flex-1">
+                        <h3 className="text-sm font-medium text-red-800">Error Creating Order</h3>
+                        <div className="mt-2 text-sm text-red-700">
+                          <p>{apiError}</p>
+                        </div>
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={() => setApiError(null)}
+                            className="text-sm text-red-800 hover:text-red-900 underline"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Order Priority + Order Note */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
                   <div>
