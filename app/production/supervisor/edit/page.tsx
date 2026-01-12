@@ -91,7 +91,7 @@ const EditOrderContent = () => {
     }
   }, [orderId]);
 
-  // Load both order and machines together
+  //Load both order and machines together
   const loadOrderAndMachines = async () => {
     if (!orderId) return;
     
@@ -113,6 +113,13 @@ const EditOrderContent = () => {
     }
   };
 
+  // Valid production floors
+  const validProductionFloors = [
+    'Knitting', 'Linking', 'Checking', 'Washing', 'Boarding', 
+    'Silicon', 'Secondary Checking', 'Branding', 'Final Checking', 
+    'Warehouse', 'Dispatch'
+  ];
+
   // Fetch machines from API
   const fetchMachines = async () => {
     try {
@@ -130,7 +137,11 @@ const EditOrderContent = () => {
       
       const data = await response.json();
       const machinesArray = Array.isArray(data.results) ? data.results : [];
-      setMachines(machinesArray);
+      // Filter machines to only include those with valid production floors
+      const validMachines = machinesArray.filter((machine: Machine) => 
+        validProductionFloors.includes(machine.floor)
+      );
+      setMachines(validMachines);
     } catch (error) {
       console.error('Error fetching machines:', error);
       toast.error('Failed to load machines');
@@ -544,11 +555,36 @@ const EditOrderContent = () => {
         toast.success('Production order updated successfully!');
         router.push('/production/supervisor');
       } else {
-        toast.error(response.error?.message || 'Failed to update order');
+        // Extract error message with better handling
+        const errorMessage = response.error?.message || 'Failed to update order';
+        const errorCode = response.error?.code || 'UNKNOWN_ERROR';
+        const errorDetails = response.error?.details || [];
+        
+        console.error('Order update error:', {
+          code: errorCode,
+          message: errorMessage,
+          details: errorDetails,
+          fullError: response.error
+        });
+        
+        // Show error in toast
+        toast.error(errorMessage, {
+          duration: 5000,
+        });
+        
+        // Also show alert for critical errors
+        if (errorCode === '400' || errorCode === 'VALIDATION_ERROR') {
+          alert(`Error: ${errorMessage}\n\nPlease check the form and try again.`);
+        }
       }
     } catch (error: any) {
       console.error('Error updating order:', error);
-      toast.error(error.message || 'Failed to update order');
+      // This should rarely happen now since service returns errors in ApiResponse format
+      const errorMessage = error?.message || 'Failed to update order';
+      
+      // Show both toast and alert for unexpected errors
+      toast.error(errorMessage, { duration: 5000 });
+      alert(`Unexpected Error: ${errorMessage}\n\nPlease try again or contact support if the issue persists.`);
     } finally {
       setIsSubmitting(false);
     }

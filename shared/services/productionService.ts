@@ -243,10 +243,44 @@ class ProductionService {
 
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, config);
-      const data = await response.json();
+      
+      // Try to parse JSON, but handle cases where response might not be JSON
+      let data: any;
+      const contentType = response.headers.get('content-type');
+      const isJson = contentType && contentType.includes('application/json');
+      
+      try {
+        const text = await response.text();
+        data = text ? (isJson ? JSON.parse(text) : { message: text }) : {};
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        data = { message: `Failed to parse response: ${response.statusText}` };
+      }
 
       if (!response.ok) {
-        throw new Error(data.error?.message || 'Request failed');
+        // Return error in ApiResponse format instead of throwing
+        const errorMessage = 
+          data.message || 
+          data.error?.message || 
+          data.error || 
+          `Request failed with status ${response.status}`;
+        
+        console.error('API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+          endpoint: `${this.baseUrl}${endpoint}`
+        });
+        
+        return {
+          success: false,
+          data: {} as T,
+          error: {
+            code: data.code || String(response.status),
+            message: errorMessage,
+            details: data.error?.details || data.details || []
+          }
+        };
       }
 
       // Handle both wrapped and direct response formats
@@ -262,7 +296,17 @@ class ProductionService {
       }
     } catch (error) {
       console.error('API Error:', error);
-      throw error;
+      // Handle network errors or JSON parsing errors
+      const errorMessage = error instanceof Error ? error.message : 'Network error occurred';
+      return {
+        success: false,
+        data: {} as T,
+        error: {
+          code: 'NETWORK_ERROR',
+          message: errorMessage,
+          details: []
+        }
+      };
     }
   }
 
