@@ -7,6 +7,9 @@ import FloorProgression from "@/shared/components/production/FloorProgression";
 import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
+import RepairTransferModal from "@/shared/components/production/RepairTransferModal";
+import { getPreviousFloor } from "@/shared/utils/productionUtils";
+import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 
 interface ArticleLog {
   id: string;
@@ -27,6 +30,10 @@ interface FloorQuantities {
   m2Quantity?: number;
   m3Quantity?: number;
   m4Quantity?: number;
+  m2Transferred?: number;
+  m2Remaining?: number;
+  repairReceived?: number;
+  repairFromFloor?: string;
   repairStatus?: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected';
   repairRemarks?: string;
 }
@@ -112,6 +119,13 @@ const CheckingFloorSupervisorPage = () => {
   });
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  const [showRepairModal, setShowRepairModal] = useState(false);
+  const [selectedRepairArticle, setSelectedRepairArticle] = useState<{
+    articleId: string;
+    articleNumber: string;
+    orderId: string;
+    linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
+  } | null>(null);
 
   // Load checking floor orders from API
   const loadOrders = async () => {
@@ -1209,9 +1223,12 @@ const CheckingFloorSupervisorPage = () => {
                         <label className="form-label">
                           {article.linkingType === 'Auto Linking' ? 'Received from Knitting' : 'Received from Linking'}
                         </label>
-                        <div className="text-lg font-semibold text-blue-600">
-                          {checkingFloor.data?.received || 0}
-                        </div>
+                        <ReceivedQuantityDisplay
+                          received={checkingFloor.data?.received || 0}
+                          repairReceived={checkingFloor.data?.repairReceived}
+                          repairFromFloor={checkingFloor.data?.repairFromFloor}
+                          className="text-lg"
+                        />
                       </div>
                       <div>
                         <label className="form-label">M1 Completed Quantity *</label>
@@ -1288,6 +1305,58 @@ const CheckingFloorSupervisorPage = () => {
                             onChange={(value) => handleM2QuantityChange(articleId, value)}
                           />
                           <small className="text-yellow-600">To be reviewed</small>
+                          
+                          {/* M2 Status Card */}
+                          {(() => {
+                            const m2Quantity = checkingFloor.data?.m2Quantity || article.m2Quantity || 0;
+                            const m2Transferred = checkingFloor.data?.m2Transferred || 0;
+                            // According to docs: m2Remaining = m2Quantity (since m2Quantity is already reduced when items are sent)
+                            const m2Remaining = checkingFloor.data?.m2Remaining ?? m2Quantity;
+                            const previousFloor = getPreviousFloor('Checking', article.linkingType);
+                            
+                            // Show M2 status card if there are current M2 items OR if items have been sent for repair
+                            if (m2Quantity > 0 || m2Transferred > 0) {
+                              return (
+                                <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                                  <div className="text-xs font-semibold text-yellow-800 mb-2">M2 Repairable Items</div>
+                                  <div className="space-y-1 text-xs">
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600">Current M2:</span>
+                                      <span className="font-medium">{m2Quantity}</span>
+                                      {m2Transferred > 0 && (
+                                        <span className="text-gray-500 ml-2">({m2Transferred} sent for repair)</span>
+                                      )}
+                                    </div>
+                                    {m2Transferred > 0 && (
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Total Sent for Repair:</span>
+                                        <span className="font-medium text-yellow-700">{m2Transferred}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {m2Remaining > 0 && previousFloor && (
+                                    <button
+                                      type="button"
+                                      className="ti-btn ti-btn-warning ti-btn-sm w-full mt-2"
+                                      onClick={() => {
+                                        setSelectedRepairArticle({
+                                          articleId: article._id || article.id,
+                                          articleNumber: article.articleNumber,
+                                          orderId: selectedOrder.id,
+                                          linkingType: article.linkingType
+                                        });
+                                        setShowRepairModal(true);
+                                      }}
+                                    >
+                                      <i className="ri-tools-line me-1"></i>
+                                      Send M2 for Repair
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                         
                         <div>
@@ -1732,9 +1801,12 @@ const CheckingFloorSupervisorPage = () => {
                         <label className="form-label">
                           {article.linkingType === 'Auto Linking' ? 'Received from Knitting' : 'Received from Linking'}
                         </label>
-                        <div className="text-lg font-semibold text-blue-600">
-                          {checkingFloor.data?.received || 0}
-                        </div>
+                        <ReceivedQuantityDisplay
+                          received={checkingFloor.data?.received || 0}
+                          repairReceived={checkingFloor.data?.repairReceived}
+                          repairFromFloor={checkingFloor.data?.repairFromFloor}
+                          className="text-lg"
+                        />
                       </div>
                       <div>
                         <label className="form-label">Checking Completed Quantity (M1 - Good Quality)</label>
@@ -1963,6 +2035,38 @@ const CheckingFloorSupervisorPage = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Repair Transfer Modal */}
+      {showRepairModal && selectedRepairArticle && (
+        <RepairTransferModal
+          isOpen={showRepairModal}
+          onClose={() => {
+            setShowRepairModal(false);
+            setSelectedRepairArticle(null);
+          }}
+          articleId={selectedRepairArticle.articleId}
+          articleNumber={selectedRepairArticle.articleNumber}
+          orderId={selectedRepairArticle.orderId}
+          floor="Checking"
+          m2Remaining={(() => {
+            const article = selectedOrder?.articles.find(a => (a._id || a.id) === selectedRepairArticle.articleId);
+            if (!article) return 0;
+            const checkingFloor = getCheckingFloorData(article);
+            const m2Quantity = checkingFloor.data?.m2Quantity || article.m2Quantity || 0;
+            // According to docs: m2Remaining = m2Quantity (since m2Quantity is already reduced when items are sent)
+            return checkingFloor.data?.m2Remaining ?? m2Quantity;
+          })()}
+          previousFloor={(() => {
+            const prevFloor = getPreviousFloor('Checking', selectedRepairArticle.linkingType);
+            // Convert to API format (no spaces)
+            if (prevFloor === 'Final Checking') return 'FinalChecking';
+            return prevFloor || 'Linking';
+          })()}
+          onSuccess={() => {
+            loadOrders();
+          }}
+        />
       )}
     </div>
   );

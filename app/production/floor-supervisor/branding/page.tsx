@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, FloorOrderFilters } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
+import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 import NumericInput from "@/shared/utils/numericInput";
 
 interface ArticleLog {
@@ -907,7 +908,13 @@ const BrandingFloorSupervisorPage = () => {
                             <div className="text-gray-500 text-xs mt-0.5">{article.linkingType || 'N/A'}</div>
                           </td>
                           <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{plannedQty.toLocaleString()}</td>
-                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-blue-600 font-medium">{receivedQty.toLocaleString()}</td>
+                          <td className="px-2 py-1.5 border-r border-gray-300 align-top min-w-[120px]">
+                            <ReceivedQuantityDisplay
+                              received={receivedQty}
+                              repairReceived={article.floorQuantities?.branding?.repairReceived}
+                              repairFromFloor={article.floorQuantities?.branding?.repairFromFloor}
+                            />
+                          </td>
                           <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
                           <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
                           <td className="px-2 py-1.5 border-r border-gray-300 bg-yellow-50">
@@ -1094,7 +1101,13 @@ const BrandingFloorSupervisorPage = () => {
                               )}
                             </td>
                             <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{plannedQty.toLocaleString()}</td>
-                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-blue-600 font-medium">{receivedQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 border-r border-gray-300 align-top min-w-[120px]">
+                              <ReceivedQuantityDisplay
+                                received={receivedQty}
+                                repairReceived={article.floorQuantities?.branding?.repairReceived}
+                                repairFromFloor={article.floorQuantities?.branding?.repairFromFloor}
+                              />
+                            </td>
                             <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{completedQty.toLocaleString()}</td>
                             <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
                             <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>

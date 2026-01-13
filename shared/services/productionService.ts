@@ -49,14 +49,15 @@ export interface Article {
   createdAt?: string;
   updatedAt?: string;
   floorQuantities?: {
-    knitting: { received: number; completed: number; remaining: number; transferred: number; m4Quantity?: number };
-    linking: { received: number; completed: number; remaining: number; transferred: number };
-    checking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number };
-    washing: { received: number; completed: number; remaining: number; transferred: number };
-    boarding: { received: number; completed: number; remaining: number; transferred: number };
-    finalChecking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number };
-    branding: { received: number; completed: number; remaining: number; transferred: number };
-    warehouse: { received: number; completed: number; remaining: number; transferred: number };
+    knitting: { received: number; completed: number; remaining: number; transferred: number; m4Quantity?: number; repairReceived?: number; repairFromFloor?: string };
+    linking: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
+    checking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number; m2Transferred?: number; m2Remaining?: number; repairReceived?: number; repairFromFloor?: string };
+    secondaryChecking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number; m2Transferred?: number; m2Remaining?: number; repairReceived?: number; repairFromFloor?: string };
+    washing: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
+    boarding: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
+    finalChecking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number; m2Transferred?: number; m2Remaining?: number; repairReceived?: number; repairFromFloor?: string };
+    branding: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
+    warehouse: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
   };
 }
 
@@ -544,6 +545,23 @@ class ProductionService {
     return this.request('/floors/final-checking/forward-to-warehouse', {
       method: 'POST',
       body: JSON.stringify({ orderId, remarks }),
+    });
+  }
+
+  // M2 Repair Transfer API
+  async transferM2ForRepair(
+    floor: string,
+    orderId: string,
+    articleId: string,
+    repairData: {
+      quantity?: number;
+      remarks?: string;
+      targetFloor?: string; // Optional: allows user to select destination floor (defaults to immediate previous floor)
+    }
+  ): Promise<ApiResponse<any>> {
+    return this.request(`/floors/${floor}/repair/${orderId}/articles/${articleId}`, {
+      method: 'POST',
+      body: JSON.stringify(repairData),
     });
   }
 
