@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import Seo from "@/shared/layout-components/seo/seo";
+import JsBarcode from "jsbarcode";
 import yarnConeService, {
   GenerateConesResponse,
   YarnCone,
@@ -210,6 +211,39 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     }
   };
 
+  // Helper function to generate barcode SVG
+  const generateBarcodeSVG = (barcodeValue: string): string => {
+    try {
+      // Create a temporary container div
+      const tempDiv = document.createElement('div');
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      tempDiv.appendChild(svg);
+      
+      // Generate barcode
+      JsBarcode(svg, barcodeValue, {
+        format: "CODE128",
+        width: 2,
+        height: 60,
+        displayValue: true,
+        fontSize: 14,
+        margin: 10,
+        background: "transparent"
+      });
+      
+      // Get the SVG HTML
+      const svgHTML = svg.outerHTML;
+      
+      // Clean up
+      tempDiv.remove();
+      
+      return svgHTML;
+    } catch (error) {
+      console.error('Error generating barcode:', error);
+      // Fallback to text if barcode generation fails
+      return `<div style="font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; padding: 10px;">${barcodeValue}</div>`;
+    }
+  };
+
   const handlePrintCones = () => {
     if (!box || cones.length === 0) {
       toast.error("No cones available to print");
@@ -227,63 +261,153 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Print Cones - ${box.boxId}</title>
+          <title>Print Cone Barcodes - ${box.boxId}</title>
           <style>
             body {
               font-family: Arial, sans-serif;
               padding: 20px;
             }
-            h2 {
-              margin-bottom: 5px;
-            }
-            p {
-              margin: 4px 0;
+            .header-info {
+              background: #e9ecef;
+              padding: 15px;
+              margin-bottom: 20px;
+              border-radius: 5px;
             }
             .barcode-container {
               display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 20px;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 25px;
               margin-top: 20px;
             }
             .barcode-item {
-              border: 1px solid #ddd;
-              padding: 15px;
+              border: 2px solid #ddd;
+              padding: 20px;
               text-align: center;
               page-break-inside: avoid;
+              min-height: 400px;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              background: #fff;
+              border-radius: 8px;
+            }
+            .cone-header-info {
+              margin-bottom: 12px;
+            }
+            .barcode-label {
+              font-size: 11px;
+              color: #666;
+              margin-bottom: 5px;
+              font-weight: 600;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            .barcode-section {
+              margin-top: auto;
+              padding-top: 15px;
+              border-top: 1px solid #e0e0e0;
             }
             .barcode-value {
               font-family: 'Courier New', monospace;
-              font-size: 18px;
-              font-weight: bold;
               margin: 10px 0;
-              padding: 10px;
+              padding: 15px;
               background: #f5f5f5;
               border: 1px dashed #ccc;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              border-radius: 4px;
+            }
+            .barcode-value svg {
+              max-width: 100%;
+              height: auto;
+            }
+            .cone-details-section {
+              margin: 20px 0;
+              padding: 15px 0;
+              text-align: left;
+              flex: 1;
+            }
+            .detail-row {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 8px;
+              font-size: 12px;
+            }
+            .detail-row:last-child {
+              margin-bottom: 0;
+            }
+            .detail-label {
+              font-weight: 600;
+              color: #555;
+              min-width: 100px;
+            }
+            .detail-value {
+              color: #333;
+              font-weight: 500;
+              text-align: right;
+              flex: 1;
+              word-break: break-word;
             }
             .cone-info {
-              font-size: 11px;
+              font-size: 13px;
               color: #333;
-              margin-top: 5px;
             }
             @media print {
               .barcode-container {
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
+              }
+              .barcode-item {
+                min-height: 420px;
+                padding: 18px;
               }
             }
           </style>
         </head>
         <body>
-          <h2>Cone Barcodes - ${box.boxId}</h2>
-          <p>PO Number: ${box.poNumber} | Yarn: ${box.yarnName || "-"} | Total Cones: ${cones.length}</p>
+          <div class="header-info">
+            <h2 style="margin: 0 0 10px 0;">Cone Barcodes - ${box.boxId}</h2>
+            <p style="margin: 0;">PO Number: ${box.poNumber} | Yarn: ${box.yarnName || "-"} | Total Cones: ${cones.length}</p>
+          </div>
           <div class="barcode-container">
             ${cones
-              .map(
-                (cone) => `
-              <div class="barcode-item">
-                <div class="cone-info">Cone Barcode</div>
-                <div class="barcode-value">${cone.barcode}</div>
-              </div>`
-              )
+              .map((cone) => {
+                const barcodeSVG = generateBarcodeSVG(cone.barcode);
+                return `
+                <div class="barcode-item">
+                  <div class="cone-header-info">
+                    <div class="barcode-label">Cone Barcode</div>
+                    <div class="cone-info" style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">${cone.barcode}</div>
+                  </div>
+                  <div class="cone-details-section">
+                    <div class="detail-row">
+                      <span class="detail-label">Yarn Name:</span>
+                      <span class="detail-value">${box.yarnName || "-"}</span>
+                    </div>
+                    <div class="detail-row">
+                      <span class="detail-label">PO Number:</span>
+                      <span class="detail-value">${box.poNumber || "-"}</span>
+                    </div>
+                    <div class="detail-row">
+                      <span class="detail-label">Shade Code:</span>
+                      <span class="detail-value">${box.shadeCode || "-"}</span>
+                    </div>
+                    <div class="detail-row">
+                      <span class="detail-label">Lot Number:</span>
+                      <span class="detail-value">${box.lotNumber || "-"}</span>
+                    </div>
+                  </div>
+                  <div class="barcode-section">
+                    <div class="barcode-label">Barcode</div>
+                    <div class="barcode-value">
+                      ${barcodeSVG}
+                    </div>
+                  </div>
+                </div>
+              `;
+              })
               .join("")}
           </div>
         </body>
@@ -294,7 +418,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     printWindow.document.close();
     setTimeout(() => {
       printWindow.print();
-      toast.success(`${cones.length} cone barcode(s) sent to printer`);
+      toast.success(`${cones.length} cone barcode(s) printed successfully`);
     }, 250);
   };
 
@@ -487,6 +611,17 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                 <i className="ri-barcode-line text-primary"></i>
                 Generated Cones ({cones.length})
               </h3>
+              {cones.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handlePrintCones}
+                  className="ti-btn ti-btn-primary"
+                  title="Print all cone barcodes"
+                >
+                  <i className="ri-printer-line me-2"></i>
+                  Print Cone Barcodes
+                </button>
+              )}
             </div>
             <div className="box-body">
               {cones.length > 0 && (
