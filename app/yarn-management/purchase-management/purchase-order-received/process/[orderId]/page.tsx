@@ -311,39 +311,57 @@ const ProcessOrderPage = () => {
         
         setBoxes(boxesData);
         
-        // Initialize box data state
-        const initialBoxData: Record<string, any> = {};
-        boxesData.forEach((box) => {
-          const boxId = box._id || box.id || box.boxId;
-          if (boxId) {
-            // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
-            const yarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
-              ? box.yarnName 
-              : '';
-            
-            // Auto-fill from PO items if lot number exists
-            let autoFilledYarnName = yarnName;
-            let autoFilledShadeCode = box.shadeCode || '';
-            const boxLotNumber = box.lotNumber || '';
-            
-            if (boxLotNumber && rawApiOrder) {
-              const poItemData = getPOItemDataFromLotNumber(boxLotNumber);
-              if (poItemData) {
-                autoFilledYarnName = poItemData.yarnName;
-                autoFilledShadeCode = poItemData.shadeCode;
+        // Initialize box data state, preserving existing data
+        setBoxData(prev => {
+          const initialBoxData: Record<string, any> = { ...prev };
+          boxesData.forEach((box) => {
+            const boxId = box._id || box.id || box.boxId;
+            if (boxId) {
+              // Get existing data for this box
+              const existingData = prev[boxId] || {};
+              
+              // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
+              const yarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
+                ? box.yarnName 
+                : '';
+              
+              // Auto-fill from PO items if lot number exists
+              let autoFilledYarnName = yarnName;
+              let autoFilledShadeCode = box.shadeCode || '';
+              const boxLotNumber = box.lotNumber || '';
+              
+              if (boxLotNumber && rawApiOrder) {
+                const poItemData = getPOItemDataFromLotNumber(boxLotNumber);
+                if (poItemData) {
+                  autoFilledYarnName = poItemData.yarnName;
+                  autoFilledShadeCode = poItemData.shadeCode;
+                }
+              }
+              
+              // Only set if box doesn't have existing data, or preserve existing data if it exists
+              if (!existingData.yarnName && !existingData.shadeCode && !existingData.lotNumber) {
+                // No existing data, use initialized values
+                initialBoxData[boxId] = {
+                  yarnName: autoFilledYarnName,
+                  shadeCode: autoFilledShadeCode,
+                  lotNumber: boxLotNumber,
+                  boxWeight: box.boxWeight?.toString() || '',
+                  numberOfCones: box.numberOfCones?.toString() || ''
+                };
+              } else {
+                // Preserve existing data, only update if server has new data
+                initialBoxData[boxId] = {
+                  yarnName: existingData.yarnName || autoFilledYarnName,
+                  shadeCode: existingData.shadeCode || autoFilledShadeCode,
+                  lotNumber: existingData.lotNumber || boxLotNumber,
+                  boxWeight: existingData.boxWeight || box.boxWeight?.toString() || '',
+                  numberOfCones: existingData.numberOfCones || box.numberOfCones?.toString() || ''
+                };
               }
             }
-            
-            initialBoxData[boxId] = {
-              yarnName: autoFilledYarnName,
-              shadeCode: autoFilledShadeCode,
-              lotNumber: boxLotNumber,
-              boxWeight: box.boxWeight?.toString() || '',
-              numberOfCones: box.numberOfCones?.toString() || ''
-            };
-          }
+          });
+          return initialBoxData;
         });
-        setBoxData(prev => ({ ...prev, ...initialBoxData }));
       } catch (error) {
         console.error('Failed to fetch boxes:', error);
         toast.error('Failed to load boxes');
@@ -847,31 +865,52 @@ const ProcessOrderPage = () => {
         }
         setBoxes(boxesData);
         
-        // Update box data state with refreshed data
-        const updatedBoxData: Record<string, any> = {};
-        boxesData.forEach((box) => {
-          const refreshedBoxId = box._id || box.id || box.boxId;
-          if (refreshedBoxId) {
-            // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
-            const yarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
-              ? box.yarnName 
-              : '';
-            
-            updatedBoxData[refreshedBoxId] = {
-              yarnName: yarnName,
-              shadeCode: box.shadeCode || '',
-              lotNumber: box.lotNumber || '',
-              boxWeight: box.boxWeight?.toString() || '',
-              numberOfCones: box.numberOfCones?.toString() || ''
-            };
-          }
+        // Update box data state with refreshed data, preserving existing data for other boxes
+        let calculatedBoxData: Record<string, any> = {};
+        setBoxData(prev => {
+          const updatedBoxData: Record<string, any> = { ...prev };
+          boxesData.forEach((box) => {
+            const refreshedBoxId = box._id || box.id || box.boxId;
+            if (refreshedBoxId) {
+              // Get existing data for this box
+              const existingData = prev[refreshedBoxId] || {};
+              
+              // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
+              const refreshedYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
+                ? box.yarnName 
+                : '';
+              
+              // For the box that was just updated, use server data
+              // For other boxes, preserve existing data if it exists and is not empty
+              if (refreshedBoxId === boxId) {
+                // This is the box that was just updated - use server data
+                updatedBoxData[refreshedBoxId] = {
+                  yarnName: refreshedYarnName,
+                  shadeCode: box.shadeCode || '',
+                  lotNumber: box.lotNumber || '',
+                  boxWeight: box.boxWeight?.toString() || '',
+                  numberOfCones: box.numberOfCones?.toString() || ''
+                };
+              } else {
+                // This is another box - preserve existing data if it exists
+                updatedBoxData[refreshedBoxId] = {
+                  yarnName: existingData.yarnName || refreshedYarnName,
+                  shadeCode: existingData.shadeCode || box.shadeCode || '',
+                  lotNumber: existingData.lotNumber || box.lotNumber || '',
+                  boxWeight: existingData.boxWeight || box.boxWeight?.toString() || '',
+                  numberOfCones: existingData.numberOfCones || box.numberOfCones?.toString() || ''
+                };
+              }
+            }
+          });
+          calculatedBoxData = updatedBoxData;
+          return updatedBoxData;
         });
-        setBoxData(prev => ({ ...prev, ...updatedBoxData }));
         
         // Check if all boxes are now completed and auto-update status to goods_received
         const allCompleted = boxesData.every((b) => {
           const bId = b._id || b.id || b.boxId;
-          const bData = updatedBoxData[bId] || {};
+          const bData = calculatedBoxData[bId] || {};
           return bData.yarnName && 
                  bData.lotNumber && 
                  bData.boxWeight && 
@@ -1036,6 +1075,10 @@ const ProcessOrderPage = () => {
                   </div>
                   <div class="box-details-section">
                     <div class="detail-row">
+                      <span class="detail-label">Supplier:</span>
+                      <span class="detail-value">${order.supplier || '-'}</span>
+                    </div>
+                    <div class="detail-row">
                       <span class="detail-label">Yarn Name:</span>
                       <span class="detail-value">${details.yarnName}</span>
                     </div>
@@ -1087,6 +1130,10 @@ const ProcessOrderPage = () => {
                   </div>
                 </div>
                 <div class="box-details-section">
+                  <div class="detail-row">
+                    <span class="detail-label">Supplier:</span>
+                    <span class="detail-value">${order.supplier || '-'}</span>
+                  </div>
                   <div class="detail-row">
                     <span class="detail-label">Yarn Name:</span>
                     <span class="detail-value">${details.yarnName}</span>
@@ -1196,7 +1243,7 @@ const ProcessOrderPage = () => {
               justify-content: space-between;
               align-items: center;
               margin-bottom: 8px;
-              font-size: 12px;
+              font-size: 13px;
             }
             .detail-row:last-child {
               margin-bottom: 0;
@@ -1546,7 +1593,7 @@ const ProcessOrderPage = () => {
                               justify-content: space-between;
                               align-items: center;
                               margin-bottom: 8px;
-                              font-size: 12px;
+                              font-size: 13px;
                             }
                             .detail-row:last-child {
                               margin-bottom: 0;
@@ -1610,6 +1657,10 @@ const ProcessOrderPage = () => {
                                     </div>
                                   </div>
                                   <div class="box-details-section">
+                                    <div class="detail-row">
+                                      <span class="detail-label">Supplier:</span>
+                                      <span class="detail-value">${order.supplier || '-'}</span>
+                                    </div>
                                     <div class="detail-row">
                                       <span class="detail-label">Yarn Name:</span>
                                       <span class="detail-value">${details.yarnName}</span>
