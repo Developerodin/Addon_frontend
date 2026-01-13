@@ -91,7 +91,7 @@ const EditOrderContent = () => {
     }
   }, [orderId]);
 
-  //Load both order and machines together
+  // Load both order and machines together
   const loadOrderAndMachines = async () => {
     if (!orderId) return;
     
