@@ -7,7 +7,6 @@ import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 import PurchaseForm, { PurchaseOrderData } from "../components/PurchaseForm";
 import yarnPurchaseOrderService, { CreatePurchaseOrderPayload, PurchaseOrderItemPayload } from "@/shared/services/yarnPurchaseOrderService";
-import yarnCatalogService, { YarnCatalogQueryParams } from "@/shared/services/yarnCatalogService";
 
 const AddPurchasePage = () => {
   const router = useRouter();
@@ -152,59 +151,20 @@ const AddPurchasePage = () => {
           return item.yarnId;
         }
 
-        if (item.selectedCatalog?.id) {
-          return item.selectedCatalog.id;
+        // Use yarnCatalogId from supplier yarn detail
+        if (item.selectedYarnDetail?.yarnCatalogId) {
+          return item.selectedYarnDetail.yarnCatalogId;
         }
 
+        // Try to extract from yarnCatalog object reference
         const detailId = extractYarnId(item.selectedYarnDetail);
         if (detailId) {
           return detailId;
         }
 
-        const query: YarnCatalogQueryParams = {
-          limit: 20,
-          page: 1,
-        };
-
-        if (item.sizeCount) {
-          query.countSize = String(item.sizeCount);
-        }
-        if (item.yarnSubtypeId) {
-          query.yarnSubtype = String(item.yarnSubtypeId);
-        }
-        if (item.yarnTypeId) {
-          query.yarnType = String(item.yarnTypeId);
-        }
-        if (item.yarnName) {
-          query.yarnName = item.yarnName;
-        }
-
-        try {
-          console.log("[AddPurchasePage] Fetching yarn catalog for item", { item, query });
-          const catalogResponse = await yarnCatalogService.getYarnCatalogs(query);
-          console.log("[AddPurchasePage] Yarn catalog response", catalogResponse);
-
-          const byExactName = catalogResponse.results.find(
-            (catalog) => catalog.yarnName?.toLowerCase() === item.yarnName?.toLowerCase()
-          );
-          if (byExactName) {
-            return byExactName.id;
-          }
-
-          const byCountSize = catalogResponse.results.find((catalog) => {
-            const catalogCountId = catalog.countSize?.id || (catalog.countSize as any)?._id;
-            return catalogCountId && String(catalogCountId) === String(item.sizeCount);
-          });
-          if (byCountSize) {
-            return byCountSize.id;
-          }
-
-          const fallbackCatalog = catalogResponse.results[0];
-          return fallbackCatalog?.id;
-        } catch (error) {
-          console.error("[AddPurchasePage] Failed to fetch yarn catalog", error);
-          return undefined;
-        }
+        // If no catalog ID is available, return undefined
+        // The user must select a yarn from supplier's yarn details
+        return undefined;
       };
 
       const itemsWithResolvedIds = await Promise.all(
@@ -230,7 +190,7 @@ const AddPurchasePage = () => {
 
       if (missingYarnIndex !== -1) {
         console.warn('[AddPurchasePage] Missing yarnId for item', missingYarnIndex + 1, itemsWithResolvedIds[missingYarnIndex]);
-        toast.error(`Please select a yarn from the supplier catalog for item ${missingYarnIndex + 1}`);
+        toast.error(`Please select a yarn from the supplier's yarn details for item ${missingYarnIndex + 1}`);
         setIsSubmitting(false);
         return;
       }
@@ -246,15 +206,13 @@ const AddPurchasePage = () => {
         });
 
         const resolveSizeCount = () => {
+          // Prioritize catalog countSize if available (from matched catalog)
           if (item.selectedCatalog?.countSize) {
             const catalogCountSize = item.selectedCatalog.countSize as any;
-            return (
-              catalogCountSize?.name ||
-              catalogCountSize?.label ||
-              catalogCountSize?.id ||
-              item.sizeCountName ||
-              item.sizeCount
-            );
+            const catalogCountSizeName = catalogCountSize?.name || catalogCountSize?.label;
+            if (catalogCountSizeName) {
+              return catalogCountSizeName;
+            }
           }
 
           if (!selectedDetail) {

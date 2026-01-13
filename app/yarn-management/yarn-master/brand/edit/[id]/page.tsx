@@ -61,6 +61,7 @@ const EditBrandPage = () => {
   const [yarnColors, setYarnColors] = useState<YarnColor[]>([]);
   const [yarnDetailsPage, setYarnDetailsPage] = useState(1);
   const [yarnDetailsPerPage, setYarnDetailsPerPage] = useState(10);
+  const [originalSupplierData, setOriginalSupplierData] = useState<Supplier | null>(null);
   
   // Filter States
   const [filterYarnName, setFilterYarnName] = useState('');
@@ -206,6 +207,9 @@ const EditBrandPage = () => {
     try {
       const data: Supplier = await supplierService.getSupplierById(id);
       
+      // Store original supplier data for matching
+      setOriginalSupplierData(data);
+      
       // Build catalog map from current yarnCatalogs state
       const catalogMap = yarnCatalogs.reduce<Record<string, YarnCatalog>>((acc, catalog) => {
         if (catalog.id) {
@@ -349,20 +353,87 @@ const EditBrandPage = () => {
     (index: number, catalogId: string) => {
       const selectedCatalog = catalogId ? yarnCatalogMap[catalogId] : undefined;
 
-      updateYarnDetail(index, {
-        yarnCatalogId: catalogId,
-        yarnName: selectedCatalog?.yarnName ?? '',
-        yarnType: selectedCatalog?.yarnType?.id ?? '',
-        yarnsubtype: selectedCatalog?.yarnSubtype?.id ?? '',
+      if (!catalogId || !selectedCatalog) {
+        updateYarnDetail(index, {
+          yarnCatalogId: catalogId,
+          yarnName: selectedCatalog?.yarnName ?? '',
+          yarnType: selectedCatalog?.yarnType?.id ?? '',
+          yarnsubtype: selectedCatalog?.yarnSubtype?.id ?? '',
+        });
+        
+        if (!catalogId) {
+          console.debug('[EditBrandPage] Yarn catalog cleared for detail', { index });
+        } else if (!selectedCatalog) {
+          console.warn('[EditBrandPage] Selected yarn catalog not found in lookup', { index, catalogId });
+        }
+        return;
+      }
+
+      const catalogYarnName = selectedCatalog.yarnName?.trim() || '';
+      
+      // Try to match with existing supplier yarn details by yarn name
+      let matchingSupplierDetail: SupplierYarnDetail | undefined;
+      if (originalSupplierData?.yarnDetails && catalogYarnName) {
+        matchingSupplierDetail = originalSupplierData.yarnDetails.find((detail) => {
+          const detailYarnName = detail.yarnName?.trim() || (detail as any)?.yarn?.trim() || '';
+          return detailYarnName.toLowerCase() === catalogYarnName.toLowerCase();
+        });
+      }
+
+      console.log('[EditBrandPage] Catalog selected, matching with supplier details', {
+        index,
+        catalogId,
+        catalogYarnName,
+        foundMatch: Boolean(matchingSupplierDetail),
       });
 
-      if (!catalogId) {
-        console.debug('[EditBrandPage] Yarn catalog cleared for detail', { index });
-      } else if (!selectedCatalog) {
-        console.warn('[EditBrandPage] Selected yarn catalog not found in lookup', { index, catalogId });
+      // Extract color ID from matching supplier detail or keep existing
+      const currentDetail = formData.yarnDetails[index];
+      let colorId = currentDetail?.color || '';
+      
+      if (matchingSupplierDetail) {
+        const detailColorId =
+          typeof matchingSupplierDetail.color === 'string'
+            ? matchingSupplierDetail.color
+            : matchingSupplierDetail.color?.id || (matchingSupplierDetail.color as { _id?: string })?._id || '';
+        if (detailColorId) {
+          colorId = detailColorId;
+        }
       }
+
+      // Extract shade number from matching supplier detail or keep existing
+      let shadeNumber = currentDetail?.shadeNumber || '';
+      if (matchingSupplierDetail?.shadeNumber) {
+        shadeNumber = matchingSupplierDetail.shadeNumber;
+      }
+
+      // Extract tear weight from matching supplier detail or keep existing
+      let tearweight = currentDetail?.tearweight || '';
+      if (matchingSupplierDetail?.tearweight) {
+        tearweight = typeof matchingSupplierDetail.tearweight === 'string'
+          ? matchingSupplierDetail.tearweight
+          : String(matchingSupplierDetail.tearweight);
+      }
+
+      updateYarnDetail(index, {
+        yarnCatalogId: catalogId,
+        yarnName: catalogYarnName,
+        yarnType: selectedCatalog.yarnType?.id ?? '',
+        yarnsubtype: selectedCatalog.yarnSubtype?.id ?? '',
+        color: colorId,
+        shadeNumber: shadeNumber,
+        tearweight: tearweight,
+      });
+
+      console.log('[EditBrandPage] Yarn detail updated with catalog and matched supplier data', {
+        index,
+        catalogYarnName,
+        colorId,
+        shadeNumber,
+        tearweight,
+      });
     },
-    [updateYarnDetail, yarnCatalogMap],
+    [updateYarnDetail, yarnCatalogMap, originalSupplierData, formData.yarnDetails],
   );
 
   const handleYarnDetailChange = useCallback(

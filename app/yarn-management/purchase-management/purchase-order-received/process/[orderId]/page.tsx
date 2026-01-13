@@ -145,6 +145,7 @@ const ProcessOrderPage = () => {
   const orderId = params?.orderId as string;
 
   const [order, setOrder] = useState<ReceivedOrder | null>(null);
+  const [rawApiOrder, setRawApiOrder] = useState<any>(null); // Store raw API response for accessing receivedLotDetails with poItems
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
   const [boxes, setBoxes] = useState<YarnBox[]>([]);
   const [isLoadingBoxes, setIsLoadingBoxes] = useState(false);
@@ -153,7 +154,6 @@ const ProcessOrderPage = () => {
   const [boxData, setBoxData] = useState<Record<string, {
     yarnName: string;
     shadeCode: string;
-    orderQty: number;
     lotNumber: string;
     boxWeight: string;
     numberOfCones: string;
@@ -235,7 +235,6 @@ const ProcessOrderPage = () => {
             [activeBoxId]: {
               yarnName: prev[activeBoxId]?.yarnName || defaultYarnName,
               shadeCode: prev[activeBoxId]?.shadeCode || box.shadeCode || '',
-              orderQty: prev[activeBoxId]?.orderQty || box.orderQty || 0,
               lotNumber: prev[activeBoxId]?.lotNumber || box.lotNumber || '',
               boxWeight: weight.toString(),
               numberOfCones: prev[activeBoxId]?.numberOfCones || box.numberOfCones?.toString() || ''
@@ -267,6 +266,9 @@ const ProcessOrderPage = () => {
         console.log('Process page - fetching order with id:', orderId);
         const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
         console.log('Process page - API response:', apiOrder);
+        
+        // Store raw API response for accessing receivedLotDetails with poItems
+        setRawApiOrder(apiOrder);
         
         const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
         console.log('Process page - mapped order:', mappedOrder);
@@ -309,27 +311,57 @@ const ProcessOrderPage = () => {
         
         setBoxes(boxesData);
         
-        // Initialize box data state
-        const initialBoxData: Record<string, any> = {};
-        boxesData.forEach((box) => {
-          const boxId = box._id || box.id || box.boxId;
-          if (boxId) {
-            // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
-            const yarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
-              ? box.yarnName 
-              : '';
-            
-            initialBoxData[boxId] = {
-              yarnName: yarnName,
-              shadeCode: box.shadeCode || '',
-              orderQty: box.orderQty || 0,
-              lotNumber: box.lotNumber || '',
-              boxWeight: box.boxWeight?.toString() || '',
-              numberOfCones: box.numberOfCones?.toString() || ''
-            };
-          }
+        // Initialize box data state, preserving existing data
+        setBoxData(prev => {
+          const initialBoxData: Record<string, any> = { ...prev };
+          boxesData.forEach((box) => {
+            const boxId = box._id || box.id || box.boxId;
+            if (boxId) {
+              // Get existing data for this box
+              const existingData = prev[boxId] || {};
+              
+              // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
+              const yarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
+                ? box.yarnName 
+                : '';
+              
+              // Auto-fill from PO items if lot number exists
+              let autoFilledYarnName = yarnName;
+              let autoFilledShadeCode = box.shadeCode || '';
+              const boxLotNumber = box.lotNumber || '';
+              
+              if (boxLotNumber && rawApiOrder) {
+                const poItemData = getPOItemDataFromLotNumber(boxLotNumber);
+                if (poItemData) {
+                  autoFilledYarnName = poItemData.yarnName;
+                  autoFilledShadeCode = poItemData.shadeCode;
+                }
+              }
+              
+              // Only set if box doesn't have existing data, or preserve existing data if it exists
+              if (!existingData.yarnName && !existingData.shadeCode && !existingData.lotNumber) {
+                // No existing data, use initialized values
+                initialBoxData[boxId] = {
+                  yarnName: autoFilledYarnName,
+                  shadeCode: autoFilledShadeCode,
+                  lotNumber: boxLotNumber,
+                  boxWeight: box.boxWeight?.toString() || '',
+                  numberOfCones: box.numberOfCones?.toString() || ''
+                };
+              } else {
+                // Preserve existing data, only update if server has new data
+                initialBoxData[boxId] = {
+                  yarnName: existingData.yarnName || autoFilledYarnName,
+                  shadeCode: existingData.shadeCode || autoFilledShadeCode,
+                  lotNumber: existingData.lotNumber || boxLotNumber,
+                  boxWeight: existingData.boxWeight || box.boxWeight?.toString() || '',
+                  numberOfCones: existingData.numberOfCones || box.numberOfCones?.toString() || ''
+                };
+              }
+            }
+          });
+          return initialBoxData;
         });
-        setBoxData(prev => ({ ...prev, ...initialBoxData }));
       } catch (error) {
         console.error('Failed to fetch boxes:', error);
         toast.error('Failed to load boxes');
@@ -341,7 +373,7 @@ const ProcessOrderPage = () => {
     if (order?.orderNumber) {
       fetchBoxes();
     }
-  }, [order?.orderNumber]);
+  }, [order?.orderNumber, rawApiOrder]);
 
   const getQualityStatusColor = (status: string) => {
     switch (status) {
@@ -433,6 +465,42 @@ const ProcessOrderPage = () => {
     }
   };
 
+  // Get PO item data from lot number using receivedLotDetails
+  const getPOItemDataFromLotNumber = (lotNumber: string): { yarnName: string; shadeCode: string } | null => {
+    if (!rawApiOrder || !rawApiOrder.receivedLotDetails || !rawApiOrder.poItems) {
+      return null;
+    }
+
+    // Find the lot in receivedLotDetails
+    const lot = rawApiOrder.receivedLotDetails.find((l: any) => 
+      (l.lotNumber || '').trim().toUpperCase() === lotNumber.trim().toUpperCase()
+    );
+
+    if (!lot || !lot.poItems || lot.poItems.length === 0) {
+      return null;
+    }
+
+    // Get the first PO item ID from the lot (assuming one PO item per lot)
+    const poItemId = lot.poItems[0]?.poItem;
+    if (!poItemId) {
+      return null;
+    }
+
+    // Find the PO item in poItems array
+    const poItem = rawApiOrder.poItems.find((item: any) => 
+      String(item._id || item.id) === String(poItemId)
+    );
+
+    if (!poItem) {
+      return null;
+    }
+
+    return {
+      yarnName: poItem.yarnName || '',
+      shadeCode: poItem.shadeCode || ''
+    };
+  };
+
   // Handle barcode scan
   const handleBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && barcodeScanValue.trim()) {
@@ -441,6 +509,39 @@ const ProcessOrderPage = () => {
       
       if (foundBox) {
         const boxId = foundBox._id || foundBox.id || foundBox.boxId;
+        
+        // Get lot number from box (check boxData first, then box.lotNumber)
+        const existingData = boxData[boxId];
+        const lotNumber = existingData?.lotNumber?.trim() || foundBox.lotNumber?.trim() || '';
+        
+        // Auto-fill data from PO items if lot number exists
+        let autoFilledData = {
+          yarnName: existingData?.yarnName || '',
+          shadeCode: existingData?.shadeCode || '',
+          lotNumber: lotNumber
+        };
+
+        if (lotNumber && rawApiOrder) {
+          const poItemData = getPOItemDataFromLotNumber(lotNumber);
+          if (poItemData) {
+            autoFilledData.yarnName = poItemData.yarnName;
+            autoFilledData.shadeCode = poItemData.shadeCode;
+          }
+        }
+
+        // Update boxData with auto-filled values
+        setBoxData(prev => ({
+          ...prev,
+          [boxId]: {
+            ...prev[boxId],
+            yarnName: autoFilledData.yarnName,
+            shadeCode: autoFilledData.shadeCode,
+            lotNumber: autoFilledData.lotNumber,
+            boxWeight: prev[boxId]?.boxWeight || '',
+            numberOfCones: prev[boxId]?.numberOfCones || ''
+          }
+        }));
+
         setActiveBoxId(boxId);
         setBarcodeScanValue('');
         toast.success(`Box ${foundBox.boxId} activated`);
@@ -458,25 +559,30 @@ const ProcessOrderPage = () => {
     return item?.shadeCode || '';
   };
 
-  // Get order qty for selected yarn name
-  const getOrderQtyForYarn = (yarnName: string): number => {
-    if (!order) return 0;
-    const item = order.items.find(item => item.yarnName === yarnName);
-    return item?.orderedQuantity || 0;
+  // Get unique yarn names from PO items
+  const getUniqueYarnNames = (): string[] => {
+    if (!order || !order.items) return [];
+    const uniqueNames = Array.from(new Set(order.items.map(item => item.yarnName).filter(Boolean)));
+    return uniqueNames;
   };
 
-  // Handle yarn name change - auto-fill shade code and order qty
+  // Check if there are multiple yarn names in the PO
+  const hasMultipleYarnNames = (): boolean => {
+    return getUniqueYarnNames().length > 1;
+  };
+
+  // Handle yarn name change - auto-fill shade code
   const handleYarnNameChange = (boxId: string, yarnName: string) => {
     setBoxData(prev => ({
       ...prev,
       [boxId]: {
         ...prev[boxId],
         yarnName,
-        shadeCode: getShadeCodeForYarn(yarnName),
-        orderQty: getOrderQtyForYarn(yarnName)
+        shadeCode: getShadeCodeForYarn(yarnName)
       }
     }));
   };
+
 
   // Truncate ID/Barcode for display
   const truncateId = (id: string): string => {
@@ -735,7 +841,6 @@ const ProcessOrderPage = () => {
       const payload: UpdateYarnBoxPayload = {
         yarnName: data.yarnName,
         shadeCode: data.shadeCode,
-        orderQty: data.orderQty,
         lotNumber: data.lotNumber,
         boxWeight: parseFloat(data.boxWeight),
         numberOfCones: parseFloat(data.numberOfCones)
@@ -760,32 +865,52 @@ const ProcessOrderPage = () => {
         }
         setBoxes(boxesData);
         
-        // Update box data state with refreshed data
-        const updatedBoxData: Record<string, any> = {};
-        boxesData.forEach((box) => {
-          const refreshedBoxId = box._id || box.id || box.boxId;
-          if (refreshedBoxId) {
-            // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
-            const yarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
-              ? box.yarnName 
-              : '';
-            
-            updatedBoxData[refreshedBoxId] = {
-              yarnName: yarnName,
-              shadeCode: box.shadeCode || '',
-              orderQty: box.orderQty || 0,
-              lotNumber: box.lotNumber || '',
-              boxWeight: box.boxWeight?.toString() || '',
-              numberOfCones: box.numberOfCones?.toString() || ''
-            };
-          }
+        // Update box data state with refreshed data, preserving existing data for other boxes
+        let calculatedBoxData: Record<string, any> = {};
+        setBoxData(prev => {
+          const updatedBoxData: Record<string, any> = { ...prev };
+          boxesData.forEach((box) => {
+            const refreshedBoxId = box._id || box.id || box.boxId;
+            if (refreshedBoxId) {
+              // Get existing data for this box
+              const existingData = prev[refreshedBoxId] || {};
+              
+              // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
+              const refreshedYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
+                ? box.yarnName 
+                : '';
+              
+              // For the box that was just updated, use server data
+              // For other boxes, preserve existing data if it exists and is not empty
+              if (refreshedBoxId === boxId) {
+                // This is the box that was just updated - use server data
+                updatedBoxData[refreshedBoxId] = {
+                  yarnName: refreshedYarnName,
+                  shadeCode: box.shadeCode || '',
+                  lotNumber: box.lotNumber || '',
+                  boxWeight: box.boxWeight?.toString() || '',
+                  numberOfCones: box.numberOfCones?.toString() || ''
+                };
+              } else {
+                // This is another box - preserve existing data if it exists
+                updatedBoxData[refreshedBoxId] = {
+                  yarnName: existingData.yarnName || refreshedYarnName,
+                  shadeCode: existingData.shadeCode || box.shadeCode || '',
+                  lotNumber: existingData.lotNumber || box.lotNumber || '',
+                  boxWeight: existingData.boxWeight || box.boxWeight?.toString() || '',
+                  numberOfCones: existingData.numberOfCones || box.numberOfCones?.toString() || ''
+                };
+              }
+            }
+          });
+          calculatedBoxData = updatedBoxData;
+          return updatedBoxData;
         });
-        setBoxData(prev => ({ ...prev, ...updatedBoxData }));
         
         // Check if all boxes are now completed and auto-update status to goods_received
         const allCompleted = boxesData.every((b) => {
           const bId = b._id || b.id || b.boxId;
-          const bData = updatedBoxData[bId] || {};
+          const bData = calculatedBoxData[bId] || {};
           return bData.yarnName && 
                  bData.lotNumber && 
                  bData.boxWeight && 
@@ -950,6 +1075,10 @@ const ProcessOrderPage = () => {
                   </div>
                   <div class="box-details-section">
                     <div class="detail-row">
+                      <span class="detail-label">Supplier:</span>
+                      <span class="detail-value">${order.supplier || '-'}</span>
+                    </div>
+                    <div class="detail-row">
                       <span class="detail-label">Yarn Name:</span>
                       <span class="detail-value">${details.yarnName}</span>
                     </div>
@@ -1001,6 +1130,10 @@ const ProcessOrderPage = () => {
                   </div>
                 </div>
                 <div class="box-details-section">
+                  <div class="detail-row">
+                    <span class="detail-label">Supplier:</span>
+                    <span class="detail-value">${order.supplier || '-'}</span>
+                  </div>
                   <div class="detail-row">
                     <span class="detail-label">Yarn Name:</span>
                     <span class="detail-value">${details.yarnName}</span>
@@ -1110,7 +1243,7 @@ const ProcessOrderPage = () => {
               justify-content: space-between;
               align-items: center;
               margin-bottom: 8px;
-              font-size: 12px;
+              font-size: 13px;
             }
             .detail-row:last-child {
               margin-bottom: 0;
@@ -1460,7 +1593,7 @@ const ProcessOrderPage = () => {
                               justify-content: space-between;
                               align-items: center;
                               margin-bottom: 8px;
-                              font-size: 12px;
+                              font-size: 13px;
                             }
                             .detail-row:last-child {
                               margin-bottom: 0;
@@ -1524,6 +1657,10 @@ const ProcessOrderPage = () => {
                                     </div>
                                   </div>
                                   <div class="box-details-section">
+                                    <div class="detail-row">
+                                      <span class="detail-label">Supplier:</span>
+                                      <span class="detail-value">${order.supplier || '-'}</span>
+                                    </div>
                                     <div class="detail-row">
                                       <span class="detail-label">Yarn Name:</span>
                                       <span class="detail-value">${details.yarnName}</span>
@@ -1663,7 +1800,6 @@ const ProcessOrderPage = () => {
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
-                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Qty (kg)</th>
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lot Number</th>
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box Weight (kg)</th>
                               <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. of Cones</th>
@@ -1682,7 +1818,6 @@ const ProcessOrderPage = () => {
                         const data = boxData[boxId] || {
                           yarnName: defaultYarnName,
                           shadeCode: box.shadeCode || '',
-                          orderQty: box.orderQty || 0,
                           lotNumber: box.lotNumber || '',
                           boxWeight: box.boxWeight?.toString() || '',
                           numberOfCones: box.numberOfCones?.toString() || ''
@@ -1715,7 +1850,7 @@ const ProcessOrderPage = () => {
                               </button>
                             </td>
                             <td className="border border-gray-300 px-4 py-3">
-                              {isActive ? (
+                              {isActive && hasMultipleYarnNames() ? (
                                 <select
                                   className="form-select text-sm"
                                   value={data.yarnName}
@@ -1731,9 +1866,9 @@ const ProcessOrderPage = () => {
                                   }}
                                 >
                                   <option value="">Select Yarn Name</option>
-                                  {order?.items.map((item) => (
-                                    <option key={item.id} value={item.yarnName}>
-                          {item.yarnName}
+                                  {getUniqueYarnNames().map((yarnName) => (
+                                    <option key={yarnName} value={yarnName}>
+                                      {yarnName}
                                     </option>
                                   ))}
                                 </select>
@@ -1742,57 +1877,10 @@ const ProcessOrderPage = () => {
                               )}
                         </td>
                             <td className="border border-gray-300 px-4 py-3">
-                              {isActive ? (
-                                <input
-                                  type="text"
-                                  className="form-control text-sm"
-                                  value={data.shadeCode}
-                                  readOnly
-                                  tabIndex={-1}
-                                />
-                              ) : (
-                                <span className="text-sm text-gray-900">{data.shadeCode || '-'}</span>
-                              )}
+                              <span className="text-sm text-gray-900">{data.shadeCode || '-'}</span>
                         </td>
                             <td className="border border-gray-300 px-4 py-3">
-                              {isActive ? (
-                                <input
-                                  type="number"
-                                  className="form-control text-sm"
-                                  value={data.orderQty}
-                                  readOnly
-                                  tabIndex={-1}
-                                />
-                              ) : (
-                                <span className="text-sm text-gray-900">{data.orderQty || '-'}</span>
-                              )}
-                        </td>
-                            <td className="border border-gray-300 px-4 py-3">
-                              {isActive ? (
-                                <input
-                                  type="text"
-                                  className="form-control text-sm"
-                                  value={data.lotNumber}
-                                  onChange={(e) => {
-                                    setBoxData(prev => ({
-                                      ...prev,
-                                      [boxId]: { ...prev[boxId], lotNumber: e.target.value }
-                                    }));
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
-                                      if (nextInput) {
-                                        (nextInput as HTMLInputElement).focus();
-                                      }
-                                    }
-                                  }}
-                                  placeholder="Enter lot number"
-                                />
-                              ) : (
-                                <span className="text-sm text-gray-900">{data.lotNumber || '-'}</span>
-                          )}
+                              <span className="text-sm text-gray-900">{data.lotNumber || '-'}</span>
                         </td>
                             <td className="border border-gray-300 px-4 py-3">
                               {isActive ? (
@@ -1965,7 +2053,6 @@ const ProcessOrderPage = () => {
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
-                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Qty (kg)</th>
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lot Number</th>
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box Weight (kg)</th>
                             <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. of Cones</th>
@@ -1983,7 +2070,6 @@ const ProcessOrderPage = () => {
                             const data = boxData[boxId] || {
                               yarnName: defaultYarnName,
                               shadeCode: box.shadeCode || '',
-                              orderQty: box.orderQty || 0,
                               lotNumber: box.lotNumber || '',
                               boxWeight: box.boxWeight?.toString() || '',
                               numberOfCones: box.numberOfCones?.toString() || ''
@@ -2016,7 +2102,7 @@ const ProcessOrderPage = () => {
                                   </button>
                                 </td>
                                 <td className="border border-gray-300 px-4 py-3">
-                                  {isActive ? (
+                                  {isActive && hasMultipleYarnNames() ? (
                                     <select
                                       className="form-select text-sm"
                                       value={data.yarnName}
@@ -2032,9 +2118,9 @@ const ProcessOrderPage = () => {
                                       }}
                                     >
                                       <option value="">Select Yarn Name</option>
-                                      {order?.items.map((item) => (
-                                        <option key={item.id} value={item.yarnName}>
-                                          {item.yarnName}
+                                      {getUniqueYarnNames().map((yarnName) => (
+                                        <option key={yarnName} value={yarnName}>
+                                          {yarnName}
                                         </option>
                                       ))}
                                     </select>
@@ -2043,57 +2129,10 @@ const ProcessOrderPage = () => {
                                   )}
                                 </td>
                                 <td className="border border-gray-300 px-4 py-3">
-                                  {isActive ? (
-                                    <input
-                                      type="text"
-                                      className="form-control text-sm"
-                                      value={data.shadeCode}
-                                      readOnly
-                                      tabIndex={-1}
-                                    />
-                                  ) : (
-                                    <span className="text-sm text-gray-900">{data.shadeCode || '-'}</span>
-                                  )}
+                                  <span className="text-sm text-gray-900">{data.shadeCode || '-'}</span>
                                 </td>
                                 <td className="border border-gray-300 px-4 py-3">
-                                  {isActive ? (
-                                    <input
-                                      type="number"
-                                      className="form-control text-sm"
-                                      value={data.orderQty}
-                                      readOnly
-                                      tabIndex={-1}
-                                    />
-                                  ) : (
-                                    <span className="text-sm text-gray-900">{data.orderQty || '-'}</span>
-                                  )}
-                                </td>
-                                <td className="border border-gray-300 px-4 py-3">
-                                  {isActive ? (
-                                    <input
-                                      type="text"
-                                      className="form-control text-sm border-yellow-300 focus:border-yellow-500"
-                                      value={data.lotNumber}
-                                      onChange={(e) => {
-                                        setBoxData(prev => ({
-                                          ...prev,
-                                          [boxId]: { ...prev[boxId], lotNumber: e.target.value }
-                                        }));
-                                      }}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
-                                          if (nextInput) {
-                                            (nextInput as HTMLInputElement).focus();
-                                          }
-                                        }
-                                      }}
-                                      placeholder="Enter lot number"
-                                    />
-                                  ) : (
-                                    <span className="text-sm text-yellow-600 font-medium">{data.lotNumber || 'Not assigned'}</span>
-                                  )}
+                                  <span className="text-sm text-yellow-600 font-medium">{data.lotNumber || 'Not assigned'}</span>
                                 </td>
                                 <td className="border border-gray-300 px-4 py-3">
                                   {isActive ? (
@@ -2309,15 +2348,6 @@ const ProcessOrderPage = () => {
                     {(() => {
                       const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
                       return boxData[boxId]?.shadeCode || selectedBoxForDetails.shadeCode || '-';
-                    })()}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">Order Qty</label>
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                    {(() => {
-                      const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
-                      return boxData[boxId]?.orderQty || selectedBoxForDetails.orderQty || 0;
                     })()}
                   </div>
                 </div>

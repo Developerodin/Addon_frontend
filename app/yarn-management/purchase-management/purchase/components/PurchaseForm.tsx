@@ -58,12 +58,11 @@ interface PurchaseFormProps {
   submitButtonText?: string;
 }
 
-interface SupplierCatalogOption {
+interface SupplierYarnOption {
   id: string;
   displayName: string;
   searchableText: string;
   shadeCode?: string;
-  catalog: YarnCatalog;
   supplierDetail: SupplierYarnDetail;
   metadataSummary?: string;
 }
@@ -82,11 +81,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const [countSizes, setCountSizes] = useState<CountSize[]>([]);
   const [yarnSubtypeMap, setYarnSubtypeMap] = useState<Record<string, { id: string; name: string; countSizes: string[] }[]>>({});
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
-  const [supplierCatalogOptions, setSupplierCatalogOptions] = useState<SupplierCatalogOption[]>([]);
-  const [isLoadingCatalogOptions, setIsLoadingCatalogOptions] = useState(false);
   const supplierYarnDetailsRef = useRef<SupplierYarnDetail[]>([]);
-  const supplierCatalogOptionsRef = useRef<SupplierCatalogOption[]>([]);
-  const lastCatalogSupplierIdRef = useRef<string | null>(null);
   
   const [formData, setFormData] = useState<PurchaseOrderData>({
     purchaseDate: initialData.purchaseDate || new Date().toISOString().split('T')[0],
@@ -103,7 +98,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   // Autocomplete state
   const [autocompleteStates, setAutocompleteStates] = useState<Record<string, {
     query: string;
-    suggestions: SupplierCatalogOption[];
+    suggestions: SupplierYarnOption[];
     showSuggestions: boolean;
   }>>({});
 
@@ -112,10 +107,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   useEffect(() => {
     supplierYarnDetailsRef.current = supplierYarnDetails;
   }, [supplierYarnDetails]);
-
-  useEffect(() => {
-    supplierCatalogOptionsRef.current = supplierCatalogOptions;
-  }, [supplierCatalogOptions]);
 
   const extractIdFromValue = useCallback((value: unknown): string | undefined => {
     if (!value) return undefined;
@@ -160,460 +151,128 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     return [];
   }, [extractIdFromValue]);
 
-  const normalizeText = (value: unknown): string | undefined => {
-    if (!value) return undefined;
-    if (typeof value === "string") return value.trim().toLowerCase();
-    if (typeof value === "number") return String(value).trim().toLowerCase();
-    if (typeof value === "object") {
-      const obj = value as Record<string, unknown>;
-      const possibleKeys = ["name", "subtype", "label", "title"];
-      for (const key of possibleKeys) {
-        const text = obj[key];
-        if (typeof text === "string" && text.trim()) {
-          return text.trim().toLowerCase();
-        }
-      }
-    }
-    return undefined;
-  };
-
-  const doesCatalogFieldMatchDetail = useCallback((
-    catalogField: unknown,
-    detailField: unknown,
-    additionalCatalogKeys: string[] = [],
-    context?: { field: string; detailId?: string; catalogId?: string }
-  ): boolean => {
-    if (!catalogField || !detailField) {
-      console.log("[PurchaseForm] Field comparison skipped (missing data)", {
-        field: context?.field,
-        catalogValue: catalogField,
-        detailValue: detailField,
-      });
-      return false;
+  // Build supplier yarn options from supplier yarn details
+  const buildSupplierYarnOptions = useCallback((): SupplierYarnOption[] => {
+    const yarnDetails = supplierYarnDetailsRef.current;
+    if (!yarnDetails || yarnDetails.length === 0) {
+      return [];
     }
 
-    const catalogId = extractIdFromValue(catalogField);
-    const detailId = extractIdFromValue(detailField);
-    if (catalogId && detailId && catalogId === detailId) {
-      console.log("[PurchaseForm] Field match by id", {
-        field: context?.field,
-        catalogId,
+    const options: SupplierYarnOption[] = yarnDetails.map((detail, index) => {
+      const yarnName = detail.yarnName || (detail as any)?.yarn || (detail as any)?.name || '';
+      const displayName = yarnName.trim() || `Yarn ${index + 1}`;
+      
+      // Extract type name
+      const typeName = typeof detail.yarnType === 'string' 
+        ? detail.yarnType 
+        : (detail.yarnType as any)?.name || '';
+      
+      // Extract subtype name
+      const subtypeName = typeof detail.yarnsubtype === 'string'
+        ? detail.yarnsubtype
+        : (detail.yarnsubtype as any)?.subtype || (detail.yarnsubtype as any)?.name || '';
+      
+      // Extract color name
+      const colorName = typeof detail.color === 'string'
+        ? detail.color
+        : (detail.color as any)?.name || '';
+      
+      const shadeCode = detail.shadeNumber || '';
+      
+      const metadataSummary = [
+        typeName,
+        subtypeName,
+        colorName,
+      ]
+        .filter(Boolean)
+        .join(" • ") || undefined;
+
+      const searchableText = [
+        displayName,
+        typeName,
+        subtypeName,
+        colorName,
+        shadeCode,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      // Create unique ID from detail properties
+      const detailId = detail.id || detail._id || `${index}`;
+      const uniqueId = [
         detailId,
-      });
-      return true;
-    }
+        extractIdFromValue(detail.yarnType) || "",
+        extractIdFromValue(detail.yarnsubtype) || "",
+        extractIdFromValue(detail.color) || "",
+        shadeCode,
+      ].join("|");
 
-    const catalogName = normalizeText(catalogField);
-    const detailName = normalizeText(detailField);
-    if (catalogName && detailName && catalogName === detailName) {
-      console.log("[PurchaseForm] Field match by name", {
-        field: context?.field,
-        catalogName,
-        detailName,
-      });
-      return true;
-    }
-
-    if (typeof catalogField === "object" && additionalCatalogKeys.length > 0) {
-      const catalogObj = catalogField as Record<string, unknown>;
-      for (const key of additionalCatalogKeys) {
-        const catalogValue = catalogObj[key];
-        const catalogValueNormalized = normalizeText(catalogValue);
-        if (catalogValueNormalized && detailName && catalogValueNormalized === detailName) {
-          console.log("[PurchaseForm] Field match via additional key", {
-            field: context?.field,
-            catalogKey: key,
-            catalogValue: catalogValueNormalized,
-            detailName,
-          });
-          return true;
-        }
-      }
-    }
-
-    console.log("[PurchaseForm] Field mismatch", {
-      field: context?.field,
-      catalogValue: catalogField,
-      detailValue: detailField,
-      catalogId,
-      detailId,
+      return {
+        id: uniqueId,
+        displayName,
+        searchableText,
+        shadeCode: shadeCode || undefined,
+        supplierDetail: detail,
+        metadataSummary,
+      };
     });
 
-    return false;
+    return options;
   }, [extractIdFromValue]);
 
-  const findSupplierDetailForCatalog = useCallback((
-    catalog: YarnCatalog,
-    detailsOverride?: SupplierYarnDetail[]
-  ): SupplierYarnDetail | undefined => {
-    const detailsPool = detailsOverride ?? supplierYarnDetailsRef.current;
-    if (!catalog || !detailsPool || detailsPool.length === 0) {
-      return undefined;
+  // Filter supplier yarn options based on query
+  const filterSupplierYarnOptions = useCallback((query: string): SupplierYarnOption[] => {
+    if (!query || !query.trim()) {
+      return [];
     }
 
-    const catalogNameNormalized = normalizeText(catalog?.yarnName);
-
-    const selectWithColorPreference = (candidates: SupplierYarnDetail[]) => {
-      if (!candidates || candidates.length === 0) return undefined;
-
-      if (catalog?.colorFamily) {
-        const colorMatched = candidates.find((detail) =>
-          doesCatalogFieldMatchDetail(
-            catalog?.colorFamily,
-            detail?.color,
-            [],
-            { field: "colorFamily" }
-          )
-        );
-        if (colorMatched) {
-          return colorMatched;
-        }
-      }
-
-      return candidates[0];
-    };
-
-    const catalogLinkedDetail = detailsPool.find((detail) => {
-      const detailCatalogId =
-        extractIdFromValue((detail as any)?.yarnCatalog) ||
-        extractIdFromValue(detail?.yarnCatalogId);
-      return detailCatalogId && String(detailCatalogId) === String(catalog.id);
-    });
-
-    if (catalogLinkedDetail) {
-      console.log("[PurchaseForm] Supplier detail matched by catalog id link", {
-        catalogId: catalog.id,
-        catalogName: catalog.yarnName,
-        matchedDetail: {
-          yarnType: catalogLinkedDetail?.yarnType,
-          yarnsubtype: catalogLinkedDetail?.yarnsubtype,
-          color: catalogLinkedDetail?.color,
-          shadeNumber: catalogLinkedDetail?.shadeNumber,
-        },
-      });
-      return catalogLinkedDetail;
-    }
-
-    const nameMatchedDetails = detailsPool.filter((detail) => {
-      const detailName = normalizeText(
-        (detail as any)?.yarnName ||
-        (detail as any)?.yarn ||
-        (detail as any)?.name
-      );
-
-      if (!catalogNameNormalized || !detailName || detailName !== catalogNameNormalized) {
-        return false;
-      }
-
-      const typeMatches = doesCatalogFieldMatchDetail(
-        catalog?.yarnType,
-        detail?.yarnType,
-        [],
-        { field: "yarnType" }
-      );
-      if (!typeMatches) {
-        return false;
-      }
-
-      if (catalog?.yarnSubtype && detail?.yarnsubtype) {
-        const subtypeMatches = doesCatalogFieldMatchDetail(
-          catalog?.yarnSubtype,
-          detail?.yarnsubtype,
-          ["subtype"],
-          { field: "yarnSubtype" }
-        );
-        if (!subtypeMatches) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-
-    if (nameMatchedDetails.length > 0) {
-      const chosenByName = selectWithColorPreference(nameMatchedDetails);
-      if (chosenByName) {
-        console.log("[PurchaseForm] Supplier detail matched by yarn name", {
-          catalogId: catalog.id,
-          catalogName: catalog.yarnName,
-          matchedDetail: {
-            yarnType: chosenByName?.yarnType,
-            yarnsubtype: chosenByName?.yarnsubtype,
-            color: chosenByName?.color,
-            shadeNumber: chosenByName?.shadeNumber,
-          },
-          candidates: nameMatchedDetails.length,
-        });
-        return chosenByName;
-      }
-    }
-
-    const matchingDetails = detailsPool.filter((detail, detailIndex) => {
-      console.log("[PurchaseForm] Evaluating supplier detail", {
-        catalogId: catalog.id,
-        catalogName: catalog.yarnName,
-        detailIndex,
-        detailType: detail?.yarnType,
-        detailSubtype: detail?.yarnsubtype,
-        detailColor: detail?.color,
-      });
-
-      const typeMatches = doesCatalogFieldMatchDetail(
-        catalog?.yarnType,
-        detail?.yarnType,
-        [],
-        { field: "yarnType" }
-      );
-      if (!typeMatches) {
-        return false;
-      }
-
-      if (catalog?.yarnSubtype && detail?.yarnsubtype) {
-        const subtypeMatches = doesCatalogFieldMatchDetail(
-          catalog?.yarnSubtype,
-          detail?.yarnsubtype,
-          ["subtype"],
-          { field: "yarnSubtype" }
-        );
-        if (!subtypeMatches) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-
-    if (matchingDetails.length === 0) {
-      return undefined;
-    }
-
-    const chosenDetail = selectWithColorPreference(matchingDetails);
-
-    console.log("[PurchaseForm] Supplier detail matched with catalog", {
-      catalogId: catalog.id,
-      catalogName: catalog.yarnName,
-      matchedDetail: {
-        yarnType: chosenDetail?.yarnType,
-        yarnsubtype: chosenDetail?.yarnsubtype,
-        color: chosenDetail?.color,
-        shadeNumber: chosenDetail?.shadeNumber,
-      },
-      matchType: catalog?.colorFamily ? "type/subtype/color" : "type/subtype",
-      totalCandidates: matchingDetails.length,
-    });
-
-    return chosenDetail;
-  }, [doesCatalogFieldMatchDetail]);
-
-  const buildSupplierCatalogOptions = useCallback(async (supplier: Supplier, force = false) => {
-    if (!supplier || !supplier.id) {
-      console.warn("[PurchaseForm] buildSupplierCatalogOptions: missing supplier id", { supplier });
-      lastCatalogSupplierIdRef.current = null;
-      setSupplierCatalogOptions([]);
-      setIsLoadingCatalogOptions(false);
-      return;
-    }
-
-    const supplierId = supplier.id;
-
-    if (
-      !force &&
-      lastCatalogSupplierIdRef.current === supplierId &&
-      supplierCatalogOptionsRef.current.length > 0
-    ) {
-      console.log("[PurchaseForm] buildSupplierCatalogOptions:using cached data", {
-        supplierId,
-        optionsCount: supplierCatalogOptionsRef.current.length,
-      });
-      return;
-    }
-
-    const yarnDetails = supplier?.yarnDetails || [];
-    console.log("[PurchaseForm] buildSupplierCatalogOptions:start", {
-      supplierId,
-      supplierName: supplier.brandName,
-      yarnDetailsCount: yarnDetails.length,
-    });
-
-    if (yarnDetails.length === 0) {
-      console.warn("[PurchaseForm] buildSupplierCatalogOptions: supplier has no yarn details", {
-        supplierId,
-      });
-      setSupplierCatalogOptions([]);
-      setIsLoadingCatalogOptions(false);
-      lastCatalogSupplierIdRef.current = supplierId;
-      return;
-    }
-
-    setIsLoadingCatalogOptions(true);
-
-    try {
-      const catalogResponse = await yarnCatalogService.getYarnCatalogs({
-        status: "active",
-        limit: 1000,
-        page: 1,
-      });
-
-      const allCatalogs = catalogResponse.results || [];
-      console.log("[PurchaseForm] buildSupplierCatalogOptions:catalogFetch", {
-        totalCatalogsReceived: allCatalogs.length,
-        sampleCatalogs: allCatalogs.slice(0, 5).map(catalog => ({
-          id: catalog.id,
-          yarnName: catalog.yarnName,
-          yarnType: catalog.yarnType?.name,
-          yarnSubtype: catalog.yarnSubtype?.name,
-          color: catalog.colorFamily?.name,
-        })),
-      });
-
-      const seenPairKeys = new Set<string>();
-      const aggregatedOptions: SupplierCatalogOption[] = [];
-
-      allCatalogs.forEach((catalog, catalogIndex) => {
-        if (!catalog?.id) {
-          console.warn("[PurchaseForm] Catalog skipped due to missing id", { catalogIndex, catalog });
-          return;
-        }
-
-        const catalogYarnName = typeof catalog?.yarnName === "string" ? catalog.yarnName.trim() : "";
-        if (!catalogYarnName) {
-          console.warn("[PurchaseForm] Catalog skipped due to missing yarn name", {
-            catalogIndex,
-            catalogId: catalog.id,
-          });
-          return;
-        }
-
-        const matchedDetail = findSupplierDetailForCatalog(catalog, yarnDetails);
-        if (!matchedDetail) {
-          console.log("[PurchaseForm] Catalog skipped (no matching supplier detail)", {
-            catalogId: catalog.id,
-            catalogName: catalog.yarnName,
-            yarnType: catalog.yarnType?.name,
-            yarnSubtype: catalog.yarnSubtype?.name,
-            color: catalog.colorFamily?.name,
-          });
-          return;
-        }
-
-        const pairKey = [
-          catalog.id,
-          extractIdFromValue(matchedDetail?.yarnType) || "",
-          extractIdFromValue(matchedDetail?.yarnsubtype) || "",
-          extractIdFromValue(matchedDetail?.color) || "",
-          matchedDetail?.shadeNumber || "",
-        ].join("|");
-
-        if (seenPairKeys.has(pairKey)) {
-          return;
-        }
-        seenPairKeys.add(pairKey);
-
-        const displayName = catalogYarnName;
-        const metadataSummary = [
-          typeof catalog?.countSize?.name === "string" ? catalog.countSize.name : undefined,
-          typeof catalog?.colorFamily?.name === "string" ? catalog.colorFamily.name : undefined,
-          typeof catalog?.yarnType?.name === "string" ? catalog.yarnType.name : undefined,
-          typeof (catalog?.yarnSubtype as any)?.name === "string"
-            ? (catalog?.yarnSubtype as any).name
-            : typeof (catalog?.yarnSubtype as any)?.subtype === "string"
-              ? (catalog?.yarnSubtype as any).subtype
-              : undefined,
-        ]
-          .filter(Boolean)
-          .join(" • ") || undefined;
-        // Use only the supplier detail's shade number; no catalog fallback
-        const shadeCode = matchedDetail.shadeNumber;
-
-        const searchableText = [
-          displayName,
-          typeof catalog?.yarnType?.name === "string" ? catalog.yarnType.name : undefined,
-          typeof (catalog?.yarnSubtype as any)?.name === "string"
-            ? (catalog?.yarnSubtype as any).name
-            : typeof (catalog?.yarnSubtype as any)?.subtype === "string"
-              ? (catalog?.yarnSubtype as any).subtype
-              : undefined,
-          typeof catalog?.countSize?.name === "string" ? catalog.countSize.name : undefined,
-          typeof catalog?.colorFamily?.name === "string" ? catalog.colorFamily.name : undefined,
-          shadeCode,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-
-        aggregatedOptions.push({
-          id: pairKey,
-          catalog,
-          supplierDetail: matchedDetail,
-          displayName,
-          shadeCode: shadeCode || undefined,
-          searchableText,
-          metadataSummary,
-        });
-      });
-
-      console.log("[PurchaseForm] buildSupplierCatalogOptions:result", {
-        supplierId: supplier.id,
-        supplierName: supplier.brandName,
-        aggregatedOptionsCount: aggregatedOptions.length,
-        optionSamples: aggregatedOptions.slice(0, 5).map(option => ({
-          id: option.catalog.id,
-          yarnName: option.displayName,
-          yarnType: option.catalog?.yarnType?.name,
-          yarnSubtype: option.catalog?.yarnSubtype?.name,
-          color: option.catalog?.colorFamily?.name,
-          shadeCode: option.shadeCode,
-        })),
-      });
-
-      setSupplierCatalogOptions(aggregatedOptions);
-      lastCatalogSupplierIdRef.current = supplierId;
-    } catch (error) {
-      console.error("[PurchaseForm] Failed to fetch yarn catalog data", error);
-      toast.error("Failed to load yarn catalog data");
-      setSupplierCatalogOptions([]);
-      lastCatalogSupplierIdRef.current = null;
-    } finally {
-      setIsLoadingCatalogOptions(false);
-    }
-  }, [extractIdFromValue, findSupplierDetailForCatalog, toast]);
-
-  const filterSupplierCatalogOptions = useCallback((query: string): SupplierCatalogOption[] => {
-    if (!query || !query.trim() || supplierCatalogOptions.length === 0) {
+    const options = buildSupplierYarnOptions();
+    if (options.length === 0) {
       return [];
     }
 
     const normalizedQuery = query.trim().toLowerCase();
     const enforceStartsWithOnly = normalizedQuery.length <= 1;
 
-    const rankedMatches = supplierCatalogOptions
+    // Check if any option has an exact shade code match with the query
+    const hasExactShadeCodeMatch = options.some((option) => {
+      const shadeCode = option.shadeCode?.trim().toLowerCase() || "";
+      return shadeCode === normalizedQuery;
+    });
+
+    const rankedMatches = options
       .map((option) => {
-        const yarnName = (option.catalog?.yarnName || option.displayName || "").trim().toLowerCase();
-        const typeNameRaw = option.catalog?.yarnType?.name;
-        const typeName = typeof typeNameRaw === "string" ? typeNameRaw.trim().toLowerCase() : undefined;
-        const subtypeNameRaw = option.catalog?.yarnSubtype?.name;
-        const subtypeName = typeof subtypeNameRaw === "string" ? subtypeNameRaw.trim().toLowerCase() : undefined;
+        const yarnName = option.displayName.trim().toLowerCase();
         const searchable = option.searchableText || "";
+        const shadeCode = option.shadeCode?.trim().toLowerCase() || "";
+
+        // Check for exact shade code match (highest priority)
+        const exactShadeCodeMatch = shadeCode === normalizedQuery;
+
+        // If there's an exact shade code match in the dataset, only show items with exact shade code match
+        if (hasExactShadeCodeMatch && !exactShadeCodeMatch) {
+          return null;
+        }
 
         const startsWithYarn = yarnName.startsWith(normalizedQuery);
-        const startsWithType = typeName?.startsWith(normalizedQuery) ?? false;
-        const startsWithSubtype = subtypeName?.startsWith(normalizedQuery) ?? false;
         const includesYarn = yarnName.includes(normalizedQuery);
         const includesSearchable = searchable.includes(normalizedQuery);
 
         if (enforceStartsWithOnly) {
-          if (!startsWithYarn && !startsWithType && !startsWithSubtype) {
+          if (!startsWithYarn && !exactShadeCodeMatch) {
             return null;
           }
-        } else if (!startsWithYarn && !startsWithType && !startsWithSubtype && !includesYarn && !includesSearchable) {
+        } else if (!startsWithYarn && !includesYarn && !includesSearchable && !exactShadeCodeMatch) {
           return null;
         }
 
-        let score = 4;
-        if (startsWithYarn) {
+        let score = 5;
+        // Prioritize exact shade code matches
+        if (exactShadeCodeMatch) {
+          score = -1; // Highest priority (lowest score)
+        } else if (startsWithYarn) {
           score = 0;
-        } else if (startsWithType || startsWithSubtype) {
-          score = 1;
         } else if (includesYarn) {
           score = 2;
         } else if (includesSearchable) {
@@ -622,11 +281,11 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
         return { option, score };
       })
-      .filter((entry): entry is { option: SupplierCatalogOption; score: number } => Boolean(entry))
+      .filter((entry): entry is { option: SupplierYarnOption; score: number } => Boolean(entry))
       .sort((a, b) => a.score - b.score);
 
     const seen = new Set<string>();
-    const uniqueOrdered: SupplierCatalogOption[] = [];
+    const uniqueOrdered: SupplierYarnOption[] = [];
     rankedMatches.forEach(({ option }) => {
       if (!seen.has(option.id)) {
         seen.add(option.id);
@@ -635,7 +294,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     });
 
     return uniqueOrdered.slice(0, 10);
-  }, [supplierCatalogOptions]);
+  }, [buildSupplierYarnOptions]);
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -689,11 +348,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           const supplier = suppliersResponse.results?.find(s => s.id === initialData.supplierId);
           if (supplier) {
             setSelectedSupplier(supplier);
-            setSupplierYarnDetails(supplier.yarnDetails || []);
-            supplierYarnDetailsRef.current = supplier.yarnDetails || [];
-            supplierCatalogOptionsRef.current = [];
-            lastCatalogSupplierIdRef.current = null;
-            void buildSupplierCatalogOptions(supplier, true);
+            const yarnDetails = supplier.yarnDetails || [];
+            setSupplierYarnDetails(yarnDetails);
+            supplierYarnDetailsRef.current = yarnDetails;
+            console.log("[PurchaseForm] Initial supplier loaded", {
+              supplierId: supplier.id,
+              supplierName: supplier.brandName,
+              yarnDetailsCount: yarnDetails.length,
+            });
           }
         }
       } catch (error) {
@@ -705,10 +367,10 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     };
 
     loadOptions();
-  }, [buildSupplierCatalogOptions, initialData.supplierId]);
+  }, [initialData.supplierId]);
 
   useEffect(() => {
-    if (!selectedSupplier || supplierCatalogOptions.length === 0) {
+    if (!selectedSupplier || supplierYarnDetails.length === 0) {
       return;
     }
 
@@ -722,7 +384,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           return;
         }
 
-        const suggestions = filterSupplierCatalogOptions(state.query);
+        const suggestions = filterSupplierYarnOptions(state.query);
         const showSuggestions = suggestions.length > 0;
 
         const prevSuggestions = state.suggestions || [];
@@ -744,7 +406,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
       return hasChanges ? nextStates : prevStates;
     });
-  }, [selectedSupplier, supplierCatalogOptions, filterSupplierCatalogOptions]);
+  }, [selectedSupplier, supplierYarnDetails, filterSupplierYarnOptions]);
 
   useEffect(() => {
     // Click outside handler for autocomplete
@@ -767,12 +429,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     if (!supplierId) {
       setSelectedSupplier(null);
       setSupplierYarnDetails([]);
-      setSupplierCatalogOptions([]);
       supplierYarnDetailsRef.current = [];
-      supplierCatalogOptionsRef.current = [];
-      lastCatalogSupplierIdRef.current = null;
       setAutocompleteStates({});
-      setIsLoadingCatalogOptions(false);
       setFormData(prev => ({
         ...prev,
         supplierId: "",
@@ -785,12 +443,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     const supplier = suppliers.find(s => s.id === supplierId);
     if (supplier) {
       setSelectedSupplier(supplier);
-      setSupplierYarnDetails(supplier.yarnDetails || []);
-      setSupplierCatalogOptions([]);
-      supplierYarnDetailsRef.current = supplier.yarnDetails || [];
-      supplierCatalogOptionsRef.current = [];
-      lastCatalogSupplierIdRef.current = null;
-      setIsLoadingCatalogOptions(false);
+      const yarnDetails = supplier.yarnDetails || [];
+      setSupplierYarnDetails(yarnDetails);
+      supplierYarnDetailsRef.current = yarnDetails;
       setFormData(prev => ({
         ...prev,
         supplierId: supplier.id,
@@ -800,7 +455,11 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       if (!formData.supplierId || formData.supplierId !== supplier.id) {
         setAutocompleteStates({});
       }
-      void buildSupplierCatalogOptions(supplier, true);
+      console.log("[PurchaseForm] Supplier changed", {
+        supplierId: supplier.id,
+        supplierName: supplier.brandName,
+        yarnDetailsCount: yarnDetails.length,
+      });
     }
   };
 
@@ -867,7 +526,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     const queryLower = value.toLowerCase().trim();
     const suggestions =
       selectedSupplier && queryLower
-        ? filterSupplierCatalogOptions(value)
+        ? filterSupplierYarnOptions(value)
         : [];
 
     console.log("[PurchaseForm] handleYarnNameInput", {
@@ -876,16 +535,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       queryLower,
       hasSupplier: Boolean(selectedSupplier),
       supplierName: selectedSupplier?.brandName,
-      catalogOptionsCount: supplierCatalogOptions.length,
+      yarnDetailsCount: supplierYarnDetails.length,
       suggestionsCount: suggestions.length,
       suggestionSamples: suggestions.map(s => s.displayName).slice(0, 5),
-      supplierDetailSamples: supplierCatalogOptions.slice(0, 5).map(option => ({
-        displayName: option.displayName,
-        yarnType: option.catalog?.yarnType?.name,
-        yarnSubtype: option.catalog?.yarnSubtype?.name,
-        color: option.catalog?.colorFamily?.name,
-        shadeCode: option.shadeCode,
-      })),
     });
 
     setAutocompleteStates(prev => ({
@@ -910,48 +562,73 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     });
   };
 
-  const selectYarnSuggestion = useCallback((itemId: string, option: SupplierCatalogOption) => {
-    const { catalog, supplierDetail, displayName } = option;
+  const selectYarnSuggestion = useCallback(async (itemId: string, option: SupplierYarnOption) => {
+    const { supplierDetail, displayName } = option;
 
     console.log("[PurchaseForm] selectYarnSuggestion", {
       itemId,
-      catalogId: catalog?.id,
-      catalogName: catalog?.yarnName,
-      catalogType: catalog?.yarnType?.name,
-      catalogSubtype: catalog?.yarnSubtype?.name,
-      catalogColor: catalog?.colorFamily?.name,
+      displayName,
       supplierDetail,
     });
 
-    const yarnTypeId = catalog?.yarnType?.id || extractIdFromValue(supplierDetail?.yarnType) || "";
-    const yarnSubtypeId = catalog?.yarnSubtype?.id || extractIdFromValue(supplierDetail?.yarnsubtype) || "";
+    const yarnTypeId = extractIdFromValue(supplierDetail?.yarnType) || "";
+    const yarnSubtypeId = extractIdFromValue(supplierDetail?.yarnsubtype) || "";
 
-    const catalogCountSizeId = extractIdFromValue(catalog?.countSize);
-    const catalogCountSizeName =
-      (catalog?.countSize && (catalog.countSize as any)?.name) ||
-      (catalog?.countSize && (catalog.countSize as any)?.label) ||
-      undefined;
+    const finalDisplayName = displayName.trim();
 
+    // Try to match supplier yarn name with catalog yarn name to get countSize
+    let catalogCountSizeId: string | undefined;
+    let catalogCountSizeName: string | undefined;
+    let matchedCatalog: YarnCatalog | undefined;
+
+    try {
+      const catalogResponse = await yarnCatalogService.getYarnCatalogs({
+        yarnName: finalDisplayName,
+        status: "active",
+        limit: 20,
+        page: 1,
+      });
+
+      // Find exact match by yarn name
+      const exactMatch = catalogResponse.results?.find(
+        (catalog) => catalog.yarnName?.trim().toLowerCase() === finalDisplayName.toLowerCase()
+      );
+
+      if (exactMatch) {
+        matchedCatalog = exactMatch;
+        catalogCountSizeId = extractIdFromValue(exactMatch.countSize);
+        catalogCountSizeName =
+          (exactMatch.countSize && (exactMatch.countSize as any)?.name) ||
+          (exactMatch.countSize && (exactMatch.countSize as any)?.label) ||
+          undefined;
+
+        console.log("[PurchaseForm] Found matching catalog for yarn name", {
+          yarnName: finalDisplayName,
+          catalogId: exactMatch.id,
+          catalogCountSizeId,
+          catalogCountSizeName,
+        });
+      }
+    } catch (error) {
+      console.error("[PurchaseForm] Failed to fetch catalog for yarn name matching", error);
+    }
+
+    // Fallback to supplier detail count sizes if catalog match not found
     const detailCountSizeOptions = extractCountSizeOptionsFromDetail(supplierDetail);
-
     const fallbackCountSizeFromDetail = detailCountSizeOptions.length === 1 ? detailCountSizeOptions[0] : undefined;
 
+    // Prioritize catalog countSize, then fallback to supplier detail
     const resolvedCountSizeId = catalogCountSizeId || fallbackCountSizeFromDetail?.id;
-    const resolvedCountSizeName =
-      catalogCountSizeName ||
-      detailCountSizeOptions.find(option => option.id === catalogCountSizeId)?.name ||
-      fallbackCountSizeFromDetail?.name;
-
-    const finalDisplayName = catalog?.yarnName?.trim() || displayName;
+    const resolvedCountSizeName = catalogCountSizeName || fallbackCountSizeFromDetail?.name;
 
     const updates: Partial<YarnPurchaseItem> = {
       yarnName: finalDisplayName,
-      yarnId: catalog.id,
+      yarnId: supplierDetail.yarnCatalogId || extractIdFromValue(supplierDetail.yarnCatalog) || matchedCatalog?.id || "",
       yarnTypeId,
       yarnSubtypeId,
       shadeCode: option.shadeCode || "",
       selectedYarnDetail: supplierDetail,
-      selectedCatalog: catalog,
+      selectedCatalog: matchedCatalog, // Store matched catalog for reference
     };
 
     console.log("[PurchaseForm] selectYarnSuggestion resolved fields", {
@@ -962,6 +639,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       shadeCode: option.shadeCode,
       resolvedCountSizeId,
       resolvedCountSizeName,
+      catalogMatched: Boolean(matchedCatalog),
     });
 
     if (resolvedCountSizeId) {
@@ -982,25 +660,22 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   }, [extractCountSizeOptionsFromDetail, extractIdFromValue, updateItem]);
 
   useEffect(() => {
-    if (!selectedSupplier || supplierCatalogOptions.length === 0) {
+    if (!selectedSupplier || supplierYarnDetails.length === 0) {
       return;
     }
 
     formData.items.forEach((item) => {
       if (!item) return;
-      if (item.selectedCatalog) return;
-      if (!item.yarnId && !item.yarnName) return;
+      if (item.selectedYarnDetail) return;
+      if (!item.yarnName) return;
 
-      const match = supplierCatalogOptions.find((option) => {
-        const optionId = option.catalog?.id ? String(option.catalog.id) : undefined;
-        const itemId = item.yarnId ? String(item.yarnId) : undefined;
+      const options = buildSupplierYarnOptions();
+      const match = options.find((option) => {
+        const optionYarnName = option.displayName.trim().toLowerCase();
+        const itemYarnName = item.yarnName.trim().toLowerCase();
 
-        if (itemId && optionId && itemId === optionId) {
+        if (itemYarnName && optionYarnName === itemYarnName) {
           return true;
-        }
-
-        if (item.yarnName && option.catalog?.yarnName) {
-          return option.catalog.yarnName.trim().toLowerCase() === item.yarnName.trim().toLowerCase();
         }
 
         return false;
@@ -1018,7 +693,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         selectYarnSuggestion(item.id, match);
       }
     });
-  }, [formData.items, selectedSupplier, supplierCatalogOptions, selectYarnSuggestion]);
+  }, [formData.items, selectedSupplier, supplierYarnDetails, buildSupplierYarnOptions, selectYarnSuggestion]);
 
   const calculateTotals = () => {
     const subTotal = formData.items.reduce((sum, item) => {
@@ -1048,16 +723,19 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const getAvailableCountSizes = (item: YarnPurchaseItem): Array<{ id: string; name: string }> => {
     const uniqueOptions = new Map<string, string>();
 
-    if (item.selectedCatalog) {
+    // Prioritize catalog countSize if available (from matched catalog)
+    if (item.selectedCatalog?.countSize) {
       const catalogCountSizeId = extractIdFromValue(item.selectedCatalog.countSize);
       const catalogCountSizeName =
         (item.selectedCatalog.countSize && (item.selectedCatalog.countSize as any)?.name) ||
-        (item.selectedCatalog.countSize && (item.selectedCatalog.countSize as any)?.label);
+        (item.selectedCatalog.countSize && (item.selectedCatalog.countSize as any)?.label) ||
+        undefined;
       if (catalogCountSizeId) {
         uniqueOptions.set(catalogCountSizeId, catalogCountSizeName || catalogCountSizeId);
       }
     }
 
+    // Add count sizes from supplier yarn detail
     if (item.selectedYarnDetail) {
       extractCountSizeOptionsFromDetail(item.selectedYarnDetail).forEach(option => {
         if (option.id) {
@@ -1241,14 +919,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             </p>
           </div>
         )}
-        {formData.supplierId && isLoadingCatalogOptions && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center">
-            <i className="ri-loader-4-line animate-spin me-3 text-blue-500"></i>
-            <p className="text-sm text-blue-800">
-              Fetching yarn catalog options for the selected supplier...
-            </p>
-          </div>
-        )}
 
         {formData.items.length === 0 ? (
           <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
@@ -1321,18 +991,13 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                             }
                           }}
                           className="form-control"
-                          placeholder="Type to search yarn from supplier's master data..."
+                          placeholder="Type to search yarn from supplier's yarn details..."
                           required
                         />
                         {autocompleteState.showSuggestions && autocompleteState.suggestions.length > 0 && (
                           <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
                             {autocompleteState.suggestions.map((option, idx) => {
-                              const { catalog } = option;
                               const displayName = option.displayName;
-                              const typeName = catalog?.yarnType?.name;
-                              const subtypeName = catalog?.yarnSubtype?.name;
-                              const colorName = catalog?.colorFamily?.name;
-                              const countSizeName = catalog?.countSize?.name;
                               const shadeCode = option.shadeCode;
                               const metadata = option.metadataSummary;
 
