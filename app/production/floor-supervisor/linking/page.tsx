@@ -6,6 +6,8 @@ import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
+import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
+import { getRepairInfo } from "@/shared/utils/repairUtils";
 
 const LinkingFloorSupervisorPage = () => {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
@@ -868,6 +870,31 @@ const LinkingFloorSupervisorPage = () => {
                       const remainingQty = receivedQty - transferredQty;
                       const isFullyTransferred = remainingQty <= 0;
                       
+                      // Get repair info from floorQuantities or logs
+                      // Use articleLogs if available (when logs section is open), otherwise use article.logs if available
+                      const availableLogs = 
+                        (selectedLogArticleId === articleId && articleLogs.length > 0) 
+                          ? articleLogs 
+                          : ((article as any).logs || []);
+                      
+                      const repairInfo = getRepairInfo(
+                        article.floorQuantities?.linking,
+                        availableLogs,
+                        'Linking'
+                      );
+                      
+                      // Debug: Log repair data
+                      if (receivedQty > 0) {
+                        console.log(`Article ${article.articleNumber} - Linking Floor Data:`, {
+                          received: receivedQty,
+                          repairReceived: repairInfo.repairReceived,
+                          repairFromFloor: repairInfo.repairFromFloor,
+                          fromBackend: article.floorQuantities?.linking?.repairReceived,
+                          fromLogs: repairInfo.repairReceived > 0 && !article.floorQuantities?.linking?.repairReceived,
+                          fullData: article.floorQuantities?.linking
+                        });
+                      }
+                      
                       return (
                         <tr key={articleId} className="hover:bg-gray-50">
                           <td className="px-2 py-1.5 border-r border-gray-300">
@@ -875,7 +902,13 @@ const LinkingFloorSupervisorPage = () => {
                             <div className="text-gray-500 text-xs mt-0.5">{article.linkingType || 'N/A'}</div>
                           </td>
                           <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{plannedQty.toLocaleString()}</td>
-                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-blue-600 font-medium">{receivedQty.toLocaleString()}</td>
+                          <td className="px-2 py-1.5 border-r border-gray-300 align-top min-w-[120px]">
+                            <ReceivedQuantityDisplay
+                              received={receivedQty}
+                              repairReceived={repairInfo.repairReceived}
+                              repairFromFloor={repairInfo.repairFromFloor || undefined}
+                            />
+                          </td>
                           <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
                           <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
                           <td className="px-2 py-1.5 border-r border-gray-300 bg-yellow-50">
@@ -1037,6 +1070,20 @@ const LinkingFloorSupervisorPage = () => {
                         const remainingQty = article.floorQuantities?.linking?.remaining || 0;
                         const progress = receivedQty > 0 ? Math.round((completedQty / receivedQty) * 100) : 0;
                         
+                        // Get repair info from floorQuantities or logs
+                        // Use articleLogs if available (when logs section is open), otherwise use article.logs if available
+                        const articleId = article.id || article._id;
+                        const availableLogs = 
+                          (selectedLogArticleId === articleId && articleLogs.length > 0) 
+                            ? articleLogs 
+                            : ((article as any).logs || []);
+                        
+                        const repairInfo = getRepairInfo(
+                          article.floorQuantities?.linking,
+                          availableLogs,
+                          'Linking'
+                        );
+                        
                         return (
                           <tr key={article.id || article._id} className="hover:bg-gray-50">
                             <td className="px-2 py-1.5 border-r border-gray-300">
@@ -1051,7 +1098,13 @@ const LinkingFloorSupervisorPage = () => {
                               )}
                             </td>
                             <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{plannedQty.toLocaleString()}</td>
-                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-blue-600 font-medium">{receivedQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 border-r border-gray-300 align-top min-w-[120px]">
+                              <ReceivedQuantityDisplay
+                                received={receivedQty}
+                                repairReceived={repairInfo.repairReceived}
+                                repairFromFloor={repairInfo.repairFromFloor || undefined}
+                              />
+                            </td>
                             <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{completedQty.toLocaleString()}</td>
                             <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
                             <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
