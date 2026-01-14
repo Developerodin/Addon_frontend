@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "react-hot-toast";
+import JsBarcode from "jsbarcode";
 import BarcodeScanner from "./BarcodeScanner";
 import RackDetailsModal from "./RackDetailsModal";
 import { RackLocation, PackedBox } from "../types";
@@ -43,6 +44,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const [storageRackCode, setStorageRackCode] = useState("");
   const [isAllocating, setIsAllocating] = useState(false);
   const [isLoadingBox, setIsLoadingBox] = useState(false);
+  const [showPrintBarcodeModal, setShowPrintBarcodeModal] = useState(false);
+  const [selectedRacksForPrint, setSelectedRacksForPrint] = useState<string[]>([]);
 
   // Fetch storage slots from API
   useEffect(() => {
@@ -357,6 +360,304 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     }
   };
 
+  // Helper function to generate barcode SVG
+  const generateBarcodeSVG = (barcodeValue: string): string => {
+    try {
+      const tempDiv = document.createElement('div');
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      tempDiv.appendChild(svg);
+      
+      JsBarcode(svg, barcodeValue, {
+        format: "CODE128",
+        width: 2,
+        height: 60,
+        displayValue: true,
+        fontSize: 14,
+        margin: 10,
+        background: "transparent"
+      });
+      
+      const svgHTML = svg.outerHTML;
+      tempDiv.remove();
+      
+      return svgHTML;
+    } catch (error) {
+      console.error('Error generating barcode:', error);
+      return `<div style="font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; padding: 10px;">${barcodeValue}</div>`;
+    }
+  };
+
+  // Handle print selected racks barcode
+  const handlePrintSelectedRacks = () => {
+    if (selectedRacksForPrint.length === 0) {
+      toast.error("Please select at least one rack");
+      return;
+    }
+
+    const selectedRacks = racks.filter((r) => selectedRacksForPrint.includes(r.id) && r.barcode);
+    if (selectedRacks.length === 0) {
+      toast.error("No valid racks selected");
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print barcodes');
+      return;
+    }
+
+    const rackBarcodes = selectedRacks.map((rack) => {
+      const barcodeSVG = generateBarcodeSVG(rack.barcode!);
+      return `
+        <div class="barcode-item">
+          <div class="rack-info">
+            <div class="rack-label">${rack.rackCode}</div>
+          </div>
+          <div class="barcode-section">
+            <div class="barcode-label">Barcode</div>
+            <div class="barcode-value">
+              ${barcodeSVG}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const barcodeHTML = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Print Selected Rack Barcodes</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 20px;
+            }
+            .header-info {
+              background: #e9ecef;
+              padding: 15px;
+              margin-bottom: 20px;
+              border-radius: 5px;
+            }
+            .barcode-container {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 25px;
+              margin-top: 20px;
+            }
+            .barcode-item {
+              border: 2px solid #ddd;
+              padding: 20px;
+              text-align: center;
+              page-break-inside: avoid;
+              background: #fff;
+              border-radius: 8px;
+            }
+            .rack-info {
+              margin-bottom: 15px;
+            }
+            .rack-label {
+              font-size: 16px;
+              font-weight: bold;
+              color: #333;
+              margin-bottom: 8px;
+            }
+            .rack-details {
+              font-size: 12px;
+              color: #666;
+              margin-bottom: 3px;
+            }
+            .barcode-section {
+              margin: 15px 0;
+            }
+            .barcode-label {
+              font-size: 11px;
+              color: #666;
+              margin-bottom: 8px;
+              font-weight: 600;
+              text-transform: uppercase;
+            }
+            .barcode-value {
+              margin: 10px 0;
+              padding: 15px;
+              background: #f5f5f5;
+              border: 1px dashed #ccc;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              border-radius: 4px;
+            }
+            .barcode-value svg {
+              max-width: 100%;
+              height: auto;
+            }
+            @media print {
+              .barcode-container {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
+              }
+              .barcode-item {
+                page-break-inside: avoid;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header-info">
+            <h2 style="margin: 0 0 10px 0;">Selected Rack Barcodes - Long Term Storage</h2>
+            <p style="margin: 0;">Total Selected: ${selectedRacks.length}</p>
+          </div>
+          <div class="barcode-container">
+            ${rackBarcodes}
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(barcodeHTML);
+    printWindow.document.close();
+    
+    setTimeout(() => {
+      printWindow.print();
+      toast.success(`${selectedRacks.length} rack barcode(s) printed successfully`);
+    }, 250);
+  };
+
+  // Handle print all racks barcode
+  const handlePrintAllRacks = () => {
+    if (racks.length === 0) {
+      toast.error("No racks available to print");
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print barcodes');
+      return;
+    }
+
+    const rackBarcodes = racks
+      .filter((rack) => rack.barcode)
+      .map((rack) => {
+        const barcodeSVG = generateBarcodeSVG(rack.barcode!);
+        return `
+          <div class="barcode-item">
+            <div class="rack-info">
+              <div class="rack-label">${rack.rackCode}</div>
+              <div class="rack-details">Floor: ${rack.column} | Shelf: ${rack.shelf}</div>
+              <div class="rack-details">Status: ${rack.status}</div>
+            </div>
+            <div class="barcode-section">
+              <div class="barcode-label">Barcode</div>
+              <div class="barcode-value">
+                ${barcodeSVG}
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    const barcodeHTML = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Print All Rack Barcodes</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 20px;
+            }
+            .header-info {
+              background: #e9ecef;
+              padding: 15px;
+              margin-bottom: 20px;
+              border-radius: 5px;
+            }
+            .barcode-container {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 25px;
+              margin-top: 20px;
+            }
+            .barcode-item {
+              border: 2px solid #ddd;
+              padding: 20px;
+              text-align: center;
+              page-break-inside: avoid;
+              background: #fff;
+              border-radius: 8px;
+            }
+            .rack-info {
+              margin-bottom: 15px;
+            }
+            .rack-label {
+              font-size: 16px;
+              font-weight: bold;
+              color: #333;
+              margin-bottom: 8px;
+            }
+            .rack-details {
+              font-size: 12px;
+              color: #666;
+              margin-bottom: 3px;
+            }
+            .barcode-section {
+              margin: 15px 0;
+            }
+            .barcode-label {
+              font-size: 11px;
+              color: #666;
+              margin-bottom: 8px;
+              font-weight: 600;
+              text-transform: uppercase;
+            }
+            .barcode-value {
+              margin: 10px 0;
+              padding: 15px;
+              background: #f5f5f5;
+              border: 1px dashed #ccc;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              border-radius: 4px;
+            }
+            .barcode-value svg {
+              max-width: 100%;
+              height: auto;
+            }
+            @media print {
+              .barcode-container {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
+              }
+              .barcode-item {
+                page-break-inside: avoid;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header-info">
+            <h2 style="margin: 0 0 10px 0;">Rack Barcodes - Long Term Storage</h2>
+            <p style="margin: 0;">Total Racks: ${racks.length}</p>
+          </div>
+          <div class="barcode-container">
+            ${rackBarcodes}
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(barcodeHTML);
+    printWindow.document.close();
+    
+    setTimeout(() => {
+      printWindow.print();
+      toast.success(`${racks.length} rack barcode(s) printed successfully`);
+    }, 250);
+  };
+
   return (
     <div className="space-y-6">
       {/* Scanning Section */}
@@ -394,23 +695,34 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               </span>
             )}
           </h3>
-          <div className="flex gap-2 text-xs">
-            <div className="flex items-center gap-1">
-              <div className="w-4 h-4 bg-green-50 border border-green-200 rounded"></div>
-              <span>Available</span>
+          <div className="flex gap-2 items-center flex-wrap">
+            <div className="flex gap-2 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-green-50 border border-green-200 rounded"></div>
+                <span>Available</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-blue-50 border border-blue-300 rounded"></div>
+                <span>Occupied</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-yellow-50 border border-yellow-300 rounded"></div>
+                <span>Reserved</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-red-50 border border-red-300 rounded"></div>
+                <span>Maintenance</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-4 h-4 bg-blue-50 border border-blue-300 rounded"></div>
-              <span>Occupied</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-4 h-4 bg-yellow-50 border border-yellow-300 rounded"></div>
-              <span>Reserved</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-4 h-4 bg-red-50 border border-red-300 rounded"></div>
-              <span>Maintenance</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowPrintBarcodeModal(true)}
+              className="ti-btn ti-btn-primary text-xs px-3 py-1.5 ml-2"
+              title="Print rack barcodes"
+            >
+              <i className="ri-printer-line me-1"></i>
+              Print Barcode
+            </button>
           </div>
         </div>
         <div className="box-body">
@@ -429,9 +741,9 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           ) : (
             <div className="overflow-auto">
               <div
-                className="inline-grid gap-2 p-4"
+                className="grid gap-4 p-6 w-full"
                 style={{
-                  gridTemplateColumns: `repeat(${gridDimensions.columns}, minmax(120px, 1fr))`,
+                  gridTemplateColumns: `repeat(${gridDimensions.columns}, minmax(160px, 1fr))`,
                 }}
               >
               {rackGrid.map((row, rowIndex) =>
@@ -444,9 +756,10 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     <div
                       key={rack ? rack.id : `empty-${rowIndex}-${colIndex}`}
                       className={`
-                        relative border-2 rounded-lg p-3 min-h-[100px] transition-all cursor-pointer
+                        relative border-2 rounded-xl p-4 min-h-[140px] transition-all cursor-pointer
                         ${getRackStatusColor(rack)}
-                        ${rack ? "hover:shadow-md" : ""}
+                        ${rack ? "hover:shadow-lg hover:scale-[1.02]" : ""}
+                        flex flex-col justify-between
                       `}
                       onClick={() => {
                         if (rack) {
@@ -456,12 +769,18 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     >
                       {rack ? (
                         <>
-                          <div className="text-xs font-semibold text-gray-700 mb-1">
+                          <div className="text-sm font-bold text-gray-800 mb-2">
                             {rack.rackCode}
                           </div>
-                          <div className="text-xs text-gray-500 space-y-0.5">
-                            <div>Floor: {rack.column}</div>
-                            <div>Shelf: {rack.shelf}</div>
+                          <div className="text-sm text-gray-600 space-y-1">
+                            <div className="flex items-center gap-1">
+                              <i className="ri-building-line text-xs"></i>
+                              <span>Floor: {rack.column}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <i className="ri-stack-line text-xs"></i>
+                              <span>Shelf: {rack.shelf}</span>
+                            </div>
                           </div>
                           {/* {box ? (
                             <div className="text-xs text-gray-600 space-y-0.5 mt-1">
@@ -482,7 +801,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                           )} */}
                         </>
                       ) : (
-                        <div className="text-xs text-gray-400 text-center mt-4">
+                        <div className="text-sm text-gray-400 text-center flex items-center justify-center h-full">
                           No Rack
                         </div>
                       )}
@@ -518,6 +837,117 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         dataType={rackDetails?.type || "boxes"}
         isLoading={isLoadingRackDetails}
       />
+
+      {/* Print Barcode Modal */}
+      {showPrintBarcodeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4" onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setShowPrintBarcodeModal(false);
+            setSelectedRacksForPrint([]);
+          }
+        }}>
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="box-header border-b border-gray-200 px-6 py-4 flex-shrink-0">
+              <h3 className="box-title text-lg font-semibold">
+                Print Rack Barcode
+              </h3>
+            </div>
+            <div className="box-body px-6 py-4 overflow-y-auto flex-1">
+              <div className="mb-4 flex justify-between items-center">
+                <label className="form-label text-sm font-medium text-gray-700">
+                  Select Racks <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allRackIds = racks.filter((r) => r.barcode).map((r) => r.id);
+                      setSelectedRacksForPrint(allRackIds);
+                    }}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Select All
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRacksForPrint([])}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+              <div className="border border-gray-200 rounded-lg p-4 max-h-[400px] overflow-y-auto bg-gray-50">
+                <div className="space-y-2">
+                  {racks
+                    .filter((rack) => rack.barcode)
+                    .map((rack) => (
+                      <label
+                        key={rack.id}
+                        className="flex items-center p-2 rounded hover:bg-white cursor-pointer transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedRacksForPrint.includes(rack.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedRacksForPrint([...selectedRacksForPrint, rack.id]);
+                            } else {
+                              setSelectedRacksForPrint(selectedRacksForPrint.filter((id) => id !== rack.id));
+                            }
+                          }}
+                          className="form-checkbox h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+                        />
+                        <span className="ml-3 text-sm text-gray-700">
+                          <span className="font-medium">{rack.rackCode}</span>
+                          <span className="text-gray-500 ml-2">(Floor: {rack.column}, Shelf: {rack.shelf})</span>
+                        </span>
+                      </label>
+                    ))}
+                </div>
+              </div>
+              <div className="mt-4 text-sm text-gray-600">
+                Selected: {selectedRacksForPrint.length} of {racks.filter((r) => r.barcode).length} racks
+              </div>
+            </div>
+            <div className="box-footer border-t border-gray-200 px-6 py-4 flex justify-end gap-2 flex-shrink-0">
+              <button
+                onClick={() => {
+                  setShowPrintBarcodeModal(false);
+                  setSelectedRacksForPrint([]);
+                }}
+                className="ti-btn ti-btn-light"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handlePrintAllRacks();
+                  setShowPrintBarcodeModal(false);
+                  setSelectedRacksForPrint([]);
+                }}
+                className="ti-btn ti-btn-primary"
+              >
+                <i className="ri-printer-line me-1"></i>
+                Print All Racks
+              </button>
+              <button
+                onClick={() => {
+                  handlePrintSelectedRacks();
+                  setShowPrintBarcodeModal(false);
+                  setSelectedRacksForPrint([]);
+                }}
+                className="ti-btn ti-btn-primary"
+                disabled={selectedRacksForPrint.length === 0}
+              >
+                <i className="ri-printer-line me-1"></i>
+                Print Selected ({selectedRacksForPrint.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Allocate Box Modal */}
       {showAllocateModal && (
