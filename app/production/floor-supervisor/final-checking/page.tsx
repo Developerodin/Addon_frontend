@@ -1294,7 +1294,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                                   {m2Remaining > 0 && previousFloor && (
                                     <button
                                       type="button"
-                                      className="ti-btn ti-btn-warning ti-btn-sm w-full mt-2"
+                                      className="ti-btn ti-btn-warning ti-btn w-full mt-2"
                                       onClick={() => {
                                         setSelectedRepairArticle({
                                           articleId: article._id || article.id,
