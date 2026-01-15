@@ -9,6 +9,8 @@ import { toast } from "react-hot-toast";
 import JsBarcode from "jsbarcode";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { YarnBox, UpdateYarnBoxPayload } from "@/shared/services/yarnBoxService";
+import { QZTrayLoader } from "@/shared/components/qzTray";
+import { printMultipleBarcodes, connectQZ, getDefaultPrinter } from "@/shared/utils/qzTray";
 
 interface ReceivedItem {
   id: string;
@@ -1073,7 +1075,67 @@ const ProcessOrderPage = () => {
     };
   };
 
-  const handlePrintAllBarcodes = () => {
+  const handlePrintAllBarcodes = async () => {
+    if (!order || boxes.length === 0) {
+      toast.error('No boxes available to print');
+      return;
+    }
+
+    // Connect to QZ Tray
+    const connection = await connectQZ();
+    if (!connection.isConnected) {
+      toast.error(connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/');
+      return;
+    }
+
+    // Get default printer
+    const defaultPrinter = await getDefaultPrinter();
+    if (!defaultPrinter) {
+      toast.error('No printer found. Please set a default printer.');
+      return;
+    }
+
+    // Prepare barcodes for printing
+    const barcodesToPrint = boxes.map((box) => {
+      const details = getBoxPrintDetails(box);
+      return {
+        barcodeValue: box.barcode,
+        boxId: box.boxId,
+        supplier: order.supplier || '',
+        yarnName: details.yarnName,
+        shadeCode: details.shadeCode,
+        yarnColour: details.yarnColour,
+        shadeName: details.shadeName,
+        lotNumber: box.lotNumber || '',
+      };
+    });
+
+    // Print all barcodes
+    toast.loading(`Printing ${barcodesToPrint.length} barcode(s)...`);
+    const result = await printMultipleBarcodes(barcodesToPrint, {
+      printerName: defaultPrinter.name,
+      delayBetweenPrints: 500,
+    });
+
+    toast.dismiss();
+
+    if (result.success) {
+      toast.success(`Successfully printed ${result.printed} barcode(s)`);
+    } else {
+      if (result.printed > 0) {
+        toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
+        toast.error(`Failed to print ${result.errors.length} barcode(s)`, { duration: 4000 });
+      } else {
+        toast.error('Failed to print barcodes. Please check printer connection.');
+      }
+      if (result.errors.length > 0) {
+        console.error('Print errors:', result.errors);
+      }
+    }
+  };
+
+  // Legacy browser print function (kept as fallback)
+  const handlePrintAllBarcodesBrowser = () => {
     if (!order || boxes.length === 0) {
       toast.error('No boxes available to print');
       return;
@@ -1397,6 +1459,7 @@ const ProcessOrderPage = () => {
 
   return (
     <div className="main-content">
+      <QZTrayLoader />
       <Seo title={`Process Order - ${order.orderNumber}`} />
       
       <div className="grid grid-cols-12 gap-6">
@@ -1537,7 +1600,67 @@ const ProcessOrderPage = () => {
                 {/* Render boxes grouped by lot */}
                 {boxesByLot.sortedLots.map((lotNumber) => {
                   const lotBoxes = boxesByLot.grouped[lotNumber];
-                  const handlePrintLotBarcodes = () => {
+                  const handlePrintLotBarcodes = async () => {
+                    if (!order || lotBoxes.length === 0) {
+                      toast.error('No boxes available to print');
+                      return;
+                    }
+
+                    // Connect to QZ Tray
+                    const connection = await connectQZ();
+                    if (!connection.isConnected) {
+                      toast.error(connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/');
+                      return;
+                    }
+
+                    // Get default printer
+                    const defaultPrinter = await getDefaultPrinter();
+                    if (!defaultPrinter) {
+                      toast.error('No printer found. Please set a default printer.');
+                      return;
+                    }
+
+                    // Prepare barcodes for printing
+                    const barcodesToPrint = lotBoxes.map((box) => {
+                      const details = getBoxPrintDetails(box);
+                      return {
+                        barcodeValue: box.barcode,
+                        boxId: box.boxId,
+                        supplier: order.supplier || '',
+                        yarnName: details.yarnName,
+                        shadeCode: details.shadeCode,
+                        yarnColour: details.yarnColour,
+                        shadeName: details.shadeName,
+                        lotNumber: lotNumber,
+                      };
+                    });
+
+                    // Print all barcodes for this lot
+                    toast.loading(`Printing ${barcodesToPrint.length} barcode(s) for ${lotNumber}...`);
+                    const result = await printMultipleBarcodes(barcodesToPrint, {
+                      printerName: defaultPrinter.name,
+                      delayBetweenPrints: 500,
+                    });
+
+                    toast.dismiss();
+
+                    if (result.success) {
+                      toast.success(`${result.printed} box barcode(s) printed for ${lotNumber}`);
+                    } else {
+                      if (result.printed > 0) {
+                        toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
+                        toast.error(`Failed to print ${result.errors.length} barcode(s)`, { duration: 4000 });
+                      } else {
+                        toast.error('Failed to print barcodes. Please check printer connection.');
+                      }
+                      if (result.errors.length > 0) {
+                        console.error('Print errors:', result.errors);
+                      }
+                    }
+                  };
+
+                  // Legacy browser print function (kept as fallback)
+                  const handlePrintLotBarcodesBrowser = () => {
                     if (!order || lotBoxes.length === 0) {
                       toast.error('No boxes available to print');
                       return;
