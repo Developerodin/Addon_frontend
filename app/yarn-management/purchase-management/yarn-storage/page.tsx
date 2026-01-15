@@ -333,16 +333,6 @@ const YarnStoragePage = () => {
                   and barcode tracking
                 </p>
               </div>
-              <div className="box-tools flex gap-2">
-                <button
-                  onClick={() => setShowPreferences(true)}
-                  className="ti-btn ti-btn-light"
-                  title="Preferences"
-                >
-                  <i className="ri-settings-3-line me-1"></i>
-                  Preferences
-                </button>
-              </div>
             </div>
           </div>
 
