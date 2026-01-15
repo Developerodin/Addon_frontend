@@ -1,7 +1,28 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
 import { StoragePreferences as StoragePreferencesType } from "../types";
+
+// System default preferences (4x4 grid)
+const DEFAULT_PREFERENCES: StoragePreferencesType = {
+  layoutView: "grid",
+  showEmptySlots: true,
+  gridColumns: 4,
+  gridRows: 4,
+  autoRefresh: false,
+  refreshInterval: 30,
+  theme: "light",
+  compactMode: false,
+};
+
+// Helper function to get preferences storage key for user
+const getPreferencesStorageKey = (userId?: string): string => {
+  if (userId) {
+    return `yarnStoragePreferences_${userId}`;
+  }
+  return "yarnStoragePreferences"; // Fallback for non-authenticated users
+};
 
 interface StoragePreferencesProps {
   preferences: StoragePreferencesType;
@@ -14,6 +35,7 @@ const StoragePreferences: React.FC<StoragePreferencesProps> = ({
   onSave,
   onClose,
 }) => {
+  const user = useSelector((state: any) => state.auth?.user);
   const [preferences, setPreferences] =
     useState<StoragePreferencesType>(initialPreferences);
 
@@ -28,26 +50,19 @@ const StoragePreferences: React.FC<StoragePreferencesProps> = ({
   };
 
   const handleSave = () => {
-    // Save to localStorage
-    localStorage.setItem("yarnStoragePreferences", JSON.stringify(preferences));
+    // Save to user-specific localStorage key
+    if (typeof window !== "undefined") {
+      const storageKey = getPreferencesStorageKey(user?.id);
+      localStorage.setItem(storageKey, JSON.stringify(preferences));
+    }
     onSave(preferences);
     toast.success("Preferences saved successfully");
     onClose();
   };
 
   const handleReset = () => {
-    const defaultPrefs: StoragePreferencesType = {
-      layoutView: "grid",
-      showEmptySlots: true,
-      gridColumns: 8,
-      gridRows: 6,
-      autoRefresh: false,
-      refreshInterval: 30,
-      theme: "light",
-      compactMode: false,
-    };
-    setPreferences(defaultPrefs);
-    toast.success("Preferences reset to default");
+    setPreferences(DEFAULT_PREFERENCES);
+    toast.success("Preferences reset to system default (4x4)");
   };
 
   return (

@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -18,51 +19,79 @@ import {
   Cone,
 } from "./types";
 
+// System default preferences (4x4 grid)
+const DEFAULT_PREFERENCES: StoragePreferencesType = {
+  layoutView: "grid",
+  showEmptySlots: true,
+  gridColumns: 4,
+  gridRows: 4,
+  autoRefresh: false,
+  refreshInterval: 30,
+  theme: "light",
+  compactMode: false,
+};
+
+// Helper function to get preferences storage key for user
+const getPreferencesStorageKey = (userId?: string): string => {
+  if (userId) {
+    return `yarnStoragePreferences_${userId}`;
+  }
+  return "yarnStoragePreferences"; // Fallback for non-authenticated users
+};
+
 const YarnStoragePage = () => {
   const { hasSubPermission } = useNavigation();
+  const user = useSelector((state: any) => state.auth?.user);
   const [activeTab, setActiveTab] = useState<
     "unallocated" | "allocated" | "long-term" | "short-term"
   >("unallocated");
   const [showPreferences, setShowPreferences] = useState(false);
 
-  // Load preferences from localStorage
-  const loadPreferences = (): StoragePreferencesType => {
+  // Load preferences from localStorage (user-specific or system default)
+  const loadPreferences = useCallback((): StoragePreferencesType => {
     if (typeof window === "undefined") {
-      return {
-        layoutView: "grid",
-        showEmptySlots: true,
-        gridColumns: 8,
-        gridRows: 6,
-        autoRefresh: false,
-        refreshInterval: 30,
-        theme: "light",
-        compactMode: false,
-      };
+      return DEFAULT_PREFERENCES;
     }
 
-    const saved = localStorage.getItem("yarnStoragePreferences");
+    const storageKey = getPreferencesStorageKey(user?.id);
+    const saved = localStorage.getItem(storageKey);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        // Ensure all required fields are present
+        return { ...DEFAULT_PREFERENCES, ...parsed };
       } catch {
         // Return default if parse fails
+        return DEFAULT_PREFERENCES;
       }
     }
 
-    return {
-      layoutView: "grid",
-      showEmptySlots: true,
-      gridColumns: 8,
-      gridRows: 6,
-      autoRefresh: false,
-      refreshInterval: 30,
-      theme: "light",
-      compactMode: false,
-    };
-  };
+    // If no user-specific preferences, try to load from old global key for migration
+    if (user?.id) {
+      const oldSaved = localStorage.getItem("yarnStoragePreferences");
+      if (oldSaved) {
+        try {
+          const parsed = JSON.parse(oldSaved);
+          // Migrate old preferences to user-specific key
+          const migratedPrefs = { ...DEFAULT_PREFERENCES, ...parsed };
+          localStorage.setItem(storageKey, JSON.stringify(migratedPrefs));
+          return migratedPrefs;
+        } catch {
+          // Fall through to default
+        }
+      }
+    }
+
+    return DEFAULT_PREFERENCES;
+  }, [user?.id]);
 
   const [preferences, setPreferences] =
-    useState<StoragePreferencesType>(loadPreferences);
+    useState<StoragePreferencesType>(DEFAULT_PREFERENCES);
+
+  // Load preferences when component mounts or user changes
+  useEffect(() => {
+    setPreferences(loadPreferences());
+  }, [loadPreferences]);
 
   // Generate dummy racks
   const generateRacks = (): RackLocation[] => {
@@ -246,6 +275,11 @@ const YarnStoragePage = () => {
   };
 
   const handlePreferencesSave = (newPreferences: StoragePreferencesType) => {
+    // Save to user-specific localStorage key
+    if (typeof window !== "undefined") {
+      const storageKey = getPreferencesStorageKey(user?.id);
+      localStorage.setItem(storageKey, JSON.stringify(newPreferences));
+    }
     setPreferences(newPreferences);
     setRacks(generateRacks());
   };
