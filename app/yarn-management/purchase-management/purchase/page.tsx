@@ -253,6 +253,8 @@ const PurchasePage = () => {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [detailedOrderData, setDetailedOrderData] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
+  const [isPrinting, setIsPrinting] = useState(false);
 
   // Check permission
   const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
@@ -368,118 +370,136 @@ const PurchasePage = () => {
   }
 
   const handlePrintInvoice = async (order: PurchaseOrder) => {
+    setIsPrinting(true);
     try {
+      // Fetch detailed order data to get complete supplier information
+      let detailedOrderData: any = null;
+      try {
+        detailedOrderData = await yarnPurchaseOrderService.getPurchaseOrderById(order.id);
+      } catch (error) {
+        console.error('Failed to fetch detailed order data:', error);
+        toast.error('Failed to fetch order details for printing');
+        setIsPrinting(false);
+        return;
+      }
+
       // Fetch the HTML template
       const response = await fetch('/templates/yarn-purchase-invoice.html');
       let htmlTemplate = await response.text();
 
-      // Get supplier details (you may need to fetch this from API)
-      // For now, using order data
-      const supplier = {
-        name: order.supplier,
-        address: {
-          line1: '', // TODO: Get from supplier data
-          line2: '',
-          city: '',
-          state: '',
-          pin: ''
-        },
-        phone: '',
-        mobile: '',
-        gst: ''
+      // Helper function to format date as DD-MM-YYYY
+      const formatDate = (date: string | Date): string => {
+        if (!date) return 'N/A';
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return 'N/A';
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}-${month}-${year}`;
       };
 
-      // Calculate tax breakdown (assuming GST is split into SGST and CGST)
-      const gstRate = order.items.length > 0 ? order.items[0].gst : 18;
-      const sgstRate = gstRate / 2;
-      const cgstRate = gstRate / 2;
-      const sgstAmount = order.totalGst / 2;
-      const cgstAmount = order.totalGst / 2;
+      // Get supplier details from API response
+      const supplierData = detailedOrderData?.supplier || {};
+      const supplierName = detailedOrderData?.supplierName || supplierData?.brandName || order.supplier || 'N/A';
+      const supplierAddress = supplierData?.address || 'N/A';
+      const supplierCity = supplierData?.city || '';
+      const supplierState = supplierData?.state || '';
+      const supplierLocation = [supplierCity, supplierState].filter(Boolean).join(', ') || 'N/A';
+      const supplierContact = supplierData?.contactNumber || 'N/A';
+      const supplierGST = supplierData?.gstin || supplierData?.gst || 'N/A';
 
-      // Replace template variables
-      htmlTemplate = htmlTemplate.replace(/\{\{supplier\.name\}\}/g, supplier.name || order.supplier);
-      htmlTemplate = htmlTemplate.replace(/\{\{supplier\.address\.line1\}\}/g, supplier.address.line1 || '');
-      htmlTemplate = htmlTemplate.replace(/\{\{supplier\.address\.line2\}\}/g, supplier.address.line2 || '');
-      htmlTemplate = htmlTemplate.replace(/\{\{supplier\.address\.city\}\}/g, supplier.address.city || '');
-      htmlTemplate = htmlTemplate.replace(/\{\{supplier\.address\.state\}\}/g, supplier.address.state || '');
-      htmlTemplate = htmlTemplate.replace(/\{\{supplier\.address\.pin\}\}/g, supplier.address.pin || '');
-      htmlTemplate = htmlTemplate.replace(/\{\{supplier\.phone\}\}/g, supplier.phone || '');
-      htmlTemplate = htmlTemplate.replace(/\{\{supplier\.mobile\}\}/g, supplier.mobile || '');
-      htmlTemplate = htmlTemplate.replace(/\{\{supplier\.gst\}\}/g, supplier.gst || '');
+      // Get order details from API response
+      const orderItems = detailedOrderData?.poItems || order.items || [];
+      const poNumber = detailedOrderData?.poNumber || order.orderNumber || 'N/A';
+      const orderDate = detailedOrderData?.createDate || order.orderDate;
+      const subTotal = detailedOrderData?.subTotal || order.subTotal || 0;
+      const totalGst = detailedOrderData?.gst || order.totalGst || 0;
+      const totalAmount = detailedOrderData?.total || order.totalAmount || 0;
+      const notes = detailedOrderData?.notes || order.notes || '';
 
-      // Invoice details
-      htmlTemplate = htmlTemplate.replace(/\{\{invoice\.number\}\}/g, order.orderNumber);
-      htmlTemplate = htmlTemplate.replace(/\{\{invoice\.date\}\}/g, new Date(order.orderDate).toLocaleDateString());
-      htmlTemplate = htmlTemplate.replace(/\{\{invoice\.payment_terms\}\}/g, 'Credit');
-      htmlTemplate = htmlTemplate.replace(/\{\{invoice\.supplier_ref\}\}/g, '');
-      htmlTemplate = htmlTemplate.replace(/\{\{invoice\.po_number\}\}/g, order.orderNumber);
+      // Get packlist details
+      const packlistDetails = detailedOrderData?.packListDetails?.[0] || order.packlistDetails;
+      const dispatchNumber = packlistDetails?.packingNumber || packlistDetails?.trackingNumber || 'N/A';
+      const dispatchDate = packlistDetails?.dispatchDate ? formatDate(packlistDetails.dispatchDate) : 'N/A';
 
-      // Delivery details
-      htmlTemplate = htmlTemplate.replace(/\{\{delivery\.note\}\}/g, '');
-      htmlTemplate = htmlTemplate.replace(/\{\{delivery\.date\}\}/g, new Date(order.expectedDelivery).toLocaleDateString());
+      // Calculate GST - check if same state (CGST/SGST) or different state (IGST)
+      const isSameState = supplierState?.toLowerCase() === 'maharashtra' || supplierState?.toLowerCase() === 'mh';
+      let taxRowHtml = '';
+      
+      if (isSameState && orderItems.length > 0) {
+        // Same state: Split GST into SGST and CGST
+        const avgGstRate = orderItems.reduce((sum: number, item: any) => sum + (item.gstRate || item.gst || 0), 0) / orderItems.length;
+        const sgstRate = avgGstRate / 2;
+        const cgstRate = avgGstRate / 2;
+        const sgstAmount = totalGst / 2;
+        const cgstAmount = totalGst / 2;
+        taxRowHtml = `<tr><td>SGST ${sgstRate.toFixed(2)}%</td><td>${subTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>${sgstAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>0.00</td></tr><tr><td>CGST ${cgstRate.toFixed(2)}%</td><td>........</td><td>0.00</td><td>${cgstAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`;
+      } else if (orderItems.length > 0) {
+        // Different state: Use IGST
+        const avgGstRate = orderItems.reduce((sum: number, item: any) => sum + (item.gstRate || item.gst || 0), 0) / orderItems.length;
+        const igstAmount = totalGst;
+        taxRowHtml = `<tr><td>IGST ${avgGstRate.toFixed(2)}%</td><td>${subTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>0.00</td><td>${igstAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`;
+      } else {
+        taxRowHtml = `<tr><td>IGST 5%</td><td>........</td><td>0.00</td><td>0.00</td></tr>`;
+      }
 
-      // Consignee (company details)
-      htmlTemplate = htmlTemplate.replace(/\{\{consignee\.name\}\}/g, 'Addon holding pvt ltd');
-      htmlTemplate = htmlTemplate.replace(/\{\{consignee\.address\.line1\}\}/g, '');
-      htmlTemplate = htmlTemplate.replace(/\{\{consignee\.address\.line2\}\}/g, '');
-      htmlTemplate = htmlTemplate.replace(/\{\{consignee\.address\.city\}\}/g, '');
-      htmlTemplate = htmlTemplate.replace(/\{\{consignee\.address\.state\}\}/g, '');
-      htmlTemplate = htmlTemplate.replace(/\{\{consignee\.address\.pin\}\}/g, '');
-      htmlTemplate = htmlTemplate.replace(/\{\{consignee\.state_code\}\}/g, 'MH');
-      htmlTemplate = htmlTemplate.replace(/\{\{consignee\.phone\}\}/g, '+91 9898989898');
-      htmlTemplate = htmlTemplate.replace(/\{\{consignee\.email\}\}/g, 'info@addon.in');
-      htmlTemplate = htmlTemplate.replace(/\{\{consignee\.gstin\}\}/g, '');
+      // Replace supplier information
+      htmlTemplate = htmlTemplate.replace(
+        /<b>Valson Polyester Pvt Ltd<\/b><br>[\s\S]*?<b>GST :<\/b> 26AAACV4941Q1ZS/g,
+        `<b>${supplierName}</b><br>${supplierAddress}<br>${supplierLocation}<br><br><b>PHON :</b><br><b>MOB :</b> ${supplierContact}<br><b>GST :</b> ${supplierGST}`
+      );
 
-      // Order details
-      htmlTemplate = htmlTemplate.replace(/\{\{order\.number\}\}/g, order.orderNumber);
-      htmlTemplate = htmlTemplate.replace(/\{\{order\.date\}\}/g, new Date(order.orderDate).toLocaleDateString());
+      // Replace invoice details
+      const invoiceDate = formatDate(orderDate);
+      htmlTemplate = htmlTemplate.replace(/<b>Invoice No :<\/b><br>P\/25-26\/00478/g, `<b>Invoice No :</b><br>${poNumber}`);
+      htmlTemplate = htmlTemplate.replace(/<b>Dated :<\/b><br>30-10-2025/g, `<b>Dated :</b><br>${invoiceDate}`);
+      htmlTemplate = htmlTemplate.replace(/<b>Delivery Note :<\/b><br>/g, `<b>Delivery Note :</b><br>${dispatchNumber}`);
+      htmlTemplate = htmlTemplate.replace(/<b>Mode\/Terms of Payment :<\/b><br>/g, `<b>Mode/Terms of Payment :</b><br>Credit`);
+      htmlTemplate = htmlTemplate.replace(/<b>Suppliers Ref :<\/b><br>/g, `<b>Suppliers Ref :</b><br>N/A`);
+      htmlTemplate = htmlTemplate.replace(/<b>Other References\/PO No :<\/b><br>/g, `<b>Other References/PO No :</b><br>${poNumber}`);
+      htmlTemplate = htmlTemplate.replace(/<b>Buyers Order No :<\/b><br>/g, `<b>Buyers Order No :</b><br>${poNumber}`);
+      htmlTemplate = htmlTemplate.replace(/<b>Dated :<\/b><br>/g, `<b>Dated :</b><br>${invoiceDate}`);
+      htmlTemplate = htmlTemplate.replace(/<b>Despatch Document No :<\/b><br>/g, `<b>Despatch Document No :</b><br>${dispatchNumber}`);
+      htmlTemplate = htmlTemplate.replace(/<b>Delivery Note Date :<\/b><br>/g, `<b>Delivery Note Date :</b><br>${dispatchDate}`);
 
-      // Despatch details
-      htmlTemplate = htmlTemplate.replace(/\{\{despatch\.number\}\}/g, order.packlistDetails?.packingNumber || order.packlistDetails?.trackingNumber || '');
+      // Replace consignee email
+      htmlTemplate = htmlTemplate.replace(/<b>E-Mail :<\/b>/g, `<b>E-Mail :</b> info@addon.in`);
 
-      // Generate items rows
+      // Generate items rows - replace the example rows
       let itemsHtml = '';
-      order.items.forEach((item, index) => {
-        itemsHtml += `
-          <tr>
-            <td>${index + 1}</td>
-            <td>${item.shadeCode || ''}</td>
-            <td>${item.yarnName} - ${item.sizeCount}</td>
-            <td class="numeric">${item.quantity}</td>
-            <td class="numeric">₹${item.rate.toLocaleString()}</td>
-            <td class="numeric">₹${(item.rate * item.quantity).toLocaleString()}</td>
-          </tr>
-        `;
+      orderItems.forEach((item: any, index: number) => {
+        const yarnName = item.yarnName || item.yarn?.yarnName || 'N/A';
+        const sizeCount = item.sizeCount || 'N/A';
+        const shadeCode = item.shadeCode || 'N/A';
+        const quantity = item.quantity || 0;
+        const rate = item.rate || 0;
+        const amount = quantity * rate;
+        
+        itemsHtml += `<tr><td>${index + 1}</td><td>${shadeCode}</td><td>${yarnName}${sizeCount !== 'N/A' ? ' - ' + sizeCount : ''}</td><td>${quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>${rate.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>KGS</td><td>${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`;
       });
-      htmlTemplate = htmlTemplate.replace(/<!-- Repeat this <tr> block for each line item -->[\s\S]*?<!-- Add additional rows as needed -->/g, itemsHtml);
+      
+      // Replace the example product rows
+      htmlTemplate = htmlTemplate.replace(
+        /<tr>\s*<td>1<\/td>[\s\S]*?<td>15,067\.22<\/td>\s*<\/tr>/g,
+        itemsHtml
+      );
 
-      // Summary totals
-      const totalQuantity = order.items.reduce((sum, item) => sum + item.quantity, 0);
-      htmlTemplate = htmlTemplate.replace(/\{\{summary\.total_quantity\}\}/g, totalQuantity.toString());
-      htmlTemplate = htmlTemplate.replace(/\{\{summary\.subtotal\}\}/g, `₹${order.subTotal.toLocaleString()}`);
-      htmlTemplate = htmlTemplate.replace(/\{\{summary\.shipping\}\}/g, '₹0');
-      htmlTemplate = htmlTemplate.replace(/\{\{summary\.round_off\}\}/g, '₹0');
-      htmlTemplate = htmlTemplate.replace(/\{\{summary\.taxable_value\}\}/g, `₹${order.subTotal.toLocaleString()}`);
-      htmlTemplate = htmlTemplate.replace(/\{\{summary\.grand_total\}\}/g, `₹${order.totalAmount.toLocaleString()}`);
+      // Replace totals
+      const totalQuantity = orderItems.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
+      htmlTemplate = htmlTemplate.replace(/TOTAL QTY : 190\.5700/g, `TOTAL QTY : ${totalQuantity.toLocaleString('en-IN', { maximumFractionDigits: 4 })}`);
+      htmlTemplate = htmlTemplate.replace(/TOTAL AMOUNT : 72,988\.30/g, `TOTAL AMOUNT : ${subTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
+      htmlTemplate = htmlTemplate.replace(/<td colspan="6">SHIPPING<\/td>\s*<td>572\.00<\/td>/g, `<td colspan="6">SHIPPING</td><td>0.00</td>`);
 
-      // Tax details
-      htmlTemplate = htmlTemplate.replace(/\{\{tax\.sgst_rate\}\}/g, sgstRate.toString());
-      htmlTemplate = htmlTemplate.replace(/\{\{tax\.sgst_amount\}\}/g, `₹${sgstAmount.toLocaleString()}`);
-      htmlTemplate = htmlTemplate.replace(/\{\{tax\.cgst_rate\}\}/g, cgstRate.toString());
-      htmlTemplate = htmlTemplate.replace(/\{\{tax\.cgst_amount\}\}/g, `₹${cgstAmount.toLocaleString()}`);
-      htmlTemplate = htmlTemplate.replace(/\{\{tax\.igst_rate\}\}/g, '0');
-      htmlTemplate = htmlTemplate.replace(/\{\{tax\.igst_amount\}\}/g, '₹0');
+      // Replace tax section
+      htmlTemplate = htmlTemplate.replace(/<tr><td>IGST 5%<\/td>[\s\S]*?<td>3,678\.01<\/td><\/tr>/g, taxRowHtml);
+      htmlTemplate = htmlTemplate.replace(/<tr><td colspan="3" class="tax-total">TOTAL<\/td><td>77,238\.00<\/td><\/tr>/g, `<tr><td colspan="3" class="tax-total">TOTAL</td><td>${totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`);
 
-      // Amount in words (simple conversion - you may want to use a library)
-      htmlTemplate = htmlTemplate.replace(/\{\{summary\.amount_in_words\}\}/g, `Rupees ${numberToWords(order.totalAmount)} only`);
+      // Replace amount in words
+      htmlTemplate = htmlTemplate.replace(/<div><b>Net Amount Total :-<\/b> Seventy Seven Thousand Two Hundred Thirty Eight Only<\/div>/g, `<div><b>Net Amount Total :-</b> ${numberToWords(totalAmount)} Only</div>`);
 
-      // Narration
-      htmlTemplate = htmlTemplate.replace(/\{\{narration\}\}/g, order.notes || '');
-
-      // Signatures
-      htmlTemplate = htmlTemplate.replace(/\{\{signatures\.prepared_by\}\}/g, '');
-      htmlTemplate = htmlTemplate.replace(/\{\{signatures\.verified_by\}\}/g, '');
-      htmlTemplate = htmlTemplate.replace(/\{\{signatures\.authorised_date\}\}/g, new Date().toLocaleDateString());
+      // Replace narration
+      const narrationText = notes || 'N/A';
+      htmlTemplate = htmlTemplate.replace(/<div style="margin-top:6px;"><b>NARRATION:<\/b> Inv No P28345 Dt 29\.10\.2025 Rcvd 30\.10\.2025<\/div>/g, `<div style="margin-top:6px;"><b>NARRATION:</b> ${narrationText}</div>`);
 
       // Open print window
       const printWindow = window.open('', '_blank');
@@ -489,12 +509,17 @@ const PurchasePage = () => {
         printWindow.onload = () => {
           setTimeout(() => {
             printWindow.print();
+            setIsPrinting(false);
           }, 250);
         };
+      } else {
+        setIsPrinting(false);
+        toast.error('Please allow popups to print invoice');
       }
     } catch (error) {
       console.error('Error printing invoice:', error);
       toast.error('Failed to load invoice template');
+      setIsPrinting(false);
     }
   };
 
@@ -926,6 +951,7 @@ const PurchasePage = () => {
                                 <button
                                   onClick={async () => {
                                     setSelectedOrder(order);
+                                    setActiveTab('details');
                                     setDetailsModalOpen(true);
                                     setIsLoadingDetails(true);
                                     try {
@@ -948,8 +974,13 @@ const PurchasePage = () => {
                                   onClick={() => handlePrintInvoice(order)}
                                   className="text-blue-600 hover:text-blue-900 flex items-center justify-center"
                                   title="Print Invoice"
+                                  disabled={isPrinting}
                                 >
-                                  <i className="ri-printer-line text-lg"></i>
+                                  {isPrinting ? (
+                                    <i className="ri-loader-4-line text-lg animate-spin"></i>
+                                  ) : (
+                                    <i className="ri-printer-line text-lg"></i>
+                                  )}
                                 </button>
                                 <Link
                                   href={`/yarn-management/purchase-management/purchase/edit/${order.id}`}
@@ -1079,20 +1110,62 @@ const PurchasePage = () => {
             {/* Modal panel */}
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full">
               {/* Header */}
-              <div className="bg-primary text-white px-6 py-4 flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-semibold">Purchase Order Details</h3>
-                  <p className="text-sm text-white/80 mt-1">{selectedOrder.orderNumber}</p>
+              <div className="bg-primary text-white px-6 py-4">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Purchase Order Details</h3>
+                    <p className="text-sm text-white/80 mt-1">{selectedOrder.orderNumber}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => handlePrintInvoice(selectedOrder)}
+                      className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 px-3 py-1.5 rounded hover:bg-white/10"
+                      title="Print Invoice"
+                      disabled={isPrinting}
+                    >
+                      {isPrinting ? (
+                        <i className="ri-loader-4-line text-lg animate-spin"></i>
+                      ) : (
+                        <i className="ri-printer-line text-lg"></i>
+                      )}
+                      <span className="text-sm">{isPrinting ? 'Printing...' : 'Print'}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDetailsModalOpen(false);
+                        setSelectedOrder(null);
+                        setDetailedOrderData(null);
+                        setActiveTab('details');
+                      }}
+                      className="text-white hover:text-gray-200 transition-colors"
+                    >
+                      <i className="ri-close-line text-xl"></i>
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => {
-                    setDetailsModalOpen(false);
-                    setSelectedOrder(null);
-                  }}
-                  className="text-white hover:text-gray-200 transition-colors"
-                >
-                  <i className="ri-close-line text-xl"></i>
-                </button>
+                {/* Tabs */}
+                <div className="flex gap-1 border-b border-white/20">
+                  <button
+                    onClick={() => setActiveTab('details')}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${
+                      activeTab === 'details'
+                        ? 'text-white border-b-2 border-white'
+                        : 'text-white/70 hover:text-white'
+                    }`}
+                  >
+                    Order Details
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('history')}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${
+                      activeTab === 'history'
+                        ? 'text-white border-b-2 border-white'
+                        : 'text-white/70 hover:text-white'
+                    }`}
+                  >
+                    Status History
+                  </button>
+                </div>
               </div>
 
               {/* Content */}
@@ -1104,7 +1177,10 @@ const PurchasePage = () => {
                   </div>
                 ) : (
                   <>
-                    {/* Order Information */}
+                    {/* Order Details Tab */}
+                    {activeTab === 'details' && (
+                      <>
+                        {/* Order Information */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                       <div className="space-y-4">
                         <div>
@@ -1443,48 +1519,72 @@ const PurchasePage = () => {
                   </div>
                 )}
 
-                    {/* Status Logs */}
-                    {detailedOrderData?.statusLogs && detailedOrderData.statusLogs.length > 0 && (
-                      <div className="mb-6">
-                        <label className="text-sm font-medium text-gray-600 mb-3 block">Status History</label>
-                        <div className="space-y-3">
-                          {detailedOrderData.statusLogs.map((log: any, index: number) => (
-                            <div key={index} className="p-3 bg-gray-50 rounded-lg border-l-4 border-primary">
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(log.statusCode))}`}>
-                                      {convertStatusFromAPI(log.statusCode)}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                      {new Date(log.updatedAt).toLocaleString()}
-                                    </span>
-                                  </div>
-                                  {log.updatedBy?.username && (
-                                    <div className="text-xs text-gray-600 mt-1">
-                                      Updated by: <span className="font-medium">{log.updatedBy.username}</span>
-                                    </div>
-                                  )}
-                                  {log.notes && (
-                                    <div className="text-sm text-gray-700 mt-2">{log.notes}</div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                        {/* Timestamps */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500 pt-4 border-t">
+                          <div>
+                            <span className="font-medium">Created:</span> {new Date(detailedOrderData?.createDate || selectedOrder.createdAt).toLocaleString()}
+                          </div>
+                          <div>
+                            <span className="font-medium">Last Updated:</span> {new Date(detailedOrderData?.lastUpdateDate || selectedOrder.updatedAt).toLocaleString()}
+                          </div>
                         </div>
-                      </div>
+                      </>
                     )}
 
-                    {/* Timestamps */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500 pt-4 border-t">
-                      <div>
-                        <span className="font-medium">Created:</span> {new Date(detailedOrderData?.createDate || selectedOrder.createdAt).toLocaleString()}
-                      </div>
-                      <div>
-                        <span className="font-medium">Last Updated:</span> {new Date(detailedOrderData?.lastUpdateDate || selectedOrder.updatedAt).toLocaleString()}
-                      </div>
-                    </div>
+                    {/* Status History Tab */}
+                    {activeTab === 'history' && (
+                      <>
+                        {detailedOrderData?.statusLogs && detailedOrderData.statusLogs.length > 0 ? (
+                          <div className="mb-6">
+                            <label className="text-sm font-medium text-gray-600 mb-3 block">Status History</label>
+                            <div className="space-y-3">
+                              {detailedOrderData.statusLogs.map((log: any, index: number) => (
+                                <div key={index} className="p-3 bg-gray-50 rounded-lg border-l-4 border-primary">
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(log.statusCode))}`}>
+                                          {convertStatusFromAPI(log.statusCode)}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                          {new Date(log.updatedAt).toLocaleString()}
+                                        </span>
+                                      </div>
+                                      {log.updatedBy?.username && (
+                                        <div className="text-xs text-gray-600 mt-1">
+                                          Updated by: <span className="font-medium">{log.updatedBy.username}</span>
+                                        </div>
+                                      )}
+                                      {log.notes && (
+                                        <div className="text-sm text-gray-700 mt-2">{log.notes}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-12">
+                            <div className="text-gray-400 mb-4">
+                              <i className="ri-history-line text-4xl"></i>
+                            </div>
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">No Status History</h3>
+                            <p className="text-gray-500">No status changes have been recorded for this purchase order.</p>
+                          </div>
+                        )}
+
+                        {/* Timestamps */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500 pt-4 border-t">
+                          <div>
+                            <span className="font-medium">Created:</span> {new Date(detailedOrderData?.createDate || selectedOrder.createdAt).toLocaleString()}
+                          </div>
+                          <div>
+                            <span className="font-medium">Last Updated:</span> {new Date(detailedOrderData?.lastUpdateDate || selectedOrder.updatedAt).toLocaleString()}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -1496,6 +1596,7 @@ const PurchasePage = () => {
                     setDetailsModalOpen(false);
                     setSelectedOrder(null);
                     setDetailedOrderData(null);
+                    setActiveTab('details');
                   }}
                   className="ti-btn ti-btn-light"
                 >

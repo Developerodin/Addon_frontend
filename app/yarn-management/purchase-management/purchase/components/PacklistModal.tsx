@@ -465,14 +465,44 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                             Number of Boxes <span className="text-red-500">*</span>
                           </label>
                           <input
-                            type="number"
+                            type="text"
                             name="numberOfBoxes"
                             value={entry.numberOfBoxes || ""}
-                            onChange={(e) => handleInputChange(entryIndex, e)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Allow empty string or valid positive integer (no leading zeros except single digit)
+                              if (value === "") {
+                                handleInputChange(entryIndex, e);
+                              } else if (/^[1-9]\d*$/.test(value) || /^[1-9]$/.test(value)) {
+                                // Allow positive integers starting with 1-9, or single digit 1-9
+                                handleInputChange(entryIndex, e);
+                              } else if (/^0$/.test(value)) {
+                                // Prevent just "0"
+                                return;
+                              }
+                            }}
+                            onBlur={(e) => {
+                              // Ensure valid number on blur
+                              const value = e.target.value;
+                              const numValue = parseInt(value, 10);
+                              if (!value || isNaN(numValue) || numValue < 1) {
+                                const currentValue = entry.numberOfBoxes || 0;
+                                e.target.value = currentValue > 0 ? currentValue.toString() : "";
+                                if (currentValue > 0) {
+                                  handleInputChange(entryIndex, e);
+                                }
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              // Prevent non-numeric keys except backspace, delete, tab, arrow keys
+                              if (!/[0-9]/.test(e.key) && 
+                                  !['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) &&
+                                  !(e.ctrlKey && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase()))) {
+                                e.preventDefault();
+                              }
+                            }}
                             className="form-control"
-                            placeholder="0"
-                            min="1"
-                            step="1"
+                            placeholder="Enter number of boxes"
                             required
                           />
                         </div>
@@ -482,15 +512,57 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                             Total Weight (kg) <span className="text-red-500">*</span>
                           </label>
                           <input
-                            type="number"
+                            type="text"
                             name="totalWeight"
                             value={entry.totalWeight || ""}
-                            onChange={(e) => handleInputChange(entryIndex, e)}
-                            onKeyDown={(e) => handleWeightKeyDown(e, entry.totalWeight || "")}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Allow empty string
+                              if (value === "") {
+                                handleInputChange(entryIndex, e);
+                                return;
+                              }
+                              // Allow valid decimal numbers: digits, single decimal point, no leading zeros except for decimals
+                              // Pattern: allows numbers like 1, 12, 1.5, 0.5, 12.34, etc.
+                              if (/^[1-9]\d*(\.\d*)?$/.test(value) || /^0\.\d*$/.test(value) || /^\d+\.$/.test(value)) {
+                                handleInputChange(entryIndex, e);
+                              }
+                            }}
+                            onBlur={(e) => {
+                              // Ensure valid number on blur
+                              const value = e.target.value;
+                              const numValue = parseFloat(value);
+                              if (!value || isNaN(numValue) || numValue <= 0) {
+                                const currentValue = entry.totalWeight || 0;
+                                e.target.value = currentValue > 0 ? currentValue.toString() : "";
+                                if (currentValue > 0) {
+                                  handleInputChange(entryIndex, e);
+                                }
+                              } else {
+                                // Format to remove trailing decimal point if no decimals
+                                if (value.endsWith('.')) {
+                                  e.target.value = numValue.toString();
+                                  handleInputChange(entryIndex, e);
+                                }
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              const input = e.currentTarget;
+                              const value = input.value;
+                              // Allow decimal point only if not already present
+                              if (e.key === '.' && value.includes('.')) {
+                                e.preventDefault();
+                                return;
+                              }
+                              // Prevent non-numeric keys except backspace, delete, tab, arrow keys, and decimal point
+                              if (!/[0-9.]/.test(e.key) && 
+                                  !['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) &&
+                                  !(e.ctrlKey && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase()))) {
+                                e.preventDefault();
+                              }
+                            }}
                             className="form-control"
-                            placeholder="0.00"
-                            min="0.001"
-                            step="0.001"
+                            placeholder="Enter weight in kg"
                             required
                           />
                         </div>

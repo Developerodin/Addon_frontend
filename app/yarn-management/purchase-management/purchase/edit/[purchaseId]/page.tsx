@@ -21,6 +21,10 @@ const statusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     qc_pending: "QC pending",
     partially_delivered: "partially delivered",
     stocked: "stocked",
+    goods_received: "goods received",
+    goods_partially_received: "goods partially received",
+    po_accepted: "PO accepted",
+    po_accepted_partially: "PO accepted partially",
   };
   return map[statusCode] || "submitted to supplier";
 };
@@ -34,6 +38,11 @@ const statusToAPI = (status: PurchaseOrderStatus): string => {
     "QC pending": "qc_pending",
     "partially delivered": "partially_delivered",
     stocked: "stocked",
+    "goods received": "goods_received",
+    "goods partially received": "goods_partially_received",
+    "PO accepted": "po_accepted",
+    "PO accepted partially": "po_accepted_partially",
+    "po_accepted": "po_accepted",
   };
   return map[status] || "submitted_to_supplier";
 };
@@ -519,18 +528,15 @@ const EditPurchasePage = () => {
   };
 
   return (
-    <div className="main-content">
+    <div className="main-content" style={{ paddingLeft: 0, paddingRight: 0, marginLeft: '-1.5rem', marginRight: '-1.5rem' }}>
       <Seo title="Edit Purchase Order" />
       
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
+          {/* Form Container */}
+          <div className="box mt-6">
             <div className="box-header flex justify-between items-center">
-              <div>
-                <h1 className="box-title text-2xl font-semibold">Edit Purchase Order</h1>
-                <p className="text-gray-600 mt-1">Update yarn purchase order information</p>
-              </div>
+              <h3 className="box-title">Purchase Order Details</h3>
               <div className="box-tools">
                 <Link 
                   href="/yarn-management/purchase-management/purchase" 
@@ -541,17 +547,6 @@ const EditPurchasePage = () => {
                   Back
                 </Link>
               </div>
-            </div>
-          </div>
-
-          {/* Form Container */}
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">Purchase Order Details</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Update the details below to modify the purchase order. You can add, remove, or modify yarn items.
-                Fields marked with * are required.
-              </p>
             </div>
             <div className="box-body">
               <PurchaseForm

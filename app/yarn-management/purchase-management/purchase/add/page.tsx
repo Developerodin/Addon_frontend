@@ -288,18 +288,15 @@ const AddPurchasePage = () => {
   };
 
   return (
-    <div className="main-content">
+    <div className="main-content" style={{ paddingLeft: 0, paddingRight: 0, marginLeft: '-1.5rem', marginRight: '-1.5rem' }}>
       <Seo title="Add Purchase Order" />
       
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
+          {/* Form Container */}
+          <div className="box mt-6">
             <div className="box-header flex justify-between items-center">
-              <div>
-                <h1 className="box-title text-2xl font-semibold">Add Purchase Order</h1>
-                <p className="text-gray-600 mt-1">Create a new yarn purchase order</p>
-              </div>
+              <h3 className="box-title">Purchase Order Details</h3>
               <div className="box-tools">
                 <Link 
                   href="/yarn-management/purchase-management/purchase" 
@@ -310,17 +307,6 @@ const AddPurchasePage = () => {
                   Back
                 </Link>
               </div>
-            </div>
-          </div>
-
-          {/* Form Container */}
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">Purchase Order Details</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Fill in the details below to create a new purchase order. You can add multiple yarn items in one purchase order.
-                Fields marked with * are required. The order will be saved as "submitted to supplier" by default.
-              </p>
             </div>
             <div className="box-body">
               <PurchaseForm

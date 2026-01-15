@@ -2246,29 +2246,30 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           Number of Cones <span className="text-red-500">*</span>
                         </label>
                         <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
+                          type="text"
                           value={rawInputValues[`lot-${lotIndex}-cones`] !== undefined 
                             ? rawInputValues[`lot-${lotIndex}-cones`] 
-                            : (lot.numberOfCones === 0 ? '' : lot.numberOfCones)}
+                            : (lot.numberOfCones === 0 ? '' : lot.numberOfCones.toString())}
                           onChange={(e) => {
                             const value = e.target.value;
                             const key = `lot-${lotIndex}-cones`;
                             
-                            // Store raw input value
-                            setRawInputValues(prev => ({
-                              ...prev,
-                              [key]: value
-                            }));
-                            
-                            // Also update the numeric value
-                            if (value === '') {
-                              updateLot(lotIndex, 'numberOfCones', 0);
-                            } else {
-                              const numValue = parseFloat(value);
-                              if (!isNaN(numValue)) {
-                                updateLot(lotIndex, 'numberOfCones', numValue);
+                            // Allow empty string, numbers, and decimal point
+                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                              // Store raw input value
+                              setRawInputValues(prev => ({
+                                ...prev,
+                                [key]: value
+                              }));
+                              
+                              // Also update the numeric value if valid
+                              if (value === '' || value === '.') {
+                                updateLot(lotIndex, 'numberOfCones', 0);
+                              } else {
+                                const numValue = parseFloat(value);
+                                if (!isNaN(numValue)) {
+                                  updateLot(lotIndex, 'numberOfCones', numValue);
+                                }
                               }
                             }
                           }}
@@ -2292,6 +2293,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                             }
                           }}
                           className="form-control"
+                          placeholder="0.00"
                           required
                         />
                       </div>
@@ -2301,27 +2303,28 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           Total Weight (kg) <span className="text-red-500">*</span>
                         </label>
                         <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
+                          type="text"
                           value={rawInputValues[`lot-${lotIndex}-totalWeight`] !== undefined 
                             ? rawInputValues[`lot-${lotIndex}-totalWeight`] 
-                            : (lot.totalWeight === 0 ? '' : lot.totalWeight)}
+                            : (lot.totalWeight === 0 ? '' : lot.totalWeight.toString())}
                           onChange={(e) => {
                             const value = e.target.value;
                             const key = `lot-${lotIndex}-totalWeight`;
                             
-                            setRawInputValues(prev => ({
-                              ...prev,
-                              [key]: value
-                            }));
-                            
-                            if (value === '') {
-                              updateLot(lotIndex, 'totalWeight', 0);
-                            } else {
-                              const numValue = parseFloat(value);
-                              if (!isNaN(numValue)) {
-                                updateLot(lotIndex, 'totalWeight', numValue);
+                            // Allow empty string, numbers, and decimal point
+                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                              setRawInputValues(prev => ({
+                                ...prev,
+                                [key]: value
+                              }));
+                              
+                              if (value === '' || value === '.') {
+                                updateLot(lotIndex, 'totalWeight', 0);
+                              } else {
+                                const numValue = parseFloat(value);
+                                if (!isNaN(numValue)) {
+                                  updateLot(lotIndex, 'totalWeight', numValue);
+                                }
                               }
                             }
                           }}
@@ -2343,6 +2346,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                             }
                           }}
                           className="form-control"
+                          placeholder="0.00"
                           required
                         />
                       </div>
@@ -2352,27 +2356,28 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           Number of Boxes <span className="text-red-500">*</span>
                         </label>
                         <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
+                          type="text"
                           value={rawInputValues[`lot-${lotIndex}-numberOfBoxes`] !== undefined 
                             ? rawInputValues[`lot-${lotIndex}-numberOfBoxes`] 
-                            : (lot.numberOfBoxes === 0 ? '' : lot.numberOfBoxes)}
+                            : (lot.numberOfBoxes === 0 ? '' : lot.numberOfBoxes.toString())}
                           onChange={(e) => {
                             const value = e.target.value;
                             const key = `lot-${lotIndex}-numberOfBoxes`;
                             
-                            setRawInputValues(prev => ({
-                              ...prev,
-                              [key]: value
-                            }));
-                            
-                            if (value === '') {
-                              updateLot(lotIndex, 'numberOfBoxes', 0);
-                            } else {
-                              const numValue = parseFloat(value);
-                              if (!isNaN(numValue)) {
-                                updateLot(lotIndex, 'numberOfBoxes', numValue);
+                            // Allow empty string, numbers, and decimal point
+                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                              setRawInputValues(prev => ({
+                                ...prev,
+                                [key]: value
+                              }));
+                              
+                              if (value === '' || value === '.') {
+                                updateLot(lotIndex, 'numberOfBoxes', 0);
+                              } else {
+                                const numValue = parseFloat(value);
+                                if (!isNaN(numValue)) {
+                                  updateLot(lotIndex, 'numberOfBoxes', numValue);
+                                }
                               }
                             }
                           }}
@@ -2394,6 +2399,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                             }
                           }}
                           className="form-control"
+                          placeholder="0.00"
                           required
                         />
                       </div>
@@ -2439,27 +2445,28 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               Received Quantity (kg) <span className="text-red-500">*</span>
                             </label>
                             <input
-                              type="number"
-                              min="0.01"
-                              step="0.01"
+                              type="text"
                               value={rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] !== undefined 
                                 ? rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] 
-                                : (poItem.receivedQuantity === 0 ? '' : poItem.receivedQuantity)}
+                                : (poItem.receivedQuantity === 0 ? '' : poItem.receivedQuantity.toString())}
                               onChange={(e) => {
                                 const value = e.target.value;
                                 const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
                                 
-                                setRawInputValues(prev => ({
-                                  ...prev,
-                                  [key]: value
-                                }));
-                                
-                                if (value === '') {
-                                  updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', 0);
-                                } else {
-                                  const numValue = parseFloat(value);
-                                  if (!isNaN(numValue)) {
-                                    updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', numValue);
+                                // Allow empty string, numbers, and decimal point
+                                if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                  setRawInputValues(prev => ({
+                                    ...prev,
+                                    [key]: value
+                                  }));
+                                  
+                                  if (value === '' || value === '.') {
+                                    updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', 0);
+                                  } else {
+                                    const numValue = parseFloat(value);
+                                    if (!isNaN(numValue)) {
+                                      updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', numValue);
+                                    }
                                   }
                                 }
                               }}
@@ -2481,6 +2488,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                                 }
                               }}
                               className="form-control"
+                              placeholder="0.00"
                               required
                             />
                           </div>
