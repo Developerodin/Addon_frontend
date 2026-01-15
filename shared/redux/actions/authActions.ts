@@ -19,9 +19,12 @@ export const authActions = {
 
     logout: () => async (dispatch: any) => {
         // Remove refreshToken from client
-        Cookies.remove('refreshToken');
-        // Remove HTTP-only accessToken from server
-        await fetch('/api/auth/logout', { method: 'POST' });
+        Cookies.remove('refreshToken', { path: '/' });
+        // Remove accessToken from server
+        await fetch('/api/auth/logout', { 
+            method: 'POST',
+            credentials: 'include' // Ensure cookies are sent
+        });
         dispatch({ type: AUTH_TYPES.LOGOUT });
     },
 
@@ -44,14 +47,30 @@ export const authActions = {
             }
 
             // Set accessToken as HTTP-only cookie via API route
-            await fetch('/api/auth/set-cookie', {
+            const cookieResponse = await fetch('/api/auth/set-cookie', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: data.tokens.access.token })
+                body: JSON.stringify({ token: data.tokens.access.token }),
+                credentials: 'include' // Ensure cookies are sent/received
             });
 
+            if (!cookieResponse.ok) {
+                console.error('Failed to set access token cookie');
+            }
+
             // Optionally keep refreshToken for client use
-            Cookies.set('refreshToken', data.tokens.refresh.token, { expires: 7 });
+            // Don't set domain to work with both localhost and IP addresses
+            Cookies.set('refreshToken', data.tokens.refresh.token, { 
+                expires: 7,
+                path: '/',
+                sameSite: 'lax'
+            });
+            
+            // Verify cookie was set (for debugging)
+            const verifyToken = Cookies.get('accessToken');
+            if (!verifyToken) {
+                console.warn('Access token cookie not immediately available, may need page refresh');
+            }
             
             dispatch(authActions.loginSuccess(data.user));
 

@@ -239,7 +239,7 @@ const PurchasePage = () => {
     return new Date().toISOString().split('T')[0];
   };
   
-  const [statusFilter, setStatusFilter] = useState<string>("submitted to supplier");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [startDate, setStartDate] = useState<string>(getDefaultStartDate());
   const [endDate, setEndDate] = useState<string>(getDefaultEndDate());
   const [packlistModalOpen, setPacklistModalOpen] = useState(false);
@@ -261,29 +261,64 @@ const PurchasePage = () => {
   const fetchPurchaseOrders = async () => {
     setIsLoadingOrders(true);
     try {
-      const params: any = {};
+      const baseParams: any = {};
 
       // Add date filters if provided
       if (startDate) {
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
-        params.start_date = start.toISOString();
+        baseParams.start_date = start.toISOString();
       }
       if (endDate) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
-        params.end_date = end.toISOString();
+        baseParams.end_date = end.toISOString();
       }
 
-      // Filter by selected status
-      params.status_code = convertStatusToAPI(statusFilter as PurchaseOrderStatus);
+      // If "all" is selected, fetch all statuses
+      if (statusFilter === "all") {
+        const statusesToFetch = [
+          'submitted_to_supplier',
+          'in_transit',
+          'goods_partially_received',
+          'goods_received',
+          'qc_pending',
+          'po_accepted',
+          'po_accepted_partially',
+          'po_rejected'
+        ];
 
-      const response = await yarnPurchaseOrderService.getPurchaseOrders(params);
-      
-      // Handle both array and object with results property
-      const ordersData = Array.isArray(response) ? response : (response.results || []);
-      const mappedOrders = ordersData.map(mapAPIOrderToComponent);
-      setOrders(mappedOrders);
+        // Fetch all statuses in parallel
+        const responses = await Promise.all(
+          statusesToFetch.map(status => 
+            yarnPurchaseOrderService.getPurchaseOrders({ ...baseParams, status_code: status })
+          )
+        );
+
+        // Combine results from all API calls
+        const allOrders: any[] = [];
+        responses.forEach((response) => {
+          const ordersData = Array.isArray(response) ? response : (response.results || []);
+          allOrders.push(...ordersData);
+        });
+
+        // Deduplicate by order ID
+        const uniqueOrders = allOrders.filter((order, index, self) => 
+          index === self.findIndex((o) => (o._id || o.id) === (order._id || order.id))
+        );
+        
+        const mappedOrders = uniqueOrders.map(mapAPIOrderToComponent);
+        setOrders(mappedOrders);
+      } else {
+        // Filter by selected status
+        baseParams.status_code = convertStatusToAPI(statusFilter as PurchaseOrderStatus);
+        const response = await yarnPurchaseOrderService.getPurchaseOrders(baseParams);
+        
+        // Handle both array and object with results property
+        const ordersData = Array.isArray(response) ? response : (response.results || []);
+        const mappedOrders = ordersData.map(mapAPIOrderToComponent);
+        setOrders(mappedOrders);
+      }
     } catch (error) {
       console.error('Failed to fetch purchase orders:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to load purchase orders');
@@ -757,6 +792,7 @@ const PurchasePage = () => {
                       value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value)}
                     >
+                      <option value="all">All Orders</option>
                       <option value="submitted to supplier">Submitted to Supplier</option>
                       <option value="in transit">In Transit</option>
                       <option value="goods partially received">Goods Partially Received</option>
