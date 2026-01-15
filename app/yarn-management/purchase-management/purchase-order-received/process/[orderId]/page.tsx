@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
@@ -174,6 +174,7 @@ const ProcessOrderPage = () => {
   // Store raw input values as strings to allow typing "0" and "0.5"
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
   const [isFetchingWeight, setIsFetchingWeight] = useState(false);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -210,6 +211,42 @@ const ProcessOrderPage = () => {
       setIsSubmittingStatus(false);
     }
   }, [showProcessedModal]);
+
+  // Focus barcode input on page load and when boxes are loaded
+  useEffect(() => {
+    if (!isLoadingBoxes && boxes.length > 0 && barcodeInputRef.current && !activeBoxId) {
+      barcodeInputRef.current.focus();
+    }
+  }, [isLoadingBoxes, boxes.length, activeBoxId]);
+
+  // Focus weight input when a box is activated
+  useEffect(() => {
+    if (activeBoxId) {
+      // Use multiple attempts to ensure DOM is updated and input is available
+      const focusWeightInput = () => {
+        const weightInput = document.querySelector(`input[data-box-weight="${activeBoxId}"]`) as HTMLInputElement;
+        if (weightInput) {
+          weightInput.focus();
+          weightInput.select(); // Select the text if any
+          return true;
+        }
+        return false;
+      };
+
+      // Try immediately
+      if (!focusWeightInput()) {
+        // Try after a short delay
+        setTimeout(() => {
+          if (!focusWeightInput()) {
+            // Try one more time after a longer delay
+            setTimeout(() => {
+              focusWeightInput();
+            }, 200);
+          }
+        }, 100);
+      }
+    }
+  }, [activeBoxId]);
 
   // Fetch weight automatically when a row is activated
   useEffect(() => {
@@ -1475,6 +1512,7 @@ const ProcessOrderPage = () => {
               <div className="mb-4">
                 <label className="form-label">Scan Barcode</label>
                 <input
+                  ref={barcodeInputRef}
                   type="text"
                   className="form-control"
                   placeholder="Scan or enter barcode to activate row"
@@ -1889,6 +1927,7 @@ const ProcessOrderPage = () => {
                               step="0.01"
                               min="0"
                                   className="form-control text-sm"
+                                  data-box-weight={boxId}
                                   value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
                                     ? rawInputValues[`box-${boxId}-boxWeight`] 
                                     : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
@@ -1932,10 +1971,13 @@ const ProcessOrderPage = () => {
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                       e.preventDefault();
-                                      const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
-                                      if (nextInput) {
-                                        (nextInput as HTMLInputElement).focus();
-                                      }
+                                      setTimeout(() => {
+                                        const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
+                                        if (coneInput) {
+                                          coneInput.focus();
+                                          coneInput.select();
+                                        }
+                                      }, 50);
                                     }
                                   }}
                               placeholder="0.00"
@@ -1951,6 +1993,7 @@ const ProcessOrderPage = () => {
                                   min="0"
                                   step="0.01"
                                   className="form-control text-sm"
+                                  data-box-cones={boxId}
                                   value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
                                     ? rawInputValues[`box-${boxId}-numberOfCones`] 
                                     : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
@@ -1995,6 +2038,17 @@ const ProcessOrderPage = () => {
                                     if (e.key === 'Enter') {
                                       e.preventDefault();
                                       await handleUpdateBox(box);
+                                      
+                                      // Reset state and focus back to barcode input
+                                      setActiveBoxId(null);
+                                      setBarcodeScanValue('');
+                                      
+                                      // Focus back to barcode input after update
+                                      setTimeout(() => {
+                                        if (barcodeInputRef.current) {
+                                          barcodeInputRef.current.focus();
+                                        }
+                                      }, 150);
                                     }
                                   }}
                                   placeholder="0"
@@ -2141,6 +2195,7 @@ const ProcessOrderPage = () => {
                                       step="0.01"
                                       min="0"
                                       className="form-control text-sm"
+                                      data-box-weight={boxId}
                                       value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
                                         ? rawInputValues[`box-${boxId}-boxWeight`] 
                                         : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
@@ -2184,10 +2239,13 @@ const ProcessOrderPage = () => {
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
                                           e.preventDefault();
-                                          const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
-                                          if (nextInput) {
-                                            (nextInput as HTMLInputElement).focus();
-                                          }
+                                          setTimeout(() => {
+                                            const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
+                                            if (coneInput) {
+                                              coneInput.focus();
+                                              coneInput.select();
+                                            }
+                                          }, 50);
                                         }
                                       }}
                                       placeholder="0.00"
@@ -2203,6 +2261,7 @@ const ProcessOrderPage = () => {
                                       min="0"
                                       step="0.01"
                                       className="form-control text-sm"
+                                      data-box-cones={boxId}
                                       value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
                                         ? rawInputValues[`box-${boxId}-numberOfCones`] 
                                         : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
@@ -2247,6 +2306,17 @@ const ProcessOrderPage = () => {
                                         if (e.key === 'Enter') {
                                           e.preventDefault();
                                           await handleUpdateBox(box);
+                                          
+                                          // Reset state and focus back to barcode input
+                                          setActiveBoxId(null);
+                                          setBarcodeScanValue('');
+                                          
+                                          // Focus back to barcode input after update
+                                          setTimeout(() => {
+                                            if (barcodeInputRef.current) {
+                                              barcodeInputRef.current.focus();
+                                            }
+                                          }, 150);
                                         }
                                       }}
                                       placeholder="0"
