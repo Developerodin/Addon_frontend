@@ -207,22 +207,41 @@ export const connectQZ = async (): Promise<QZConnection> => {
 
     // Check site trust status
     const trustStatus = checkSiteTrust();
-    const isUntrusted = typeof window !== 'undefined' && 
-                       (window.location.protocol === 'http:' || 
-                        window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
+    const isHTTP = typeof window !== 'undefined' && window.location.protocol === 'http:';
+    const isLocalhost = typeof window !== 'undefined' && 
+                       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const isUntrusted = isHTTP && !isLocalhost;
     
     if (isUntrusted && typeof window !== 'undefined' && (window as any).console) {
       console.warn(`[QZ Tray] ⚠️ "Untrusted website" detected - QZ Tray may not save certificate approval`);
       console.warn(`[QZ Tray] 💡 Solution: Use HTTPS or localhost to allow certificate saving`);
+      console.warn(`[QZ Tray] 💡 Current URL: ${window.location.protocol}//${window.location.hostname}`);
+      console.warn(`[QZ Tray] 💡 Recommended: https://${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`);
     }
     
     // Show instructions before connecting (in case prompt appears)
     showCertificateInstructions();
     
-    // Connect to QZ Tray
+    // Connect to QZ Tray with timeout
     // NOTE: The security prompt cannot be bypassed programmatically for security reasons
     // User MUST manually check "Remember this decision" when prompt appears
-    await window.qz.websocket.connect();
+    try {
+      // Set a reasonable timeout for connection (8 seconds)
+      const connectPromise = window.qz.websocket.connect();
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Connection timeout. QZ Tray may not be running or is not responding.'));
+        }, 8000);
+      });
+
+      await Promise.race([connectPromise, timeoutPromise]);
+    } catch (connectError: any) {
+      // If it's a timeout, provide helpful message
+      if (connectError?.message?.includes('timeout')) {
+        throw new Error('Connection timeout. Please ensure QZ Tray is running and try again.');
+      }
+      throw connectError;
+    }
     
     // Provide helpful message
     if (typeof window !== 'undefined' && (window as any).console) {
@@ -233,9 +252,9 @@ export const connectQZ = async (): Promise<QZConnection> => {
         console.warn('[QZ Tray] ⚠️ Since this is an "Untrusted website", QZ Tray may not save the certificate approval.');
         console.warn('[QZ Tray] 💡 To fix permanently:');
         console.warn('[QZ Tray]    1. Close QZ Tray completely');
-        console.warn('[QZ Tray]    2. Delete: ~/Library/Application Support/qz/auth/*');
+        console.warn('[QZ Tray]    2. Delete certificate cache');
         console.warn('[QZ Tray]    3. Restart QZ Tray');
-        console.warn('[QZ Tray]    4. Use https://localhost instead of http://');
+        console.warn(`[QZ Tray]    4. Use HTTPS: https://${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`);
       }
     }
     
@@ -243,16 +262,32 @@ export const connectQZ = async (): Promise<QZConnection> => {
   } catch (error: any) {
     const errorMessage = error?.message || 'Failed to connect to QZ Tray. Make sure QZ Tray is running.';
     
+    // Check if QZ Tray is actually running by checking for WebSocket errors
+    const isWebSocketError = errorMessage.includes('WebSocket') || 
+                             errorMessage.includes('ECONNREFUSED') ||
+                             errorMessage.includes('timeout') ||
+                             errorMessage.includes('not running');
+    
+    if (isWebSocketError && !errorMessage.includes('certificate') && !errorMessage.includes('trust')) {
+      return {
+        isConnected: false,
+        error: `QZ Tray is not running or not responding.\n\n🔧 Please:\n1. Check if QZ Tray is installed\n2. Start QZ Tray application\n3. Look for QZ Tray icon in system tray/menu bar\n4. If still not working, restart QZ Tray\n\nDownload: https://qz.io/download/`,
+      };
+    }
+    
     // If connection fails due to certificate, provide manual instructions
     if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
       const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
+      const currentUrl = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}` : '';
+      const httpsUrl = typeof window !== 'undefined' ? `https://${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}` : '';
+      
       const fixSteps = isMac 
-        ? `\n\n🔧 macOS FIX for "Untrusted website" issue:\n\n1. Quit QZ Tray completely (right-click menu bar icon → Quit)\n2. Open Terminal and run:\n   rm -rf ~/Library/Application\\ Support/qz/auth/*\n3. Restart QZ Tray\n4. Try connecting again\n5. When prompt appears:\n   - Check "Remember this decision" ✅\n   - Click "Allow"\n\n💡 Better solution: Use https://localhost instead of http://localhost\n   This allows QZ Tray to properly save the certificate.`
-        : `\n\n🔧 FIX if prompt keeps appearing:\n\n1. Close QZ Tray completely\n2. Delete certificate cache:\n   • Windows: %APPDATA%\\qz\\auth\\\n   • macOS: ~/Library/Application Support/qz/auth/\n   • Linux: ~/.qz/auth/\n3. Restart QZ Tray\n4. Try again\n\n💡 If using HTTP, switch to HTTPS to allow certificate saving.`;
+        ? `\n\n🔧 macOS FIX for "Untrusted website" issue:\n\n1. Quit QZ Tray completely (right-click menu bar icon → Quit)\n2. Open Terminal and run:\n   rm -rf ~/Library/Application\\ Support/qz/auth/*\n3. Restart QZ Tray\n4. Try connecting again\n5. When prompt appears:\n   - Check "Remember this decision" ✅\n   - Click "Allow"\n\n💡 Better solution: Use HTTPS instead of HTTP\n   Current: ${currentUrl}\n   Recommended: ${httpsUrl}\n   This allows QZ Tray to properly save the certificate.`
+        : `\n\n🔧 FIX if prompt keeps appearing:\n\n1. Close QZ Tray completely\n2. Delete certificate cache:\n   • Windows: %APPDATA%\\qz\\auth\\\n   • macOS: ~/Library/Application Support/qz/auth/\n   • Linux: ~/.qz/auth/\n3. Restart QZ Tray\n4. Try again\n\n💡 If using HTTP, switch to HTTPS to allow certificate saving.\n   Current: ${currentUrl}\n   Recommended: ${httpsUrl}`;
       
       return {
         isConnected: false,
-        error: `${errorMessage}\n\n🔒 Certificate Approval Required:\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" checkbox\n3. Click "Allow" again${fixSteps}`,
+        error: `${errorMessage}\n\n🔒 Certificate Approval Required:\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" checkbox (CRITICAL!)\n3. Click "Allow" again${fixSteps}`,
       };
     }
     

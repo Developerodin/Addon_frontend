@@ -1114,25 +1114,78 @@ const ProcessOrderPage = () => {
     }
 
     try {
+      // Check if we're on HTTP (non-localhost) - this causes certificate issues
+      const isHTTP = typeof window !== 'undefined' && window.location.protocol === 'http:';
+      const isLocalhost = typeof window !== 'undefined' && 
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      const isUntrustedSite = isHTTP && !isLocalhost;
+
+      if (isUntrustedSite) {
+        toast.error(
+          '⚠️ HTTP Connection Detected\n\nQZ Tray requires HTTPS for live URLs.\n\n' +
+          '🔧 Solutions:\n' +
+          '1. Use HTTPS: https://yourdomain.com\n' +
+          '2. Or use browser print (fallback option)\n\n' +
+          'Note: HTTP on non-localhost is treated as "Untrusted" and QZ Tray cannot save certificates.',
+          { 
+            duration: 10000,
+            style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+          }
+        );
+        // Offer browser print as fallback
+        const useBrowserPrint = window.confirm(
+          'QZ Tray may not work on HTTP. Would you like to use browser print instead?'
+        );
+        if (useBrowserPrint) {
+          handlePrintAllBarcodesBrowser();
+        }
+        return;
+      }
+
       // Connect to QZ Tray
       toast.loading('Connecting to QZ Tray...');
-      const connection = await connectQZ();
+      
+      // Add timeout for connection
+      const connectionPromise = connectQZ();
+      const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
+        setTimeout(() => {
+          resolve({
+            isConnected: false,
+            error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
+          });
+        }, 10000); // 10 second timeout
+      });
+
+      const connection = await Promise.race([connectionPromise, timeoutPromise]);
       
       if (!connection.isConnected) {
         toast.dismiss();
         const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
         
-        // If it's a certificate error, show detailed instructions
-        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted')) {
+        // Enhanced error handling for certificate issues
+        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
+          const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
+          const fixInstructions = isMac
+            ? '🔧 macOS FIX:\n\n1. Quit QZ Tray completely\n2. Run in Terminal:\n   rm -rf ~/Library/Application\\ Support/qz/auth/*\n3. Restart QZ Tray\n4. Use HTTPS URL (not HTTP)\n5. When prompt appears:\n   ✅ CHECK "Remember this decision"\n   Click "Allow"'
+            : '🔧 FIX:\n\n1. Close QZ Tray completely\n2. Delete certificate cache:\n   • Windows: %APPDATA%\\qz\\auth\\\n   • macOS: ~/Library/Application Support/qz/auth/\n   • Linux: ~/.qz/auth/\n3. Restart QZ Tray\n4. Use HTTPS URL (not HTTP)\n5. When prompt appears:\n   ✅ CHECK "Remember this decision"\n   Click "Allow"';
+
           toast.error(
-            'Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision"\n3. Click "Allow" again',
+            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${fixInstructions}`,
+            { 
+              duration: 12000,
+              style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
+            }
+          );
+        } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
+          toast.error(
+            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try browser print as fallback`,
             { 
               duration: 8000,
               style: { maxWidth: '500px', whiteSpace: 'pre-line' }
             }
           );
         } else {
-          toast.error(errorMessage, { duration: 5000 });
+          toast.error(errorMessage, { duration: 6000 });
         }
         console.error('QZ Tray connection error:', errorMessage);
         return;
@@ -1144,7 +1197,13 @@ const ProcessOrderPage = () => {
       
       if (!defaultPrinter) {
         toast.dismiss();
-        toast.error('No printer found. Please set a default printer in your system settings.', { duration: 5000 });
+        toast.error(
+          'No printer found\n\nPlease set a default printer in your system settings:\n• Windows: Settings → Printers & scanners\n• macOS: System Preferences → Printers & Scanners\n• Linux: System Settings → Printers',
+          { 
+            duration: 6000,
+            style: { maxWidth: '400px', whiteSpace: 'pre-line' }
+          }
+        );
         return;
       }
 
@@ -1189,7 +1248,19 @@ const ProcessOrderPage = () => {
     } catch (error) {
       toast.dismiss();
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred while printing';
-      toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
+      
+      // Check if it's a certificate/connection error
+      if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('WebSocket')) {
+        toast.error(
+          `Print Failed: Connection Issue\n\n${errorMessage}\n\n💡 Try:\n1. Ensure QZ Tray is running\n2. Use HTTPS URL (not HTTP)\n3. Accept certificate when prompted\n4. Use browser print as fallback`,
+          { 
+            duration: 8000,
+            style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+          }
+        );
+      } else {
+        toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
+      }
       console.error('Print error:', error);
     }
   };
@@ -1712,25 +1783,78 @@ const ProcessOrderPage = () => {
                     }
 
                     try {
+                      // Check if we're on HTTP (non-localhost) - this causes certificate issues
+                      const isHTTP = typeof window !== 'undefined' && window.location.protocol === 'http:';
+                      const isLocalhost = typeof window !== 'undefined' && 
+                        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+                      const isUntrustedSite = isHTTP && !isLocalhost;
+
+                      if (isUntrustedSite) {
+                        toast.error(
+                          '⚠️ HTTP Connection Detected\n\nQZ Tray requires HTTPS for live URLs.\n\n' +
+                          '🔧 Solutions:\n' +
+                          '1. Use HTTPS: https://yourdomain.com\n' +
+                          '2. Or use browser print (fallback option)\n\n' +
+                          'Note: HTTP on non-localhost is treated as "Untrusted" and QZ Tray cannot save certificates.',
+                          { 
+                            duration: 10000,
+                            style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+                          }
+                        );
+                        // Offer browser print as fallback
+                        const useBrowserPrint = window.confirm(
+                          'QZ Tray may not work on HTTP. Would you like to use browser print instead?'
+                        );
+                        if (useBrowserPrint) {
+                          handlePrintLotBarcodesBrowser();
+                        }
+                        return;
+                      }
+
                       // Connect to QZ Tray
                       toast.loading('Connecting to QZ Tray...');
-                      const connection = await connectQZ();
+                      
+                      // Add timeout for connection
+                      const connectionPromise = connectQZ();
+                      const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
+                        setTimeout(() => {
+                          resolve({
+                            isConnected: false,
+                            error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
+                          });
+                        }, 10000); // 10 second timeout
+                      });
+
+                      const connection = await Promise.race([connectionPromise, timeoutPromise]);
                       
                       if (!connection.isConnected) {
                         toast.dismiss();
                         const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
                         
-                        // If it's a certificate error, show detailed instructions
-                        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted')) {
+                        // Enhanced error handling for certificate issues
+                        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
+                          const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
+                          const fixInstructions = isMac
+                            ? '🔧 macOS FIX:\n\n1. Quit QZ Tray completely\n2. Run in Terminal:\n   rm -rf ~/Library/Application\\ Support/qz/auth/*\n3. Restart QZ Tray\n4. Use HTTPS URL (not HTTP)\n5. When prompt appears:\n   ✅ CHECK "Remember this decision"\n   Click "Allow"'
+                            : '🔧 FIX:\n\n1. Close QZ Tray completely\n2. Delete certificate cache:\n   • Windows: %APPDATA%\\qz\\auth\\\n   • macOS: ~/Library/Application Support/qz/auth/\n   • Linux: ~/.qz/auth/\n3. Restart QZ Tray\n4. Use HTTPS URL (not HTTP)\n5. When prompt appears:\n   ✅ CHECK "Remember this decision"\n   Click "Allow"';
+
                           toast.error(
-                            'Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision"\n3. Click "Allow" again',
+                            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${fixInstructions}`,
+                            { 
+                              duration: 12000,
+                              style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
+                            }
+                          );
+                        } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
+                          toast.error(
+                            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try browser print as fallback`,
                             { 
                               duration: 8000,
                               style: { maxWidth: '500px', whiteSpace: 'pre-line' }
                             }
                           );
                         } else {
-                          toast.error(errorMessage, { duration: 5000 });
+                          toast.error(errorMessage, { duration: 6000 });
                         }
                         console.error('QZ Tray connection error:', errorMessage);
                         return;
@@ -1742,7 +1866,13 @@ const ProcessOrderPage = () => {
                       
                       if (!defaultPrinter) {
                         toast.dismiss();
-                        toast.error('No printer found. Please set a default printer in your system settings.', { duration: 5000 });
+                        toast.error(
+                          'No printer found\n\nPlease set a default printer in your system settings:\n• Windows: Settings → Printers & scanners\n• macOS: System Preferences → Printers & Scanners\n• Linux: System Settings → Printers',
+                          { 
+                            duration: 6000,
+                            style: { maxWidth: '400px', whiteSpace: 'pre-line' }
+                          }
+                        );
                         return;
                       }
 
@@ -1787,7 +1917,19 @@ const ProcessOrderPage = () => {
                     } catch (error) {
                       toast.dismiss();
                       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred while printing';
-                      toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
+                      
+                      // Check if it's a certificate/connection error
+                      if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('WebSocket')) {
+                        toast.error(
+                          `Print Failed: Connection Issue\n\n${errorMessage}\n\n💡 Try:\n1. Ensure QZ Tray is running\n2. Use HTTPS URL (not HTTP)\n3. Accept certificate when prompted\n4. Use browser print as fallback`,
+                          { 
+                            duration: 8000,
+                            style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+                          }
+                        );
+                      } else {
+                        toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
+                      }
                       console.error('Print error:', error);
                     }
                   };
