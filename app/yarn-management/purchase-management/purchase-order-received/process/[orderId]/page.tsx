@@ -1113,56 +1113,72 @@ const ProcessOrderPage = () => {
       return;
     }
 
-    // Connect to QZ Tray
-    const connection = await connectQZ();
-    if (!connection.isConnected) {
-      toast.error(connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/');
-      return;
-    }
+    try {
+      // Connect to QZ Tray
+      toast.loading('Connecting to QZ Tray...');
+      const connection = await connectQZ();
+      
+      if (!connection.isConnected) {
+        toast.dismiss();
+        const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
+        toast.error(errorMessage, { duration: 5000 });
+        console.error('QZ Tray connection error:', errorMessage);
+        return;
+      }
 
-    // Get default printer
-    const defaultPrinter = await getDefaultPrinter();
-    if (!defaultPrinter) {
-      toast.error('No printer found. Please set a default printer.');
-      return;
-    }
+      // Get default printer
+      toast.loading('Detecting printer...');
+      const defaultPrinter = await getDefaultPrinter();
+      
+      if (!defaultPrinter) {
+        toast.dismiss();
+        toast.error('No printer found. Please set a default printer in your system settings.', { duration: 5000 });
+        return;
+      }
 
-    // Prepare barcodes for printing
-    const barcodesToPrint = boxes.map((box) => {
-      const details = getBoxPrintDetails(box);
-      return {
-        barcodeValue: box.barcode,
-        boxId: box.boxId,
-        supplier: order.supplier || '',
-        yarnName: details.yarnName,
-        shadeCode: details.shadeCode,
-        yarnColour: details.yarnColour,
-        shadeName: details.shadeName,
-        lotNumber: box.lotNumber || '',
-      };
-    });
+      // Prepare barcodes for printing
+      const barcodesToPrint = boxes.map((box) => {
+        const details = getBoxPrintDetails(box);
+        return {
+          barcodeValue: box.barcode,
+          boxId: box.boxId,
+          supplier: order.supplier || '',
+          yarnName: details.yarnName,
+          shadeCode: details.shadeCode,
+          yarnColour: details.yarnColour,
+          shadeName: details.shadeName,
+          lotNumber: box.lotNumber || '',
+        };
+      });
 
-    // Print all barcodes
-    toast.loading(`Printing ${barcodesToPrint.length} barcode(s)...`);
-    const result = await printMultipleBarcodes(barcodesToPrint, {
-      printerName: defaultPrinter.name,
-      delayBetweenPrints: 500,
-    });
+      // Print all barcodes
+      toast.loading(`Printing ${barcodesToPrint.length} barcode(s) to ${defaultPrinter.name}...`);
+      const result = await printMultipleBarcodes(barcodesToPrint, {
+        printerName: defaultPrinter.name,
+        delayBetweenPrints: 500,
+      });
 
-    toast.dismiss();
+      toast.dismiss();
 
-    if (result.success) {
-      toast.success(`Successfully printed ${result.printed} barcode(s)`);
-    } else {
-      if (result.printed > 0) {
-        toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
-        toast.error(`Failed to print ${result.errors.length} barcode(s)`, { duration: 4000 });
+      if (result.success) {
+        toast.success(`Successfully printed ${result.printed} barcode(s)`, { duration: 3000 });
       } else {
-        toast.error('Failed to print barcodes. Please check printer connection.');
+        if (result.printed > 0) {
+          toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
+          toast.error(`Failed to print ${result.errors.length} barcode(s): ${result.errors[0] || 'Unknown error'}`, { duration: 5000 });
+        } else {
+          const errorMsg = result.errors.length > 0 ? result.errors[0] : 'Unknown error occurred';
+          toast.error(`Failed to print barcodes: ${errorMsg}`, { duration: 5000 });
+        }
+        if (result.errors.length > 0) {
+          console.error('Print errors:', result.errors);
+        }
       }
-      if (result.errors.length > 0) {
-        console.error('Print errors:', result.errors);
-      }
+    } catch (error) {
+      toast.dismiss();
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred while printing';
+      toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
+      console.error('Print error:', error);
     }
   };
 
@@ -1683,56 +1699,72 @@ const ProcessOrderPage = () => {
                       return;
                     }
 
-                    // Connect to QZ Tray
-                    const connection = await connectQZ();
-                    if (!connection.isConnected) {
-                      toast.error(connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/');
-                      return;
-                    }
+                    try {
+                      // Connect to QZ Tray
+                      toast.loading('Connecting to QZ Tray...');
+                      const connection = await connectQZ();
+                      
+                      if (!connection.isConnected) {
+                        toast.dismiss();
+                        const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
+                        toast.error(errorMessage, { duration: 5000 });
+                        console.error('QZ Tray connection error:', errorMessage);
+                        return;
+                      }
 
-                    // Get default printer
-                    const defaultPrinter = await getDefaultPrinter();
-                    if (!defaultPrinter) {
-                      toast.error('No printer found. Please set a default printer.');
-                      return;
-                    }
+                      // Get default printer
+                      toast.loading('Detecting printer...');
+                      const defaultPrinter = await getDefaultPrinter();
+                      
+                      if (!defaultPrinter) {
+                        toast.dismiss();
+                        toast.error('No printer found. Please set a default printer in your system settings.', { duration: 5000 });
+                        return;
+                      }
 
-                    // Prepare barcodes for printing
-                    const barcodesToPrint = lotBoxes.map((box) => {
-                      const details = getBoxPrintDetails(box);
-                      return {
-                        barcodeValue: box.barcode,
-                        boxId: box.boxId,
-                        supplier: order.supplier || '',
-                        yarnName: details.yarnName,
-                        shadeCode: details.shadeCode,
-                        yarnColour: details.yarnColour,
-                        shadeName: details.shadeName,
-                        lotNumber: lotNumber,
-                      };
-                    });
+                      // Prepare barcodes for printing
+                      const barcodesToPrint = lotBoxes.map((box) => {
+                        const details = getBoxPrintDetails(box);
+                        return {
+                          barcodeValue: box.barcode,
+                          boxId: box.boxId,
+                          supplier: order.supplier || '',
+                          yarnName: details.yarnName,
+                          shadeCode: details.shadeCode,
+                          yarnColour: details.yarnColour,
+                          shadeName: details.shadeName,
+                          lotNumber: lotNumber,
+                        };
+                      });
 
-                    // Print all barcodes for this lot
-                    toast.loading(`Printing ${barcodesToPrint.length} barcode(s) for ${lotNumber}...`);
-                    const result = await printMultipleBarcodes(barcodesToPrint, {
-                      printerName: defaultPrinter.name,
-                      delayBetweenPrints: 500,
-                    });
+                      // Print all barcodes for this lot
+                      toast.loading(`Printing ${barcodesToPrint.length} barcode(s) for ${lotNumber} to ${defaultPrinter.name}...`);
+                      const result = await printMultipleBarcodes(barcodesToPrint, {
+                        printerName: defaultPrinter.name,
+                        delayBetweenPrints: 500,
+                      });
 
-                    toast.dismiss();
+                      toast.dismiss();
 
-                    if (result.success) {
-                      toast.success(`${result.printed} box barcode(s) printed for ${lotNumber}`);
-                    } else {
-                      if (result.printed > 0) {
-                        toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
-                        toast.error(`Failed to print ${result.errors.length} barcode(s)`, { duration: 4000 });
+                      if (result.success) {
+                        toast.success(`${result.printed} box barcode(s) printed for ${lotNumber}`, { duration: 3000 });
                       } else {
-                        toast.error('Failed to print barcodes. Please check printer connection.');
+                        if (result.printed > 0) {
+                          toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
+                          toast.error(`Failed to print ${result.errors.length} barcode(s): ${result.errors[0] || 'Unknown error'}`, { duration: 5000 });
+                        } else {
+                          const errorMsg = result.errors.length > 0 ? result.errors[0] : 'Unknown error occurred';
+                          toast.error(`Failed to print barcodes: ${errorMsg}`, { duration: 5000 });
+                        }
+                        if (result.errors.length > 0) {
+                          console.error('Print errors:', result.errors);
+                        }
                       }
-                      if (result.errors.length > 0) {
-                        console.error('Print errors:', result.errors);
-                      }
+                    } catch (error) {
+                      toast.dismiss();
+                      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred while printing';
+                      toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
+                      console.error('Print error:', error);
                     }
                   };
 
