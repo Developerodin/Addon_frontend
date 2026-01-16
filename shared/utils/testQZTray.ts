@@ -130,9 +130,15 @@ export const testQZTray = {
         }
       }
 
-      const printer = await window.qz.printers.getDefault();
-      if (!printer) {
+      const printerName = await window.qz.printers.getDefault();
+      if (!printerName) {
         return '❌ No default printer found!\n\nPlease set a default printer in your OS settings.';
+      }
+
+      // Find printer and create config
+      const printer = await window.qz.printers.find(printerName);
+      if (!printer) {
+        return `❌ Printer "${printerName}" not found!`;
       }
 
       // Generate simple ZPL barcode
@@ -142,9 +148,11 @@ export const testQZTray = {
 ^FO20,150^A0N,20,20^FD${barcodeValue}^FS
 ^XZ`;
 
-      await window.qz.print(printer, zpl);
+      // Create print config for raw ZPL printing
+      const config = window.qz.configs.create(printer);
+      await window.qz.print(config, [zpl]);
       
-      return `✅ Print job sent successfully!\n\nPrinter: ${printer}\nBarcode: ${barcodeValue}\n\nCheck your printer for the output.`;
+      return `✅ Print job sent successfully!\n\nPrinter: ${printerName}\nBarcode: ${barcodeValue}\n\nCheck your printer for the output.`;
     } catch (error: any) {
       return `❌ Print failed!\n\nError: ${error.message}\n\nPossible issues:\n1. Printer is offline\n2. Printer driver issue\n3. Invalid ZPL format\n4. Printer queue is full`;
     }

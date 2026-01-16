@@ -1121,7 +1121,19 @@ const ProcessOrderPage = () => {
       if (!connection.isConnected) {
         toast.dismiss();
         const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
-        toast.error(errorMessage, { duration: 5000 });
+        
+        // If it's a certificate error, show detailed instructions
+        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted')) {
+          toast.error(
+            'Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision"\n3. Click "Allow" again',
+            { 
+              duration: 8000,
+              style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+            }
+          );
+        } else {
+          toast.error(errorMessage, { duration: 5000 });
+        }
         console.error('QZ Tray connection error:', errorMessage);
         return;
       }
@@ -1707,7 +1719,19 @@ const ProcessOrderPage = () => {
                       if (!connection.isConnected) {
                         toast.dismiss();
                         const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
-                        toast.error(errorMessage, { duration: 5000 });
+                        
+                        // If it's a certificate error, show detailed instructions
+                        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted')) {
+                          toast.error(
+                            'Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision"\n3. Click "Allow" again',
+                            { 
+                              duration: 8000,
+                              style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+                            }
+                          );
+                        } else {
+                          toast.error(errorMessage, { duration: 5000 });
+                        }
                         console.error('QZ Tray connection error:', errorMessage);
                         return;
                       }

@@ -27,7 +27,17 @@ export const isQZLoaded = (): boolean => {
 };
 
 /**
- * Load QZ Tray script dynamically
+ * CDN URLs to try in order (2.2.5 is the working version)
+ */
+const QZ_CDN_URLS = [
+  'https://cdn.jsdelivr.net/npm/qz-tray@2.2.5/qz-tray.js',
+  'https://cdn.jsdelivr.net/npm/qz-tray@2.2.5/qz-tray.min.js',
+  'https://unpkg.com/qz-tray@2.2.5/qz-tray.js',
+  'https://unpkg.com/qz-tray@2.2.5/qz-tray.min.js'
+];
+
+/**
+ * Load QZ Tray script dynamically with fallback CDN support
  */
 export const loadQZScript = (): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -41,25 +51,141 @@ export const loadQZScript = (): Promise<void> => {
       return;
     }
 
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.3/qz-tray.min.js';
-    script.async = true;
-    script.onload = () => {
-      if (isQZLoaded()) {
-        resolve();
-      } else {
-        reject(new Error('QZ Tray script loaded but qz object not found'));
+    // Check if script tag already exists
+    const existingScript = document.querySelector('script[src*="qz-tray"]');
+    if (existingScript) {
+      // Wait for existing script to load
+      let attempts = 0;
+      const maxAttempts = 50; // 5 seconds total
+      const checkInterval = setInterval(() => {
+        attempts++;
+        if (isQZLoaded()) {
+          clearInterval(checkInterval);
+          resolve();
+        } else if (attempts >= maxAttempts) {
+          clearInterval(checkInterval);
+          reject(new Error('QZ Tray script loaded but qz object not found'));
+        }
+      }, 100);
+      return;
+    }
+
+    // Try each CDN URL until one works
+    let currentIndex = 0;
+    let lastError: Error | null = null;
+
+    const tryNextCDN = () => {
+      if (currentIndex >= QZ_CDN_URLS.length) {
+        reject(new Error(
+          `Failed to load QZ Tray from all CDN sources.\n\n` +
+          `Tried URLs:\n${QZ_CDN_URLS.join('\n')}\n\n` +
+          `Possible issues:\n` +
+          `1. No internet connection\n` +
+          `2. All CDNs are blocked\n` +
+          `3. Content Security Policy restrictions\n` +
+          `4. Check browser console (F12) for detailed errors`
+        ));
+        return;
       }
+
+      const url = QZ_CDN_URLS[currentIndex];
+      if (typeof window !== 'undefined' && (window as any).console) {
+        console.log(`[QZ Tray] Attempting to load from: ${url}`);
+      }
+
+      const script = document.createElement('script');
+      script.src = url;
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      
+      script.onload = () => {
+        // Wait a bit for qz to be available, check multiple times
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds total
+        const checkInterval = setInterval(() => {
+          attempts++;
+          if (isQZLoaded()) {
+            clearInterval(checkInterval);
+            if (typeof window !== 'undefined' && (window as any).console) {
+              console.log(`[QZ Tray] ✅ Loaded successfully from: ${url}`);
+            }
+            resolve();
+          } else if (attempts >= maxAttempts) {
+            clearInterval(checkInterval);
+            // Try next CDN
+            currentIndex++;
+            tryNextCDN();
+          }
+        }, 100);
+      };
+      
+      script.onerror = (error) => {
+        if (typeof window !== 'undefined' && (window as any).console) {
+          console.error(`[QZ Tray] ❌ Failed to load from ${url}:`, error);
+        }
+        lastError = new Error(`Failed to load from ${url}`);
+        currentIndex++;
+        tryNextCDN();
+      };
+      
+      document.head.appendChild(script);
     };
-    script.onerror = () => {
-      reject(new Error('Failed to load QZ Tray script'));
-    };
-    document.head.appendChild(script);
+
+    tryNextCDN();
   });
 };
 
 /**
- * Connect to QZ Tray
+ * Check if current site is trusted by QZ Tray
+ */
+const checkSiteTrust = (): { isTrusted: boolean; message: string } => {
+  const protocol = typeof window !== 'undefined' ? window.location.protocol : '';
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  
+  // HTTPS is always trusted
+  if (protocol === 'https:') {
+    return { isTrusted: true, message: 'HTTPS connection - certificate will be trusted' };
+  }
+  
+  // localhost is usually trusted
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return { isTrusted: true, message: 'Localhost connection - certificate prompt may appear' };
+  }
+  
+  // HTTP on non-localhost may show "Untrusted website"
+  return { 
+    isTrusted: false, 
+    message: 'HTTP connection detected. For better security, use HTTPS. Certificate prompt will appear.' 
+  };
+};
+
+/**
+ * Display helpful instructions for certificate approval
+ */
+const showCertificateInstructions = () => {
+  if (typeof window === 'undefined' || !(window as any).console) {
+    return;
+  }
+
+  console.group('%c🔒 QZ Tray Certificate Approval Required', 'color: #ff6b6b; font-weight: bold; font-size: 14px;');
+  console.log('%c⚠️ IMPORTANT: To stop repeated prompts, you MUST:', 'color: #ff6b6b; font-weight: bold;');
+  console.log('1. When the security prompt appears, click "Allow"');
+  console.log('2. ✅ CHECK "Remember this decision" checkbox (CRITICAL!)');
+  console.log('3. Click "Allow" again');
+  console.log('');
+  console.log('%cIf "Remember this decision" checkbox is disabled or grayed out:', 'color: #ffa500;');
+  console.log('• Close QZ Tray completely');
+  console.log('• Delete certificate cache:');
+  console.log('  - Windows: %APPDATA%\\qz\\auth\\');
+  console.log('  - macOS: ~/Library/Application Support/qz/auth/');
+  console.log('  - Linux: ~/.qz/auth/');
+  console.log('• Restart QZ Tray');
+  console.log('• Try connecting again');
+  console.groupEnd();
+};
+
+/**
+ * Connect to QZ Tray with automatic certificate handling
  */
 export const connectQZ = async (): Promise<QZConnection> => {
   try {
@@ -79,13 +205,60 @@ export const connectQZ = async (): Promise<QZConnection> => {
       return { isConnected: true };
     }
 
+    // Check site trust status
+    const trustStatus = checkSiteTrust();
+    const isUntrusted = typeof window !== 'undefined' && 
+                       (window.location.protocol === 'http:' || 
+                        window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
+    
+    if (isUntrusted && typeof window !== 'undefined' && (window as any).console) {
+      console.warn(`[QZ Tray] ⚠️ "Untrusted website" detected - QZ Tray may not save certificate approval`);
+      console.warn(`[QZ Tray] 💡 Solution: Use HTTPS or localhost to allow certificate saving`);
+    }
+    
+    // Show instructions before connecting (in case prompt appears)
+    showCertificateInstructions();
+    
     // Connect to QZ Tray
+    // NOTE: The security prompt cannot be bypassed programmatically for security reasons
+    // User MUST manually check "Remember this decision" when prompt appears
     await window.qz.websocket.connect();
+    
+    // Provide helpful message
+    if (typeof window !== 'undefined' && (window as any).console) {
+      console.info('[QZ Tray] ✅ Connected successfully');
+      
+      // If untrusted, warn about potential issues
+      if (isUntrusted) {
+        console.warn('[QZ Tray] ⚠️ Since this is an "Untrusted website", QZ Tray may not save the certificate approval.');
+        console.warn('[QZ Tray] 💡 To fix permanently:');
+        console.warn('[QZ Tray]    1. Close QZ Tray completely');
+        console.warn('[QZ Tray]    2. Delete: ~/Library/Application Support/qz/auth/*');
+        console.warn('[QZ Tray]    3. Restart QZ Tray');
+        console.warn('[QZ Tray]    4. Use https://localhost instead of http://');
+      }
+    }
+    
     return { isConnected: true };
   } catch (error: any) {
+    const errorMessage = error?.message || 'Failed to connect to QZ Tray. Make sure QZ Tray is running.';
+    
+    // If connection fails due to certificate, provide manual instructions
+    if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
+      const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
+      const fixSteps = isMac 
+        ? `\n\n🔧 macOS FIX for "Untrusted website" issue:\n\n1. Quit QZ Tray completely (right-click menu bar icon → Quit)\n2. Open Terminal and run:\n   rm -rf ~/Library/Application\\ Support/qz/auth/*\n3. Restart QZ Tray\n4. Try connecting again\n5. When prompt appears:\n   - Check "Remember this decision" ✅\n   - Click "Allow"\n\n💡 Better solution: Use https://localhost instead of http://localhost\n   This allows QZ Tray to properly save the certificate.`
+        : `\n\n🔧 FIX if prompt keeps appearing:\n\n1. Close QZ Tray completely\n2. Delete certificate cache:\n   • Windows: %APPDATA%\\qz\\auth\\\n   • macOS: ~/Library/Application Support/qz/auth/\n   • Linux: ~/.qz/auth/\n3. Restart QZ Tray\n4. Try again\n\n💡 If using HTTP, switch to HTTPS to allow certificate saving.`;
+      
+      return {
+        isConnected: false,
+        error: `${errorMessage}\n\n🔒 Certificate Approval Required:\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" checkbox\n3. Click "Allow" again${fixSteps}`,
+      };
+    }
+    
     return {
       isConnected: false,
-      error: error?.message || 'Failed to connect to QZ Tray. Make sure QZ Tray is running.',
+      error: errorMessage,
     };
   }
 };
@@ -296,10 +469,23 @@ export const printBarcode = async (
       lotNumber: options.lotNumber,
     });
 
+    // Find printer and create config
+    const printer = await window.qz.printers.find(printerName);
+    if (!printer) {
+      return {
+        success: false,
+        error: `Printer "${printerName}" not found`,
+      };
+    }
+
+    // Create print config for raw ZPL printing
+    const config = window.qz.configs.create(printer);
+
     // Print
     const copies = options.copies || 1;
     for (let i = 0; i < copies; i++) {
-      await window.qz.print(printerName, zpl);
+      // For raw ZPL, pass as array of strings
+      await window.qz.print(config, [zpl]);
     }
 
     return { success: true };

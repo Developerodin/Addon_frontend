@@ -104,6 +104,7 @@
         <div class="test-section">
             <h3>1. Script Loading</h3>
             <button onclick="testScriptLoad()">Test Script Load</button>
+            <button onclick="testCDNAccess()">Test CDN Access</button>
             <div id="scriptResult" class="result"></div>
         </div>
 
@@ -134,19 +135,117 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.3/qz-tray.min.js"></script>
     <script>
         let qzConnected = false;
+        let scriptLoaded = false;
+
+        // CDN URLs to try in order (2.2.5 is the working version)
+        const QZ_CDN_URLS = [
+            'https://cdn.jsdelivr.net/npm/qz-tray@2.2.5/qz-tray.js',
+            'https://cdn.jsdelivr.net/npm/qz-tray@2.2.5/qz-tray.min.js',
+            'https://unpkg.com/qz-tray@2.2.5/qz-tray.js',
+            'https://unpkg.com/qz-tray@2.2.5/qz-tray.min.js'
+        ];
+
+        // Load QZ Tray script dynamically with error handling and fallbacks
+        function loadQZScript() {
+            return new Promise((resolve, reject) => {
+                // Check if already loaded
+                if (typeof window !== 'undefined' && typeof window.qz !== 'undefined') {
+                    scriptLoaded = true;
+                    resolve();
+                    return;
+                }
+
+                // Check if script tag already exists
+                const existingScript = document.querySelector('script[src*="qz-tray"]');
+                if (existingScript) {
+                    const checkInterval = setInterval(() => {
+                        if (typeof window.qz !== 'undefined') {
+                            clearInterval(checkInterval);
+                            scriptLoaded = true;
+                            resolve();
+                        }
+                    }, 100);
+                    
+                    setTimeout(() => {
+                        clearInterval(checkInterval);
+                        if (typeof window.qz === 'undefined') {
+                            reject(new Error('Script loaded but qz object not found'));
+                        }
+                    }, 5000);
+                    return;
+                }
+
+                // Try each CDN URL until one works
+                let currentIndex = 0;
+                let lastError = null;
+
+                function tryNextCDN() {
+                    if (currentIndex >= QZ_CDN_URLS.length) {
+                        reject(new Error(`Failed to load QZ Tray from all CDN sources.\n\nLast error: ${lastError}\n\nTried URLs:\n${QZ_CDN_URLS.join('\n')}\n\nPossible issues:\n1. No internet connection\n2. All CDNs are blocked\n3. Content Security Policy restrictions\n4. Check browser console (F12) for detailed errors`));
+                        return;
+                    }
+
+                    const url = QZ_CDN_URLS[currentIndex];
+                    console.log(`Attempting to load QZ Tray from: ${url}`);
+
+                    const script = document.createElement('script');
+                    script.src = url;
+                    script.async = true;
+                    script.crossOrigin = 'anonymous';
+                    
+                    script.onload = () => {
+                        // Wait a bit for qz to be available, check multiple times
+                        let attempts = 0;
+                        const maxAttempts = 50; // 5 seconds total
+                        const checkInterval = setInterval(() => {
+                            attempts++;
+                            if (typeof window.qz !== 'undefined') {
+                                clearInterval(checkInterval);
+                                scriptLoaded = true;
+                                console.log(`✅ QZ Tray loaded successfully from: ${url}`);
+                                resolve();
+                            } else if (attempts >= maxAttempts) {
+                                clearInterval(checkInterval);
+                                // Try next CDN
+                                currentIndex++;
+                                tryNextCDN();
+                            }
+                        }, 100);
+                    };
+                    
+                    script.onerror = (error) => {
+                        console.error(`Failed to load from ${url}:`, error);
+                        lastError = `Failed to load from ${url}`;
+                        currentIndex++;
+                        tryNextCDN();
+                    };
+                    
+                    document.head.appendChild(script);
+                }
+
+                tryNextCDN();
+            });
+        }
 
         // Check initial status
-        window.addEventListener('load', () => {
-            setTimeout(checkInitialStatus, 1000);
+        window.addEventListener('load', async () => {
+            try {
+                await loadQZScript();
+                setTimeout(checkInitialStatus, 500);
+            } catch (error) {
+                const statusEl = document.getElementById('connectionStatus');
+                statusEl.textContent = 'Script Load Failed';
+                statusEl.className = 'status disconnected';
+                console.error('QZ Tray script load error:', error);
+            }
         });
 
         function checkInitialStatus() {
             const statusEl = document.getElementById('connectionStatus');
-            if (typeof qz !== 'undefined') {
-                if (qz.websocket.isActive()) {
+            if (typeof window !== 'undefined' && typeof window.qz !== 'undefined') {
+                if (window.qz.websocket.isActive()) {
                     statusEl.textContent = 'Connected';
                     statusEl.className = 'status connected';
                     qzConnected = true;
@@ -166,35 +265,89 @@
             el.className = `result ${type}`;
         }
 
-        async function testScriptLoad() {
-            showResult('scriptResult', 'Checking...', 'loading');
+        async function testCDNAccess() {
+            showResult('scriptResult', 'Testing CDN accessibility...\n\nCheck browser console (F12) for details...', 'loading');
+            const results = [];
             
-            if (typeof qz === 'undefined') {
-                showResult('scriptResult', '❌ ERROR: QZ Tray script not loaded!\n\nMake sure:\n1. Internet connection is available\n2. CDN is accessible\n3. No Content Security Policy blocking the script', 'error');
-                return;
+            // Test first 3 CDN URLs with fetch
+            for (let i = 0; i < Math.min(3, QZ_CDN_URLS.length); i++) {
+                const url = QZ_CDN_URLS[i];
+                try {
+                    console.log(`Testing CDN: ${url}`);
+                    const response = await fetch(url, { method: 'GET', cache: 'no-cache' });
+                    if (response.ok) {
+                        results.push(`✅ ${url}\n   Status: ${response.status} ${response.statusText}`);
+                    } else {
+                        results.push(`⚠️ ${url}\n   Status: ${response.status} ${response.statusText}`);
+                    }
+                } catch (error) {
+                    results.push(`❌ ${url}\n   Error: ${error.message}`);
+                    console.error(`CDN test failed for ${url}:`, error);
+                }
             }
+            
+            const result = `CDN Accessibility Test Results:\n\n${results.join('\n\n')}\n\n💡 Tips:\n- If all show ❌, check internet connection\n- If you see CORS errors, check Content Security Policy\n- Open browser console (F12) for detailed errors\n- Try accessing URLs directly in browser address bar`;
+            const hasSuccess = results.some(r => r.includes('✅'));
+            showResult('scriptResult', result, hasSuccess ? 'info' : 'error');
+        }
 
-            const version = qz.version || 'Unknown';
-            showResult('scriptResult', `✅ SUCCESS: QZ Tray script loaded!\n\nVersion: ${version}\nWebSocket Active: ${qz.websocket.isActive()}`, 'success');
+        async function testScriptLoad() {
+            showResult('scriptResult', 'Checking and loading script...\n\nCheck browser console (F12) for detailed progress...', 'loading');
+            
+            try {
+                // Try to load script if not already loaded
+                if (typeof window === 'undefined' || typeof window.qz === 'undefined') {
+                    console.log('QZ Tray not found, attempting to load...');
+                    await loadQZScript();
+                }
+
+                if (typeof window === 'undefined' || typeof window.qz === 'undefined') {
+                    const scriptTag = document.querySelector('script[src*="qz-tray"]');
+                    const errorMsg = scriptTag 
+                        ? `Script tag exists but qz object not found.\n\nScript source: ${scriptTag.src}\n\nThis usually means:\n1. Script loaded but didn't expose 'qz' on window\n2. Script version mismatch\n3. Script execution error\n\nCheck browser console (F12) for errors.`
+                        : 'No script tag found. Script loading failed.';
+                    
+                    showResult('scriptResult', `❌ ERROR: QZ Tray script not loaded!\n\n${errorMsg}`, 'error');
+                    return;
+                }
+
+                const version = window.qz.version || 'Unknown';
+                const isActive = window.qz.websocket ? window.qz.websocket.isActive() : false;
+                const scriptTag = document.querySelector('script[src*="qz-tray"]');
+                const scriptSource = scriptTag ? scriptTag.src : 'N/A';
+                
+                showResult('scriptResult', `✅ SUCCESS: QZ Tray script loaded!\n\nVersion: ${version}\nWebSocket Active: ${isActive}\nScript Source: ${scriptSource}\n\nYou can now test the connection.`, 'success');
+            } catch (error) {
+                console.error('QZ Tray load error:', error);
+                const scriptTag = document.querySelector('script[src*="qz-tray"]');
+                const errorDetails = error.message || 'Unknown error';
+                
+                showResult('scriptResult', `❌ ERROR: ${errorDetails}\n\nTroubleshooting Steps:\n1. Open browser console (F12) and check for errors\n2. Verify internet connection\n3. Check if CDN is accessible in your network\n4. Look for Content Security Policy errors in console\n5. Try accessing CDN directly:\n   https://cdn.jsdelivr.net/npm/qz-tray@2.3/qz-tray.js\n\nScript tag status: ${scriptTag ? 'Found (' + scriptTag.src + ')' : 'Not found'}`, 'error');
+            }
         }
 
         async function testConnection() {
             showResult('connectionResult', 'Connecting...', 'loading');
 
             try {
-                if (typeof qz === 'undefined') {
+                // Ensure script is loaded
+                if (typeof window === 'undefined' || typeof window.qz === 'undefined') {
+                    await loadQZScript();
+                }
+
+                if (typeof window === 'undefined' || typeof window.qz === 'undefined') {
                     showResult('connectionResult', '❌ ERROR: QZ Tray script not loaded!', 'error');
                     return;
                 }
 
-                if (qz.websocket.isActive()) {
+                if (window.qz.websocket.isActive()) {
                     showResult('connectionResult', '✅ Already connected to QZ Tray!', 'success');
                     qzConnected = true;
                     updateStatus();
                     return;
                 }
 
-                await qz.websocket.connect();
+                await window.qz.websocket.connect();
                 qzConnected = true;
                 updateStatus();
                 showResult('connectionResult', '✅ SUCCESS: Connected to QZ Tray!\n\nYou may have been prompted to accept a certificate.\nIf you checked "Remember this decision", you won\'t be prompted again.', 'success');
@@ -209,18 +362,22 @@
             showResult('printerResult', 'Detecting printers...', 'loading');
 
             try {
-                if (!qzConnected && typeof qz !== 'undefined') {
-                    await qz.websocket.connect();
+                if (typeof window === 'undefined' || typeof window.qz === 'undefined') {
+                    await loadQZScript();
+                }
+
+                if (!qzConnected && typeof window.qz !== 'undefined') {
+                    await window.qz.websocket.connect();
                     qzConnected = true;
                     updateStatus();
                 }
 
-                if (typeof qz === 'undefined' || !qz.websocket.isActive()) {
+                if (typeof window.qz === 'undefined' || !window.qz.websocket.isActive()) {
                     showResult('printerResult', '❌ ERROR: Not connected to QZ Tray!\n\nClick "Test Connection" first.', 'error');
                     return;
                 }
 
-                const printers = await qz.printers.find();
+                const printers = await window.qz.printers.find();
                 
                 if (printers.length === 0) {
                     showResult('printerResult', '⚠️ WARNING: No printers found!\n\nMake sure:\n1. Printer is connected (USB/Network)\n2. Printer drivers are installed\n3. Printer is powered on', 'error');
@@ -240,18 +397,22 @@
             showResult('printerResult', 'Getting default printer...', 'loading');
 
             try {
-                if (!qzConnected && typeof qz !== 'undefined') {
-                    await qz.websocket.connect();
+                if (typeof window === 'undefined' || typeof window.qz === 'undefined') {
+                    await loadQZScript();
+                }
+
+                if (!qzConnected && typeof window.qz !== 'undefined') {
+                    await window.qz.websocket.connect();
                     qzConnected = true;
                     updateStatus();
                 }
 
-                if (typeof qz === 'undefined' || !qz.websocket.isActive()) {
+                if (typeof window.qz === 'undefined' || !window.qz.websocket.isActive()) {
                     showResult('printerResult', '❌ ERROR: Not connected to QZ Tray!\n\nClick "Test Connection" first.', 'error');
                     return;
                 }
 
-                const printer = await qz.printers.getDefault();
+                const printer = await window.qz.printers.getDefault();
                 
                 if (!printer) {
                     showResult('printerResult', '⚠️ WARNING: No default printer set!\n\nPlease set a default printer in your OS settings.', 'error');
@@ -268,19 +429,23 @@
             showResult('printResult', `Printing barcode: ${barcodeValue}...`, 'loading');
 
             try {
-                if (!qzConnected && typeof qz !== 'undefined') {
-                    await qz.websocket.connect();
+                if (typeof window === 'undefined' || typeof window.qz === 'undefined') {
+                    await loadQZScript();
+                }
+
+                if (!qzConnected && typeof window.qz !== 'undefined') {
+                    await window.qz.websocket.connect();
                     qzConnected = true;
                     updateStatus();
                 }
 
-                if (typeof qz === 'undefined' || !qz.websocket.isActive()) {
+                if (typeof window.qz === 'undefined' || !window.qz.websocket.isActive()) {
                     showResult('printResult', '❌ ERROR: Not connected to QZ Tray!\n\nClick "Test Connection" first.', 'error');
                     return;
                 }
 
                 // Get default printer
-                const printer = await qz.printers.getDefault();
+                const printer = await window.qz.printers.getDefault();
                 if (!printer) {
                     showResult('printResult', '❌ ERROR: No default printer found!\n\nPlease set a default printer in your OS settings.', 'error');
                     return;
@@ -293,7 +458,7 @@
 ^FO20,150^A0N,20,20^FD${barcodeValue}^FS
 ^XZ`;
 
-                await qz.print(printer, zpl);
+                await window.qz.print(printer, zpl);
                 showResult('printResult', `✅ SUCCESS: Print job sent!\n\nPrinter: ${printer}\nBarcode: ${barcodeValue}\n\nCheck your printer for the output.`, 'success');
             } catch (error) {
                 showResult('printResult', `❌ ERROR: Print failed!\n\n${error.message}\n\nPossible issues:\n1. Printer is offline\n2. Printer driver issue\n3. Invalid ZPL format\n4. Printer queue is full`, 'error');
@@ -304,10 +469,19 @@
             showResult('statusResult', 'Checking status...', 'loading');
 
             try {
+                // Try to load script if not loaded
+                if (typeof window === 'undefined' || typeof window.qz === 'undefined') {
+                    try {
+                        await loadQZScript();
+                    } catch (e) {
+                        // Script load failed, continue with status check
+                    }
+                }
+
                 const status = {
-                    scriptLoaded: typeof qz !== 'undefined',
-                    connected: typeof qz !== 'undefined' && qz.websocket.isActive(),
-                    version: typeof qz !== 'undefined' ? (qz.version || 'Unknown') : 'N/A'
+                    scriptLoaded: typeof window !== 'undefined' && typeof window.qz !== 'undefined',
+                    connected: typeof window !== 'undefined' && typeof window.qz !== 'undefined' && window.qz.websocket.isActive(),
+                    version: typeof window !== 'undefined' && typeof window.qz !== 'undefined' ? (window.qz.version || 'Unknown') : 'N/A'
                 };
 
                 let result = '📊 QZ Tray Status:\n\n';
@@ -317,14 +491,14 @@
 
                 if (status.connected) {
                     try {
-                        const printer = await qz.printers.getDefault();
+                        const printer = await window.qz.printers.getDefault();
                         result += `Default Printer: ${printer || 'Not set'}\n`;
                     } catch (e) {
                         result += `Default Printer: Error - ${e.message}\n`;
                     }
                 }
 
-                const type = status.connected ? 'success' : 'error';
+                const type = status.connected ? 'success' : (status.scriptLoaded ? 'info' : 'error');
                 showResult('statusResult', result, type);
                 updateStatus();
             } catch (error) {
@@ -334,7 +508,7 @@
 
         function updateStatus() {
             const statusEl = document.getElementById('connectionStatus');
-            if (typeof qz !== 'undefined' && qz.websocket.isActive()) {
+            if (typeof window !== 'undefined' && typeof window.qz !== 'undefined' && window.qz.websocket.isActive()) {
                 statusEl.textContent = 'Connected';
                 statusEl.className = 'status connected';
             } else {
