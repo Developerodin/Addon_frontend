@@ -423,56 +423,56 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
   };
 
   return (
-    <div className="box">
-      <div className="box-header flex justify-between items-center">
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
         <div>
-          <h3 className="box-title">Unallocated Boxes</h3>
-          <p className="text-sm text-gray-600 mt-1">
+          <h3 className="text-xs font-bold text-gray-800">Unallocated Boxes</h3>
+          <p className="text-[10px] text-gray-500 mt-0.5">
             Purchase orders with PO Accepted, Partially Accepted, Goods Received, or Partially Received status - showing boxes from accepted lots only
           </p>
         </div>
         <button
           onClick={fetchUnallocatedOrders}
-          className="ti-btn ti-btn-light"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
           title="Refresh"
         >
-          <i className="ri-refresh-line me-1"></i>
+          <i className="ri-refresh-line text-xs"></i>
           Refresh
         </button>
       </div>
 
-      <div className="box-body">
+      <div>
         {/* Date Filters */}
-        <div className="mb-4">
+        <div className="mb-3">
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className="form-label text-xs text-gray-600">Start Date</label>
+              <label className="text-[10px] font-medium text-gray-600 mb-0.5 block">Start Date</label>
               <input
                 type="date"
-                className="form-control"
+                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
             </div>
             <div className="flex-1">
-              <label className="form-label text-xs text-gray-600">End Date</label>
+              <label className="text-[10px] font-medium text-gray-600 mb-0.5 block">End Date</label>
               <input
                 type="date"
-                className="form-control"
+                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
             {(startDate || endDate) && (
               <button
-                className="ti-btn ti-btn-light self-end"
+                className="flex items-center gap-1 px-2 py-1.5 bg-white text-gray-700 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm self-end"
                 onClick={() => {
                   setStartDate(getDefaultStartDate());
                   setEndDate(getDefaultEndDate());
                 }}
                 title="Reset to default dates"
               >
-                <i className="ri-refresh-line me-1"></i>
+                <i className="ri-refresh-line text-xs"></i>
                 Reset
               </button>
             )}
@@ -480,18 +480,18 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
         </div>
 
         {/* PO Select Dropdown */}
-        <div className="mb-6">
-          <label className="form-label text-sm font-medium text-gray-700 mb-2 block">
+        <div className="mb-4">
+          <label className="text-xs font-medium text-gray-700 mb-1.5 block">
             Select Purchase Order
           </label>
           {isLoading ? (
             <div className="flex items-center gap-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-              <span className="text-sm text-gray-600">Loading orders...</span>
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600"></div>
+              <span className="text-xs text-gray-600">Loading orders...</span>
             </div>
           ) : (
             <select
-              className="form-select"
+              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
               value={selectedPO}
               onChange={(e) => setSelectedPO(e.target.value)}
             >
@@ -504,7 +504,7 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
             </select>
           )}
           {filteredOrders.length === 0 && !isLoading && (
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="text-xs text-gray-500 mt-1.5">
               No purchase orders found for the selected date range.
             </p>
           )}
@@ -512,105 +512,85 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
 
         {/* Boxes Table */}
         {selectedPO && (
-          <div className="mt-6">
-            <h4 className="text-lg font-semibold mb-4">
+          <div className="mt-4">
+            <h4 className="text-xs font-bold text-gray-800 mb-3">
               Unallocated Boxes for PO: {selectedPO}
             </h4>
             {isLoadingBoxes ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading boxes...</p>
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-3"></div>
+                <p className="text-xs text-gray-600">Loading boxes...</p>
               </div>
             ) : boxes.length === 0 ? (
               <div className="text-center py-8">
-                <div className="text-gray-400 mb-4">
-                  <i className="ri-inbox-line text-4xl"></i>
+                <div className="text-gray-400 mb-3">
+                  <i className="ri-inbox-line text-3xl"></i>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <h3 className="text-xs font-bold text-gray-900 mb-1">
                   No Unallocated Boxes
                 </h3>
-                <p className="text-gray-500">
+                <p className="text-xs text-gray-500">
                   All boxes for this purchase order have been allocated to storage.
                 </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-gray-300">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Box ID
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Barcode
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Yarn Name
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Shade Code
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Box Weight (kg)
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Number of Cones
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Order Qty
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Lot Number
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Received Date
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
+                <table className="w-full border-collapse border border-gray-200">
+                  <thead>
+                    <tr className="bg-gray-50/30">
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Number of Cones</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order Qty</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received Date</th>
+                      <th className="px-1.5 py-2 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white">
+                  <tbody>
                     {boxes.map((box) => {
                       const boxId = box._id || box.id || box.boxId;
                       return (
-                        <tr key={boxId} className="hover:bg-gray-50">
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <tr key={boxId} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs font-medium text-gray-900">
                             {box.boxId}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900 font-mono">
                             {box.barcode}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.yarnName || "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.shadeCode || "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.boxWeight ? `${box.boxWeight} kg` : "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.numberOfCones || "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.orderQty || "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.lotNumber || "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.receivedDate
                               ? new Date(box.receivedDate).toLocaleDateString()
                               : "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm">
+                          <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200">
                             <button
                               onClick={() => handleAllocateClick(boxId)}
-                              className="ti-btn ti-btn-primary"
+                              className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
                               title="Allocate to storage"
                             >
-                              <i className="ri-map-pin-line me-1"></i>
+                              <i className="ri-map-pin-line text-xs"></i>
                               Allocate
                             </button>
                           </td>
@@ -624,64 +604,90 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
           </div>
         )}
 
-        {/* Allocate Modal */}
+        {/* Allocate Modal - Side Drawer */}
         {showAllocateModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-              <div className="box-header border-b border-gray-200 px-6 py-4">
-                <h3 className="box-title text-lg font-semibold">
-                  Allocate Box to Storage
-                </h3>
-              </div>
-              <div className="box-body px-6 py-4">
-                <div className="mb-4">
-                  <label className="form-label text-sm font-medium text-gray-700 mb-2 block">
-                    Storage Rack Code <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Enter storage rack barcode"
-                    value={storageRackCode}
-                    onChange={(e) => setStorageRackCode(e.target.value)}
+          <div className="fixed inset-0 z-50 overflow-hidden">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/60 transition-opacity"
+              onClick={handleModalClose}
+            ></div>
+            {/* Side Drawer */}
+            <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out">
+              <div className="flex flex-col h-full">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
+                  <div className="flex items-center gap-2">
+                    <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-800">
+                        Allocate Box to Storage
+                      </h3>
+                      <p className="text-[10px] text-gray-500 mt-0.5">
+                        Enter storage rack code to allocate box
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleModalClose}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
                     disabled={isAllocating}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !isAllocating) {
-                        handleAllocateConfirm();
-                      }
-                    }}
-                    autoFocus
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Enter the barcode of the storage rack location
-                  </p>
+                  >
+                    <i className="ri-close-line text-lg"></i>
+                  </button>
                 </div>
-              </div>
-              <div className="box-footer border-t border-gray-200 px-6 py-4 flex justify-end gap-2">
-                <button
-                  onClick={handleModalClose}
-                  className="ti-btn ti-btn-light"
-                  disabled={isAllocating}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAllocateConfirm}
-                  className="ti-btn ti-btn-primary"
-                  disabled={isAllocating || !storageRackCode.trim()}
-                >
-                  {isAllocating ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2 inline-block"></div>
-                      Allocating...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-check-line me-1"></i>
-                      Confirm
-                    </>
-                  )}
-                </button>
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto px-4 py-3">
+                  <div className="mb-4">
+                    <label className="text-xs font-medium text-gray-700 mb-1.5 block">
+                      Storage Rack Code <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                      placeholder="Enter storage rack barcode"
+                      value={storageRackCode}
+                      onChange={(e) => setStorageRackCode(e.target.value)}
+                      disabled={isAllocating}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !isAllocating) {
+                          handleAllocateConfirm();
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      Enter the barcode of the storage rack location
+                    </p>
+                  </div>
+                </div>
+                {/* Footer */}
+                <div className="border-t border-gray-200 px-4 py-3 bg-gray-50 flex justify-end gap-2">
+                  <button
+                    onClick={handleModalClose}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                    disabled={isAllocating}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAllocateConfirm}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                    disabled={isAllocating || !storageRackCode.trim()}
+                  >
+                    {isAllocating ? (
+                      <>
+                        <i className="ri-loader-4-line animate-spin text-xs"></i>
+                        Allocating...
+                      </>
+                    ) : (
+                      <>
+                        <i className="ri-check-line text-xs"></i>
+                        Confirm
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -689,10 +695,10 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
 
         {!selectedPO && (
           <div className="text-center py-8">
-            <div className="text-gray-400 mb-4">
-              <i className="ri-arrow-down-line text-4xl"></i>
+            <div className="text-gray-400 mb-3">
+              <i className="ri-arrow-down-line text-3xl"></i>
             </div>
-            <p className="text-gray-500">
+            <p className="text-xs text-gray-500">
               Please select a purchase order to view unallocated boxes.
             </p>
           </div>

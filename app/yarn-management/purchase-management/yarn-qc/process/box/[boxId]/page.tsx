@@ -300,324 +300,292 @@ const ProcessQCPage = () => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Process QC - Box Inspection" />
       
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none mb-6">
-            <div className="box-header flex justify-between items-center">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <Link
-                    href="/yarn-management/purchase-management/yarn-qc"
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    <i className="ri-arrow-left-line text-xl"></i>
-                  </Link>
-                  <h1 className="box-title text-2xl font-semibold">Process QC - Box Inspection</h1>
-                </div>
-                <p className="text-gray-600 mt-1">Scan barcode to load box details and perform quality check</p>
-              </div>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <Link
+                href="/yarn-management/purchase-management/yarn-qc"
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <i className="ri-arrow-left-line text-sm"></i>
+              </Link>
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Process QC - Box Inspection</h1>
             </div>
           </div>
 
           {/* Barcode Scan Section */}
-          <div className="box mb-6">
-            <div className="box-header">
-              <h3 className="box-title">
-                <i className="ri-qr-scan-2-line me-2"></i>
-                Scan Barcode
-              </h3>
+          <div className="mb-4">
+            <h3 className="text-xs font-bold text-gray-800 mb-2">Scan Barcode</h3>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                  placeholder="Click Scan button to fill barcode automatically"
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleScanBarcode();
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleScanBarcode}
+                disabled={isScanning}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {isScanning ? (
+                  <>
+                    <i className="ri-loader-4-line animate-spin text-xs"></i>
+                    Scanning...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-qr-scan-2-line text-xs"></i>
+                    Scan
+                  </>
+                )}
+              </button>
             </div>
-            <div className="box-body">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-1">
+            <p className="text-[10px] text-gray-500 mt-1">
+              Click the Scan button to automatically fill barcode and load box details, or enter barcode manually and press Enter
+            </p>
+          </div>
+        </div>
+
+        {/* Box Details Section */}
+        {scannedBox && (
+          <>
+            <div className="p-[10px] border-t border-gray-100">
+              <h3 className="text-xs font-bold text-gray-800 mb-3">Box Details</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Barcode</p>
+                  <p className="text-xs font-bold text-gray-900 font-mono bg-gray-50 p-1.5 rounded border border-gray-200">{scannedBox.barcode}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Box Number</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">{scannedBox.boxNumber}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Purchase Order</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">{scannedBox.purchaseOrderNumber}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Received Order</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">{scannedBox.receivedOrderNumber}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Supplier</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">{scannedBox.supplier}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Brand</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">{scannedBox.brand}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Yarn Code</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">{scannedBox.yarnCode}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Yarn Name</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">{scannedBox.yarnName}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Weight</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">{scannedBox.weight} kg</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Number of Cones</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">{scannedBox.numberOfCones}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Unit Price</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">₹{scannedBox.unitPrice.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Price</p>
+                  <p className="text-xs font-bold text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">₹{scannedBox.totalPrice.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Media Upload Section */}
+            <div className="p-[10px] border-t border-gray-100">
+              <h3 className="text-xs font-bold text-gray-800 mb-3">Upload Images & Videos</h3>
+              <div className="mb-3">
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Upload QC Images/Videos</label>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,video/*"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                  className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Upload images or videos showing the quality inspection of this box
+                </p>
+              </div>
+
+              {uploadedMedia.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
+                  {uploadedMedia.map((media) => (
+                    <div key={media.id} className="relative group">
+                      {media.type === 'image' ? (
+                        <img
+                          src={media.url}
+                          alt={media.fileName}
+                          className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                        />
+                      ) : (
+                        <video
+                          src={media.url}
+                          className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                          controls
+                        />
+                      )}
+                      <button
+                        onClick={() => handleRemoveMedia(media.id)}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Remove"
+                      >
+                        <i className="ri-close-line text-[10px]"></i>
+                      </button>
+                      <p className="text-[10px] text-gray-500 mt-1 truncate">{media.fileName}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* QC Status Update Section */}
+            <div className="p-[10px] border-t border-gray-100">
+              <h3 className="text-xs font-bold text-gray-800 mb-3">Update QC Status</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">
+                    QC Status <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        console.log('QC Accepted button clicked');
+                        setQcStatus('QC Accepted');
+                      }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors ${
+                        qcStatus === 'QC Accepted'
+                          ? 'bg-purple-600 text-white hover:bg-purple-700'
+                          : 'bg-white text-purple-600 border border-purple-200 hover:bg-purple-50'
+                      }`}
+                      disabled={isSubmitting}
+                    >
+                      <i className="ri-checkbox-circle-line text-xs"></i>
+                      QC Accepted
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        console.log('QC Rejected button clicked');
+                        setQcStatus('QC Rejected');
+                      }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors ${
+                        qcStatus === 'QC Rejected'
+                          ? 'bg-red-600 text-white hover:bg-red-700'
+                          : 'bg-white text-red-600 border border-red-200 hover:bg-red-50'
+                      }`}
+                      disabled={isSubmitting}
+                    >
+                      <i className="ri-close-circle-line text-xs"></i>
+                      QC Rejected
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">
+                    QC Inspector Name <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
-                    className="form-control"
-                    placeholder="Click Scan button to fill barcode automatically"
-                    value={barcodeInput}
-                    onChange={(e) => setBarcodeInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleScanBarcode();
-                      }
-                    }}
-                    autoFocus
+                    className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                    value={qcBy}
+                    onChange={(e) => setQcBy(e.target.value)}
+                    placeholder="Enter QC inspector name"
+                    disabled={isSubmitting}
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={handleScanBarcode}
-                  disabled={isScanning}
-                  className="ti-btn ti-btn-primary whitespace-nowrap"
-                >
-                  {isScanning ? (
-                    <>
-                      <i className="ri-loader-4-line animate-spin me-2"></i>
-                      Scanning...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-qr-scan-2-line me-2"></i>
-                      Scan
-                    </>
-                  )}
-                </button>
+
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">QC Notes</label>
+                  <textarea
+                    className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                    rows={3}
+                    value={qcNotes}
+                    onChange={(e) => setQcNotes(e.target.value)}
+                    placeholder="Add any notes or observations about the quality inspection..."
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="flex gap-2 justify-end pt-3 border-t border-gray-200">
+                  <Link
+                    href="/yarn-management/purchase-management/yarn-qc"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
+                    onClick={(e) => {
+                      if (isSubmitting) {
+                        e.preventDefault();
+                      }
+                    }}
+                  >
+                    Cancel
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleSubmitQC}
+                    disabled={isSubmitting || !qcStatus || !qcBy.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <i className="ri-loader-4-line animate-spin text-xs"></i>
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <i className="ri-check-line text-xs"></i>
+                        Update QC Status
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Click the Scan button to automatically fill barcode and load box details, or enter barcode manually and press Enter
-              </p>
+            </div>
+          </>
+        )}
+
+        {!scannedBox && barcodeInput && (
+          <div className="p-[10px] border-t border-gray-100">
+            <div className="text-center py-8">
+              <div className="text-gray-400 mb-3">
+                <i className="ri-search-line text-2xl"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">NO BOX FOUND</h3>
+              <p className="text-[10px] text-gray-500">Please scan a valid barcode to load box details</p>
             </div>
           </div>
-
-          {/* Box Details Section */}
-          {scannedBox && (
-            <>
-              <div className="box mb-6">
-                <div className="box-header">
-                  <h3 className="box-title">
-                    <i className="ri-box-3-line me-2"></i>
-                    Box Details
-                  </h3>
-                </div>
-                <div className="box-body">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Barcode</p>
-                      <p className="text-sm font-semibold text-gray-900 font-mono">{scannedBox.barcode}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Box Number</p>
-                      <p className="text-sm font-semibold text-gray-900">{scannedBox.boxNumber}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Purchase Order</p>
-                      <p className="text-sm font-semibold text-gray-900">{scannedBox.purchaseOrderNumber}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Received Order</p>
-                      <p className="text-sm font-semibold text-gray-900">{scannedBox.receivedOrderNumber}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Supplier</p>
-                      <p className="text-sm font-semibold text-gray-900">{scannedBox.supplier}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Brand</p>
-                      <p className="text-sm font-semibold text-gray-900">{scannedBox.brand}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Yarn Code</p>
-                      <p className="text-sm font-semibold text-gray-900">{scannedBox.yarnCode}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Yarn Name</p>
-                      <p className="text-sm font-semibold text-gray-900">{scannedBox.yarnName}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Weight</p>
-                      <p className="text-sm font-semibold text-gray-900">{scannedBox.weight} kg</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Number of Cones</p>
-                      <p className="text-sm font-semibold text-gray-900">{scannedBox.numberOfCones}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Unit Price</p>
-                      <p className="text-sm font-semibold text-gray-900">₹{scannedBox.unitPrice.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Total Price</p>
-                      <p className="text-sm font-semibold text-gray-900">₹{scannedBox.totalPrice.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Media Upload Section */}
-              <div className="box mb-6">
-                <div className="box-header">
-                  <h3 className="box-title">
-                    <i className="ri-image-line me-2"></i>
-                    Upload Images & Videos
-                  </h3>
-                </div>
-                <div className="box-body">
-                  <div className="mb-4">
-                    <label className="form-label">Upload QC Images/Videos</label>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*,video/*"
-                      onChange={handleFileUpload}
-                      disabled={isUploading}
-                      className="form-control"
-                    />
-                    <p className="text-xs text-gray-500 mt-2">
-                      Upload images or videos showing the quality inspection of this box
-                    </p>
-                  </div>
-
-                  {uploadedMedia.length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
-                      {uploadedMedia.map((media) => (
-                        <div key={media.id} className="relative group">
-                          {media.type === 'image' ? (
-                            <img
-                              src={media.url}
-                              alt={media.fileName}
-                              className="w-full h-32 object-cover rounded-lg border border-gray-200"
-                            />
-                          ) : (
-                            <video
-                              src={media.url}
-                              className="w-full h-32 object-cover rounded-lg border border-gray-200"
-                              controls
-                            />
-                          )}
-                          <button
-                            onClick={() => handleRemoveMedia(media.id)}
-                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Remove"
-                          >
-                            <i className="ri-close-line text-sm"></i>
-                          </button>
-                          <p className="text-xs text-gray-500 mt-1 truncate">{media.fileName}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* QC Status Update Section */}
-              <div className="box mb-6">
-                <div className="box-header">
-                  <h3 className="box-title">
-                    <i className="ri-checkbox-circle-line me-2"></i>
-                    Update QC Status
-                  </h3>
-                </div>
-                <div className="box-body">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="form-label">
-                        QC Status <span className="text-red-500">*</span>
-                      </label>
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            console.log('QC Accepted button clicked');
-                            setQcStatus('QC Accepted');
-                          }}
-                          className={`flex-1 ti-btn ${
-                            qcStatus === 'QC Accepted'
-                              ? 'ti-btn-primary'
-                              : 'ti-btn-outline-primary'
-                          }`}
-                          disabled={isSubmitting}
-                        >
-                          <i className="ri-checkbox-circle-line me-2"></i>
-                          QC Accepted
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            console.log('QC Rejected button clicked');
-                            setQcStatus('QC Rejected');
-                          }}
-                          className={`flex-1 ti-btn ${
-                            qcStatus === 'QC Rejected'
-                              ? 'ti-btn-danger'
-                              : 'ti-btn-outline-danger'
-                          }`}
-                          disabled={isSubmitting}
-                        >
-                          <i className="ri-close-circle-line me-2"></i>
-                          QC Rejected
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="form-label">
-                        QC Inspector Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={qcBy}
-                        onChange={(e) => setQcBy(e.target.value)}
-                        placeholder="Enter QC inspector name"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="form-label">QC Notes</label>
-                      <textarea
-                        className="form-control"
-                        rows={4}
-                        value={qcNotes}
-                        onChange={(e) => setQcNotes(e.target.value)}
-                        placeholder="Add any notes or observations about the quality inspection..."
-                        disabled={isSubmitting}
-                      />
-                    </div>
-
-                    <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
-                      <Link
-                        href="/yarn-management/purchase-management/yarn-qc"
-                        className="ti-btn ti-btn-light"
-                        onClick={(e) => {
-                          if (isSubmitting) {
-                            e.preventDefault();
-                          }
-                        }}
-                      >
-                        Cancel
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={handleSubmitQC}
-                        disabled={isSubmitting || !qcStatus || !qcBy.trim()}
-                        className="ti-btn ti-btn-primary"
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <i className="ri-loader-4-line animate-spin me-2"></i>
-                            Submitting...
-                          </>
-                        ) : (
-                          <>
-                            <i className="ri-check-line me-2"></i>
-                            Update QC Status
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {!scannedBox && barcodeInput && (
-            <div className="box">
-              <div className="box-body text-center py-8">
-                <div className="text-gray-400 mb-4">
-                  <i className="ri-search-line text-4xl"></i>
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Box Found</h3>
-                <p className="text-gray-500">Please scan a valid barcode to load box details</p>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

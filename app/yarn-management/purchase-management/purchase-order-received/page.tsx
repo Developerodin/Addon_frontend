@@ -876,365 +876,351 @@ const PurchaseOrderReceivedPage = () => {
 
   const SortIcon = ({ field }: { field: OrderSortField }) => {
     if (sortField !== field) {
-      return <i className="ri-arrow-up-down-line text-gray-400"></i>;
+      return <i className="ri-arrow-up-down-line text-gray-400 text-[10px]"></i>;
     }
     return sortDirection === "asc" ? (
-      <i className="ri-arrow-up-line text-primary"></i>
+      <i className="ri-arrow-up-line text-purple-600 text-[10px]"></i>
     ) : (
-      <i className="ri-arrow-down-line text-primary"></i>
+      <i className="ri-arrow-down-line text-purple-600 text-[10px]"></i>
     );
   };
 
   return (
     <>
-      <div className="main-content">
+      <div className="main-content !p-[10px]">
       <Seo title="Purchase Order Received" />
       
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div>
-                <h1 className="box-title text-2xl font-semibold">Purchase Order Received</h1>
-                <p className="text-gray-600 mt-1">Track and manage received purchase orders</p>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Purchase Order Received</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {filteredAndSortedOrders.length}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search Bar */}
+              <div className="relative">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-32 placeholder:text-gray-400 transition-all font-medium"
+                  placeholder="Search"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
               </div>
             </div>
           </div>
 
-          {/* Search and Filters */}
-          <div className="box">
-            <div className="box-body">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search by order number, PO number or supplier..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button className="ti-btn ti-btn-light">
-                    <i className="ri-download-line me-1"></i>
-                    Export
-                  </button>
-                </div>
-              </div>
-              <div className="flex flex-col md:flex-row gap-4 mt-4">
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="form-label text-xs text-gray-600">Start Date</label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="form-label text-xs text-gray-600">End Date</label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
-                  {(startDate || endDate) && (
-                    <button
-                      className="ti-btn ti-btn-light self-end"
-                      onClick={() => {
-                        setStartDate(getDefaultStartDate());
-                        setEndDate(getDefaultEndDate());
-                      }}
-                    >
-                      <i className="ri-close-line me-1"></i>
-                      Clear Dates
-                    </button>
-                  )}
-                </div>
-              </div>
+          {/* Date Filters Row */}
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
+            <div className="flex">
+              <button className="px-3 py-2 border-b-2 border-transparent text-gray-800 text-[11px] font-bold relative group">
+                All
+                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500 rounded-t-full"></div>
+              </button>
             </div>
-          </div>
 
-          {/* Received Orders Table */}
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">Received Orders ({filteredAndSortedOrders.length})</h3>
-            </div>
-            <div className="box-body">
-              {isLoadingOrders ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading purchase orders...</p>
-                </div>
-              ) : filteredAndSortedOrders.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-gray-400 mb-4">
-                    <i className="ri-inbox-line text-4xl"></i>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Orders Found</h3>
-                  <p className="text-gray-500 mb-4">
-                    {searchTerm
-                      ? "No orders match your search criteria. Try adjusting your search term."
-                      : "No purchase orders found (In Transit, Goods Received, or Goods Partially Received) for the selected period."}
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("orderNumber")}
-                        >
-                          <div className="flex items-center gap-2">
-                            PO Number
-                            <SortIcon field="orderNumber" />
-                          </div>
-                        </th>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("supplier")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Supplier
-                            <SortIcon field="supplier" />
-                          </div>
-                        </th>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("orderDate")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Order Date
-                            <SortIcon field="orderDate" />
-                          </div>
-                        </th>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("expectedDelivery")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Expected Delivery
-                            <SortIcon field="expectedDelivery" />
-                          </div>
-                        </th>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("status")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Status
-                            <SortIcon field="status" />
-                          </div>
-                        </th>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("totalAmount")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Total Amount
-                            <SortIcon field="totalAmount" />
-                          </div>
-                        </th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white">
-                      {filteredAndSortedOrders.map((order) => {
-                        return (
-                          <tr
-                            key={order.id}
-                            className={`hover:bg-gray-50 ${
-                              selectedOrderId === order.id ? "!bg-primary/5" : ""
-                            }`}
-                          >
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {order.orderNumber}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {order.supplier}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(order.orderDate).toLocaleDateString()}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(order.expectedDelivery).toLocaleDateString()}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                              {order.status}
-                            </span>
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            ₹{order.totalAmount.toLocaleString()}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div className="flex items-center gap-2">
-                              {/* For "in transit" status: show only "Goods Received" button */}
-                              {order.status === 'in transit' && (
-                                <button
-                                  type="button"
-                                  onClick={async (e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    await handleOpenGoodsReceivedModal(order);
-                                  }}
-                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-primary bg-primary text-white px-3 py-1 text-sm hover:bg-primary/90 transition h-8"
-                                  title="Mark goods as received"
-                                >
-                                  <i className="ri-checkbox-circle-line"></i>
-                                  Goods Received
-                                </button>
-                              )}
-
-                              {/* For "goods partially received" or "goods received" status: show both "Process" and "Goods Received" buttons */}
-                              {(order.status === 'goods partially received' || order.status === 'goods received') && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={async (e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      
-                                      if (processingOrderId === order.id) {
-                                        console.log('Already processing this order');
-                                        return;
-                                      }
-                                      
-                                      console.log('Process button clicked for order:', order.id, order.orderNumber);
-                                      setProcessingOrderId(order.id);
-                                      
-                                      try {
-                                        // Fetch full order details to get receivedLotDetails
-                                        const fullOrderDetails = await yarnPurchaseOrderService.getPurchaseOrderById(order.id);
-                                        const mappedOrder = mapAPIOrderToComponent(fullOrderDetails);
-                                        
-                                        // Check if receivedLotDetails exist
-                                        if (!mappedOrder.receivedLotDetails || mappedOrder.receivedLotDetails.length === 0) {
-                                          toast.error('Please fill Goods Received details first before processing');
-                                          setProcessingOrderId(null);
-                                          return;
-                                        }
-
-                                        // Format lot details for process page - ensure proper structure
-                                        const lotDetails = mappedOrder.receivedLotDetails
-                                          .filter(lot => lot.lotNumber && lot.numberOfBoxes > 0) // Filter out invalid lots
-                                          .map(lot => ({
-                                            lotNumber: lot.lotNumber.trim(),
-                                            numberOfBoxes: lot.numberOfBoxes
-                                          }));
-
-                                        // Validate that we have at least one valid lot
-                                        if (lotDetails.length === 0) {
-                                          toast.error('No valid lot details found. Please ensure all lots have a lot number and number of boxes.');
-                                          setProcessingOrderId(null);
-                                          return;
-                                        }
-
-                                        // Create process data payload with correct structure
-                                        const processData = {
-                                          poNumber: mappedOrder.orderNumber,
-                                          lotDetails: lotDetails
-                                        };
-
-                                        console.log('Process data to pass:', JSON.stringify(processData, null, 2));
-
-                                        // Check if boxes already exist for this order
-                                        console.log('Checking for existing boxes...');
-                                        const existingBoxes = await yarnBoxService.getYarnBoxes({
-                                          po_number: mappedOrder.orderNumber,
-                                          cones_issued: false
-                                        });
-                                        console.log('Existing boxes response:', existingBoxes);
-
-                                        // If boxes don't exist, create them based on lot details
-                                        if (!existingBoxes.results || existingBoxes.results.length === 0) {
-                                          console.log('No existing boxes found, creating bulk boxes...');
-                                          
-                                          // Validate that we have lot details
-                                          if (lotDetails.length === 0) {
-                                            toast.error('Cannot create boxes without lot details. Please check lot details.');
-                                            setProcessingOrderId(null);
-                                            return;
-                                          }
-
-                                          // Create bulk payload with lotDetails structure
-                                          const bulkPayload: CreateBulkYarnBoxPayload = {
-                                            poNumber: mappedOrder.orderNumber,
-                                            lotDetails: lotDetails
-                                          };
-                                          console.log('Bulk payload:', JSON.stringify(bulkPayload, null, 2));
-
-                                          const result = await yarnBoxService.createBulkYarnBoxes(bulkPayload);
-                                          console.log('Bulk boxes created:', result);
-                                          const totalBoxesCreated = lotDetails.reduce((sum, lot) => sum + lot.numberOfBoxes, 0);
-                                          toast.success(`${totalBoxesCreated} yarn box(es) created successfully`);
-                                        } else {
-                                          console.log('Boxes already exist, skipping creation');
-                                          toast.success('Boxes already exist for this order');
-                                        }
-
-                                        // Navigate to process page with lot details as query params
-                                        console.log('Navigating to process page with lot details...');
-                                        const queryParams = new URLSearchParams({
-                                          lotData: JSON.stringify(processData)
-                                        });
-                                        router.push(`/yarn-management/purchase-management/purchase-order-received/process/${order.id}?${queryParams.toString()}`);
-                                      } catch (error) {
-                                        console.error('Failed to process order:', error);
-                                        toast.error(error instanceof Error ? error.message : 'Failed to process order');
-                                        setProcessingOrderId(null);
-                                      }
-                                    }}
-                                    disabled={processingOrderId === order.id}
-                                    className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:border-primary hover:text-primary transition h-8 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Process receipt workflow"
-                                  >
-                                    {processingOrderId === order.id ? (
-                                      <>
-                                        <i className="ri-loader-4-line animate-spin"></i>
-                                        Processing...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <i className="ri-box-3-line"></i>
-                                        Process
-                                      </>
-                                    )}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={async (e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      await handleOpenGoodsReceivedModal(order);
-                                    }}
-                                    className="inline-flex items-center justify-center gap-2 rounded-md border border-primary bg-primary text-white px-3 py-1 text-sm hover:bg-primary/90 transition h-8"
-                                    title="Mark goods as received"
-                                  >
-                                    <i className="ri-checkbox-circle-line"></i>
-                                    Goods Received
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+            <div className="flex items-center gap-3 pr-2">
+              <div className="flex items-center gap-1.5 bg-gray-50/50 px-2 py-1 rounded border border-gray-100 border-dashed">
+                <i className="ri-calendar-line text-[10px] text-gray-400"></i>
+                <input
+                  type="date"
+                  className="bg-transparent border-none text-[10px] font-bold text-gray-600 p-0 outline-none w-24 cursor-pointer"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+                <span className="text-gray-300 text-[10px]">~</span>
+                <input
+                  type="date"
+                  className="bg-transparent border-none text-[10px] font-bold text-gray-600 p-0 outline-none w-24 cursor-pointer"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => {
+                    setStartDate(getDefaultStartDate());
+                    setEndDate(getDefaultEndDate());
+                  }}
+                  className="text-[9px] text-purple-400 hover:text-purple-600 font-bold uppercase transition-colors"
+                >
+                  Reset
+                </button>
               )}
             </div>
           </div>
+        </div>
+
+        {/* Table Container */}
+        <div className="overflow-x-auto min-h-[300px]">
+          {isLoadingOrders ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+            </div>
+          ) : filteredAndSortedOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-inbox-line text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">DATA EMPTY</h3>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th
+                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("orderNumber")}
+                  >
+                    <div className="flex items-center gap-1">
+                      PO Number
+                      <SortIcon field="orderNumber" />
+                    </div>
+                  </th>
+                  <th
+                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("supplier")}
+                  >
+                    <div className="flex items-center gap-1">
+                      Supplier
+                      <SortIcon field="supplier" />
+                    </div>
+                  </th>
+                  <th
+                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("orderDate")}
+                  >
+                    <div className="flex items-center gap-1">
+                      Order Date
+                      <SortIcon field="orderDate" />
+                    </div>
+                  </th>
+                  <th
+                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("expectedDelivery")}
+                  >
+                    <div className="flex items-center gap-1">
+                      Expected Delivery
+                      <SortIcon field="expectedDelivery" />
+                    </div>
+                  </th>
+                  <th
+                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("status")}
+                  >
+                    <div className="flex items-center gap-1">
+                      Status
+                      <SortIcon field="status" />
+                    </div>
+                  </th>
+                  <th
+                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("totalAmount")}
+                  >
+                    <div className="flex items-center gap-1">
+                      Total Amount
+                      <SortIcon field="totalAmount" />
+                    </div>
+                  </th>
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAndSortedOrders.map((order) => {
+                  return (
+                    <tr
+                      key={order.id}
+                      className={`hover:bg-gray-50/50 transition-colors group ${
+                        selectedOrderId === order.id ? "!bg-primary/5" : ""
+                      }`}
+                    >
+                      <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">
+                        {order.orderNumber}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-200">
+                        {order.supplier}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">
+                        {new Date(order.orderDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">
+                        {new Date(order.expectedDelivery).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-left border border-gray-200">
+                        <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${getStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                      </td>
+                      <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-800 border border-gray-200">
+                        ₹{order.totalAmount.toLocaleString()}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                        <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                          {/* For "in transit" status: show only "Goods Received" button */}
+                          {order.status === 'in transit' && (
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                await handleOpenGoodsReceivedModal(order);
+                              }}
+                              className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                              title="Mark goods as received"
+                            >
+                              <i className="ri-checkbox-circle-line text-xs"></i>
+                              Goods Received
+                            </button>
+                          )}
+
+                          {/* For "goods partially received" or "goods received" status: show both "Process" and "Goods Received" buttons */}
+                          {(order.status === 'goods partially received' || order.status === 'goods received') && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  
+                                  if (processingOrderId === order.id) {
+                                    console.log('Already processing this order');
+                                    return;
+                                  }
+                                  
+                                  console.log('Process button clicked for order:', order.id, order.orderNumber);
+                                  setProcessingOrderId(order.id);
+                                  
+                                  try {
+                                    // Fetch full order details to get receivedLotDetails
+                                    const fullOrderDetails = await yarnPurchaseOrderService.getPurchaseOrderById(order.id);
+                                    const mappedOrder = mapAPIOrderToComponent(fullOrderDetails);
+                                    
+                                    // Check if receivedLotDetails exist
+                                    if (!mappedOrder.receivedLotDetails || mappedOrder.receivedLotDetails.length === 0) {
+                                      toast.error('Please fill Goods Received details first before processing');
+                                      setProcessingOrderId(null);
+                                      return;
+                                    }
+
+                                    // Format lot details for process page - ensure proper structure
+                                    const lotDetails = mappedOrder.receivedLotDetails
+                                      .filter(lot => lot.lotNumber && lot.numberOfBoxes > 0) // Filter out invalid lots
+                                      .map(lot => ({
+                                        lotNumber: lot.lotNumber.trim(),
+                                        numberOfBoxes: lot.numberOfBoxes
+                                      }));
+
+                                    // Validate that we have at least one valid lot
+                                    if (lotDetails.length === 0) {
+                                      toast.error('No valid lot details found. Please ensure all lots have a lot number and number of boxes.');
+                                      setProcessingOrderId(null);
+                                      return;
+                                    }
+
+                                    // Create process data payload with correct structure
+                                    const processData = {
+                                      poNumber: mappedOrder.orderNumber,
+                                      lotDetails: lotDetails
+                                    };
+
+                                    console.log('Process data to pass:', JSON.stringify(processData, null, 2));
+
+                                    // Check if boxes already exist for this order
+                                    console.log('Checking for existing boxes...');
+                                    const existingBoxes = await yarnBoxService.getYarnBoxes({
+                                      po_number: mappedOrder.orderNumber,
+                                      cones_issued: false
+                                    });
+                                    console.log('Existing boxes response:', existingBoxes);
+
+                                    // If boxes don't exist, create them based on lot details
+                                    if (!existingBoxes.results || existingBoxes.results.length === 0) {
+                                      console.log('No existing boxes found, creating bulk boxes...');
+                                      
+                                      // Validate that we have lot details
+                                      if (lotDetails.length === 0) {
+                                        toast.error('Cannot create boxes without lot details. Please check lot details.');
+                                        setProcessingOrderId(null);
+                                        return;
+                                      }
+
+                                      // Create bulk payload with lotDetails structure
+                                      const bulkPayload: CreateBulkYarnBoxPayload = {
+                                        poNumber: mappedOrder.orderNumber,
+                                        lotDetails: lotDetails
+                                      };
+                                      console.log('Bulk payload:', JSON.stringify(bulkPayload, null, 2));
+
+                                      const result = await yarnBoxService.createBulkYarnBoxes(bulkPayload);
+                                      console.log('Bulk boxes created:', result);
+                                      const totalBoxesCreated = lotDetails.reduce((sum, lot) => sum + lot.numberOfBoxes, 0);
+                                      toast.success(`${totalBoxesCreated} yarn box(es) created successfully`);
+                                    } else {
+                                      console.log('Boxes already exist, skipping creation');
+                                      toast.success('Boxes already exist for this order');
+                                    }
+
+                                    // Navigate to process page with lot details as query params
+                                    console.log('Navigating to process page with lot details...');
+                                    const queryParams = new URLSearchParams({
+                                      lotData: JSON.stringify(processData)
+                                    });
+                                    router.push(`/yarn-management/purchase-management/purchase-order-received/process/${order.id}?${queryParams.toString()}`);
+                                  } catch (error) {
+                                    console.error('Failed to process order:', error);
+                                    toast.error(error instanceof Error ? error.message : 'Failed to process order');
+                                    setProcessingOrderId(null);
+                                  }
+                                }}
+                                disabled={processingOrderId === order.id}
+                                className="flex items-center gap-1.5 px-2.5 py-1 bg-white text-gray-600 text-[10px] font-bold rounded border border-gray-200 hover:border-purple-300 hover:text-purple-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Process receipt workflow"
+                              >
+                                {processingOrderId === order.id ? (
+                                  <>
+                                    <i className="ri-loader-4-line animate-spin text-xs"></i>
+                                    Processing...
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="ri-box-3-line text-xs"></i>
+                                    Process
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  await handleOpenGoodsReceivedModal(order);
+                                }}
+                                className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                                title="Mark goods as received"
+                              >
+                                <i className="ri-checkbox-circle-line text-xs"></i>
+                                Goods Received
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -2120,86 +2106,99 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div 
-          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
-          onClick={onClose}
-        ></div>
+    <div className={`fixed inset-0 z-50 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`}>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${
+          isOpen ? 'opacity-100' : 'opacity-0'
+        }`}
+        onClick={onClose}
+      ></div>
 
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full max-h-[90vh] overflow-y-auto">
-          <form onSubmit={handleSubmit}>
-            <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">
-                  Goods Received - {order.orderNumber}
-                </h3>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="text-gray-400 hover:text-gray-500"
-                  disabled={isSubmitting}
-                >
-                  <i className="ri-close-line text-2xl"></i>
-                </button>
+      {/* Side Modal */}
+      <div
+        className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
+          isOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <form onSubmit={handleSubmit} className="flex flex-col h-full">
+          {/* Header */}
+          <div className="bg-primary text-white px-4 py-3 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Goods Received</h3>
+                <p className="text-xs text-white/80 mt-0.5">{order.orderNumber}</p>
               </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-white hover:text-gray-200 transition-colors"
+                disabled={isSubmitting}
+              >
+                <i className="ri-close-line text-lg"></i>
+              </button>
+            </div>
+          </div>
 
-              {/* Order Details */}
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">Order Details</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">PO Number</label>
-                    <div className="mt-1 text-gray-900 font-medium">{order.orderNumber}</div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Supplier</label>
-                    <div className="mt-1 text-gray-900">{order.supplier}</div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Order Date</label>
-                    <div className="mt-1 text-gray-900">{new Date(order.orderDate).toLocaleDateString()}</div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Total Amount</label>
-                    <div className="mt-1 text-gray-900 font-medium">₹{order.totalAmount.toLocaleString()}</div>
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+
+            {/* Order Details */}
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <h4 className="text-xs font-semibold text-gray-700 mb-2">Order Details</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="text-[10px] font-medium text-gray-600">PO Number</label>
+                  <div className="mt-0.5 text-xs text-gray-900 font-medium">{order.orderNumber}</div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-gray-600">Supplier</label>
+                  <div className="mt-0.5 text-xs text-gray-900">{order.supplier}</div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-gray-600">Order Date</label>
+                  <div className="mt-0.5 text-xs text-gray-900">{new Date(order.orderDate).toLocaleDateString()}</div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-gray-600">Total Amount</label>
+                  <div className="mt-0.5 text-xs text-gray-900 font-medium">₹{order.totalAmount.toLocaleString()}</div>
+                </div>
+              </div>
+              {order.items && order.items.length > 0 && (
+                <div className="mt-3">
+                  <label className="text-[10px] font-medium text-gray-600 mb-1 block">Order Items</label>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border border-gray-200">
+                      <thead className="bg-gray-50/30">
+                        <tr>
+                          <th className="px-2 py-1 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                          <th className="px-2 py-1 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Size/Count</th>
+                          <th className="px-2 py-1 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Shade Code</th>
+                          <th className="px-2 py-1 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Quantity</th>
+                          <th className="px-2 py-1 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.items.map((item, idx) => (
+                          <tr key={idx} className="bg-white">
+                            <td className="px-2 py-1 border border-gray-200 text-xs text-gray-900">{item.yarnName}</td>
+                            <td className="px-2 py-1 border border-gray-200 text-xs text-gray-900">{item.sizeCount}</td>
+                            <td className="px-2 py-1 border border-gray-200 text-xs text-gray-900">{item.shadeCode}</td>
+                            <td className="px-2 py-1 text-right border border-gray-200 text-xs text-gray-900">{item.quantity.toLocaleString()}</td>
+                            <td className="px-2 py-1 text-right border border-gray-200 text-xs text-gray-900">₹{item.rate.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-                {order.items && order.items.length > 0 && (
-                  <div className="mt-4">
-                    <label className="text-xs font-medium text-gray-600 mb-2 block">Order Items</label>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-xs border border-gray-200">
-                        <thead className="bg-gray-100">
-                          <tr>
-                            <th className="px-2 py-1 text-left border border-gray-200">Yarn Name</th>
-                            <th className="px-2 py-1 text-left border border-gray-200">Size/Count</th>
-                            <th className="px-2 py-1 text-left border border-gray-200">Shade Code</th>
-                            <th className="px-2 py-1 text-right border border-gray-200">Quantity</th>
-                            <th className="px-2 py-1 text-right border border-gray-200">Rate</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {order.items.map((item, idx) => (
-                            <tr key={idx} className="bg-white">
-                              <td className="px-2 py-1 border border-gray-200">{item.yarnName}</td>
-                              <td className="px-2 py-1 border border-gray-200">{item.sizeCount}</td>
-                              <td className="px-2 py-1 border border-gray-200">{item.shadeCode}</td>
-                              <td className="px-2 py-1 text-right border border-gray-200">{item.quantity.toLocaleString()}</td>
-                              <td className="px-2 py-1 text-right border border-gray-200">₹{item.rate.toLocaleString()}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
+            </div>
 
-              {/* Packlist Details */}
-              {(order.packListDetails && order.packListDetails.length > 0) || order.packlistDetails ? (
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Packlist Details</h4>
+            {/* Packlist Details */}
+            {(order.packListDetails && order.packListDetails.length > 0) || order.packlistDetails ? (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <h4 className="text-xs font-semibold text-gray-700 mb-2">Packlist Details</h4>
                   {(() => {
                     // Handle both array and single object formats
                     const packListData = order.packListDetails || (order.packlistDetails ? [order.packlistDetails] : []);
@@ -2214,62 +2213,62 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                         : 'N/A';
 
                       return (
-                        <div key={packIndex} className="mb-4 last:mb-0 p-4 bg-white rounded-lg border border-gray-200">
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                        <div key={packIndex} className="mb-3 last:mb-0 p-3 bg-white rounded-lg border border-gray-200">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             <div>
-                              <label className="text-xs font-medium text-gray-600">Packing Number</label>
-                              <div className="mt-1 text-gray-900 font-medium">{packlist.packingNumber || packlist.packing_number || 'N/A'}</div>
+                              <label className="text-[10px] font-medium text-gray-600">Packing Number</label>
+                              <div className="mt-0.5 text-xs text-gray-900 font-medium">{packlist.packingNumber || packlist.packing_number || 'N/A'}</div>
                             </div>
                             <div>
-                              <label className="text-xs font-medium text-gray-600">Courier Name</label>
-                              <div className="mt-1 text-gray-900">{packlist.courierName || packlist.courier_name || 'N/A'}</div>
+                              <label className="text-[10px] font-medium text-gray-600">Courier Name</label>
+                              <div className="mt-0.5 text-xs text-gray-900">{packlist.courierName || packlist.courier_name || 'N/A'}</div>
                             </div>
                             <div>
-                              <label className="text-xs font-medium text-gray-600">Courier Number</label>
-                              <div className="mt-1 text-gray-900">{packlist.courierNumber || packlist.courier_number || 'N/A'}</div>
+                              <label className="text-[10px] font-medium text-gray-600">Courier Number</label>
+                              <div className="mt-0.5 text-xs text-gray-900">{packlist.courierNumber || packlist.courier_number || 'N/A'}</div>
                             </div>
                             <div>
-                              <label className="text-xs font-medium text-gray-600">Vehicle Number</label>
-                              <div className="mt-1 text-gray-900">{packlist.vehicleNumber || packlist.vehicle_number || 'N/A'}</div>
+                              <label className="text-[10px] font-medium text-gray-600">Vehicle Number</label>
+                              <div className="mt-0.5 text-xs text-gray-900">{packlist.vehicleNumber || packlist.vehicle_number || 'N/A'}</div>
                             </div>
                             <div>
-                              <label className="text-xs font-medium text-gray-600">Challan Number</label>
-                              <div className="mt-1 text-gray-900">{packlist.challanNumber || packlist.challan_number || 'N/A'}</div>
+                              <label className="text-[10px] font-medium text-gray-600">Challan Number</label>
+                              <div className="mt-0.5 text-xs text-gray-900">{packlist.challanNumber || packlist.challan_number || 'N/A'}</div>
                             </div>
                             <div>
-                              <label className="text-xs font-medium text-gray-600">Dispatch Date</label>
-                              <div className="mt-1 text-gray-900">
+                              <label className="text-[10px] font-medium text-gray-600">Dispatch Date</label>
+                              <div className="mt-0.5 text-xs text-gray-900">
                                 {packlist.dispatchDate || packlist.dispatch_date 
                                   ? new Date(packlist.dispatchDate || packlist.dispatch_date).toLocaleDateString()
                                   : 'N/A'}
                               </div>
                             </div>
                             <div>
-                              <label className="text-xs font-medium text-gray-600">Estimated Delivery Date</label>
-                              <div className="mt-1 text-gray-900">
+                              <label className="text-[10px] font-medium text-gray-600">Estimated Delivery Date</label>
+                              <div className="mt-0.5 text-xs text-gray-900">
                                 {packlist.estimatedDeliveryDate || packlist.estimated_delivery_date 
                                   ? new Date(packlist.estimatedDeliveryDate || packlist.estimated_delivery_date).toLocaleDateString()
                                   : 'N/A'}
                               </div>
                             </div>
                             <div>
-                              <label className="text-xs font-medium text-gray-600">Number of Boxes</label>
-                              <div className="mt-1 text-gray-900 font-medium">{packlist.numberOfBoxes || packlist.number_of_boxes || 0}</div>
+                              <label className="text-[10px] font-medium text-gray-600">Number of Boxes</label>
+                              <div className="mt-0.5 text-xs text-gray-900 font-medium">{packlist.numberOfBoxes || packlist.number_of_boxes || 0}</div>
                             </div>
                             <div>
-                              <label className="text-xs font-medium text-gray-600">Total Weight (kg)</label>
-                              <div className="mt-1 text-gray-900 font-medium">{packlist.totalWeight || packlist.total_weight || 0}</div>
+                              <label className="text-[10px] font-medium text-gray-600">Total Weight (kg)</label>
+                              <div className="mt-0.5 text-xs text-gray-900 font-medium">{packlist.totalWeight || packlist.total_weight || 0}</div>
                             </div>
                             {packlist.notes && (
                               <div className="md:col-span-2 lg:col-span-3">
-                                <label className="text-xs font-medium text-gray-600">Notes</label>
-                                <div className="mt-1 text-gray-900">{packlist.notes}</div>
+                                <label className="text-[10px] font-medium text-gray-600">Notes</label>
+                                <div className="mt-0.5 text-xs text-gray-900">{packlist.notes}</div>
                               </div>
                             )}
                             {poItemNames && (
                               <div className="md:col-span-2 lg:col-span-3">
-                                <label className="text-xs font-medium text-gray-600">PO Items</label>
-                                <div className="mt-1 text-gray-900">{poItemNames}</div>
+                                <label className="text-[10px] font-medium text-gray-600">PO Items</label>
+                                <div className="mt-0.5 text-xs text-gray-900">{poItemNames}</div>
                               </div>
                             )}
                           </div>
@@ -2280,389 +2279,389 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                 </div>
               ) : null}
 
-              {/* Lots */}
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-sm font-semibold text-gray-700">Received Lot Details</h4>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={addLot}
-                      className="ti-btn ti-btn-primary whitespace-nowrap"
-                    >
-                      <i className="ri-add-line me-2"></i>
-                      Add Lot
-                    </button>
-                  </div>
+            {/* Lots */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-semibold text-gray-700">Received Lot Details</h4>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={addLot}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                  >
+                    <i className="ri-add-line text-xs"></i>
+                    Add Lot
+                  </button>
                 </div>
+              </div>
 
-                {lots.map((lot, lotIndex) => {
-                  const lotIsSaved = isLotSaved(lot.lotNumber);
-                  
-                  return (
-                  <div key={lotIndex} className={`border rounded-lg p-4 space-y-4 ${lotIsSaved ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <h5 className="text-sm font-medium text-gray-800">Lot {lotIndex + 1}</h5>
-                        {lotIsSaved && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                            <i className="ri-save-line"></i>
-                            Saved
-                          </span>
-                        )}
-                      </div>
-                      {lots.length > 1 && !lotIsSaved && (
-                        <button
-                          type="button"
-                          onClick={() => removeLot(lotIndex)}
-                          className="ti-btn ti-btn-outline-danger whitespace-nowrap"
-                          title="Remove Lot"
-                        >
-                          <i className="ri-delete-bin-line me-2"></i>
-                          Remove Lot
-                        </button>
-                      )}
+              {lots.map((lot, lotIndex) => {
+                const lotIsSaved = isLotSaved(lot.lotNumber);
+                
+                return (
+                <div key={lotIndex} className={`border rounded-lg p-3 space-y-3 ${lotIsSaved ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <h5 className="text-xs font-semibold text-gray-800">Lot {lotIndex + 1}</h5>
                       {lotIsSaved && (
-                        <span className="text-xs text-gray-500 italic">
-                          Cannot edit - saved lots are read-only
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-blue-100 text-blue-800">
+                          <i className="ri-save-line text-[10px]"></i>
+                          Saved
                         </span>
                       )}
                     </div>
+                    {lots.length > 1 && !lotIsSaved && (
+                      <button
+                        type="button"
+                        onClick={() => removeLot(lotIndex)}
+                        className="flex items-center gap-1 px-2 py-1 bg-red-50 text-red-600 text-[10px] font-bold rounded border border-red-200 hover:bg-red-100 transition-colors"
+                        title="Remove Lot"
+                      >
+                        <i className="ri-delete-bin-line text-xs"></i>
+                        Remove
+                      </button>
+                    )}
+                    {lotIsSaved && (
+                      <span className="text-[10px] text-gray-500 italic">
+                        Cannot edit - saved lots are read-only
+                      </span>
+                    )}
+                  </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="form-label">
-                          Lot Number <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={lot.lotNumber}
-                          onChange={(e) => updateLot(lotIndex, 'lotNumber', e.target.value)}
-                          className="form-control"
-                          placeholder="Enter lot number"
-                          required
-                          disabled={lotIsSaved}
-                        />
-                        {lotIsSaved && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            This lot is saved and cannot be edited. Saved lots can only be viewed.
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="form-label">
-                          Number of Cones <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={rawInputValues[`lot-${lotIndex}-cones`] !== undefined 
-                            ? rawInputValues[`lot-${lotIndex}-cones`] 
-                            : (lot.numberOfCones === 0 ? '' : lot.numberOfCones.toString())}
-                          disabled={lotIsSaved}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const key = `lot-${lotIndex}-cones`;
-                            
-                            // Allow empty string, numbers, and decimal point
-                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                              // Store raw input value
-                              setRawInputValues(prev => ({
-                                ...prev,
-                                [key]: value
-                              }));
-                              
-                              // Also update the numeric value if valid
-                              if (value === '' || value === '.') {
-                                updateLot(lotIndex, 'numberOfCones', 0);
-                              } else {
-                                const numValue = parseFloat(value);
-                                if (!isNaN(numValue)) {
-                                  updateLot(lotIndex, 'numberOfCones', numValue);
-                                }
-                              }
-                            }
-                          }}
-                          onBlur={(e) => {
-                            const value = e.target.value;
-                            const key = `lot-${lotIndex}-cones`;
-                            const numValue = parseFloat(value);
-                            
-                            // Clear raw input value on blur
-                            setRawInputValues(prev => {
-                              const newValues = { ...prev };
-                              delete newValues[key];
-                              return newValues;
-                            });
-                            
-                            // Update numeric value
-                            if (value === '' || isNaN(numValue) || numValue <= 0) {
-                              updateLot(lotIndex, 'numberOfCones', 0);
-                            } else {
-                              updateLot(lotIndex, 'numberOfCones', numValue);
-                            }
-                          }}
-                          className="form-control"
-                          placeholder="0.00"
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <label className="form-label">
-                          Total Weight (kg) <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={rawInputValues[`lot-${lotIndex}-totalWeight`] !== undefined 
-                            ? rawInputValues[`lot-${lotIndex}-totalWeight`] 
-                            : (lot.totalWeight === 0 ? '' : lot.totalWeight.toString())}
-                          disabled={lotIsSaved}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const key = `lot-${lotIndex}-totalWeight`;
-                            
-                            // Allow empty string, numbers, and decimal point
-                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                              setRawInputValues(prev => ({
-                                ...prev,
-                                [key]: value
-                              }));
-                              
-                              if (value === '' || value === '.') {
-                                updateLot(lotIndex, 'totalWeight', 0);
-                              } else {
-                                const numValue = parseFloat(value);
-                                if (!isNaN(numValue)) {
-                                  updateLot(lotIndex, 'totalWeight', numValue);
-                                }
-                              }
-                            }
-                          }}
-                          onBlur={(e) => {
-                            const value = e.target.value;
-                            const key = `lot-${lotIndex}-totalWeight`;
-                            const numValue = parseFloat(value);
-                            
-                            setRawInputValues(prev => {
-                              const newValues = { ...prev };
-                              delete newValues[key];
-                              return newValues;
-                            });
-                            
-                            if (value === '' || isNaN(numValue) || numValue <= 0) {
-                              updateLot(lotIndex, 'totalWeight', 0);
-                            } else {
-                              updateLot(lotIndex, 'totalWeight', numValue);
-                            }
-                          }}
-                          className="form-control"
-                          placeholder="0.00"
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <label className="form-label">
-                          Number of Boxes <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={rawInputValues[`lot-${lotIndex}-numberOfBoxes`] !== undefined 
-                            ? rawInputValues[`lot-${lotIndex}-numberOfBoxes`] 
-                            : (lot.numberOfBoxes === 0 ? '' : lot.numberOfBoxes.toString())}
-                          disabled={lotIsSaved}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const key = `lot-${lotIndex}-numberOfBoxes`;
-                            
-                            // Allow empty string, numbers, and decimal point
-                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                              setRawInputValues(prev => ({
-                                ...prev,
-                                [key]: value
-                              }));
-                              
-                              if (value === '' || value === '.') {
-                                updateLot(lotIndex, 'numberOfBoxes', 0);
-                              } else {
-                                const numValue = parseFloat(value);
-                                if (!isNaN(numValue)) {
-                                  updateLot(lotIndex, 'numberOfBoxes', numValue);
-                                }
-                              }
-                            }
-                          }}
-                          onBlur={(e) => {
-                            const value = e.target.value;
-                            const key = `lot-${lotIndex}-numberOfBoxes`;
-                            const numValue = parseFloat(value);
-                            
-                            setRawInputValues(prev => {
-                              const newValues = { ...prev };
-                              delete newValues[key];
-                              return newValues;
-                            });
-                            
-                            if (value === '' || isNaN(numValue) || numValue <= 0) {
-                              updateLot(lotIndex, 'numberOfBoxes', 0);
-                            } else {
-                              updateLot(lotIndex, 'numberOfBoxes', numValue);
-                            }
-                          }}
-                          className="form-control"
-                          placeholder="0.00"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    {/* PO Items */}
-                    <div className="mt-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <label className="form-label">PO Items <span className="text-red-500">*</span></label>
-                        {!lotIsSaved && (
-                          <button
-                            type="button"
-                            onClick={() => addPoItemToLot(lotIndex)}
-                            className="ti-btn ti-btn-outline-primary whitespace-nowrap"
-                          >
-                            <i className="ri-add-line me-2"></i>
-                            Add PO Item
-                          </button>
-                        )}
-                      </div>
-
-                      {lot.poItems.map((poItem, poItemIndex) => (
-                        <div key={poItemIndex} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3 p-3 bg-gray-50 rounded">
-                          <div>
-                            <label className="form-label">
-                              PO Item <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={poItem.poItem}
-                              onChange={(e) => updatePoItem(lotIndex, poItemIndex, 'poItem', e.target.value)}
-                              className="form-select"
-                              required
-                              disabled={lotIsSaved}
-                            >
-                              <option value="">Select PO Item</option>
-                              {getFilteredPoItems().map((item) => (
-                                <option key={item.id} value={item.id}>
-                                  {item.yarnName} - {item.sizeCount} - {item.shadeCode} (Qty: {item.quantity})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="form-label">
-                              Received Quantity (kg) <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] !== undefined 
-                                ? rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] 
-                                : (poItem.receivedQuantity === 0 ? '' : poItem.receivedQuantity.toString())}
-                              disabled={lotIsSaved}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
-                                
-                                // Allow empty string, numbers, and decimal point
-                                if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                                  setRawInputValues(prev => ({
-                                    ...prev,
-                                    [key]: value
-                                  }));
-                                  
-                                  if (value === '' || value === '.') {
-                                    updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', 0);
-                                  } else {
-                                    const numValue = parseFloat(value);
-                                    if (!isNaN(numValue)) {
-                                      updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', numValue);
-                                    }
-                                  }
-                                }
-                              }}
-                              onBlur={(e) => {
-                                const value = e.target.value;
-                                const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
-                                const numValue = parseFloat(value);
-                                
-                                setRawInputValues(prev => {
-                                  const newValues = { ...prev };
-                                  delete newValues[key];
-                                  return newValues;
-                                });
-                                
-                                if (value === '' || isNaN(numValue) || numValue <= 0) {
-                                  updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', 0);
-                                } else {
-                                  updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', numValue);
-                                }
-                              }}
-                              className="form-control"
-                              placeholder="0.00"
-                              required
-                            />
-                          </div>
-
-                          <div className="flex items-end">
-                            {!lotIsSaved && (
-                              <button
-                                type="button"
-                                onClick={() => removePoItemFromLot(lotIndex, poItemIndex)}
-                                className="ti-btn ti-btn-outline-danger whitespace-nowrap w-full"
-                              >
-                                <i className="ri-delete-bin-line me-2"></i>
-                                Remove
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-
-                      {lot.poItems.length === 0 && (
-                        <p className="text-xs text-gray-500">No PO items added. Click "Add PO Item" to add items.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">
+                        Lot Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={lot.lotNumber}
+                        onChange={(e) => updateLot(lotIndex, 'lotNumber', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                        placeholder="Enter lot number"
+                        required
+                        disabled={lotIsSaved}
+                      />
+                      {lotIsSaved && (
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          This lot is saved and cannot be edited. Saved lots can only be viewed.
+                        </p>
                       )}
                     </div>
-                  </div>
-                );
-                })}
-              </div>
-            </div>
 
-            <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-              <button
-                type="submit"
-                className="ti-btn ti-btn-primary w-full sm:ml-3 sm:w-auto"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <i className="ri-loader-4-line animate-spin me-2"></i>
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <i className="ri-check-line me-2"></i>
-                    Update Order
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="ti-btn ti-btn-light mt-3 sm:mt-0 w-full sm:w-auto"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">
+                        Number of Cones <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rawInputValues[`lot-${lotIndex}-cones`] !== undefined 
+                          ? rawInputValues[`lot-${lotIndex}-cones`] 
+                          : (lot.numberOfCones === 0 ? '' : lot.numberOfCones.toString())}
+                        disabled={lotIsSaved}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const key = `lot-${lotIndex}-cones`;
+                          
+                          // Allow empty string, numbers, and decimal point
+                          if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                            // Store raw input value
+                            setRawInputValues(prev => ({
+                              ...prev,
+                              [key]: value
+                            }));
+                            
+                            // Also update the numeric value if valid
+                            if (value === '' || value === '.') {
+                              updateLot(lotIndex, 'numberOfCones', 0);
+                            } else {
+                              const numValue = parseFloat(value);
+                              if (!isNaN(numValue)) {
+                                updateLot(lotIndex, 'numberOfCones', numValue);
+                              }
+                            }
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const value = e.target.value;
+                          const key = `lot-${lotIndex}-cones`;
+                          const numValue = parseFloat(value);
+                          
+                          // Clear raw input value on blur
+                          setRawInputValues(prev => {
+                            const newValues = { ...prev };
+                            delete newValues[key];
+                            return newValues;
+                          });
+                          
+                          // Update numeric value
+                          if (value === '' || isNaN(numValue) || numValue <= 0) {
+                            updateLot(lotIndex, 'numberOfCones', 0);
+                          } else {
+                            updateLot(lotIndex, 'numberOfCones', numValue);
+                          }
+                        }}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">
+                        Total Weight (kg) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rawInputValues[`lot-${lotIndex}-totalWeight`] !== undefined 
+                          ? rawInputValues[`lot-${lotIndex}-totalWeight`] 
+                          : (lot.totalWeight === 0 ? '' : lot.totalWeight.toString())}
+                        disabled={lotIsSaved}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const key = `lot-${lotIndex}-totalWeight`;
+                          
+                          // Allow empty string, numbers, and decimal point
+                          if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                            setRawInputValues(prev => ({
+                              ...prev,
+                              [key]: value
+                            }));
+                            
+                            if (value === '' || value === '.') {
+                              updateLot(lotIndex, 'totalWeight', 0);
+                            } else {
+                              const numValue = parseFloat(value);
+                              if (!isNaN(numValue)) {
+                                updateLot(lotIndex, 'totalWeight', numValue);
+                              }
+                            }
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const value = e.target.value;
+                          const key = `lot-${lotIndex}-totalWeight`;
+                          const numValue = parseFloat(value);
+                          
+                          setRawInputValues(prev => {
+                            const newValues = { ...prev };
+                            delete newValues[key];
+                            return newValues;
+                          });
+                          
+                          if (value === '' || isNaN(numValue) || numValue <= 0) {
+                            updateLot(lotIndex, 'totalWeight', 0);
+                          } else {
+                            updateLot(lotIndex, 'totalWeight', numValue);
+                          }
+                        }}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">
+                        Number of Boxes <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rawInputValues[`lot-${lotIndex}-numberOfBoxes`] !== undefined 
+                          ? rawInputValues[`lot-${lotIndex}-numberOfBoxes`] 
+                          : (lot.numberOfBoxes === 0 ? '' : lot.numberOfBoxes.toString())}
+                        disabled={lotIsSaved}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const key = `lot-${lotIndex}-numberOfBoxes`;
+                          
+                          // Allow empty string, numbers, and decimal point
+                          if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                            setRawInputValues(prev => ({
+                              ...prev,
+                              [key]: value
+                            }));
+                            
+                            if (value === '' || value === '.') {
+                              updateLot(lotIndex, 'numberOfBoxes', 0);
+                            } else {
+                              const numValue = parseFloat(value);
+                              if (!isNaN(numValue)) {
+                                updateLot(lotIndex, 'numberOfBoxes', numValue);
+                              }
+                            }
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const value = e.target.value;
+                          const key = `lot-${lotIndex}-numberOfBoxes`;
+                          const numValue = parseFloat(value);
+                          
+                          setRawInputValues(prev => {
+                            const newValues = { ...prev };
+                            delete newValues[key];
+                            return newValues;
+                          });
+                          
+                          if (value === '' || isNaN(numValue) || numValue <= 0) {
+                            updateLot(lotIndex, 'numberOfBoxes', 0);
+                          } else {
+                            updateLot(lotIndex, 'numberOfBoxes', numValue);
+                          }
+                        }}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* PO Items */}
+                  <div className="mt-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-xs font-medium text-gray-600">PO Items <span className="text-red-500">*</span></label>
+                      {!lotIsSaved && (
+                        <button
+                          type="button"
+                          onClick={() => addPoItemToLot(lotIndex)}
+                          className="flex items-center gap-1 px-2 py-1 bg-white text-purple-600 text-[10px] font-bold rounded border border-purple-200 hover:bg-purple-50 transition-colors"
+                        >
+                          <i className="ri-add-line text-xs"></i>
+                          Add PO Item
+                        </button>
+                      )}
+                    </div>
+
+                    {lot.poItems.map((poItem, poItemIndex) => (
+                      <div key={poItemIndex} className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2 p-2 bg-gray-50 rounded">
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">
+                            PO Item <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={poItem.poItem}
+                            onChange={(e) => updatePoItem(lotIndex, poItemIndex, 'poItem', e.target.value)}
+                            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                            required
+                            disabled={lotIsSaved}
+                          >
+                            <option value="">Select PO Item</option>
+                            {getFilteredPoItems().map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.yarnName} - {item.sizeCount} - {item.shadeCode} (Qty: {item.quantity})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">
+                            Received Quantity (kg) <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] !== undefined 
+                              ? rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] 
+                              : (poItem.receivedQuantity === 0 ? '' : poItem.receivedQuantity.toString())}
+                            disabled={lotIsSaved}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
+                              
+                              // Allow empty string, numbers, and decimal point
+                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                setRawInputValues(prev => ({
+                                  ...prev,
+                                  [key]: value
+                                }));
+                                
+                                if (value === '' || value === '.') {
+                                  updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', 0);
+                                } else {
+                                  const numValue = parseFloat(value);
+                                  if (!isNaN(numValue)) {
+                                    updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', numValue);
+                                  }
+                                }
+                              }
+                            }}
+                            onBlur={(e) => {
+                              const value = e.target.value;
+                              const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
+                              const numValue = parseFloat(value);
+                              
+                              setRawInputValues(prev => {
+                                const newValues = { ...prev };
+                                delete newValues[key];
+                                return newValues;
+                              });
+                              
+                              if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', 0);
+                              } else {
+                                updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', numValue);
+                              }
+                            }}
+                            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                            placeholder="0.00"
+                            required
+                          />
+                        </div>
+
+                        <div className="flex items-end">
+                          {!lotIsSaved && (
+                            <button
+                              type="button"
+                              onClick={() => removePoItemFromLot(lotIndex, poItemIndex)}
+                              className="flex items-center gap-1 px-2 py-1 bg-red-50 text-red-600 text-[10px] font-bold rounded border border-red-200 hover:bg-red-100 transition-colors w-full"
+                            >
+                              <i className="ri-delete-bin-line text-xs"></i>
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {lot.poItems.length === 0 && (
+                      <p className="text-[10px] text-gray-500">No PO items added. Click "Add PO Item" to add items.</p>
+                    )}
+                  </div>
+                </div>
+              );
+              })}
             </div>
-          </form>
-        </div>
+          </div>
+
+          {/* Footer */}
+          <div className="bg-gray-50 px-4 py-3 flex justify-end gap-2 flex-shrink-0 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <i className="ri-loader-4-line animate-spin text-xs"></i>
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <i className="ri-check-line text-xs"></i>
+                  Update Order
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

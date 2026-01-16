@@ -277,12 +277,12 @@ const YarnQCPage = () => {
 
   const SortIcon = ({ field }: { field: OrderSortField }) => {
     if (sortField !== field) {
-      return <i className="ri-arrow-up-down-line text-gray-400"></i>;
+      return <i className="ri-arrow-up-down-line text-gray-400 text-[10px]"></i>;
     }
     return sortDirection === "asc" ? (
-      <i className="ri-arrow-up-line text-primary"></i>
+      <i className="ri-arrow-up-line text-purple-600 text-[10px]"></i>
     ) : (
-      <i className="ri-arrow-down-line text-primary"></i>
+      <i className="ri-arrow-down-line text-purple-600 text-[10px]"></i>
     );
   };
 
@@ -335,219 +335,277 @@ const YarnQCPage = () => {
     );
   }
 
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredAndSortedOrders.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedOrders = filteredAndSortedOrders.slice(startIndex, endIndex);
+
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Yarn QC" />
       
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div>
-                <h1 className="box-title text-2xl font-semibold">Yarn QC</h1>
-                <p className="text-gray-600 mt-1">Quality control for yarn purchases - Orders pending QC, received, and QC processed</p>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Yarn QC</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {filteredAndSortedOrders.length}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search Bar */}
+              <div className="relative">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-32 placeholder:text-gray-400 transition-all font-medium"
+                  placeholder="Search"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+              </div>
+
+              {/* Show items per page */}
+              <div className="relative group">
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
+                >
+                  <option value={10}>Show 10</option>
+                  <option value={25}>Show 25</option>
+                  <option value={50}>Show 50</option>
+                  <option value={100}>Show 100</option>
+                </select>
+                <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none group-hover:text-gray-600 transition-colors"></i>
               </div>
             </div>
           </div>
 
-          {/* Search and Filters */}
-          <div className="box">
-            <div className="box-body">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search by order number, PO number or supplier..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button className="ti-btn ti-btn-light">
-                    <i className="ri-download-line me-1"></i>
-                    Export
-                  </button>
-                </div>
-              </div>
-              <div className="flex flex-col md:flex-row gap-4 mt-4">
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="form-label text-xs text-gray-600">Start Date</label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="form-label text-xs text-gray-600">End Date</label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
-                  {(startDate || endDate) && (
-                    <button
-                      className="ti-btn ti-btn-light self-end"
-                      onClick={() => {
-                        setStartDate(getDefaultStartDate());
-                        setEndDate(getDefaultEndDate());
-                      }}
-                    >
-                      <i className="ri-close-line me-1"></i>
-                      Clear Dates
-                    </button>
-                  )}
-                </div>
-              </div>
+          {/* Date Filters Row */}
+          <div className="flex items-center justify-between border-b border-gray-100 mb-4 pb-3">
+            <div className="flex">
+              <button className="px-3 py-2 border-b-2 border-transparent text-gray-800 text-[11px] font-bold relative group">
+                All
+                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500 rounded-t-full"></div>
+              </button>
             </div>
-          </div>
 
-          {/* QC Orders Table */}
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">QC Orders ({filteredAndSortedOrders.length})</h3>
-            </div>
-            <div className="box-body">
-              {isLoadingOrders ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading purchase orders...</p>
-                </div>
-              ) : filteredAndSortedOrders.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-gray-400 mb-4">
-                    <i className="ri-inbox-line text-4xl"></i>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No QC Orders Found</h3>
-                  <p className="text-gray-500 mb-4">
-                    {searchTerm
-                      ? "No orders match your search criteria. Try adjusting your search term."
-                      : "No purchase orders found with QC pending, received, or processed statuses for the selected period."}
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("orderNumber")}
-                        >
-                          <div className="flex items-center gap-2">
-                            PO Number
-                            <SortIcon field="orderNumber" />
-                          </div>
-                        </th>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("supplier")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Supplier
-                            <SortIcon field="supplier" />
-                          </div>
-                        </th>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("orderDate")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Order Date
-                            <SortIcon field="orderDate" />
-                          </div>
-                        </th>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("expectedDelivery")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Expected Delivery
-                            <SortIcon field="expectedDelivery" />
-                          </div>
-                        </th>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("status")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Status
-                            <SortIcon field="status" />
-                          </div>
-                        </th>
-                        <th
-                          className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort("totalAmount")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Total Amount
-                            <SortIcon field="totalAmount" />
-                          </div>
-                        </th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white">
-                      {filteredAndSortedOrders.map((order) => (
-                        <tr key={order.id} className="hover:bg-gray-50">
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {order.orderNumber}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {order.supplier}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(order.orderDate).toLocaleDateString()}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(order.expectedDelivery).toLocaleDateString()}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                              {order.status}
-                            </span>
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            ₹{order.totalAmount.toLocaleString()}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                router.push(`/yarn-management/purchase-management/yarn-qc/process/${order.id}`);
-                              }}
-                              disabled={processingOrderId === order.id}
-                              className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:border-primary hover:text-primary transition h-8 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Process QC"
-                            >
-                              {processingOrderId === order.id ? (
-                                <>
-                                  <i className="ri-loader-4-line animate-spin"></i>
-                                  Processing...
-                                </>
-                              ) : (
-                                <>
-                                  <i className="ri-box-3-line"></i>
-                                  Process
-                                </>
-                              )}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+            <div className="flex items-center gap-3 pr-2">
+              <div className="flex items-center gap-1.5 bg-gray-50/50 px-2 py-1 rounded border border-gray-100 border-dashed">
+                <i className="ri-calendar-line text-[10px] text-gray-400"></i>
+                <input
+                  type="date"
+                  className="bg-transparent border-none text-[10px] font-bold text-gray-600 p-0 outline-none w-24 cursor-pointer"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+                <span className="text-gray-300 text-[10px]">~</span>
+                <input
+                  type="date"
+                  className="bg-transparent border-none text-[10px] font-bold text-gray-600 p-0 outline-none w-24 cursor-pointer"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => {
+                    setStartDate(getDefaultStartDate());
+                    setEndDate(getDefaultEndDate());
+                    setCurrentPage(1);
+                  }}
+                  className="text-[9px] text-purple-400 hover:text-purple-600 font-bold uppercase transition-colors"
+                >
+                  Reset
+                </button>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Table Container */}
+        <div className="overflow-x-auto min-h-[300px]">
+          {isLoadingOrders ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+            </div>
+          ) : filteredAndSortedOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-inbox-line text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">DATA EMPTY</h3>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("orderNumber")}>
+                    <div className="flex items-center gap-1">
+                      PO Number
+                      <SortIcon field="orderNumber" />
+                    </div>
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("supplier")}>
+                    <div className="flex items-center gap-1">
+                      Supplier
+                      <SortIcon field="supplier" />
+                    </div>
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("orderDate")}>
+                    <div className="flex items-center gap-1">
+                      Order Date
+                      <SortIcon field="orderDate" />
+                    </div>
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("expectedDelivery")}>
+                    <div className="flex items-center gap-1">
+                      Expected Delivery
+                      <SortIcon field="expectedDelivery" />
+                    </div>
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("status")}>
+                    <div className="flex items-center gap-1">
+                      Status
+                      <SortIcon field="status" />
+                    </div>
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("totalAmount")}>
+                    <div className="flex items-center gap-1">
+                      Total Amount
+                      <SortIcon field="totalAmount" />
+                    </div>
+                  </th>
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedOrders.map((order) => (
+                  <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">
+                      {order.orderNumber}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-200">
+                      {order.supplier}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">
+                      {new Date(order.orderDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">
+                      {new Date(order.expectedDelivery).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-left border border-gray-200">
+                      <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${getStatusColor(order.status)}`}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-800 border border-gray-200">
+                      ₹{order.totalAmount.toLocaleString()}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                      <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            router.push(`/yarn-management/purchase-management/yarn-qc/process/${order.id}`);
+                          }}
+                          disabled={processingOrderId === order.id}
+                          className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Process QC"
+                        >
+                          {processingOrderId === order.id ? (
+                            <>
+                              <i className="ri-loader-4-line animate-spin text-xs"></i>
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <i className="ri-box-3-line text-xs"></i>
+                              Process
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Pagination Section */}
+        <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
+          <div className="text-[11px] font-medium text-[#495057] tracking-tight">
+            Showing <span className="">{startIndex + 1} to {Math.min(endIndex, filteredAndSortedOrders.length)}</span> of <span className="">{filteredAndSortedOrders.length}</span> entries <span className="ml-1 opacity-50">→</span>
+          </div>
+
+          <div className="flex items-center">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Prev
+            </button>
+
+            <div className="flex items-center gap-1 mx-2">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                if (
+                  page === 1 ||
+                  page === totalPages ||
+                  (page >= currentPage - 1 && page <= currentPage + 1)
+                ) {
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded transition-all ${currentPage === page
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-gray-400 hover:bg-gray-50'
+                        }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                } else if (page === currentPage - 2 || page === currentPage + 2) {
+                  return <span key={page} className="text-gray-300 text-[10px]">...</span>;
+                }
+                return null;
+              })}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>

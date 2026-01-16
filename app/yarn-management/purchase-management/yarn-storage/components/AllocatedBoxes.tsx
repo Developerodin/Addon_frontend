@@ -250,56 +250,56 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
   const filteredOrders = orders;
 
   return (
-    <div className="box">
-      <div className="box-header flex justify-between items-center">
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
         <div>
-          <h3 className="box-title">Allocated Boxes</h3>
-          <p className="text-sm text-gray-600 mt-1">
+          <h3 className="text-xs font-bold text-gray-800">Allocated Boxes</h3>
+          <p className="text-[10px] text-gray-500 mt-0.5">
             View boxes that have been allocated to storage racks
           </p>
         </div>
         <button
           onClick={fetchAllocatedOrders}
-          className="ti-btn ti-btn-light"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
           title="Refresh"
         >
-          <i className="ri-refresh-line me-1"></i>
+          <i className="ri-refresh-line text-xs"></i>
           Refresh
         </button>
       </div>
 
-      <div className="box-body">
+      <div>
         {/* Date Filters */}
-        <div className="mb-4">
+        <div className="mb-3">
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className="form-label text-xs text-gray-600">Start Date</label>
+              <label className="text-[10px] font-medium text-gray-600 mb-0.5 block">Start Date</label>
               <input
                 type="date"
-                className="form-control"
+                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
             </div>
             <div className="flex-1">
-              <label className="form-label text-xs text-gray-600">End Date</label>
+              <label className="text-[10px] font-medium text-gray-600 mb-0.5 block">End Date</label>
               <input
                 type="date"
-                className="form-control"
+                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
             {(startDate || endDate) && (
               <button
-                className="ti-btn ti-btn-light self-end"
+                className="flex items-center gap-1 px-2 py-1.5 bg-white text-gray-700 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm self-end"
                 onClick={() => {
                   setStartDate(getDefaultStartDate());
                   setEndDate(getDefaultEndDate());
                 }}
                 title="Reset to default dates"
               >
-                <i className="ri-refresh-line me-1"></i>
+                <i className="ri-refresh-line text-xs"></i>
                 Reset
               </button>
             )}
@@ -307,18 +307,18 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
         </div>
 
         {/* PO Select Dropdown */}
-        <div className="mb-6">
-          <label className="form-label text-sm font-medium text-gray-700 mb-2 block">
+        <div className="mb-4">
+          <label className="text-xs font-medium text-gray-700 mb-1.5 block">
             Select Purchase Order
           </label>
           {isLoading ? (
             <div className="flex items-center gap-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-              <span className="text-sm text-gray-600">Loading orders...</span>
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600"></div>
+              <span className="text-xs text-gray-600">Loading orders...</span>
             </div>
           ) : (
             <select
-              className="form-select"
+              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
               value={selectedPO}
               onChange={(e) => setSelectedPO(e.target.value)}
             >
@@ -331,7 +331,7 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
             </select>
           )}
           {filteredOrders.length === 0 && !isLoading && (
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="text-xs text-gray-500 mt-1.5">
               No purchase orders with PO Accepted status found for the selected date range.
             </p>
           )}
@@ -339,99 +339,79 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
 
         {/* Boxes Table */}
         {selectedPO && (
-          <div className="mt-6">
-            <h4 className="text-lg font-semibold mb-4">
+          <div className="mt-4">
+            <h4 className="text-xs font-bold text-gray-800 mb-3">
               Allocated Boxes for PO: {selectedPO}
             </h4>
             {isLoadingBoxes ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading boxes...</p>
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-3"></div>
+                <p className="text-xs text-gray-600">Loading boxes...</p>
               </div>
             ) : boxes.length === 0 ? (
               <div className="text-center py-8">
-                <div className="text-gray-400 mb-4">
-                  <i className="ri-inbox-line text-4xl"></i>
+                <div className="text-gray-400 mb-3">
+                  <i className="ri-inbox-line text-3xl"></i>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <h3 className="text-xs font-bold text-gray-900 mb-1">
                   No Allocated Boxes
                 </h3>
-                <p className="text-gray-500">
+                <p className="text-xs text-gray-500">
                   No boxes have been allocated to storage for this purchase order.
                 </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-gray-300">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Box ID
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Barcode
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Storage Location
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Yarn Name
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Shade Code
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Box Weight (kg)
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Number of Cones
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Order Qty
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Lot Number
-                      </th>
-                      <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Received Date
-                      </th>
+                <table className="w-full border-collapse border border-gray-200">
+                  <thead>
+                    <tr className="bg-gray-50/30">
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Storage Location</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Number of Cones</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order Qty</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received Date</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white">
+                  <tbody>
                     {boxes.map((box) => {
                       const boxId = box._id || box.id || box.boxId;
                       return (
-                        <tr key={boxId} className="hover:bg-gray-50">
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <tr key={boxId} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs font-medium text-gray-900">
                             {box.boxId}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900 font-mono">
                             {box.barcode}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          <td className="px-1.5 py-2 border border-gray-200">
+                            <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-green-100 text-green-800">
                               {box.storageLocation || "-"}
                             </span>
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.yarnName || "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.shadeCode || "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.boxWeight ? `${box.boxWeight} kg` : "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.numberOfCones || "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.orderQty || "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.lotNumber || "-"}
                           </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.receivedDate
                               ? new Date(box.receivedDate).toLocaleDateString()
                               : "-"}
@@ -448,10 +428,10 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
 
         {!selectedPO && (
           <div className="text-center py-8">
-            <div className="text-gray-400 mb-4">
-              <i className="ri-arrow-down-line text-4xl"></i>
+            <div className="text-gray-400 mb-3">
+              <i className="ri-arrow-down-line text-3xl"></i>
             </div>
-            <p className="text-gray-500">
+            <p className="text-xs text-gray-500">
               Please select a purchase order to view allocated boxes.
             </p>
           </div>

@@ -458,364 +458,320 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title={`Processed Box - ${box.boxId}`} />
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          <div className="box mb-6">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <Link
-                  href="/yarn-management/purchase-management/yarn-storage"
-                  className="text-gray-500 hover:text-gray-700"
-                  title="Back to Yarn Storage"
-                >
-                  <i className="ri-arrow-left-line text-lg"></i>
-                </Link>
-                <h3 className="box-title text-base">
-                  <i className="ri-barcode-box-line me-2"></i>
-                  Processed Box Summary
-                </h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handlePrintCones}
-                  className="ti-btn ti-btn-outline-primary"
-                >
-                  <i className="ri-printer-line me-2"></i>
-                  Print Cone Barcodes
-                </button>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <Link
+                href="/yarn-management/purchase-management/yarn-storage"
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+                title="Back to Yarn Storage"
+              >
+                <i className="ri-arrow-left-line text-sm"></i>
+              </Link>
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Processed Box Summary</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {box.boxId}
+              </span>
+            </div>
+            {cones.length > 0 && (
+              <button
+                type="button"
+                onClick={handlePrintCones}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-printer-line text-xs"></i>
+                Print Cone Barcodes
+              </button>
+            )}
+          </div>
+
+          {message && (
+            <div className="mb-4 rounded-md bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs text-emerald-700 flex items-start gap-2">
+              <i className="ri-checkbox-circle-line text-sm"></i>
+              <span>{message}</span>
+            </div>
+          )}
+
+          {/* Box Details Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <DetailItem label="Box ID" value={box.boxId} isMono />
+            <DetailItem label="Barcode" value={box.barcode} isMono />
+            <DetailItem label="PO Number" value={box.poNumber} />
+            <DetailItem label="Yarn Name" value={box.yarnName || "-"} />
+            <DetailItem label="Shade Code" value={box.shadeCode || "-"} />
+            <DetailItem label="Lot Number" value={box.lotNumber || "-"} />
+            <DetailItem
+              label="Box Weight (kg)"
+              value={box.boxWeight !== undefined ? String(box.boxWeight) : "-"}
+            />
+            <DetailItem
+              label="Number of Cones"
+              value={box.numberOfCones !== undefined ? String(box.numberOfCones) : "-"}
+            />
+            <DetailItem label="Storage Location" value={box.storageLocation || "-"} />
+            <DetailItem
+              label="Order Quantity"
+              value={box.orderQty !== undefined ? String(box.orderQty) : "-"}
+            />
+            <DetailItem label="Received Date" value={formatDateTime(box.receivedDate)} />
+            <DetailItem label="Updated At" value={formatDateTime(box.updatedAt)} />
+          </div>
+
+          {box.qcData && (
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="text-xs font-bold text-gray-800 mb-2 flex items-center gap-1.5">
+                <i className="ri-shield-check-line text-purple-600 text-xs"></i>
+                QC Details
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <DetailItem
+                  label="QC Status"
+                  value={
+                    box.qcData.status === "qc_approved"
+                      ? "QC Approved"
+                      : box.qcData.status === "qc_rejected"
+                      ? "QC Rejected"
+                      : "Pending"
+                  }
+                />
+                <DetailItem label="QC Date" value={formatDateTime(box.qcData.date)} />
+                <DetailItem label="Inspector" value={box.qcData.username} />
+                {box.qcData.remarks && (
+                  <DetailItem label="Remarks" value={box.qcData.remarks} />
+                )}
               </div>
             </div>
-            <div className="box-body">
-              {message && (
-                <div className="mb-4 rounded-md bg-emerald-50 border border-emerald-100 px-4 py-3 text-sm text-emerald-700 flex items-start gap-2">
-                  <i className="ri-checkbox-circle-line text-lg"></i>
-                  <span>{message}</span>
-                </div>
-              )}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <DetailItem label="Box ID" value={box.boxId} isMono />
-                <DetailItem label="Barcode" value={box.barcode} isMono />
-                <DetailItem label="PO Number" value={box.poNumber} />
-                <DetailItem label="Yarn Name" value={box.yarnName || "-"} />
-                <DetailItem label="Shade Code" value={box.shadeCode || "-"} />
+          )}
+
+          {box.coneData && (
+            <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+              <h4 className="text-xs font-bold text-gray-800 mb-2 flex items-center gap-1.5">
+                <i className="ri-stack-line text-purple-600 text-xs"></i>
+                Cone Issue Details
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <DetailItem
-                  label="Lot Number"
-                  value={box.lotNumber || "-"}
+                  label="Cones Issued"
+                  value={box.coneData.conesIssued ? "Yes" : "No"}
                 />
                 <DetailItem
-                  label="Box Weight (kg)"
+                  label="Issue Date"
+                  value={formatDateTime(box.coneData.coneIssueDate)}
+                />
+                <DetailItem
+                  label="Issued By"
                   value={
-                    box.boxWeight !== undefined ? String(box.boxWeight) : "-"
+                    box.coneData.coneIssueBy?.username ||
+                    box.coneData.coneIssueBy?.user ||
+                    "-"
                   }
                 />
                 <DetailItem
                   label="Number of Cones"
-                  value={
-                    box.numberOfCones !== undefined
-                      ? String(box.numberOfCones)
-                      : "-"
-                  }
-                />
-                <DetailItem
-                  label="Storage Location"
-                  value={box.storageLocation || "-"}
-                />
-                <DetailItem
-                  label="Order Quantity"
-                  value={
-                    box.orderQty !== undefined ? String(box.orderQty) : "-"
-                  }
-                />
-                <DetailItem
-                  label="Received Date"
-                  value={formatDateTime(box.receivedDate)}
-                />
-                <DetailItem
-                  label="Updated At"
-                  value={formatDateTime(box.updatedAt)}
+                  value={String(box.coneData.numberOfCones)}
                 />
               </div>
-
-              {box.qcData && (
-                <div className="mt-6">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <i className="ri-shield-check-line text-primary"></i>
-                    QC Details
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <DetailItem
-                      label="QC Status"
-                      value={
-                        box.qcData.status === "qc_approved"
-                          ? "QC Approved"
-                          : box.qcData.status === "qc_rejected"
-                          ? "QC Rejected"
-                          : "Pending"
-                      }
-                    />
-                    <DetailItem
-                      label="QC Date"
-                      value={formatDateTime(box.qcData.date)}
-                    />
-                    <DetailItem
-                      label="Inspector"
-                      value={box.qcData.username}
-                    />
-                    {box.qcData.remarks && (
-                      <DetailItem label="Remarks" value={box.qcData.remarks} />
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {box.coneData && (
-                <div className="mt-6">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <i className="ri-stack-line text-primary"></i>
-                    Cone Issue Details
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <DetailItem
-                      label="Cones Issued"
-                      value={box.coneData.conesIssued ? "Yes" : "No"}
-                    />
-                    <DetailItem
-                      label="Issue Date"
-                      value={formatDateTime(box.coneData.coneIssueDate)}
-                    />
-                    <DetailItem
-                      label="Issued By"
-                      value={
-                        box.coneData.coneIssueBy?.username ||
-                        box.coneData.coneIssueBy?.user ||
-                        "-"
-                      }
-                    />
-                    <DetailItem
-                      label="Number of Cones"
-                      value={String(box.coneData.numberOfCones)}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
-          </div>
+          )}
+        </div>
 
-          <div className="box">
-            <div className="box-header flex justify-between items-center">
-              <h3 className="box-title flex items-center gap-2">
-                <i className="ri-barcode-line text-primary"></i>
+        {/* Cones Table Section */}
+        <div className="border-t border-gray-100">
+          <div className="p-[10px]">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                <i className="ri-barcode-line text-purple-600 text-xs"></i>
                 Generated Cones ({cones.length})
               </h3>
-              {cones.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handlePrintCones}
-                  className="ti-btn ti-btn-primary"
-                  title="Print all cone barcodes"
-                >
-                  <i className="ri-printer-line me-2"></i>
-                  Print Cone Barcodes
-                </button>
-              )}
             </div>
-            <div className="box-body">
-              {cones.length > 0 && (
-                <div className="mb-4">
-                  <label className="form-label">Scan Cone Barcode</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Scan cone barcode to activate row"
-                    value={barcodeScanValue}
-                    onChange={(e) => setBarcodeScanValue(e.target.value)}
-                    onKeyDown={handleConeBarcodeScan}
-                    autoFocus
-                  />
-                  <p className="text-xs text-gray-500 mt-2">
-                    Scan a cone barcode, update cone & tear weights, then press
-                    Enter to submit.
-                  </p>
+
+            {cones.length > 0 && (
+              <div className="mb-3">
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Scan Cone Barcode</label>
+                <input
+                  type="text"
+                  className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                  placeholder="Scan cone barcode to activate row"
+                  value={barcodeScanValue}
+                  onChange={(e) => setBarcodeScanValue(e.target.value)}
+                  onKeyDown={handleConeBarcodeScan}
+                  autoFocus
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Scan a cone barcode, update cone & tear weights, then press Enter to submit.
+                </p>
+              </div>
+            )}
+
+            {cones.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                  <i className="ri-inbox-line text-xl text-gray-200"></i>
                 </div>
-              )}
-              {cones.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 text-sm">
-                  No cones were generated for this box.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Cone Barcode
-                        </th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Cone Weight (kg)
-                        </th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Tear Weight (kg)
-                        </th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Issue Status
-                        </th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Storage Location
-                        </th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Created At
-                        </th>
-                        <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Actions
-                        </th>
+                <h3 className="text-xs font-bold text-gray-400 mb-1">NO CONES FOUND</h3>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-gray-200">
+                  <thead>
+                    <tr className="bg-gray-50/30">
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cone Barcode</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cone Weight (kg)</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tear Weight (kg)</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Issue Status</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Storage Location</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Created At</th>
+                      <th className="px-1.5 py-2 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cones.map((cone: YarnCone) => (
+                      <tr
+                        key={cone._id}
+                        className={`hover:bg-gray-50/50 transition-colors ${
+                          activeConeId === cone._id
+                            ? "bg-blue-50 border-2 border-blue-400"
+                            : ""
+                        }`}
+                      >
+                        <td className="px-1.5 py-2 border border-gray-200">
+                          <span className="text-xs text-gray-900 font-mono">
+                            {cone.barcode}
+                          </span>
+                        </td>
+                        <td className="px-1.5 py-2 border border-gray-200">
+                          {activeConeId === cone._id ? (
+                            <input
+                              type="number"
+                              step="0.001"
+                              className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                              value={coneInputs[cone._id]?.coneWeight || ""}
+                              onChange={(e) =>
+                                handleConeInputChange(
+                                  cone._id,
+                                  "coneWeight",
+                                  e.target.value
+                                )
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  handleUpdateCone(cone);
+                                }
+                              }}
+                              placeholder="0.0000"
+                            />
+                          ) : (
+                            <span className="text-xs text-gray-900">
+                              {formatWeight(cone.coneWeight)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-1.5 py-2 border border-gray-200">
+                          {activeConeId === cone._id ? (
+                            <input
+                              type="number"
+                              step="0.001"
+                              className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                              value={coneInputs[cone._id]?.tearWeight || ""}
+                              onChange={(e) =>
+                                handleConeInputChange(
+                                  cone._id,
+                                  "tearWeight",
+                                  e.target.value
+                                )
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  handleUpdateCone(cone);
+                                }
+                              }}
+                              placeholder="0.0000"
+                            />
+                          ) : (
+                            <span className="text-xs text-gray-900">
+                              {formatWeight(cone.tearWeight)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-1.5 py-2 border border-gray-200">
+                          <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-800 capitalize">
+                            {formatStatus(cone.issueStatus)}
+                          </span>
+                        </td>
+                        <td className="px-1.5 py-2 border border-gray-200">
+                          {activeConeId === cone._id ? (
+                            <input
+                              type="text"
+                              className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                              value={coneInputs[cone._id]?.coneStorageId || ""}
+                              onChange={(e) =>
+                                handleConeInputChange(
+                                  cone._id,
+                                  "coneStorageId",
+                                  e.target.value
+                                )
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  handleUpdateCone(cone);
+                                }
+                              }}
+                              placeholder="Enter storage ID"
+                            />
+                          ) : (
+                            <span className="text-xs text-gray-900">
+                              {cone.coneStorageId || "-"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-1.5 py-2 border border-gray-200">
+                          <span className="text-xs text-gray-900">
+                            {formatDateTime(cone.createdAt)}
+                          </span>
+                        </td>
+                        <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200">
+                          <div className="flex items-center justify-end gap-1">
+                            {isUpdatingConeId === cone._id ? (
+                              <div className="flex items-center gap-1.5 text-xs text-purple-600 whitespace-nowrap">
+                                <i className="ri-loader-4-line animate-spin text-xs"></i>
+                                <span className="text-[10px]">Saving...</span>
+                              </div>
+                            ) : activeConeId === cone._id ? (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                                onClick={() => handleUpdateCone(cone)}
+                              >
+                                <i className="ri-save-line text-xs"></i>
+                                Save
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 px-2 py-1 bg-white text-purple-600 border border-purple-200 text-[10px] font-bold rounded hover:bg-purple-50 transition-colors shadow-sm"
+                                onClick={() => setActiveConeId(cone._id)}
+                              >
+                                <i className="ri-pencil-line text-xs"></i>
+                                Edit
+                              </button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="bg-white">
-                      {cones.map((cone: YarnCone) => (
-                        <tr
-                          key={cone._id}
-                          className={`hover:bg-gray-50 ${
-                            activeConeId === cone._id
-                              ? "bg-blue-50 border-2 border-blue-400"
-                              : ""
-                          }`}
-                        >
-                          <td className="border border-gray-300 px-4 py-3">
-                            <span className="text-sm text-gray-900 font-mono">
-                              {cone.barcode}
-                            </span>
-                          </td>
-                          <td className="border border-gray-300 px-4 py-3">
-                            {activeConeId === cone._id ? (
-                              <input
-                                type="number"
-                                step="0.001"
-                                className="form-control text-sm"
-                                value={coneInputs[cone._id]?.coneWeight || ""}
-                                onChange={(e) =>
-                                  handleConeInputChange(
-                                    cone._id,
-                                    "coneWeight",
-                                    e.target.value
-                                  )
-                                }
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    handleUpdateCone(cone);
-                                  }
-                                }}
-                                placeholder="0.0000"
-                              />
-                            ) : (
-                              <span className="text-sm text-gray-900">
-                                {formatWeight(cone.coneWeight)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="border border-gray-300 px-4 py-3">
-                            {activeConeId === cone._id ? (
-                              <input
-                                type="number"
-                                step="0.001"
-                                className="form-control text-sm"
-                                value={coneInputs[cone._id]?.tearWeight || ""}
-                                onChange={(e) =>
-                                  handleConeInputChange(
-                                    cone._id,
-                                    "tearWeight",
-                                    e.target.value
-                                  )
-                                }
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    handleUpdateCone(cone);
-                                  }
-                                }}
-                                placeholder="0.0000"
-                              />
-                            ) : (
-                              <span className="text-sm text-gray-900">
-                                {formatWeight(cone.tearWeight)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="border border-gray-300 px-4 py-3">
-                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 capitalize">
-                              {formatStatus(cone.issueStatus)}
-                            </span>
-                          </td>
-                          <td className="border border-gray-300 px-4 py-3">
-                            {activeConeId === cone._id ? (
-                              <input
-                                type="text"
-                                className="form-control text-sm"
-                                value={coneInputs[cone._id]?.coneStorageId || ""}
-                                onChange={(e) =>
-                                  handleConeInputChange(
-                                    cone._id,
-                                    "coneStorageId",
-                                    e.target.value
-                                  )
-                                }
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    handleUpdateCone(cone);
-                                  }
-                                }}
-                                placeholder="Enter storage ID"
-                              />
-                            ) : (
-                              <span className="text-sm text-gray-900">
-                                {cone.coneStorageId || "-"}
-                              </span>
-                            )}
-                          </td>
-                          <td className="border border-gray-300 px-4 py-3">
-                            <span className="text-sm text-gray-900">
-                              {formatDateTime(cone.createdAt)}
-                            </span>
-                          </td>
-                          <td className="border border-gray-300 px-4 py-3">
-                            <div className="flex flex-wrap items-center gap-2 min-w-[140px]">
-                              {isUpdatingConeId === cone._id ? (
-                                <div className="flex items-center gap-2 text-sm text-primary whitespace-nowrap">
-                                  <i className="ri-loader-4-line animate-spin"></i>
-                                  <span>Saving...</span>
-                                </div>
-                              ) : activeConeId === cone._id ? (
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary whitespace-nowrap flex items-center justify-center gap-2 px-5 py-2 text-sm min-w-[110px]"
-                                  onClick={() => handleUpdateCone(cone)}
-                                >
-                                  <i className="ri-save-line me-1"></i>
-                                  Save
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-outline-primary whitespace-nowrap flex items-center justify-center gap-2 px-5 py-2 text-sm min-w-[110px]"
-                                  onClick={() => setActiveConeId(cone._id)}
-                                >
-                                  Edit
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -831,11 +787,11 @@ interface DetailItemProps {
 
 const DetailItem: React.FC<DetailItemProps> = ({ label, value, isMono }) => (
   <div>
-    <label className="text-xs font-medium text-gray-600 uppercase">
+    <label className="text-[10px] font-medium text-gray-600 mb-0.5 block uppercase">
       {label}
     </label>
     <div
-      className={`mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border ${
+      className={`mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200 ${
         isMono ? "font-mono" : ""
       }`}
     >

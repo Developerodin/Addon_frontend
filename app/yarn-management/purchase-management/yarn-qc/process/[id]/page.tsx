@@ -514,568 +514,533 @@ const ProcessQCOrderPage = () => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title={`QC Process Order - ${order.orderNumber}`} />
       
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* PO Details Section */}
-          <div className="box mb-6">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <Link
-                  href="/yarn-management/purchase-management/yarn-qc"
-                  className="text-gray-500 hover:text-gray-700"
-                  title="Back to QC orders"
-                >
-                  <i className="ri-arrow-left-line text-lg"></i>
-                </Link>
-                <h3 className="box-title text-base">
-                  <i className="ri-file-text-line me-2"></i>
-                  Purchase Order Details
-                </h3>
-              </div>
-            </div>
-            <div className="box-body">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 py-2">
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">PO Number</p>
-                  <p className="text-sm font-semibold text-gray-900">{order.purchaseOrderNumber}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Supplier</p>
-                  <p className="text-sm font-semibold text-gray-900">{order.supplier}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Received Date</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {new Date(order.receivedDate).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Status</p>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                    {order.status}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Amount</p>
-                  <p className="text-sm font-semibold text-gray-900">₹{order.totalAmount.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Items</p>
-                  <p className="text-sm font-semibold text-gray-900">{order.items.length}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Quantity</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {order.items.reduce((sum, item) => sum + item.orderedQuantity, 0).toLocaleString()} kg
-                  </p>
-                </div>
-                {order.packListDetails?.numberOfBoxes && (
-                  <div>
-                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Boxes</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {order.packListDetails.numberOfBoxes}
-                    </p>
-                  </div>
-                )}
-                {order.packListDetails?.numberOfCones && (
-                  <div>
-                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Cones</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {order.packListDetails.numberOfCones}
-                    </p>
-                  </div>
-                )}
-                {order.packListDetails?.totalWeight && (
-                  <div>
-                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Weight</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {order.packListDetails.totalWeight} kg
-                    </p>
-                  </div>
-                )}
-              </div>
-              {order.notes && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <p className="text-xs uppercase text-gray-500 mb-1">Notes</p>
-                  <p className="text-sm text-gray-700">{order.notes}</p>
-                </div>
-              )}
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <Link
+                href="/yarn-management/purchase-management/yarn-qc"
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+                title="Back to QC orders"
+              >
+                <i className="ri-arrow-left-line text-sm"></i>
+              </Link>
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">QC Process Order</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {order.purchaseOrderNumber}
+              </span>
             </div>
           </div>
 
-          {/* Received Lot Details Section */}
-          {order.receivedLotDetails && order.receivedLotDetails.length > 0 && (
-            <div className="box mb-6">
-              <div className="box-header">
-                <h3 className="box-title">
-                  <i className="ri-stack-line me-2"></i>
-                  Received Lot Details ({order.receivedLotDetails.length})
-                </h3>
-              </div>
-              <div className="box-body">
-                <div className="space-y-4">
-                  {order.receivedLotDetails.map((lot, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-primary/10 text-primary rounded-full w-10 h-10 flex items-center justify-center font-semibold">
-                            {index + 1}
-                          </div>
-                          <div>
-                            <h4 className="text-base font-semibold text-gray-900">Lot: {lot.lotNumber}</h4>
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 ${getLotStatusColor(lot.status)}`}>
-                              {getLotStatusDisplay(lot.status)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        <div>
-                          <p className="text-xs uppercase text-gray-500 mb-1">Number of Boxes</p>
-                          <p className="text-sm font-semibold text-gray-900">{lot.numberOfBoxes}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs uppercase text-gray-500 mb-1">Number of Cones</p>
-                          <p className="text-sm font-semibold text-gray-900">{lot.numberOfCones}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs uppercase text-gray-500 mb-1">Total Weight (kg)</p>
-                          <p className="text-sm font-semibold text-gray-900">{lot.totalWeight}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs uppercase text-gray-500 mb-1">PO Items</p>
-                          <p className="text-sm font-semibold text-gray-900">{lot.poItems.length}</p>
-                        </div>
-                      </div>
-
-                      {/* PO Items in this lot */}
-                      {lot.poItems.length > 0 && (
-                        <div className="mt-4 pt-4 border-t border-gray-300">
-                          <p className="text-xs uppercase text-gray-500 mb-2 font-semibold">PO Items in this Lot</p>
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                              <thead className="bg-gray-100">
-                                <tr>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Yarn Name</th>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Size/Count</th>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Shade Code</th>
-                                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 uppercase">Received Qty</th>
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white divide-y divide-gray-200">
-                                {lot.poItems.map((poItem, poItemIndex) => {
-                                  const itemDetails = getPoItemDetails(poItem.poItem);
-                                  return (
-                                    <tr key={poItemIndex} className="hover:bg-gray-50">
-                                      <td className="px-3 py-2 text-gray-900">
-                                        {itemDetails?.yarnName || 'N/A'}
-                                      </td>
-                                      <td className="px-3 py-2 text-gray-600">
-                                        {itemDetails?.sizeCount || 'N/A'}
-                                      </td>
-                                      <td className="px-3 py-2 text-gray-600">
-                                        {itemDetails?.shadeCode || 'N/A'}
-                                      </td>
-                                      <td className="px-3 py-2 text-right text-gray-900 font-medium">
-                                        {poItem.receivedQuantity} kg
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+          {/* Order Details Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">PO Number</p>
+              <p className="text-xs font-bold text-gray-900">{order.purchaseOrderNumber}</p>
             </div>
-          )}
-
-          {/* Barcode Scanner Section */}
-          <div className="box mb-6">
-            <div className="box-header">
-              <h3 className="box-title">
-                <i className="ri-qr-scan-2-line me-2"></i>
-                Scan Box Barcode
-              </h3>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Supplier</p>
+              <p className="text-xs font-bold text-gray-900">{order.supplier}</p>
             </div>
-            <div className="box-body">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-1">
-                  <label className="form-label">Enter or Scan Barcode</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Scan or enter box barcode"
-                    value={barcodeScanValue}
-                    onChange={(e) => setBarcodeScanValue(e.target.value)}
-                    onKeyDown={handleBarcodeScan}
-                    disabled={isLoadingBox}
-                    autoFocus
-                  />
-                </div>
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={handleBarcodeScan}
-                    disabled={isLoadingBox || !barcodeScanValue.trim()}
-                    className="ti-btn ti-btn-primary whitespace-nowrap"
-                  >
-                    {isLoadingBox ? (
-                      <>
-                        <i className="ri-loader-4-line animate-spin me-2"></i>
-                        Scanning...
-                      </>
-                    ) : (
-                      <>
-                        <i className="ri-qr-scan-2-line me-2"></i>
-                        Scan
-                      </>
-                    )}
-                  </button>
-                </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Received Date</p>
+              <p className="text-xs font-bold text-gray-900">
+                {new Date(order.receivedDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Status</p>
+              <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${getStatusColor(order.status)}`}>
+                {order.status}
+              </span>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Amount</p>
+              <p className="text-xs font-bold text-gray-900">₹{order.totalAmount.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Items</p>
+              <p className="text-xs font-bold text-gray-900">{order.items.length}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Quantity</p>
+              <p className="text-xs font-bold text-gray-900">
+                {order.items.reduce((sum, item) => sum + item.orderedQuantity, 0).toLocaleString()} kg
+              </p>
+            </div>
+            {order.packListDetails?.numberOfBoxes && (
+              <div>
+                <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Boxes</p>
+                <p className="text-xs font-bold text-gray-900">
+                  {order.packListDetails.numberOfBoxes}
+                </p>
               </div>
-              {isLoadingBox && (
-                <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
-                  <i className="ri-loader-4-line animate-spin"></i>
-                  <span>Loading box details...</span>
-                </div>
-              )}
-            </div>
+            )}
+            {order.packListDetails?.numberOfCones && (
+              <div>
+                <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Cones</p>
+                <p className="text-xs font-bold text-gray-900">
+                  {order.packListDetails.numberOfCones}
+                </p>
+              </div>
+            )}
+            {order.packListDetails?.totalWeight && (
+              <div>
+                <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Weight</p>
+                <p className="text-xs font-bold text-gray-900">
+                  {order.packListDetails.totalWeight} kg
+                </p>
+              </div>
+            )}
           </div>
-
-          {/* Scanned Box Details */}
-          {scannedBox && (
-            <div className="box">
-              <div className="box-header flex justify-between items-center">
-                <h3 className="box-title">
-                  <i className="ri-information-line me-2"></i>
-                  Box Details
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScannedBox(null);
-                    setBarcodeScanValue('');
-                  }}
-                  className="text-gray-400 hover:text-gray-600 transition"
-                  title="Clear box details"
-                >
-                  <i className="ri-close-line text-lg"></i>
-                </button>
-              </div>
-              <div className="box-body">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Box ID</label>
-                    <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
-                      {scannedBox.boxId}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Barcode</label>
-                    <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
-                      {scannedBox.barcode}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">PO Number</label>
-                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                      {scannedBox.poNumber}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Yarn Name</label>
-                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                      {scannedBox.yarnName || '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Shade Code</label>
-                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                      {scannedBox.shadeCode || '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Order Qty (kg)</label>
-                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                      {scannedBox.orderQty || 0}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Lot Number</label>
-                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                      {scannedBox.lotNumber || '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Box Weight (kg)</label>
-                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                      {scannedBox.boxWeight || '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Number of Cones</label>
-                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                      {scannedBox.numberOfCones || '-'}
-                    </div>
-                  </div>
-                  {scannedBox.receivedDate && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 uppercase">Received Date</label>
-                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                        {new Date(scannedBox.receivedDate).toLocaleDateString()}
-                      </div>
-                    </div>
-                  )}
-                  {scannedBox.orderDate && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 uppercase">Order Date</label>
-                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                        {new Date(scannedBox.orderDate).toLocaleDateString()}
-                      </div>
-                    </div>
-                  )}
-                  {scannedBox.conesIssued !== undefined && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 uppercase">Cones Issued</label>
-                      <div className="mt-1">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          scannedBox.conesIssued 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {scannedBox.conesIssued ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                
-                {/* QC Data Section - Show if QC already done */}
-                {scannedBox.qcData && (
-                  <div className="col-span-full mt-4 pt-4 border-t border-gray-200">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <i className="ri-checkbox-circle-line text-blue-600"></i>
-                        <h4 className="text-sm font-semibold text-blue-900">QC Status - Already Completed</h4>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div>
-                          <label className="text-xs font-medium text-blue-700 uppercase">QC Status</label>
-                          <div className="mt-1">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              scannedBox.qcData.status === 'qc_approved'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}>
-                              {scannedBox.qcData.status === 'qc_approved' ? 'QC Approved' : 'QC Rejected'}
-                            </span>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-blue-700 uppercase">QC Date</label>
-                          <div className="mt-1 text-sm text-blue-900">
-                            {new Date(scannedBox.qcData.date).toLocaleDateString()} {new Date(scannedBox.qcData.date).toLocaleTimeString()}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-blue-700 uppercase">QC Inspector</label>
-                          <div className="mt-1 text-sm text-blue-900">
-                            {scannedBox.qcData.username}
-                          </div>
-                        </div>
-                        {scannedBox.qcData.remarks && (
-                          <div className="col-span-full">
-                            <label className="text-xs font-medium text-blue-700 uppercase">QC Remarks</label>
-                            <div className="mt-1 text-sm text-blue-900 bg-white p-2 rounded border border-blue-200">
-                              {scannedBox.qcData.remarks}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Media Upload Section - Show when box is scanned */}
-          {scannedBox && (
-            <div className="box mb-6">
-              <div className="box-header">
-                <h3 className="box-title">
-                  <i className="ri-image-line me-2"></i>
-                  Upload Images & Videos
-                </h3>
-              </div>
-              <div className="box-body">
-                <div className="mb-4">
-                  <label className="form-label">Upload QC Images/Videos</label>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,video/*"
-                    onChange={handleFileUpload}
-                    disabled={isUploading}
-                    className="form-control"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">
-                    Upload images or videos showing the quality inspection of this box
-                  </p>
-                </div>
-
-                {uploadedMedia.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
-                    {uploadedMedia.map((media) => (
-                      <div key={media.id} className="relative group">
-                        {media.type === 'image' ? (
-                          <img
-                            src={media.url}
-                            alt={media.fileName}
-                            className="w-full h-32 object-cover rounded-lg border border-gray-200"
-                          />
-                        ) : (
-                          <video
-                            src={media.url}
-                            className="w-full h-32 object-cover rounded-lg border border-gray-200"
-                            controls
-                          />
-                        )}
-                        <button
-                          onClick={() => handleRemoveMedia(media.id)}
-                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Remove"
-                        >
-                          <i className="ri-close-line text-sm"></i>
-                        </button>
-                        <p className="text-xs text-gray-500 mt-1 truncate">{media.fileName}</p>
-                        <p className="text-[10px] text-gray-400">
-                          {FileUploadService.formatFileSize(media.size)} • {media.mimeType}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* QC Status Update Section - Only show if QC not already done */}
-          {scannedBox && !scannedBox.qcData && (
-            <div className="box mb-6">
-              <div className="box-header">
-                <h3 className="box-title">
-                  <i className="ri-checkbox-circle-line me-2"></i>
-                  Update QC Status
-                </h3>
-              </div>
-              <div className="box-body">
-                <div className="space-y-4">
-                  <div>
-                    <label className="form-label">
-                      QC Status <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setQcStatus('QC Accepted')}
-                        className={`flex-1 ti-btn ${
-                          qcStatus === 'QC Accepted'
-                            ? 'ti-btn-primary'
-                            : 'ti-btn-outline-primary'
-                        }`}
-                        disabled={isSubmitting}
-                      >
-                        <i className="ri-checkbox-circle-line me-2"></i>
-                        QC Accepted
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setQcStatus('QC Rejected')}
-                        className={`flex-1 ti-btn ${
-                          qcStatus === 'QC Rejected'
-                            ? 'ti-btn-danger'
-                            : 'ti-btn-outline-danger'
-                        }`}
-                        disabled={isSubmitting}
-                      >
-                        <i className="ri-close-circle-line me-2"></i>
-                        QC Rejected
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="form-label">
-                      QC Inspector Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={qcBy}
-                      onChange={(e) => setQcBy(e.target.value)}
-                      placeholder="Enter QC inspector name"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="form-label">QC Notes</label>
-                    <textarea
-                      className="form-control"
-                      rows={4}
-                      value={qcNotes}
-                      onChange={(e) => setQcNotes(e.target.value)}
-                      placeholder="Add any notes or observations about the quality inspection..."
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
-                    <Link
-                      href="/yarn-management/purchase-management/yarn-qc"
-                      className="ti-btn ti-btn-light"
-                      onClick={(e) => {
-                        if (isSubmitting) {
-                          e.preventDefault();
-                        }
-                      }}
-                    >
-                      Cancel
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={handleSubmitQC}
-                      disabled={isSubmitting || !qcStatus || !qcBy.trim()}
-                      className="ti-btn ti-btn-primary"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <i className="ri-loader-4-line animate-spin me-2"></i>
-                          Submitting...
-                        </>
-                      ) : (
-                        <>
-                          <i className="ri-check-line me-2"></i>
-                          Update QC Status
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
+          {order.notes && (
+            <div className="mb-4 p-2 bg-gray-50 rounded border border-gray-200">
+              <p className="text-[10px] uppercase text-gray-500 mb-1">Notes</p>
+              <p className="text-xs text-gray-700">{order.notes}</p>
             </div>
           )}
         </div>
+
+        {/* Received Lot Details Section */}
+        {order.receivedLotDetails && order.receivedLotDetails.length > 0 && (
+          <div className="p-[10px] border-t border-gray-100">
+            <h3 className="text-xs font-bold text-gray-800 mb-3">
+              Received Lot Details ({order.receivedLotDetails.length})
+            </h3>
+            <div className="space-y-3">
+              {order.receivedLotDetails.map((lot, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-purple-100 text-purple-600 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px]">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-900">Lot: {lot.lotNumber}</h4>
+                        <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full mt-0.5 ${getLotStatusColor(lot.status)}`}>
+                          {getLotStatusDisplay(lot.status)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    <div>
+                      <p className="text-[10px] uppercase text-gray-500 mb-0.5">Number of Boxes</p>
+                      <p className="text-xs font-bold text-gray-900">{lot.numberOfBoxes}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-gray-500 mb-0.5">Number of Cones</p>
+                      <p className="text-xs font-bold text-gray-900">{lot.numberOfCones}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Weight (kg)</p>
+                      <p className="text-xs font-bold text-gray-900">{lot.totalWeight}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-gray-500 mb-0.5">PO Items</p>
+                      <p className="text-xs font-bold text-gray-900">{lot.poItems.length}</p>
+                    </div>
+                  </div>
+
+                  {/* PO Items in this lot */}
+                  {lot.poItems.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-[10px] uppercase text-gray-500 mb-2 font-bold">PO Items in this Lot</p>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse border border-gray-200">
+                          <thead className="bg-gray-50/30">
+                            <tr>
+                              <th className="px-1.5 py-1.5 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                              <th className="px-1.5 py-1.5 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Size/Count</th>
+                              <th className="px-1.5 py-1.5 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
+                              <th className="px-1.5 py-1.5 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received Qty</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {lot.poItems.map((poItem, poItemIndex) => {
+                              const itemDetails = getPoItemDetails(poItem.poItem);
+                              return (
+                                <tr key={poItemIndex} className="hover:bg-gray-50/50">
+                                  <td className="px-1.5 py-1.5 text-xs text-gray-900 border border-gray-200">
+                                    {itemDetails?.yarnName || 'N/A'}
+                                  </td>
+                                  <td className="px-1.5 py-1.5 text-xs text-gray-600 border border-gray-200">
+                                    {itemDetails?.sizeCount || 'N/A'}
+                                  </td>
+                                  <td className="px-1.5 py-1.5 text-xs text-gray-600 border border-gray-200">
+                                    {itemDetails?.shadeCode || 'N/A'}
+                                  </td>
+                                  <td className="px-1.5 py-1.5 text-xs text-right text-gray-900 font-bold border border-gray-200">
+                                    {poItem.receivedQuantity} kg
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Barcode Scanner Section */}
+        <div className="p-[10px] border-t border-gray-100">
+          <h3 className="text-xs font-bold text-gray-800 mb-3">Scan Box Barcode</h3>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex-1">
+              <input
+                type="text"
+                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                placeholder="Scan or enter box barcode"
+                value={barcodeScanValue}
+                onChange={(e) => setBarcodeScanValue(e.target.value)}
+                onKeyDown={handleBarcodeScan}
+                disabled={isLoadingBox}
+                autoFocus
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleBarcodeScan}
+              disabled={isLoadingBox || !barcodeScanValue.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {isLoadingBox ? (
+                <>
+                  <i className="ri-loader-4-line animate-spin text-xs"></i>
+                  Scanning...
+                </>
+              ) : (
+                <>
+                  <i className="ri-qr-scan-2-line text-xs"></i>
+                  Scan
+                </>
+              )}
+            </button>
+          </div>
+          {isLoadingBox && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-gray-600">
+              <i className="ri-loader-4-line animate-spin"></i>
+              <span>Loading box details...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Scanned Box Details */}
+        {scannedBox && (
+          <div className="p-[10px] border-t border-gray-100">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-gray-800">Box Details</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setScannedBox(null);
+                  setBarcodeScanValue('');
+                }}
+                className="text-gray-400 hover:text-gray-600 transition text-xs"
+                title="Clear box details"
+              >
+                <i className="ri-close-line"></i>
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[10px] font-medium text-gray-600 mb-1 block">Box ID</label>
+                <div className="mt-0.5 text-xs text-gray-900 font-mono bg-gray-50 p-1.5 rounded border border-gray-200">
+                  {scannedBox.boxId}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-gray-600 mb-1 block">Barcode</label>
+                <div className="mt-0.5 text-xs text-gray-900 font-mono bg-gray-50 p-1.5 rounded border border-gray-200">
+                  {scannedBox.barcode}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-gray-600 mb-1 block">PO Number</label>
+                <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
+                  {scannedBox.poNumber}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-gray-600 mb-1 block">Yarn Name</label>
+                <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
+                  {scannedBox.yarnName || '-'}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-gray-600 mb-1 block">Shade Code</label>
+                <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
+                  {scannedBox.shadeCode || '-'}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-gray-600 mb-1 block">Order Qty (kg)</label>
+                <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
+                  {scannedBox.orderQty || 0}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-gray-600 mb-1 block">Lot Number</label>
+                <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
+                  {scannedBox.lotNumber || '-'}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-gray-600 mb-1 block">Box Weight (kg)</label>
+                <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
+                  {scannedBox.boxWeight || '-'}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-gray-600 mb-1 block">Number of Cones</label>
+                <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
+                  {scannedBox.numberOfCones || '-'}
+                </div>
+              </div>
+              {scannedBox.receivedDate && (
+                <div>
+                  <label className="text-[10px] font-medium text-gray-600 mb-1 block">Received Date</label>
+                  <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
+                    {new Date(scannedBox.receivedDate).toLocaleDateString()}
+                  </div>
+                </div>
+              )}
+              {scannedBox.orderDate && (
+                <div>
+                  <label className="text-[10px] font-medium text-gray-600 mb-1 block">Order Date</label>
+                  <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
+                    {new Date(scannedBox.orderDate).toLocaleDateString()}
+                  </div>
+                </div>
+              )}
+              {scannedBox.conesIssued !== undefined && (
+                <div>
+                  <label className="text-[10px] font-medium text-gray-600 mb-1 block">Cones Issued</label>
+                  <div className="mt-0.5">
+                    <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${
+                      scannedBox.conesIssued 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {scannedBox.conesIssued ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* QC Data Section - Show if QC already done */}
+            {scannedBox.qcData && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <i className="ri-checkbox-circle-line text-blue-600 text-xs"></i>
+                    <h4 className="text-xs font-bold text-blue-900">QC Status - Already Completed</h4>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-[10px] font-medium text-blue-700 mb-0.5 block">QC Status</label>
+                      <div className="mt-0.5">
+                        <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${
+                          scannedBox.qcData.status === 'qc_approved'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {scannedBox.qcData.status === 'qc_approved' ? 'QC Approved' : 'QC Rejected'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-medium text-blue-700 mb-0.5 block">QC Date</label>
+                      <div className="mt-0.5 text-xs text-blue-900">
+                        {new Date(scannedBox.qcData.date).toLocaleDateString()} {new Date(scannedBox.qcData.date).toLocaleTimeString()}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-medium text-blue-700 mb-0.5 block">QC Inspector</label>
+                      <div className="mt-0.5 text-xs text-blue-900">
+                        {scannedBox.qcData.username}
+                      </div>
+                    </div>
+                    {scannedBox.qcData.remarks && (
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <label className="text-[10px] font-medium text-blue-700 mb-0.5 block">QC Remarks</label>
+                        <div className="mt-0.5 text-xs text-blue-900 bg-white p-1.5 rounded border border-blue-200">
+                          {scannedBox.qcData.remarks}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Media Upload Section - Show when box is scanned */}
+        {scannedBox && (
+          <div className="p-[10px] border-t border-gray-100">
+            <h3 className="text-xs font-bold text-gray-800 mb-3">Upload Images & Videos</h3>
+            <div className="mb-3">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Upload QC Images/Videos</label>
+              <input
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                onChange={handleFileUpload}
+                disabled={isUploading}
+                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              />
+              <p className="text-[10px] text-gray-500 mt-1">
+                Upload images or videos showing the quality inspection of this box
+              </p>
+            </div>
+
+            {uploadedMedia.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
+                {uploadedMedia.map((media) => (
+                  <div key={media.id} className="relative group">
+                    {media.type === 'image' ? (
+                      <img
+                        src={media.url}
+                        alt={media.fileName}
+                        className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                      />
+                    ) : (
+                      <video
+                        src={media.url}
+                        className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                        controls
+                      />
+                    )}
+                    <button
+                      onClick={() => handleRemoveMedia(media.id)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Remove"
+                    >
+                      <i className="ri-close-line text-[10px]"></i>
+                    </button>
+                    <p className="text-[10px] text-gray-500 mt-1 truncate">{media.fileName}</p>
+                    <p className="text-[9px] text-gray-400">
+                      {FileUploadService.formatFileSize(media.size)} • {media.mimeType}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* QC Status Update Section - Only show if QC not already done */}
+        {scannedBox && !scannedBox.qcData && (
+          <div className="p-[10px] border-t border-gray-100">
+            <h3 className="text-xs font-bold text-gray-800 mb-3">Update QC Status</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">
+                  QC Status <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQcStatus('QC Accepted')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors ${
+                      qcStatus === 'QC Accepted'
+                        ? 'bg-purple-600 text-white hover:bg-purple-700'
+                        : 'bg-white text-purple-600 border border-purple-200 hover:bg-purple-50'
+                    }`}
+                    disabled={isSubmitting}
+                  >
+                    <i className="ri-checkbox-circle-line text-xs"></i>
+                    QC Accepted
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQcStatus('QC Rejected')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors ${
+                      qcStatus === 'QC Rejected'
+                        ? 'bg-red-600 text-white hover:bg-red-700'
+                        : 'bg-white text-red-600 border border-red-200 hover:bg-red-50'
+                    }`}
+                    disabled={isSubmitting}
+                  >
+                    <i className="ri-close-circle-line text-xs"></i>
+                    QC Rejected
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">
+                  QC Inspector Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                  value={qcBy}
+                  onChange={(e) => setQcBy(e.target.value)}
+                  placeholder="Enter QC inspector name"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">QC Notes</label>
+                <textarea
+                  className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                  rows={3}
+                  value={qcNotes}
+                  onChange={(e) => setQcNotes(e.target.value)}
+                  placeholder="Add any notes or observations about the quality inspection..."
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-3 border-t border-gray-200">
+                <Link
+                  href="/yarn-management/purchase-management/yarn-qc"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
+                  onClick={(e) => {
+                    if (isSubmitting) {
+                      e.preventDefault();
+                    }
+                  }}
+                >
+                  Cancel
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleSubmitQC}
+                  disabled={isSubmitting || !qcStatus || !qcBy.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <i className="ri-loader-4-line animate-spin text-xs"></i>
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-check-line text-xs"></i>
+                      Update QC Status
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

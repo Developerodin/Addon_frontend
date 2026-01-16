@@ -1490,191 +1490,194 @@ const ProcessOrderPage = () => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <QZTrayLoader />
       <Seo title={`Process Order - ${order.orderNumber}`} />
       
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* PO Details Section */}
-          <div className="box mb-6">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                  <Link
-                    href="/yarn-management/purchase-management/purchase-order-received"
-                    className="text-gray-500 hover:text-gray-700"
-                  title="Back to received orders"
-                  >
-                  <i className="ri-arrow-left-line text-lg"></i>
-                  </Link>
-                <h3 className="box-title text-base">
-                <i className="ri-file-text-line me-2"></i>
-                Purchase Order Details
-              </h3>
-              </div>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <Link
+                href="/yarn-management/purchase-management/purchase-order-received"
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+                title="Back to received orders"
+              >
+                <i className="ri-arrow-left-line text-sm"></i>
+              </Link>
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Process Order</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {order.purchaseOrderNumber}
+              </span>
             </div>
-            <div className="box-body">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 py-2">
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">PO Number</p>
-                  <p className="text-sm font-semibold text-gray-900">{order.purchaseOrderNumber}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Supplier</p>
-                  <p className="text-sm font-semibold text-gray-900">{order.supplier}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Received Date</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {new Date(order.receivedDate).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Status</p>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                    {order.status}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Amount</p>
-                  <p className="text-sm font-semibold text-gray-900">₹{order.totalAmount.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Items</p>
-                  <p className="text-sm font-semibold text-gray-900">{order.items.length}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500 mb-0.5">Total Quantity</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {order.items.reduce((sum, item) => sum + item.orderedQuantity, 0).toLocaleString()} kg
-                  </p>
-                </div>
-                {order.packListDetails?.numberOfBoxes && (
-                  <div>
-                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Boxes</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {order.packListDetails.numberOfBoxes}
-                    </p>
-                  </div>
-                )}
-                {order.packListDetails?.numberOfCones && (
-                  <div>
-                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Cones</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {order.packListDetails.numberOfCones}
-                    </p>
-                  </div>
-                )}
-                {order.packListDetails?.totalWeight && (
-                  <div>
-                    <p className="text-xs uppercase text-gray-500 mb-0.5">Total Weight</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {order.packListDetails.totalWeight} kg
-                    </p>
-                  </div>
-                )}
-              </div>
-              {order.notes && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <p className="text-xs uppercase text-gray-500 mb-1">Notes</p>
-                  <p className="text-sm text-gray-700">{order.notes}</p>
-                </div>
-              )}
+
+            {boxes.length > 0 && (
+              <button
+                type="button"
+                onClick={handlePrintAllBarcodes}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                title="Print all box barcodes"
+              >
+                <i className="ri-printer-line text-xs"></i>
+                Print All Barcodes
+              </button>
+            )}
+          </div>
+
+          {/* Order Details Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">PO Number</p>
+              <p className="text-xs font-bold text-gray-900">{order.purchaseOrderNumber}</p>
             </div>
-                    </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Supplier</p>
+              <p className="text-xs font-bold text-gray-900">{order.supplier}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Received Date</p>
+              <p className="text-xs font-bold text-gray-900">
+                {new Date(order.receivedDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Status</p>
+              <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${getStatusColor(order.status)}`}>
+                {order.status}
+              </span>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Amount</p>
+              <p className="text-xs font-bold text-gray-900">₹{order.totalAmount.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Items</p>
+              <p className="text-xs font-bold text-gray-900">{order.items.length}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Quantity</p>
+              <p className="text-xs font-bold text-gray-900">
+                {order.items.reduce((sum, item) => sum + item.orderedQuantity, 0).toLocaleString()} kg
+              </p>
+            </div>
+            {order.packListDetails?.numberOfBoxes && (
+              <div>
+                <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Boxes</p>
+                <p className="text-xs font-bold text-gray-900">
+                  {order.packListDetails.numberOfBoxes}
+                </p>
+              </div>
+            )}
+            {order.packListDetails?.numberOfCones && (
+              <div>
+                <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Cones</p>
+                <p className="text-xs font-bold text-gray-900">
+                  {order.packListDetails.numberOfCones}
+                </p>
+              </div>
+            )}
+            {order.packListDetails?.totalWeight && (
+              <div>
+                <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Weight</p>
+                <p className="text-xs font-bold text-gray-900">
+                  {order.packListDetails.totalWeight} kg
+                </p>
+              </div>
+            )}
+          </div>
+          {order.notes && (
+            <div className="mb-4 p-2 bg-gray-50 rounded border border-gray-200">
+              <p className="text-[10px] uppercase text-gray-500 mb-1">Notes</p>
+              <p className="text-xs text-gray-700">{order.notes}</p>
+            </div>
+          )}
+        </div>
 
-          {/* Boxes Table */}
-          <div className="box">
-            <div className="box-header flex justify-between items-center">
-              <h3 className="box-title">
-                <i className="ri-box-3-line me-2"></i>
-                Boxes ({boxes.length} boxes)
-              </h3>
-              {boxes.length > 0 && (
-                    <button
-                  type="button"
-                  onClick={handlePrintAllBarcodes}
-                  className="ti-btn ti-btn-primary"
-                  title="Print all box barcodes"
-                >
-                  <i className="ri-printer-line me-2"></i>
-                  Print All Barcodes
-                    </button>
-              )}
-                  </div>
-            <div className="box-body">
-              {/* Barcode Scanner Input */}
-              <div className="mb-4">
-                <label className="form-label">Scan Barcode</label>
-                <input
-                  ref={barcodeInputRef}
-                  type="text"
-                  className="form-control"
-                  placeholder="Scan or enter barcode to activate row"
-                  value={barcodeScanValue}
-                  onChange={(e) => setBarcodeScanValue(e.target.value)}
-                  onKeyDown={handleBarcodeScan}
-                  autoFocus
-                />
-                </div>
+        {/* Boxes Section */}
+        <div className="p-[10px]">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold text-gray-800">
+              Boxes ({boxes.length} boxes)
+            </h3>
+          </div>
 
-              {/* Weighing Process Indicator */}
-              {activeBoxId && (() => {
-                const activeBox = boxes.find(b => {
-                  const bId = b._id || b.id || b.boxId;
-                  return bId === activeBoxId;
-                });
-                if (!activeBox) return null;
-                
-                const activeBoxData = boxData[activeBoxId] || {};
-                const hasWeight = activeBoxData.boxWeight && parseFloat(activeBoxData.boxWeight) > 0;
-                const hasCones = activeBoxData.numberOfCones && parseFloat(activeBoxData.numberOfCones) > 0;
-                
-                // Show indicator only when weight hasn't been entered yet
-                if (!hasWeight) {
-                  return (
-                    <div className="mb-4 animate-pulse">
-                      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <div className="flex-shrink-0">
-                            <i className="ri-scales-3-line text-2xl text-blue-600"></i>
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-blue-900 mb-1">
-                              Place the box on the weighing scale
-                            </h4>
-                            <p className="text-xs text-blue-700">
-                              Box ID: <span className="font-mono font-semibold">{activeBox.boxId}</span> - Waiting for weight...
-                            </p>
-                          </div>
-                          {isFetchingWeight && (
-                            <div className="flex-shrink-0">
-                              <i className="ri-loader-4-line animate-spin text-blue-600 text-xl"></i>
-                            </div>
-                          )}
-                        </div>
+          {/* Barcode Scanner Input */}
+          <div className="mb-3">
+            <label className="text-xs font-medium text-gray-600 mb-1 block">Scan Barcode</label>
+            <input
+              ref={barcodeInputRef}
+              type="text"
+              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              placeholder="Scan or enter barcode to activate row"
+              value={barcodeScanValue}
+              onChange={(e) => setBarcodeScanValue(e.target.value)}
+              onKeyDown={handleBarcodeScan}
+              autoFocus
+            />
+          </div>
+
+          {/* Weighing Process Indicator */}
+          {activeBoxId && (() => {
+            const activeBox = boxes.find(b => {
+              const bId = b._id || b.id || b.boxId;
+              return bId === activeBoxId;
+            });
+            if (!activeBox) return null;
+            
+            const activeBoxData = boxData[activeBoxId] || {};
+            const hasWeight = activeBoxData.boxWeight && parseFloat(activeBoxData.boxWeight) > 0;
+            const hasCones = activeBoxData.numberOfCones && parseFloat(activeBoxData.numberOfCones) > 0;
+            
+            // Show indicator only when weight hasn't been entered yet
+            if (!hasWeight) {
+              return (
+                <div className="mb-3 animate-pulse">
+                  <div className="bg-blue-50 border-l-4 border-blue-500 p-2 rounded-r-lg shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-shrink-0">
+                        <i className="ri-scales-3-line text-lg text-blue-600"></i>
                       </div>
+                      <div className="flex-1">
+                        <h4 className="text-xs font-semibold text-blue-900 mb-0.5">
+                          Place the box on the weighing scale
+                        </h4>
+                        <p className="text-[10px] text-blue-700">
+                          Box ID: <span className="font-mono font-semibold">{activeBox.boxId}</span> - Waiting for weight...
+                        </p>
+                      </div>
+                      {isFetchingWeight && (
+                        <div className="flex-shrink-0">
+                          <i className="ri-loader-4-line animate-spin text-blue-600 text-sm"></i>
+                        </div>
+                      )}
                     </div>
-                  );
-                }
-                return null;
-              })()}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
-              {isLoadingBoxes ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading boxes...</p>
+          {isLoadingBoxes ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+            </div>
+          ) : boxes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-inbox-line text-xl text-gray-200"></i>
               </div>
-              ) : boxes.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">No boxes found for this order</p>
-              </div>
-              ) : (
-              <div className="space-y-6">
-                {/* Render boxes grouped by lot */}
-                {boxesByLot.sortedLots.map((lotNumber) => {
-                  const lotBoxes = boxesByLot.grouped[lotNumber];
-                  const handlePrintLotBarcodes = async () => {
+              <h3 className="text-xs font-bold text-gray-400 mb-1">NO BOXES FOUND</h3>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Render boxes grouped by lot */}
+              {boxesByLot.sortedLots.map((lotNumber) => {
+                const lotBoxes = boxesByLot.grouped[lotNumber];
+                const handlePrintLotBarcodes = async () => {
                     if (!order || lotBoxes.length === 0) {
                       toast.error('No boxes available to print');
                       return;
@@ -1944,104 +1947,104 @@ const ProcessOrderPage = () => {
                     console.log(`Lot ${lotNumber} status:`, lotStatus, 'from receivedLotDetails:', order?.receivedLotDetails);
                   }
 
-                  return (
-                    <div key={lotNumber} className="border border-gray-200 rounded-lg overflow-hidden">
-                      <div className="bg-primary/10 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
-                        <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
-                          <i className="ri-box-3-line text-primary"></i>
-                          <span>Lot Number: <span className="text-primary font-bold">{lotNumber}</span></span>
-                          {lotStatus && (
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full ${lotStatusDisplay.color}`}>
-                              <i className={`ri-${
-                                lotStatus === 'lot_qc_pending' || lotStatus === 'lot_pending' ? 'time-line' : 
-                                lotStatus === 'lot_accepted' ? 'check-line' : 
-                                'close-line'
-                              }`}></i>
-                              {lotStatusDisplay.text}
-                            </span>
-                          )}
-                          <span className="text-xs font-normal text-gray-600 ml-2">
-                            ({lotBoxes.length} {lotBoxes.length === 1 ? 'box' : 'boxes'})
+                return (
+                  <div key={lotNumber} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-purple-50/30 px-3 py-2 border-b border-gray-200 flex justify-between items-center">
+                      <h4 className="text-xs font-bold text-gray-900 flex items-center gap-2 flex-wrap">
+                        <i className="ri-box-3-line text-purple-600 text-xs"></i>
+                        <span>Lot Number: <span className="text-purple-600 font-bold">{lotNumber}</span></span>
+                        {lotStatus && (
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-full ${lotStatusDisplay.color}`}>
+                            <i className={`ri-${
+                              lotStatus === 'lot_qc_pending' || lotStatus === 'lot_pending' ? 'time-line' : 
+                              lotStatus === 'lot_accepted' ? 'check-line' : 
+                              'close-line'
+                            } text-[9px]`}></i>
+                            {lotStatusDisplay.text}
                           </span>
-                        </h4>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={handlePrintLotBarcodes}
-                            className="ti-btn ti-btn-primary whitespace-nowrap px-3 py-2"
-                            title={`Print barcodes for ${lotNumber}`}
-                          >
-                            <i className="ri-printer-line me-2"></i>
-                            Print Lot Barcodes
-                          </button>
-                          {/* Show Send/Reject when not processed or still pending */}
-                          {(!lotStatus || lotStatus === 'lot_pending') && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleSendLotForQC(lotNumber, lotBoxes)}
-                                disabled={!isLotCompleted || isUpdatingOrderStatus}
-                                className={`ti-btn whitespace-nowrap px-3 py-2 ${
-                                  isLotCompleted && !isUpdatingOrderStatus
-                                    ? 'ti-btn-success'
-                                    : 'ti-btn-light opacity-50 cursor-not-allowed'
-                                }`}
-                                title={`Send ${lotNumber} for QC`}
-                              >
-                                {isUpdatingOrderStatus ? (
-                                  <>
-                                    <i className="ri-loader-4-line animate-spin me-2"></i>
-                                    Sending...
-                                  </>
-                                ) : (
-                                  <>
-                                    <i className="ri-checkbox-circle-line me-2"></i>
-                                    Send Lot for QC
-                                  </>
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRejectLot(lotNumber, lotBoxes)}
-                                disabled={!isLotCompleted || isUpdatingOrderStatus}
-                                className={`ti-btn whitespace-nowrap px-3 py-2 ${
-                                  isLotCompleted && !isUpdatingOrderStatus
-                                    ? 'ti-btn-danger'
-                                    : 'ti-btn-light opacity-50 cursor-not-allowed'
-                                }`}
-                                title={`Reject ${lotNumber}`}
-                              >
-                                {isUpdatingOrderStatus ? (
-                                  <>
-                                    <i className="ri-loader-4-line animate-spin me-2"></i>
-                                    Rejecting...
-                                  </>
-                                ) : (
-                                  <>
-                                    <i className="ri-close-circle-line me-2"></i>
-                                    Reject Lot
-                                  </>
-                                )}
-                              </button>
-                            </>
-                          )}
-                        </div>
+                        )}
+                        <span className="text-[10px] font-normal text-gray-600 ml-2">
+                          ({lotBoxes.length} {lotBoxes.length === 1 ? 'box' : 'boxes'})
+                        </span>
+                      </h4>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={handlePrintLotBarcodes}
+                          className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                          title={`Print barcodes for ${lotNumber}`}
+                        >
+                          <i className="ri-printer-line text-xs"></i>
+                          Print
+                        </button>
+                        {/* Show Send/Reject when not processed or still pending */}
+                        {(!lotStatus || lotStatus === 'lot_pending') && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleSendLotForQC(lotNumber, lotBoxes)}
+                              disabled={!isLotCompleted || isUpdatingOrderStatus}
+                              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm ${
+                                isLotCompleted && !isUpdatingOrderStatus
+                                  ? 'bg-green-600 text-white hover:bg-green-700'
+                                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              }`}
+                              title={`Send ${lotNumber} for QC`}
+                            >
+                              {isUpdatingOrderStatus ? (
+                                <>
+                                  <i className="ri-loader-4-line animate-spin text-xs"></i>
+                                  Sending...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="ri-checkbox-circle-line text-xs"></i>
+                                  Send QC
+                                </>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRejectLot(lotNumber, lotBoxes)}
+                              disabled={!isLotCompleted || isUpdatingOrderStatus}
+                              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm ${
+                                isLotCompleted && !isUpdatingOrderStatus
+                                  ? 'bg-red-600 text-white hover:bg-red-700'
+                                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              }`}
+                              title={`Reject ${lotNumber}`}
+                            >
+                              {isUpdatingOrderStatus ? (
+                                <>
+                                  <i className="ri-loader-4-line animate-spin text-xs"></i>
+                                  Rejecting...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="ri-close-circle-line text-xs"></i>
+                                  Reject
+                                </>
+                              )}
+                            </button>
+                          </>
+                        )}
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full border-collapse border border-gray-300">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box ID</th>
-                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
-                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
-                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
-                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lot Number</th>
-                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box Weight (kg)</th>
-                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. of Cones</th>
-                              <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white">
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-gray-200">
+                        <thead>
+                          <tr className="bg-gray-50/30">
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">No. of Cones</th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
                             {lotBoxes.map((box) => {
                         const boxId = box._id || box.id || box.boxId;
                         const isActive = activeBoxId === boxId;
@@ -2059,265 +2062,265 @@ const ProcessOrderPage = () => {
                         };
                         const isUpdating = updatingBoxId === boxId;
 
-                      return (
-                      <tr 
-                            key={boxId}
-                            className={`hover:bg-gray-50 ${
-                              isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
-                            }`}
+                  return (
+                    <tr 
+                      key={boxId}
+                      className={`hover:bg-gray-50/50 transition-colors group ${
+                        isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
+                      }`}
+                    >
+                      <td className="px-1.5 py-2 border border-gray-200">
+                        <button
+                          onClick={() => setSelectedBoxForDetails(box)}
+                          className="text-[12px] font-bold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
+                          title="Click to view full details"
+                        >
+                          {truncateId(box.boxId)}
+                        </button>
+                      </td>
+                      <td className="px-1.5 py-2 border border-gray-200">
+                        <button
+                          onClick={() => setSelectedBoxForDetails(box)}
+                          className="text-[12px] text-gray-900 font-mono text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
+                          title="Click to view full details"
+                        >
+                          {truncateId(box.barcode)}
+                        </button>
+                      </td>
+                      <td className="px-1.5 py-2 border border-gray-200">
+                        {isActive && hasMultipleYarnNames() ? (
+                          <select
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                            value={data.yarnName}
+                            onChange={(e) => handleYarnNameChange(boxId, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
+                                if (nextInput) {
+                                  (nextInput as HTMLInputElement).focus();
+                                }
+                              }
+                            }}
                           >
-                            <td className="border border-gray-300 px-4 py-3">
-                              <button
-                                onClick={() => setSelectedBoxForDetails(box)}
-                                className="text-sm font-medium text-primary hover:text-primary-dark hover:underline cursor-pointer"
-                                title="Click to view full details"
-                              >
-                                {truncateId(box.boxId)}
-                              </button>
-                        </td>
-                            <td className="border border-gray-300 px-4 py-3">
-                              <button
-                                onClick={() => setSelectedBoxForDetails(box)}
-                                className="text-sm text-gray-900 font-mono text-primary hover:text-primary-dark hover:underline cursor-pointer"
-                                title="Click to view full details"
-                              >
-                                {truncateId(box.barcode)}
-                              </button>
-                            </td>
-                            <td className="border border-gray-300 px-4 py-3">
-                              {isActive && hasMultipleYarnNames() ? (
-                                <select
-                                  className="form-select text-sm"
-                                  value={data.yarnName}
-                                  onChange={(e) => handleYarnNameChange(boxId, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
-                                      if (nextInput) {
-                                        (nextInput as HTMLInputElement).focus();
-                                      }
-                                    }
-                                  }}
-                                >
-                                  <option value="">Select Yarn Name</option>
-                                  {getUniqueYarnNames().map((yarnName) => (
-                                    <option key={yarnName} value={yarnName}>
-                                      {yarnName}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <span className="text-sm text-gray-900">{data.yarnName || '-'}</span>
-                              )}
-                        </td>
-                            <td className="border border-gray-300 px-4 py-3">
-                              <span className="text-sm text-gray-900">{data.shadeCode || '-'}</span>
-                        </td>
-                            <td className="border border-gray-300 px-4 py-3">
-                              <span className="text-sm text-gray-900">{data.lotNumber || '-'}</span>
-                        </td>
-                            <td className="border border-gray-300 px-4 py-3">
-                              {isActive ? (
-                            <input
-                              type="text"
-                                  className="form-control text-sm"
-                                  data-box-weight={boxId}
-                                  value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
-                                    ? rawInputValues[`box-${boxId}-boxWeight`] 
-                                    : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
-                                  onChange={(e) => {
-                                    const value = e.target.value;
-                                    const sanitizedValue = validateNumericInput(value, true);
-                                    const key = `box-${boxId}-boxWeight`;
-                                    
-                                    setRawInputValues(prev => ({
-                                      ...prev,
-                                      [key]: sanitizedValue
-                                    }));
-                                    
-                                    setBoxData(prev => ({
-                                      ...prev,
-                                      [boxId]: { ...prev[boxId], boxWeight: sanitizedValue }
-                                    }));
-                                  }}
-                                  onBlur={(e) => {
-                                    const value = e.target.value;
-                                    const key = `box-${boxId}-boxWeight`;
-                                    const numValue = parseFloat(value);
-                                    
-                                    setRawInputValues(prev => {
-                                      const newValues = { ...prev };
-                                      delete newValues[key];
-                                      return newValues;
-                                    });
-                                    
-                                    if (value === '' || isNaN(numValue) || numValue <= 0) {
-                                      setBoxData(prev => ({
-                                        ...prev,
-                                        [boxId]: { ...prev[boxId], boxWeight: '' }
-                                      }));
-                                    } else {
-                                      setBoxData(prev => ({
-                                        ...prev,
-                                        [boxId]: { ...prev[boxId], boxWeight: value }
-                                      }));
-                                      
-                                      // Auto-focus cones input when valid weight is entered
-                                      setTimeout(() => {
-                                        const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
-                                        if (coneInput) {
-                                          coneInput.focus();
-                                          coneInput.select();
-                                        }
-                                      }, 100);
-                                    }
-                                  }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      setTimeout(() => {
-                                        const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
-                                        if (coneInput) {
-                                          coneInput.focus();
-                                          coneInput.select();
-                                        }
-                                      }, 50);
-                                    }
-                                  }}
-                              placeholder="0.00"
-                            />
-                          ) : (
-                                <span className="text-sm text-gray-900">{data.boxWeight || '-'}</span>
-                              )}
-                            </td>
-                            <td className="border border-gray-300 px-4 py-3">
-                              {isActive ? (
-                                <input
-                                  type="text"
-                                  className="form-control text-sm"
-                                  data-box-cones={boxId}
-                                  value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
-                                    ? rawInputValues[`box-${boxId}-numberOfCones`] 
-                                    : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
-                                  onChange={(e) => {
-                                    const value = e.target.value;
-                                    const sanitizedValue = validateNumericInput(value, true);
-                                    const key = `box-${boxId}-numberOfCones`;
-                                    
-                                    setRawInputValues(prev => ({
-                                      ...prev,
-                                      [key]: sanitizedValue
-                                    }));
-                                    
-                                    setBoxData(prev => ({
-                                      ...prev,
-                                      [boxId]: { ...prev[boxId], numberOfCones: sanitizedValue }
-                                    }));
-                                  }}
-                                  onBlur={(e) => {
-                                    const value = e.target.value;
-                                    const key = `box-${boxId}-numberOfCones`;
-                                    const numValue = parseFloat(value);
-                                    
-                                    setRawInputValues(prev => {
-                                      const newValues = { ...prev };
-                                      delete newValues[key];
-                                      return newValues;
-                                    });
-                                    
-                                    if (value === '' || isNaN(numValue) || numValue <= 0) {
-                                      setBoxData(prev => ({
-                                        ...prev,
-                                        [boxId]: { ...prev[boxId], numberOfCones: '' }
-                                      }));
-                                    } else {
-                                      setBoxData(prev => ({
-                                        ...prev,
-                                        [boxId]: { ...prev[boxId], numberOfCones: value }
-                                      }));
-                                    }
-                                  }}
-                                  onKeyDown={async (e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      await handleUpdateBox(box);
-                                      
-                                      // Reset state and focus back to barcode input
-                                      setActiveBoxId(null);
-                                      setBarcodeScanValue('');
-                                      
-                                      // Focus back to barcode input after update
-                                      setTimeout(() => {
-                                        if (barcodeInputRef.current) {
-                                          barcodeInputRef.current.focus();
-                                        }
-                                      }, 150);
-                                    }
-                                  }}
-                                  placeholder="0"
-                                />
-                              ) : (
-                                <span className="text-sm text-gray-900">{data.numberOfCones || '-'}</span>
-                              )}
-                            </td>
-                            <td className="border border-gray-300 px-4 py-3">
-                              {isUpdating ? (
-                                <div className="flex items-center gap-2">
-                                  <i className="ri-loader-4-line animate-spin text-primary"></i>
-                                  <span className="text-xs text-gray-500">Updating...</span>
-                                </div>
-                              ) : isActive ? (
-                                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                                  Active
-                                </span>
-                              ) : data.yarnName && data.lotNumber && data.boxWeight && data.numberOfCones ? (
-                                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                                  Completed
-                                </span>
-                              ) : (
-                                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                                  Pending
-                            </span>
-                          )}
-                        </td>
-                          </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
+                            <option value="">Select Yarn Name</option>
+                            {getUniqueYarnNames().map((yarnName) => (
+                              <option key={yarnName} value={yarnName}>
+                                {yarnName}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-[12px] text-gray-900">{data.yarnName || '-'}</span>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-2 border border-gray-200">
+                        <span className="text-[12px] text-gray-900">{data.shadeCode || '-'}</span>
+                      </td>
+                      <td className="px-1.5 py-2 border border-gray-200">
+                        <span className="text-[12px] text-gray-900">{data.lotNumber || '-'}</span>
+                      </td>
+                      <td className="px-1.5 py-2 border border-gray-200">
+                        {isActive ? (
+                          <input
+                            type="text"
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                            data-box-weight={boxId}
+                            value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
+                              ? rawInputValues[`box-${boxId}-boxWeight`] 
+                              : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              const sanitizedValue = validateNumericInput(value, true);
+                              const key = `box-${boxId}-boxWeight`;
+                              
+                              setRawInputValues(prev => ({
+                                ...prev,
+                                [key]: sanitizedValue
+                              }));
+                              
+                              setBoxData(prev => ({
+                                ...prev,
+                                [boxId]: { ...prev[boxId], boxWeight: sanitizedValue }
+                              }));
+                            }}
+                            onBlur={(e) => {
+                              const value = e.target.value;
+                              const key = `box-${boxId}-boxWeight`;
+                              const numValue = parseFloat(value);
+                              
+                              setRawInputValues(prev => {
+                                const newValues = { ...prev };
+                                delete newValues[key];
+                                return newValues;
+                              });
+                              
+                              if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                setBoxData(prev => ({
+                                  ...prev,
+                                  [boxId]: { ...prev[boxId], boxWeight: '' }
+                                }));
+                              } else {
+                                setBoxData(prev => ({
+                                  ...prev,
+                                  [boxId]: { ...prev[boxId], boxWeight: value }
+                                }));
+                                
+                                // Auto-focus cones input when valid weight is entered
+                                setTimeout(() => {
+                                  const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
+                                  if (coneInput) {
+                                    coneInput.focus();
+                                    coneInput.select();
+                                  }
+                                }, 100);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                setTimeout(() => {
+                                  const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
+                                  if (coneInput) {
+                                    coneInput.focus();
+                                    coneInput.select();
+                                  }
+                                }, 50);
+                              }
+                            }}
+                            placeholder="0.00"
+                          />
+                        ) : (
+                          <span className="text-[12px] text-gray-900">{data.boxWeight || '-'}</span>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-2 border border-gray-200">
+                        {isActive ? (
+                          <input
+                            type="text"
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                            data-box-cones={boxId}
+                            value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
+                              ? rawInputValues[`box-${boxId}-numberOfCones`] 
+                              : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              const sanitizedValue = validateNumericInput(value, true);
+                              const key = `box-${boxId}-numberOfCones`;
+                              
+                              setRawInputValues(prev => ({
+                                ...prev,
+                                [key]: sanitizedValue
+                              }));
+                              
+                              setBoxData(prev => ({
+                                ...prev,
+                                [boxId]: { ...prev[boxId], numberOfCones: sanitizedValue }
+                              }));
+                            }}
+                            onBlur={(e) => {
+                              const value = e.target.value;
+                              const key = `box-${boxId}-numberOfCones`;
+                              const numValue = parseFloat(value);
+                              
+                              setRawInputValues(prev => {
+                                const newValues = { ...prev };
+                                delete newValues[key];
+                                return newValues;
+                              });
+                              
+                              if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                setBoxData(prev => ({
+                                  ...prev,
+                                  [boxId]: { ...prev[boxId], numberOfCones: '' }
+                                }));
+                              } else {
+                                setBoxData(prev => ({
+                                  ...prev,
+                                  [boxId]: { ...prev[boxId], numberOfCones: value }
+                                }));
+                              }
+                            }}
+                            onKeyDown={async (e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                await handleUpdateBox(box);
+                                
+                                // Reset state and focus back to barcode input
+                                setActiveBoxId(null);
+                                setBarcodeScanValue('');
+                                
+                                // Focus back to barcode input after update
+                                setTimeout(() => {
+                                  if (barcodeInputRef.current) {
+                                    barcodeInputRef.current.focus();
+                                  }
+                                }, 150);
+                              }
+                            }}
+                            placeholder="0"
+                          />
+                        ) : (
+                          <span className="text-[12px] text-gray-900">{data.numberOfCones || '-'}</span>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-2 border border-gray-200">
+                        {isUpdating ? (
+                          <div className="flex items-center gap-1.5">
+                            <i className="ri-loader-4-line animate-spin text-purple-600 text-xs"></i>
+                            <span className="text-[10px] text-gray-500">Updating...</span>
+                          </div>
+                        ) : isActive ? (
+                          <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-800">
+                            Active
+                          </span>
+                        ) : data.yarnName && data.lotNumber && data.boxWeight && data.numberOfCones ? (
+                          <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-green-100 text-green-800">
+                            Completed
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-gray-100 text-gray-800">
+                            Pending
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
                 })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+      })}
 
-                {/* Unassigned boxes section */}
-                {boxesByLot.unassigned.length > 0 && (
-                  <div className="border border-yellow-200 rounded-lg overflow-hidden bg-yellow-50/30">
-                    <div className="bg-yellow-100 px-4 py-3 border-b border-yellow-200">
-                      <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                        <i className="ri-error-warning-line text-yellow-600"></i>
-                        Unassigned Boxes
-                        <span className="text-xs font-normal text-gray-600 ml-2">
-                          ({boxesByLot.unassigned.length} {boxesByLot.unassigned.length === 1 ? 'box' : 'boxes'} - Please assign lot numbers)
-                        </span>
-                      </h4>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full border-collapse border border-gray-300">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box ID</th>
-                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
-                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
-                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
-                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lot Number</th>
-                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box Weight (kg)</th>
-                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. of Cones</th>
-                            <th className="border border-gray-300 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white">
+              {/* Unassigned boxes section */}
+              {boxesByLot.unassigned.length > 0 && (
+                <div className="border border-yellow-200 rounded-lg overflow-hidden bg-yellow-50/30">
+                  <div className="bg-yellow-100 px-3 py-2 border-b border-yellow-200">
+                    <h4 className="text-xs font-bold text-gray-900 flex items-center gap-2">
+                      <i className="ri-error-warning-line text-yellow-600 text-xs"></i>
+                      Unassigned Boxes
+                      <span className="text-[10px] font-normal text-gray-600 ml-2">
+                        ({boxesByLot.unassigned.length} {boxesByLot.unassigned.length === 1 ? 'box' : 'boxes'} - Please assign lot numbers)
+                      </span>
+                    </h4>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-200">
+                      <thead>
+                        <tr className="bg-gray-50/30">
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">No. of Cones</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
                           {boxesByLot.unassigned.map((box) => {
                             const boxId = box._id || box.id || box.boxId;
                             const isActive = activeBoxId === boxId;
@@ -2337,32 +2340,32 @@ const ProcessOrderPage = () => {
                             return (
                               <tr 
                                 key={boxId}
-                                className={`hover:bg-gray-50 ${
+                                className={`hover:bg-gray-50/50 transition-colors group ${
                                   isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
                                 }`}
                               >
-                                <td className="border border-gray-300 px-4 py-3">
+                                <td className="px-1.5 py-2 border border-gray-200">
                                   <button
                                     onClick={() => setSelectedBoxForDetails(box)}
-                                    className="text-sm font-medium text-primary hover:text-primary-dark hover:underline cursor-pointer"
+                                    className="text-[12px] font-bold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
                                     title="Click to view full details"
                                   >
                                     {truncateId(box.boxId)}
                                   </button>
                                 </td>
-                                <td className="border border-gray-300 px-4 py-3">
+                                <td className="px-1.5 py-2 border border-gray-200">
                                   <button
                                     onClick={() => setSelectedBoxForDetails(box)}
-                                    className="text-sm text-gray-900 font-mono text-primary hover:text-primary-dark hover:underline cursor-pointer"
+                                    className="text-[12px] text-gray-900 font-mono text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
                                     title="Click to view full details"
                                   >
                                     {truncateId(box.barcode)}
                                   </button>
                                 </td>
-                                <td className="border border-gray-300 px-4 py-3">
+                                <td className="px-1.5 py-2 border border-gray-200">
                                   {isActive && hasMultipleYarnNames() ? (
                                     <select
-                                      className="form-select text-sm"
+                                      className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                                       value={data.yarnName}
                                       onChange={(e) => handleYarnNameChange(boxId, e.target.value)}
                                       onKeyDown={(e) => {
@@ -2383,20 +2386,20 @@ const ProcessOrderPage = () => {
                                       ))}
                                     </select>
                                   ) : (
-                                    <span className="text-sm text-gray-900">{data.yarnName || '-'}</span>
+                                    <span className="text-[12px] text-gray-900">{data.yarnName || '-'}</span>
                                   )}
                                 </td>
-                                <td className="border border-gray-300 px-4 py-3">
-                                  <span className="text-sm text-gray-900">{data.shadeCode || '-'}</span>
+                                <td className="px-1.5 py-2 border border-gray-200">
+                                  <span className="text-[12px] text-gray-900">{data.shadeCode || '-'}</span>
                                 </td>
-                                <td className="border border-gray-300 px-4 py-3">
-                                  <span className="text-sm text-yellow-600 font-medium">{data.lotNumber || 'Not assigned'}</span>
+                                <td className="px-1.5 py-2 border border-gray-200">
+                                  <span className="text-[12px] text-yellow-600 font-medium">{data.lotNumber || 'Not assigned'}</span>
                                 </td>
-                                <td className="border border-gray-300 px-4 py-3">
+                                <td className="px-1.5 py-2 border border-gray-200">
                                   {isActive ? (
                                     <input
                                       type="text"
-                                      className="form-control text-sm"
+                                      className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                                       data-box-weight={boxId}
                                       value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
                                         ? rawInputValues[`box-${boxId}-boxWeight`] 
@@ -2463,14 +2466,14 @@ const ProcessOrderPage = () => {
                                       placeholder="0.00"
                                     />
                                   ) : (
-                                    <span className="text-sm text-gray-900">{data.boxWeight || '-'}</span>
+                                    <span className="text-[12px] text-gray-900">{data.boxWeight || '-'}</span>
                                   )}
                                 </td>
-                                <td className="border border-gray-300 px-4 py-3">
+                                <td className="px-1.5 py-2 border border-gray-200">
                                   {isActive ? (
                                     <input
                                       type="text"
-                                      className="form-control text-sm"
+                                      className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                                       data-box-cones={boxId}
                                       value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
                                         ? rawInputValues[`box-${boxId}-numberOfCones`] 
@@ -2533,25 +2536,25 @@ const ProcessOrderPage = () => {
                                       placeholder="0"
                                     />
                                   ) : (
-                                    <span className="text-sm text-gray-900">{data.numberOfCones || '-'}</span>
+                                    <span className="text-[12px] text-gray-900">{data.numberOfCones || '-'}</span>
                                   )}
                                 </td>
-                                <td className="border border-gray-300 px-4 py-3">
+                                <td className="px-1.5 py-2 border border-gray-200">
                                   {isUpdating ? (
-                                    <div className="flex items-center gap-2">
-                                      <i className="ri-loader-4-line animate-spin text-primary"></i>
-                                      <span className="text-xs text-gray-500">Updating...</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <i className="ri-loader-4-line animate-spin text-purple-600 text-xs"></i>
+                                      <span className="text-[10px] text-gray-500">Updating...</span>
                                     </div>
                                   ) : isActive ? (
-                                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                    <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-800">
                                       Active
                                     </span>
                                   ) : data.yarnName && data.lotNumber && data.boxWeight && data.numberOfCones ? (
-                                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                    <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-green-100 text-green-800">
                                       Completed
                                     </span>
                                   ) : (
-                                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                    <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-yellow-100 text-yellow-800">
                                       Pending
                                     </span>
                                   )}
@@ -2565,58 +2568,68 @@ const ProcessOrderPage = () => {
                   </div>
                 )}
               </div>
-              )}
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Box Details Modal */}
+      {/* Box Details Modal - Side Drawer */}
       {selectedBoxForDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <i className="ri-information-line text-primary"></i>
-                  Box Details
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Full information for {selectedBoxForDetails.boxId}
-                </p>
+        <div className={`fixed inset-0 z-50 overflow-hidden ${selectedBoxForDetails ? '' : 'pointer-events-none'}`}>
+          {/* Backdrop */}
+          <div
+            className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${
+              selectedBoxForDetails ? 'opacity-100' : 'opacity-0'
+            }`}
+            onClick={() => setSelectedBoxForDetails(null)}
+          ></div>
+
+          {/* Side Modal */}
+          <div
+            className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
+              selectedBoxForDetails ? 'translate-x-0' : 'translate-x-full'
+            }`}
+          >
+            {/* Header */}
+            <div className="bg-primary text-white px-4 py-3 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">Box Details</h3>
+                  <p className="text-xs text-white/80 mt-0.5">{selectedBoxForDetails.boxId}</p>
+                </div>
+                <button
+                  onClick={() => setSelectedBoxForDetails(null)}
+                  className="text-white hover:text-gray-200 transition-colors"
+                  aria-label="Close modal"
+                >
+                  <i className="ri-close-line text-lg"></i>
+                </button>
               </div>
-                            <button
-                onClick={() => setSelectedBoxForDetails(null)}
-                className="text-gray-400 hover:text-gray-600 transition"
-                aria-label="Close modal"
-              >
-                <i className="ri-close-line text-xl"></i>
-                            </button>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                 <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">Box ID</label>
-                  <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Box ID</label>
+                  <div className="mt-0.5 text-xs text-gray-900 font-mono bg-gray-50 p-1.5 rounded border border-gray-200">
                     {selectedBoxForDetails.boxId}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">Barcode</label>
-                  <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Barcode</label>
+                  <div className="mt-0.5 text-xs text-gray-900 font-mono bg-gray-50 p-1.5 rounded border border-gray-200">
                     {selectedBoxForDetails.barcode}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">PO Number</label>
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">PO Number</label>
+                  <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
                     {selectedBoxForDetails.poNumber}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">Yarn Name</label>
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Yarn Name</label>
+                  <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
                     {(() => {
                       const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
                       return boxData[boxId]?.yarnName || selectedBoxForDetails.yarnName || '-';
@@ -2624,8 +2637,8 @@ const ProcessOrderPage = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">Shade Code</label>
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Shade Code</label>
+                  <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
                     {(() => {
                       const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
                       return boxData[boxId]?.shadeCode || selectedBoxForDetails.shadeCode || '-';
@@ -2633,8 +2646,8 @@ const ProcessOrderPage = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">Lot Number</label>
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Lot Number</label>
+                  <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
                     {(() => {
                       const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
                       return boxData[boxId]?.lotNumber || selectedBoxForDetails.lotNumber || '-';
@@ -2642,8 +2655,8 @@ const ProcessOrderPage = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">Box Weight (kg)</label>
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Box Weight (kg)</label>
+                  <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
                     {(() => {
                       const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
                       return boxData[boxId]?.boxWeight || selectedBoxForDetails.boxWeight || '-';
@@ -2651,8 +2664,8 @@ const ProcessOrderPage = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">Number of Cones</label>
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Number of Cones</label>
+                  <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
                     {(() => {
                       const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
                       return boxData[boxId]?.numberOfCones || selectedBoxForDetails.numberOfCones || '-';
@@ -2661,41 +2674,42 @@ const ProcessOrderPage = () => {
                 </div>
                 {selectedBoxForDetails.receivedDate && (
                   <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Received Date</label>
-                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Received Date</label>
+                    <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
                       {new Date(selectedBoxForDetails.receivedDate).toLocaleDateString()}
                     </div>
                   </div>
                 )}
                 {selectedBoxForDetails.orderDate && (
                   <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Order Date</label>
-                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Order Date</label>
+                    <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
                       {new Date(selectedBoxForDetails.orderDate).toLocaleDateString()}
-              </div>
-            </div>
+                    </div>
+                  </div>
                 )}
                 {selectedBoxForDetails.conesIssued !== undefined && (
                   <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase">Cones Issued</label>
-                    <div className="mt-1">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Cones Issued</label>
+                    <div className="mt-0.5">
+                      <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${
                         selectedBoxForDetails.conesIssued 
                           ? 'bg-green-100 text-green-800' 
                           : 'bg-gray-100 text-gray-800'
                       }`}>
                         {selectedBoxForDetails.conesIssued ? 'Yes' : 'No'}
                       </span>
-          </div>
+                    </div>
                   </div>
                 )}
-        </div>
-      </div>
+              </div>
+            </div>
 
-            <div className="border-t border-gray-100 px-6 py-4 flex justify-end">
+            {/* Footer */}
+            <div className="bg-gray-50 px-4 py-3 flex justify-end gap-2 flex-shrink-0 border-t border-gray-200">
               <button
                 type="button"
-                className="ti-btn ti-btn-light"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
                 onClick={() => setSelectedBoxForDetails(null)}
               >
                 Close

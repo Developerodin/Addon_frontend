@@ -316,114 +316,115 @@ const YarnStoragePage = () => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Yarn Storage" />
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div>
-                <h1 className="box-title text-2xl font-semibold">
-                  Yarn Storage Management
-                </h1>
-                <p className="text-gray-600 mt-1">
-                  Manage long-term and short-term yarn storage with 2D layout
-                  and barcode tracking
-                </p>
-              </div>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Yarn Storage Management</h1>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="box">
-            <div className="box-body p-0">
-              <div className="flex border-b border-gray-200">
-                <button
-                  onClick={() => setActiveTab("unallocated")}
-                  className={`px-6 py-3 font-medium text-sm transition-colors ${
-                    activeTab === "unallocated"
-                      ? "text-primary border-b-2 border-primary"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <i className="ri-box-3-line me-2"></i>
-                  Unallocated Boxes
-                </button>
-                <button
-                  onClick={() => setActiveTab("allocated")}
-                  className={`px-6 py-3 font-medium text-sm transition-colors ${
-                    activeTab === "allocated"
-                      ? "text-primary border-b-2 border-primary"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <i className="ri-checkbox-circle-line me-2"></i>
-                  Allocated Boxes
-                </button>
-                <button
-                  onClick={() => setActiveTab("long-term")}
-                  className={`px-6 py-3 font-medium text-sm transition-colors ${
-                    activeTab === "long-term"
-                      ? "text-primary border-b-2 border-primary"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <i className="ri-archive-line me-2"></i>
-                  Long-Term Storage
-                </button>
-                <button
-                  onClick={() => setActiveTab("short-term")}
-                  className={`px-6 py-3 font-medium text-sm transition-colors ${
-                    activeTab === "short-term"
-                      ? "text-primary border-b-2 border-primary"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <i className="ri-inbox-line me-2"></i>
-                  Short-Term Storage
-                </button>
-              </div>
-            </div>
+          <div className="flex border-b border-gray-100">
+            <button
+              onClick={() => setActiveTab("unallocated")}
+              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
+                activeTab === "unallocated"
+                  ? "text-purple-600"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <i className="ri-box-3-line me-1.5 text-xs"></i>
+              Unallocated Boxes
+              {activeTab === "unallocated" && (
+                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full"></div>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("allocated")}
+              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
+                activeTab === "allocated"
+                  ? "text-purple-600"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <i className="ri-checkbox-circle-line me-1.5 text-xs"></i>
+              Allocated Boxes
+              {activeTab === "allocated" && (
+                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full"></div>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("long-term")}
+              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
+                activeTab === "long-term"
+                  ? "text-purple-600"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <i className="ri-archive-line me-1.5 text-xs"></i>
+              Long-Term Storage
+              {activeTab === "long-term" && (
+                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full"></div>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("short-term")}
+              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
+                activeTab === "short-term"
+                  ? "text-purple-600"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <i className="ri-inbox-line me-1.5 text-xs"></i>
+              Short-Term Storage
+              {activeTab === "short-term" && (
+                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full"></div>
+              )}
+            </button>
           </div>
+        </div>
 
-          {/* Tab Content */}
-          <div className="mt-6">
-            {activeTab === "unallocated" ? (
-              <UnallocatedBoxes
-                onBoxAllocate={(orderId) => {
-                  toast.success(`Allocating boxes for order ${orderId}`);
-                  // TODO: Implement box allocation logic
-                }}
-              />
-            ) : activeTab === "allocated" ? (
-              <AllocatedBoxes />
-            ) : activeTab === "long-term" ? (
-              <LongTermStorageLayout
-                racks={racks}
-                boxes={boxes}
-                onBoxStore={handleBoxStore}
-                onRackUpdate={handleRackUpdate}
-                preferences={{
-                  gridColumns: preferences.gridColumns,
-                  gridRows: preferences.gridRows,
-                  showEmptySlots: preferences.showEmptySlots,
-                }}
-              />
-            ) : (
-              <ShortTermStorage
-                inventory={shortTermInventory}
-                boxes={boxes}
-                onInternalTransfer={handleInternalTransfer}
-                preferences={{
-                  gridColumns: preferences.gridColumns,
-                  gridRows: preferences.gridRows,
-                  showEmptySlots: preferences.showEmptySlots,
-                }}
-              />
-            )}
-          </div>
+        {/* Tab Content */}
+        <div className="p-[10px]">
+          {activeTab === "unallocated" ? (
+            <UnallocatedBoxes
+              onBoxAllocate={(orderId) => {
+                toast.success(`Allocating boxes for order ${orderId}`);
+                // TODO: Implement box allocation logic
+              }}
+            />
+          ) : activeTab === "allocated" ? (
+            <AllocatedBoxes />
+          ) : activeTab === "long-term" ? (
+            <LongTermStorageLayout
+              racks={racks}
+              boxes={boxes}
+              onBoxStore={handleBoxStore}
+              onRackUpdate={handleRackUpdate}
+              preferences={{
+                gridColumns: preferences.gridColumns,
+                gridRows: preferences.gridRows,
+                showEmptySlots: preferences.showEmptySlots,
+              }}
+            />
+          ) : (
+            <ShortTermStorage
+              inventory={shortTermInventory}
+              boxes={boxes}
+              onInternalTransfer={handleInternalTransfer}
+              preferences={{
+                gridColumns: preferences.gridColumns,
+                gridRows: preferences.gridRows,
+                showEmptySlots: preferences.showEmptySlots,
+              }}
+            />
+          )}
         </div>
       </div>
 
