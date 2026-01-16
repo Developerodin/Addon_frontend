@@ -122,6 +122,29 @@ const ProcessQCPage = () => {
     }
   }, [boxId]);
 
+  // Helper function to validate and sanitize numeric input
+  const validateNumericInput = (value: string, allowDecimal: boolean = true): string => {
+    // Allow empty string
+    if (value === '') return '';
+    
+    // Remove any non-numeric characters except decimal point if allowed
+    let sanitized = value;
+    if (allowDecimal) {
+      // Allow digits, single decimal point, and leading minus (if needed)
+      sanitized = value.replace(/[^\d.]/g, '');
+      // Ensure only one decimal point
+      const parts = sanitized.split('.');
+      if (parts.length > 2) {
+        sanitized = parts[0] + '.' + parts.slice(1).join('');
+      }
+    } else {
+      // Only allow digits
+      sanitized = value.replace(/[^\d]/g, '');
+    }
+    
+    return sanitized;
+  };
+
   const handleScanBarcode = () => {
     // If input is empty, fill with example barcode
     if (!barcodeInput.trim()) {

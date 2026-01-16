@@ -82,6 +82,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const [yarnSubtypeMap, setYarnSubtypeMap] = useState<Record<string, { id: string; name: string; countSizes: string[] }[]>>({});
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const supplierYarnDetailsRef = useRef<SupplierYarnDetail[]>([]);
+  const isTypingRef = useRef<Record<string, boolean>>({});
   
   const [formData, setFormData] = useState<PurchaseOrderData>({
     purchaseDate: initialData.purchaseDate || new Date().toISOString().split('T')[0],
@@ -382,19 +383,37 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           const supplier = suppliersResponse.results?.find(s => s.id === initialData.supplierId);
           if (supplier) {
             setSelectedSupplier(supplier);
-            const yarnDetails = supplier.yarnDetails || [];
-            setSupplierYarnDetails(yarnDetails);
-            supplierYarnDetailsRef.current = yarnDetails;
+            // Set initial state from supplier object (in case yarnDetails are already populated)
+            const initialYarnDetails = supplier.yarnDetails || [];
+            setSupplierYarnDetails(initialYarnDetails);
+            supplierYarnDetailsRef.current = initialYarnDetails;
             setSupplierAutocomplete({
               query: supplier.brandName,
               suggestions: [],
               showSuggestions: false,
             });
-            console.log("[PurchaseForm] Initial supplier loaded", {
-              supplierId: supplier.id,
-              supplierName: supplier.brandName,
-              yarnDetailsCount: yarnDetails.length,
-            });
+            
+            // Fetch full supplier details to ensure yarnDetails are loaded
+            supplierService.getSupplierById(supplier.id)
+              .then((fullSupplier) => {
+                const yarnDetails = fullSupplier.yarnDetails || [];
+                setSupplierYarnDetails(yarnDetails);
+                supplierYarnDetailsRef.current = yarnDetails;
+                console.log("[PurchaseForm] Initial supplier loaded with yarn details", {
+                  supplierId: supplier.id,
+                  supplierName: supplier.brandName,
+                  yarnDetailsCount: yarnDetails.length,
+                });
+              })
+              .catch((error) => {
+                console.error("[PurchaseForm] Failed to fetch full initial supplier details", error);
+                // Keep using initial yarnDetails if fetch fails
+                console.log("[PurchaseForm] Initial supplier loaded (using initial yarn details)", {
+                  supplierId: supplier.id,
+                  supplierName: supplier.brandName,
+                  yarnDetailsCount: initialYarnDetails.length,
+                });
+              });
           }
         }
       } catch (error) {
@@ -413,6 +432,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       return;
     }
 
+    // Update suggestions for all items that have a query
+    // This refreshes suggestions when supplier or yarn details change
+    // NOTE: Don't include formData.items in dependencies - it causes re-renders when typing
     setAutocompleteStates(prevStates => {
       let hasChanges = false;
       const nextStates: typeof prevStates = {};
@@ -423,47 +445,32 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           return;
         }
 
-        // Find the corresponding item to check if query matches existing yarnName
-        const item = formData.items.find(i => i.id === itemId);
-        const existingYarnName = item?.yarnName?.toLowerCase().trim() || "";
-        const queryLower = state.query.toLowerCase().trim();
-        const isMatchingExistingValue = queryLower === existingYarnName && existingYarnName.length > 0;
-
+        // Get updated suggestions for the current query
         const suggestions = filterSupplierYarnOptions(state.query);
-        // Don't show suggestions if the query matches the existing yarnName (pre-filled item)
-        const showSuggestions = suggestions.length > 0 && !isMatchingExistingValue;
 
         const prevSuggestions = state.suggestions || [];
         const suggestionsChanged =
           prevSuggestions.length !== suggestions.length ||
           prevSuggestions.some((prevOption, index) => prevOption.id !== suggestions[index]?.id);
 
-        // Only update if suggestions changed or showSuggestions state changed
-        // But always ensure showSuggestions is false for matching existing values
-        if (suggestionsChanged || state.showSuggestions !== showSuggestions) {
+        // Only update if suggestions changed
+        // Preserve showSuggestions state - don't interfere with user typing
+        if (suggestionsChanged) {
           hasChanges = true;
           nextStates[itemId] = {
             ...state,
             suggestions,
-            showSuggestions: isMatchingExistingValue ? false : showSuggestions, // Force false for existing values
+            // Preserve showSuggestions - let handleYarnNameInput and onFocus control it
+            showSuggestions: state.showSuggestions,
           };
         } else {
-          // Even if nothing changed, ensure showSuggestions is false for existing values
-          if (isMatchingExistingValue && state.showSuggestions) {
-            hasChanges = true;
-            nextStates[itemId] = {
-              ...state,
-              showSuggestions: false,
-            };
-          } else {
-            nextStates[itemId] = state;
-          }
+          nextStates[itemId] = state;
         }
       });
 
       return hasChanges ? nextStates : prevStates;
     });
-  }, [selectedSupplier, supplierYarnDetails, filterSupplierYarnOptions, formData.items]);
+  }, [selectedSupplier, supplierYarnDetails, filterSupplierYarnOptions]);
 
   // Filter suppliers based on query
   const filterSuppliers = useCallback((query: string): Supplier[] => {
@@ -527,11 +534,13 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   };
 
   // Select supplier suggestion
-  const selectSupplierSuggestion = (supplier: Supplier) => {
+  const selectSupplierSuggestion = async (supplier: Supplier) => {
     setSelectedSupplier(supplier);
-    const yarnDetails = supplier.yarnDetails || [];
-    setSupplierYarnDetails(yarnDetails);
-    supplierYarnDetailsRef.current = yarnDetails;
+    
+    // Set initial state from supplier object (in case yarnDetails are already populated)
+    const initialYarnDetails = supplier.yarnDetails || [];
+    setSupplierYarnDetails(initialYarnDetails);
+    supplierYarnDetailsRef.current = initialYarnDetails;
     
     setFormData(prev => ({
       ...prev,
@@ -550,23 +559,62 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       setAutocompleteStates({});
     }
 
-    console.log("[PurchaseForm] Supplier selected", {
-      supplierId: supplier.id,
-      supplierName: supplier.brandName,
-      yarnDetailsCount: yarnDetails.length,
-    });
+    // Fetch full supplier details to ensure yarnDetails are loaded
+    try {
+      const fullSupplier = await supplierService.getSupplierById(supplier.id);
+      const yarnDetails = fullSupplier.yarnDetails || [];
+      
+      setSupplierYarnDetails(yarnDetails);
+      supplierYarnDetailsRef.current = yarnDetails;
+
+      console.log("[PurchaseForm] Supplier selected and yarn details loaded", {
+        supplierId: supplier.id,
+        supplierName: supplier.brandName,
+        yarnDetailsCount: yarnDetails.length,
+      });
+    } catch (error) {
+      console.error("[PurchaseForm] Failed to fetch full supplier details", error);
+      // Keep using initial yarnDetails if fetch fails
+      console.log("[PurchaseForm] Supplier selected (using initial yarn details)", {
+        supplierId: supplier.id,
+        supplierName: supplier.brandName,
+        yarnDetailsCount: initialYarnDetails.length,
+      });
+    }
   };
 
   useEffect(() => {
     // Click outside handler for autocomplete
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      
+      // Don't close if clicking on input or within autocomplete container
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      // Check if click is within any autocomplete dropdown
+      const isWithinDropdown = target.closest('.autocomplete-dropdown');
+      if (isWithinDropdown) {
+        return;
+      }
+
       // Handle yarn name autocomplete
       Object.entries(autocompleteRefs.current).forEach(([itemId, ref]) => {
         if (ref && !ref.contains(event.target as Node)) {
-          setAutocompleteStates(prev => ({
-            ...prev,
-            [itemId]: { ...prev[itemId], showSuggestions: false }
-          }));
+          // Only close if not currently typing and not clicking on the input itself
+          if (!isTypingRef.current[itemId] && target.tagName !== 'INPUT') {
+            setAutocompleteStates(prev => {
+              const currentState = prev[itemId];
+              if (currentState?.showSuggestions) {
+                return {
+                  ...prev,
+                  [itemId]: { ...currentState, showSuggestions: false }
+                };
+              }
+              return prev;
+            });
+          }
         }
       });
 
@@ -579,8 +627,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    // Use a slight delay to ensure focus events fire first
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   // Initialize supplier autocomplete query when supplier name is provided in initialData
@@ -594,8 +649,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     }
   }, [initialData.supplierName, isLoadingOptions]);
 
-  // Ensure autocomplete states are initialized for all items and suggestions are hidden
-  // This prevents dropdown from showing when page renders with existing data
+  // Ensure autocomplete states are initialized for all items
+  // Only initialize missing states - don't interfere with user typing
   useEffect(() => {
     if (formData.items.length === 0) return;
 
@@ -607,31 +662,13 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         if (!item.id) return;
 
         const currentState = prevStates[item.id];
-        const hasYarnName = item.yarnName && item.yarnName.trim().length > 0;
 
-        // If item has yarnName but no autocomplete state, initialize it
-        if (hasYarnName && !currentState) {
+        // Only initialize if state doesn't exist - don't modify existing states
+        // This prevents interference with user typing
+        if (!currentState) {
           hasChanges = true;
           nextStates[item.id] = {
-            query: item.yarnName,
-            suggestions: [],
-            showSuggestions: false, // Explicitly set to false
-          };
-        } 
-        // If item has yarnName and state exists, ensure showSuggestions is false
-        else if (hasYarnName && currentState && currentState.showSuggestions) {
-          hasChanges = true;
-          nextStates[item.id] = {
-            ...currentState,
-            showSuggestions: false, // Force hide suggestions for existing values
-          };
-        }
-        // If item has no yarnName but state exists with showSuggestions true, keep it as is (user might be typing)
-        // Only initialize if state doesn't exist
-        else if (!hasYarnName && !currentState) {
-          hasChanges = true;
-          nextStates[item.id] = {
-            query: "",
+            query: item.yarnName || "",
             suggestions: [],
             showSuggestions: false,
           };
@@ -701,46 +738,47 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     }));
   }, []);
 
-  const handleYarnNameInput = (itemId: string, value: string) => {
-    const queryLower = value.toLowerCase().trim();
-    
-    // Find the current item to check if value matches existing yarnName
-    const currentItem = formData.items.find(item => item.id === itemId);
-    const existingYarnName = currentItem?.yarnName?.toLowerCase().trim() || "";
-    const isMatchingExistingValue = queryLower === existingYarnName && existingYarnName.length > 0;
-    
-    // Get suggestions if supplier is selected and there's a query
-    // Don't show suggestions if the value exactly matches the existing yarnName (user hasn't changed it)
-    const suggestions =
-      selectedSupplier && queryLower && supplierYarnDetails.length > 0 && !isMatchingExistingValue
-        ? filterSupplierYarnOptions(value)
-        : [];
+  const handleYarnNameInput = useCallback((itemId: string, value: string) => {
+    // Mark as typing to prevent click outside handler from closing dropdown
+    isTypingRef.current[itemId] = true;
+
+    // Get suggestions if supplier is selected and we have yarn details
+    // Similar to supplier autocomplete - simple and direct
+    const hasYarnDetails = supplierYarnDetailsRef.current.length > 0 || supplierYarnDetails.length > 0;
+    const suggestions = (selectedSupplier && value.trim() && hasYarnDetails)
+      ? filterSupplierYarnOptions(value)
+      : [];
 
     console.log("[PurchaseForm] handleYarnNameInput", {
       itemId,
       rawValue: value,
-      queryLower,
-      existingYarnName,
-      isMatchingExistingValue,
       hasSupplier: Boolean(selectedSupplier),
       supplierName: selectedSupplier?.brandName,
       supplierId: selectedSupplier?.id,
       yarnDetailsCount: supplierYarnDetails.length,
       supplierYarnDetailsRefCount: supplierYarnDetailsRef.current.length,
+      hasYarnDetails,
       suggestionsCount: suggestions.length,
       suggestionSamples: suggestions.map(s => s.displayName).slice(0, 5),
     });
 
-    setAutocompleteStates(prev => ({
-      ...prev,
-      [itemId]: {
-        query: value,
-        suggestions,
-        // Only show suggestions if value is different from existing or if it's a new item
-        showSuggestions: suggestions.length > 0 && queryLower.length > 0 && !isMatchingExistingValue,
-      },
-    }));
+    // Update autocomplete state - this should happen first
+    // Always show suggestions if they exist, regardless of previous state
+    setAutocompleteStates(prev => {
+      const currentState = prev[itemId];
+      return {
+        ...prev,
+        [itemId]: {
+          query: value,
+          suggestions,
+          // Show suggestions if there are any (like supplier autocomplete)
+          // Force show if suggestions exist and user is typing
+          showSuggestions: suggestions.length > 0,
+        },
+      };
+    });
 
+    // Update form data - this may cause re-render but autocomplete state should persist
     updateItem(itemId, {
       yarnName: value,
       yarnId: "",
@@ -752,7 +790,12 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       yarnSubtypeId: undefined,
       shadeCode: "",
     });
-  };
+
+    // Clear typing flag after a longer delay to allow for rapid typing and dropdown interaction
+    setTimeout(() => {
+      isTypingRef.current[itemId] = false;
+    }, 500);
+  }, [selectedSupplier, supplierYarnDetails, filterSupplierYarnOptions, updateItem]);
 
   const selectYarnSuggestion = useCallback(async (itemId: string, option: SupplierYarnOption) => {
     const { supplierDetail, displayName } = option;
@@ -861,6 +904,11 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       if (item.selectedYarnDetail) return;
       if (!item.yarnName) return;
 
+      // Skip if user is currently typing in this input
+      if (isTypingRef.current[item.id]) {
+        return;
+      }
+
       const options = buildSupplierYarnOptions();
       const match = options.find((option) => {
         const optionYarnName = option.displayName.trim().toLowerCase();
@@ -875,35 +923,29 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
       if (match) {
         // Update autocomplete state without showing suggestions
-        setAutocompleteStates(prev => ({
-          ...prev,
-          [item.id]: {
-            query: item.yarnName,
-            suggestions: [],
-            showSuggestions: false, // Explicitly set to false to prevent dropdown from showing
-          },
-        }));
+        // Only update if not currently showing suggestions (user might be typing)
+        setAutocompleteStates(prev => {
+          const currentState = prev[item.id];
+          // Don't interfere if user is actively interacting with this input
+          if (currentState?.showSuggestions) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [item.id]: {
+              query: item.yarnName,
+              suggestions: [],
+              showSuggestions: false, // Explicitly set to false to prevent dropdown from showing
+            },
+          };
+        });
         // Only select the suggestion if we don't already have a selectedYarnDetail
         // This prevents re-triggering for items that are already properly configured
         if (!item.selectedYarnDetail) {
           selectYarnSuggestion(item.id, match);
         }
-      } else {
-        // If no match found but item has yarnName, ensure suggestions are hidden
-        setAutocompleteStates(prev => {
-          const currentState = prev[item.id];
-          if (currentState && currentState.showSuggestions) {
-            return {
-              ...prev,
-              [item.id]: {
-                ...currentState,
-                showSuggestions: false,
-              },
-            };
-          }
-          return prev;
-        });
       }
+      // Removed the else block that was closing suggestions - let user typing control it
     });
   }, [formData.items, selectedSupplier, supplierYarnDetails, buildSupplierYarnOptions, selectYarnSuggestion]);
 
@@ -1232,50 +1274,61 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                               handleYarnNameInput(item.id, e.target.value);
                             }}
                             onFocus={() => {
-                              // Only show suggestions if user is actively typing (query exists and differs from yarnName)
-                              // Don't auto-trigger suggestions for pre-filled values
-                              const currentValue = autocompleteState.query || item.yarnName;
-                              const hasExistingValue = item.yarnName && item.yarnName.trim().length > 0;
+                              // Mark as typing to prevent click outside from closing
+                              isTypingRef.current[item.id] = true;
                               
-                              // Only trigger suggestions if:
-                              // 1. There's no existing value (new item), OR
-                              // 2. The query is different from the existing yarnName (user is typing)
-                              if (!hasExistingValue || (autocompleteState.query && autocompleteState.query !== item.yarnName)) {
-                                if (currentValue && selectedSupplier) {
-                                  handleYarnNameInput(item.id, currentValue);
-                                } else if (autocompleteState.suggestions.length > 0) {
-                                  setAutocompleteStates(prev => ({
-                                    ...prev,
-                                    [item.id]: { ...prev[item.id], showSuggestions: true }
-                                  }));
-                                }
-                              } else {
-                                // For existing values, ensure suggestions are hidden
+                              // Similar to supplier autocomplete - show suggestions if they exist
+                              // Trigger input handler if there's a value to refresh suggestions
+                              const currentValue = autocompleteState.query !== undefined ? autocompleteState.query : item.yarnName;
+                              if (currentValue && selectedSupplier) {
+                                handleYarnNameInput(item.id, currentValue);
+                              } else if (autocompleteState.suggestions.length > 0) {
                                 setAutocompleteStates(prev => ({
                                   ...prev,
-                                  [item.id]: { 
-                                    ...prev[item.id], 
-                                    showSuggestions: false,
-                                    query: item.yarnName 
-                                  }
+                                  [item.id]: { ...prev[item.id], showSuggestions: true }
                                 }));
+                              } else if (selectedSupplier && supplierYarnDetails.length > 0) {
+                                // If input is empty but supplier is selected, show all suggestions on focus
+                                // This helps user discover available yarns
+                                const allOptions = buildSupplierYarnOptions();
+                                if (allOptions.length > 0) {
+                                  setAutocompleteStates(prev => ({
+                                    ...prev,
+                                    [item.id]: {
+                                      query: currentValue || "",
+                                      suggestions: allOptions.slice(0, 20), // Show first 20 options
+                                      showSuggestions: true
+                                    }
+                                  }));
+                                }
                               }
+                              
+                              // Clear typing flag after a delay
+                              setTimeout(() => {
+                                isTypingRef.current[item.id] = false;
+                              }, 100);
+                            }}
+                            onMouseDown={(e) => {
+                              // Prevent click outside handler from closing dropdown when clicking on input
+                              e.stopPropagation();
                             }}
                             className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                             placeholder="Type to search..."
                             required
                           />
-                          {autocompleteState.showSuggestions && 
-                           autocompleteState.suggestions.length > 0 && 
-                           !(item.yarnName && autocompleteState.query === item.yarnName) && (
+                          {autocompleteState.showSuggestions && autocompleteState.suggestions.length > 0 && (
                             <div 
-                              className="absolute z-[9999] w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl max-h-60 overflow-auto"
+                              className="autocomplete-dropdown absolute z-[9999] w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl max-h-60 overflow-auto"
                               style={{ 
                                 position: 'absolute', 
                                 top: '100%', 
                                 left: 0, 
                                 right: 0,
                                 zIndex: 9999
+                              }}
+                              onMouseDown={(e) => {
+                                // Prevent click outside handler from closing when clicking on dropdown
+                                e.stopPropagation();
                               }}
                             >
                               {autocompleteState.suggestions.map((option, idx) => {

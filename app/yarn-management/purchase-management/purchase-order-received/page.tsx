@@ -1830,6 +1830,12 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   // Store raw input values as strings to allow typing "0" and "0.5"
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
 
+  // Helper function to check if a lot is saved (exists in original lots)
+  const isLotSaved = (lotNumber: string): boolean => {
+    if (!lotNumber || !lotNumber.trim()) return false;
+    return originalLots.has(lotNumber.trim().toUpperCase());
+  };
+
   useEffect(() => {
     if (isOpen) {
       // Load existing data if available, otherwise reset form
@@ -1844,14 +1850,15 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
         setOriginalLots(originalLotsMap);
         
         // Load existing received lot details
-        setLots(order.receivedLotDetails.map(lot => ({
+        const loadedLots = order.receivedLotDetails.map(lot => ({
           lotNumber: lot.lotNumber || '',
           numberOfCones: lot.numberOfCones || 0,
           totalWeight: lot.totalWeight || 0,
           numberOfBoxes: lot.numberOfBoxes || 0,
           poItems: lot.poItems || [],
           status: lot.status || 'lot_pending'
-        })));
+        }));
+        setLots(loadedLots);
         
         setRawInputValues({});
       } else {
@@ -1884,12 +1891,30 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   };
 
   const removeLot = (index: number) => {
+    const lot = lots[index];
+    if (!lot) return;
+    
+    // Check if this lot is saved (exists in original lots)
+    if (isLotSaved(lot.lotNumber)) {
+      toast.error('Cannot remove a saved lot. Saved lots can only be viewed.');
+      return;
+    }
+    
     if (lots.length > 1) {
       setLots(lots.filter((_, i) => i !== index));
     }
   };
 
   const updateLot = (index: number, field: keyof ReceivedLotDetail, value: any) => {
+    const lot = lots[index];
+    if (!lot) return;
+    
+    // Check if this lot is saved (exists in original lots)
+    if (isLotSaved(lot.lotNumber)) {
+      toast.error('Cannot edit a saved lot. Saved lots can only be viewed.');
+      return;
+    }
+    
     const updatedLots = [...lots];
     updatedLots[index] = { ...updatedLots[index], [field]: value };
     setLots(updatedLots);
@@ -1947,6 +1972,15 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   };
 
   const addPoItemToLot = (lotIndex: number) => {
+    const lot = lots[lotIndex];
+    if (!lot) return;
+    
+    // Check if this lot is saved (exists in original lots)
+    if (isLotSaved(lot.lotNumber)) {
+      toast.error('Cannot edit a saved lot. Saved lots can only be viewed.');
+      return;
+    }
+    
     const updatedLots = [...lots];
     const filteredItems = getFilteredPoItems();
     
@@ -1961,12 +1995,30 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   };
 
   const removePoItemFromLot = (lotIndex: number, poItemIndex: number) => {
+    const lot = lots[lotIndex];
+    if (!lot) return;
+    
+    // Check if this lot is saved (exists in original lots)
+    if (isLotSaved(lot.lotNumber)) {
+      toast.error('Cannot edit a saved lot. Saved lots can only be viewed.');
+      return;
+    }
+    
     const updatedLots = [...lots];
     updatedLots[lotIndex].poItems = updatedLots[lotIndex].poItems.filter((_, i) => i !== poItemIndex);
     setLots(updatedLots);
   };
 
   const updatePoItem = (lotIndex: number, poItemIndex: number, field: 'poItem' | 'receivedQuantity', value: string | number) => {
+    const lot = lots[lotIndex];
+    if (!lot) return;
+    
+    // Check if this lot is saved (exists in original lots)
+    if (isLotSaved(lot.lotNumber)) {
+      toast.error('Cannot edit a saved lot. Saved lots can only be viewed.');
+      return;
+    }
+    
     const updatedLots = [...lots];
     updatedLots[lotIndex].poItems[poItemIndex] = {
       ...updatedLots[lotIndex].poItems[poItemIndex],
@@ -1977,6 +2029,29 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check if any saved lots were modified
+    for (let i = 0; i < lots.length; i++) {
+      const lot = lots[i];
+      if (isLotSaved(lot.lotNumber)) {
+        // This is a saved lot - check if it was modified
+        const originalLot = originalLots.get(lot.lotNumber.trim().toUpperCase());
+        if (originalLot) {
+          // Compare current lot with original to see if it was modified
+          const wasModified = 
+            lot.numberOfCones !== originalLot.numberOfCones ||
+            lot.totalWeight !== originalLot.totalWeight ||
+            lot.numberOfBoxes !== originalLot.numberOfBoxes ||
+            lot.lotNumber.trim().toUpperCase() !== originalLot.lotNumber.trim().toUpperCase() ||
+            JSON.stringify(lot.poItems) !== JSON.stringify(originalLot.poItems);
+          
+          if (wasModified) {
+            toast.error(`Lot ${lot.lotNumber} is saved and cannot be modified. Saved lots can only be viewed.`);
+            return;
+          }
+        }
+      }
+    }
 
     // Validation
     for (let i = 0; i < lots.length; i++) {
@@ -2015,9 +2090,19 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     }
 
     // Preserve existing lot statuses, only set lot_pending for new lots
+    // For saved lots, use the original data to ensure no changes
     const lotsWithPreservedStatus = lots.map(lot => {
       const lotNumberKey = lot.lotNumber.trim().toUpperCase();
       const originalLot = originalLots.get(lotNumberKey);
+      
+      // If this lot is saved, use original data
+      if (isLotSaved(lot.lotNumber) && originalLot) {
+        return {
+          ...originalLot,
+          // Keep the status from original
+          status: originalLot.status || 'lot_pending'
+        };
+      }
       
       // If this lot exists in original lots, preserve its status
       // Otherwise, it's a new lot, so set status to lot_pending
@@ -2199,21 +2284,34 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h4 className="text-sm font-semibold text-gray-700">Received Lot Details</h4>
-                  <button
-                    type="button"
-                    onClick={addLot}
-                    className="ti-btn ti-btn-primary whitespace-nowrap"
-                  >
-                    <i className="ri-add-line me-2"></i>
-                    Add Lot
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={addLot}
+                      className="ti-btn ti-btn-primary whitespace-nowrap"
+                    >
+                      <i className="ri-add-line me-2"></i>
+                      Add Lot
+                    </button>
+                  </div>
                 </div>
 
-                {lots.map((lot, lotIndex) => (
-                  <div key={lotIndex} className="border border-gray-200 rounded-lg p-4 space-y-4">
+                {lots.map((lot, lotIndex) => {
+                  const lotIsSaved = isLotSaved(lot.lotNumber);
+                  
+                  return (
+                  <div key={lotIndex} className={`border rounded-lg p-4 space-y-4 ${lotIsSaved ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
                     <div className="flex justify-between items-center">
-                      <h5 className="text-sm font-medium text-gray-800">Lot {lotIndex + 1}</h5>
-                      {lots.length > 1 && (
+                      <div className="flex items-center gap-2">
+                        <h5 className="text-sm font-medium text-gray-800">Lot {lotIndex + 1}</h5>
+                        {lotIsSaved && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                            <i className="ri-save-line"></i>
+                            Saved
+                          </span>
+                        )}
+                      </div>
+                      {lots.length > 1 && !lotIsSaved && (
                         <button
                           type="button"
                           onClick={() => removeLot(lotIndex)}
@@ -2223,6 +2321,11 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           <i className="ri-delete-bin-line me-2"></i>
                           Remove Lot
                         </button>
+                      )}
+                      {lotIsSaved && (
+                        <span className="text-xs text-gray-500 italic">
+                          Cannot edit - saved lots are read-only
+                        </span>
                       )}
                     </div>
 
@@ -2238,7 +2341,13 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           className="form-control"
                           placeholder="Enter lot number"
                           required
+                          disabled={lotIsSaved}
                         />
+                        {lotIsSaved && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            This lot is saved and cannot be edited. Saved lots can only be viewed.
+                          </p>
+                        )}
                       </div>
 
                       <div>
@@ -2250,6 +2359,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           value={rawInputValues[`lot-${lotIndex}-cones`] !== undefined 
                             ? rawInputValues[`lot-${lotIndex}-cones`] 
                             : (lot.numberOfCones === 0 ? '' : lot.numberOfCones.toString())}
+                          disabled={lotIsSaved}
                           onChange={(e) => {
                             const value = e.target.value;
                             const key = `lot-${lotIndex}-cones`;
@@ -2307,6 +2417,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           value={rawInputValues[`lot-${lotIndex}-totalWeight`] !== undefined 
                             ? rawInputValues[`lot-${lotIndex}-totalWeight`] 
                             : (lot.totalWeight === 0 ? '' : lot.totalWeight.toString())}
+                          disabled={lotIsSaved}
                           onChange={(e) => {
                             const value = e.target.value;
                             const key = `lot-${lotIndex}-totalWeight`;
@@ -2360,6 +2471,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           value={rawInputValues[`lot-${lotIndex}-numberOfBoxes`] !== undefined 
                             ? rawInputValues[`lot-${lotIndex}-numberOfBoxes`] 
                             : (lot.numberOfBoxes === 0 ? '' : lot.numberOfBoxes.toString())}
+                          disabled={lotIsSaved}
                           onChange={(e) => {
                             const value = e.target.value;
                             const key = `lot-${lotIndex}-numberOfBoxes`;
@@ -2409,14 +2521,16 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                     <div className="mt-4">
                       <div className="flex justify-between items-center mb-2">
                         <label className="form-label">PO Items <span className="text-red-500">*</span></label>
-                        <button
-                          type="button"
-                          onClick={() => addPoItemToLot(lotIndex)}
-                          className="ti-btn ti-btn-outline-primary whitespace-nowrap"
-                        >
-                          <i className="ri-add-line me-2"></i>
-                          Add PO Item
-                        </button>
+                        {!lotIsSaved && (
+                          <button
+                            type="button"
+                            onClick={() => addPoItemToLot(lotIndex)}
+                            className="ti-btn ti-btn-outline-primary whitespace-nowrap"
+                          >
+                            <i className="ri-add-line me-2"></i>
+                            Add PO Item
+                          </button>
+                        )}
                       </div>
 
                       {lot.poItems.map((poItem, poItemIndex) => (
@@ -2430,6 +2544,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               onChange={(e) => updatePoItem(lotIndex, poItemIndex, 'poItem', e.target.value)}
                               className="form-select"
                               required
+                              disabled={lotIsSaved}
                             >
                               <option value="">Select PO Item</option>
                               {getFilteredPoItems().map((item) => (
@@ -2449,6 +2564,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               value={rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] !== undefined 
                                 ? rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] 
                                 : (poItem.receivedQuantity === 0 ? '' : poItem.receivedQuantity.toString())}
+                              disabled={lotIsSaved}
                               onChange={(e) => {
                                 const value = e.target.value;
                                 const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
@@ -2494,14 +2610,16 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           </div>
 
                           <div className="flex items-end">
-                            <button
-                              type="button"
-                              onClick={() => removePoItemFromLot(lotIndex, poItemIndex)}
-                              className="ti-btn ti-btn-outline-danger whitespace-nowrap w-full"
-                            >
-                              <i className="ri-delete-bin-line me-2"></i>
-                              Remove
-                            </button>
+                            {!lotIsSaved && (
+                              <button
+                                type="button"
+                                onClick={() => removePoItemFromLot(lotIndex, poItemIndex)}
+                                className="ti-btn ti-btn-outline-danger whitespace-nowrap w-full"
+                              >
+                                <i className="ri-delete-bin-line me-2"></i>
+                                Remove
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -2511,7 +2629,8 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                       )}
                     </div>
                   </div>
-                ))}
+                );
+                })}
               </div>
             </div>
 

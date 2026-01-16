@@ -285,6 +285,15 @@ const ProcessOrderPage = () => {
             ...prev,
             [`box-${activeBoxId}-boxWeight`]: weight.toString()
           }));
+          
+          // Auto-focus cones input after weight is fetched
+          setTimeout(() => {
+            const coneInput = document.querySelector(`input[data-box-cones="${activeBoxId}"]`) as HTMLInputElement;
+            if (coneInput) {
+              coneInput.focus();
+              coneInput.select();
+            }
+          }, 300);
         }
       }
     };
@@ -622,6 +631,29 @@ const ProcessOrderPage = () => {
     }));
   };
 
+
+  // Helper function to validate and sanitize numeric input
+  const validateNumericInput = (value: string, allowDecimal: boolean = true): string => {
+    // Allow empty string
+    if (value === '') return '';
+    
+    // Remove any non-numeric characters except decimal point if allowed
+    let sanitized = value;
+    if (allowDecimal) {
+      // Allow digits, single decimal point, and leading minus (if needed)
+      sanitized = value.replace(/[^\d.]/g, '');
+      // Ensure only one decimal point
+      const parts = sanitized.split('.');
+      if (parts.length > 2) {
+        sanitized = parts[0] + '.' + parts.slice(1).join('');
+      }
+    } else {
+      // Only allow digits
+      sanitized = value.replace(/[^\d]/g, '');
+    }
+    
+    return sanitized;
+  };
 
   // Truncate ID/Barcode for display
   const truncateId = (id: string): string => {
@@ -1586,6 +1618,48 @@ const ProcessOrderPage = () => {
                 />
                 </div>
 
+              {/* Weighing Process Indicator */}
+              {activeBoxId && (() => {
+                const activeBox = boxes.find(b => {
+                  const bId = b._id || b.id || b.boxId;
+                  return bId === activeBoxId;
+                });
+                if (!activeBox) return null;
+                
+                const activeBoxData = boxData[activeBoxId] || {};
+                const hasWeight = activeBoxData.boxWeight && parseFloat(activeBoxData.boxWeight) > 0;
+                const hasCones = activeBoxData.numberOfCones && parseFloat(activeBoxData.numberOfCones) > 0;
+                
+                // Show indicator only when weight hasn't been entered yet
+                if (!hasWeight) {
+                  return (
+                    <div className="mb-4 animate-pulse">
+                      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-shrink-0">
+                            <i className="ri-scales-3-line text-2xl text-blue-600"></i>
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                              Place the box on the weighing scale
+                            </h4>
+                            <p className="text-xs text-blue-700">
+                              Box ID: <span className="font-mono font-semibold">{activeBox.boxId}</span> - Waiting for weight...
+                            </p>
+                          </div>
+                          {isFetchingWeight && (
+                            <div className="flex-shrink-0">
+                              <i className="ri-loader-4-line animate-spin text-blue-600 text-xl"></i>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               {isLoadingBoxes ? (
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -2046,9 +2120,7 @@ const ProcessOrderPage = () => {
                             <td className="border border-gray-300 px-4 py-3">
                               {isActive ? (
                             <input
-                              type="number"
-                              step="0.01"
-                              min="0"
+                              type="text"
                                   className="form-control text-sm"
                                   data-box-weight={boxId}
                                   value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
@@ -2056,16 +2128,17 @@ const ProcessOrderPage = () => {
                                     : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
                                   onChange={(e) => {
                                     const value = e.target.value;
+                                    const sanitizedValue = validateNumericInput(value, true);
                                     const key = `box-${boxId}-boxWeight`;
                                     
                                     setRawInputValues(prev => ({
                                       ...prev,
-                                      [key]: value
+                                      [key]: sanitizedValue
                                     }));
                                     
                                     setBoxData(prev => ({
                                       ...prev,
-                                      [boxId]: { ...prev[boxId], boxWeight: value }
+                                      [boxId]: { ...prev[boxId], boxWeight: sanitizedValue }
                                     }));
                                   }}
                                   onBlur={(e) => {
@@ -2089,6 +2162,15 @@ const ProcessOrderPage = () => {
                                         ...prev,
                                         [boxId]: { ...prev[boxId], boxWeight: value }
                                       }));
+                                      
+                                      // Auto-focus cones input when valid weight is entered
+                                      setTimeout(() => {
+                                        const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
+                                        if (coneInput) {
+                                          coneInput.focus();
+                                          coneInput.select();
+                                        }
+                                      }, 100);
                                     }
                                   }}
                               onKeyDown={(e) => {
@@ -2112,9 +2194,7 @@ const ProcessOrderPage = () => {
                             <td className="border border-gray-300 px-4 py-3">
                               {isActive ? (
                                 <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
+                                  type="text"
                                   className="form-control text-sm"
                                   data-box-cones={boxId}
                                   value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
@@ -2122,16 +2202,17 @@ const ProcessOrderPage = () => {
                                     : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
                                   onChange={(e) => {
                                     const value = e.target.value;
+                                    const sanitizedValue = validateNumericInput(value, true);
                                     const key = `box-${boxId}-numberOfCones`;
                                     
                                     setRawInputValues(prev => ({
                                       ...prev,
-                                      [key]: value
+                                      [key]: sanitizedValue
                                     }));
                                     
                                     setBoxData(prev => ({
                                       ...prev,
-                                      [boxId]: { ...prev[boxId], numberOfCones: value }
+                                      [boxId]: { ...prev[boxId], numberOfCones: sanitizedValue }
                                     }));
                                   }}
                                   onBlur={(e) => {
@@ -2314,9 +2395,7 @@ const ProcessOrderPage = () => {
                                 <td className="border border-gray-300 px-4 py-3">
                                   {isActive ? (
                                     <input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
+                                      type="text"
                                       className="form-control text-sm"
                                       data-box-weight={boxId}
                                       value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
@@ -2324,16 +2403,17 @@ const ProcessOrderPage = () => {
                                         : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
                                       onChange={(e) => {
                                         const value = e.target.value;
+                                        const sanitizedValue = validateNumericInput(value, true);
                                         const key = `box-${boxId}-boxWeight`;
                                         
                                         setRawInputValues(prev => ({
                                           ...prev,
-                                          [key]: value
+                                          [key]: sanitizedValue
                                         }));
                                         
                                         setBoxData(prev => ({
                                           ...prev,
-                                          [boxId]: { ...prev[boxId], boxWeight: value }
+                                          [boxId]: { ...prev[boxId], boxWeight: sanitizedValue }
                                         }));
                                       }}
                                       onBlur={(e) => {
@@ -2357,6 +2437,15 @@ const ProcessOrderPage = () => {
                                             ...prev,
                                             [boxId]: { ...prev[boxId], boxWeight: value }
                                           }));
+                                          
+                                          // Auto-focus cones input when valid weight is entered
+                                          setTimeout(() => {
+                                            const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
+                                            if (coneInput) {
+                                              coneInput.focus();
+                                              coneInput.select();
+                                            }
+                                          }, 100);
                                         }
                                       }}
                                       onKeyDown={(e) => {
@@ -2380,9 +2469,7 @@ const ProcessOrderPage = () => {
                                 <td className="border border-gray-300 px-4 py-3">
                                   {isActive ? (
                                     <input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
+                                      type="text"
                                       className="form-control text-sm"
                                       data-box-cones={boxId}
                                       value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
@@ -2390,16 +2477,17 @@ const ProcessOrderPage = () => {
                                         : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
                                       onChange={(e) => {
                                         const value = e.target.value;
+                                        const sanitizedValue = validateNumericInput(value, true);
                                         const key = `box-${boxId}-numberOfCones`;
                                         
                                         setRawInputValues(prev => ({
                                           ...prev,
-                                          [key]: value
+                                          [key]: sanitizedValue
                                         }));
                                         
                                         setBoxData(prev => ({
                                           ...prev,
-                                          [boxId]: { ...prev[boxId], numberOfCones: value }
+                                          [boxId]: { ...prev[boxId], numberOfCones: sanitizedValue }
                                         }));
                                       }}
                                       onBlur={(e) => {

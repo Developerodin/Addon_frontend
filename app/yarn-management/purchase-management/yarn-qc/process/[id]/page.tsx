@@ -251,6 +251,29 @@ const ProcessQCOrderPage = () => {
     }
   };
 
+  // Helper function to validate and sanitize numeric input
+  const validateNumericInput = (value: string, allowDecimal: boolean = true): string => {
+    // Allow empty string
+    if (value === '') return '';
+    
+    // Remove any non-numeric characters except decimal point if allowed
+    let sanitized = value;
+    if (allowDecimal) {
+      // Allow digits, single decimal point, and leading minus (if needed)
+      sanitized = value.replace(/[^\d.]/g, '');
+      // Ensure only one decimal point
+      const parts = sanitized.split('.');
+      if (parts.length > 2) {
+        sanitized = parts[0] + '.' + parts.slice(1).join('');
+      }
+    } else {
+      // Only allow digits
+      sanitized = value.replace(/[^\d]/g, '');
+    }
+    
+    return sanitized;
+  };
+
   // Helper to get PO item details by ID
   const getPoItemDetails = (poItemId: string) => {
     return order?.items.find(item => item.id === poItemId);
@@ -401,7 +424,7 @@ const ProcessQCOrderPage = () => {
       });
 
       // Map QC status to lot status format
-      const lotStatus = qcStatus === 'QC Accepted' ? 'lot_accepted' : 'lot_rejected';
+      const lotStatus: 'lot_accepted' | 'lot_rejected' = qcStatus === 'QC Accepted' ? 'lot_accepted' : 'lot_rejected';
       
       // Prepare payload for lot status QC approve API
       const lotStatusPayload = {
