@@ -1114,34 +1114,6 @@ const ProcessOrderPage = () => {
     }
 
     try {
-      // Check if we're on HTTP (non-localhost) - this causes certificate issues
-      const isHTTP = typeof window !== 'undefined' && window.location.protocol === 'http:';
-      const isLocalhost = typeof window !== 'undefined' && 
-        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-      const isUntrustedSite = isHTTP && !isLocalhost;
-
-      if (isUntrustedSite) {
-        toast.error(
-          '⚠️ HTTP Connection Detected\n\nQZ Tray requires HTTPS for live URLs.\n\n' +
-          '🔧 Solutions:\n' +
-          '1. Use HTTPS: https://yourdomain.com\n' +
-          '2. Or use browser print (fallback option)\n\n' +
-          'Note: HTTP on non-localhost is treated as "Untrusted" and QZ Tray cannot save certificates.',
-          { 
-            duration: 10000,
-            style: { maxWidth: '500px', whiteSpace: 'pre-line' }
-          }
-        );
-        // Offer browser print as fallback
-        const useBrowserPrint = window.confirm(
-          'QZ Tray may not work on HTTP. Would you like to use browser print instead?'
-        );
-        if (useBrowserPrint) {
-          handlePrintAllBarcodesBrowser();
-        }
-        return;
-      }
-
       // Connect to QZ Tray
       toast.loading('Connecting to QZ Tray...');
       
@@ -1162,31 +1134,26 @@ const ProcessOrderPage = () => {
         toast.dismiss();
         const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
         
-        // Enhanced error handling for certificate issues
-        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
-          const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
-          const fixInstructions = isMac
-            ? '🔧 macOS FIX:\n\n1. Quit QZ Tray completely\n2. Run in Terminal:\n   rm -rf ~/Library/Application\\ Support/qz/auth/*\n3. Restart QZ Tray\n4. Use HTTPS URL (not HTTP)\n5. When prompt appears:\n   ✅ CHECK "Remember this decision"\n   Click "Allow"'
-            : '🔧 FIX:\n\n1. Close QZ Tray completely\n2. Delete certificate cache:\n   • Windows: %APPDATA%\\qz\\auth\\\n   • macOS: ~/Library/Application Support/qz/auth/\n   • Linux: ~/.qz/auth/\n3. Restart QZ Tray\n4. Use HTTPS URL (not HTTP)\n5. When prompt appears:\n   ✅ CHECK "Remember this decision"\n   Click "Allow"';
-
-          toast.error(
-            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${fixInstructions}`,
-            { 
-              duration: 12000,
-              style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
-            }
-          );
-        } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
-          toast.error(
-            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try browser print as fallback`,
-            { 
-              duration: 8000,
-              style: { maxWidth: '500px', whiteSpace: 'pre-line' }
-            }
-          );
-        } else {
-          toast.error(errorMessage, { duration: 6000 });
-        }
+                        // Enhanced error handling for certificate issues
+                        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
+                          toast.error(
+                            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
+                            { 
+                              duration: 10000,
+                              style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
+                            }
+                          );
+                        } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
+                          toast.error(
+                            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
+                            { 
+                              duration: 8000,
+                              style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+                            }
+                          );
+                        } else {
+                          toast.error(errorMessage, { duration: 6000 });
+                        }
         console.error('QZ Tray connection error:', errorMessage);
         return;
       }
@@ -1783,34 +1750,6 @@ const ProcessOrderPage = () => {
                     }
 
                     try {
-                      // Check if we're on HTTP (non-localhost) - this causes certificate issues
-                      const isHTTP = typeof window !== 'undefined' && window.location.protocol === 'http:';
-                      const isLocalhost = typeof window !== 'undefined' && 
-                        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-                      const isUntrustedSite = isHTTP && !isLocalhost;
-
-                      if (isUntrustedSite) {
-                        toast.error(
-                          '⚠️ HTTP Connection Detected\n\nQZ Tray requires HTTPS for live URLs.\n\n' +
-                          '🔧 Solutions:\n' +
-                          '1. Use HTTPS: https://yourdomain.com\n' +
-                          '2. Or use browser print (fallback option)\n\n' +
-                          'Note: HTTP on non-localhost is treated as "Untrusted" and QZ Tray cannot save certificates.',
-                          { 
-                            duration: 10000,
-                            style: { maxWidth: '500px', whiteSpace: 'pre-line' }
-                          }
-                        );
-                        // Offer browser print as fallback
-                        const useBrowserPrint = window.confirm(
-                          'QZ Tray may not work on HTTP. Would you like to use browser print instead?'
-                        );
-                        if (useBrowserPrint) {
-                          handlePrintLotBarcodesBrowser();
-                        }
-                        return;
-                      }
-
                       // Connect to QZ Tray
                       toast.loading('Connecting to QZ Tray...');
                       
@@ -1833,21 +1772,16 @@ const ProcessOrderPage = () => {
                         
                         // Enhanced error handling for certificate issues
                         if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
-                          const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
-                          const fixInstructions = isMac
-                            ? '🔧 macOS FIX:\n\n1. Quit QZ Tray completely\n2. Run in Terminal:\n   rm -rf ~/Library/Application\\ Support/qz/auth/*\n3. Restart QZ Tray\n4. Use HTTPS URL (not HTTP)\n5. When prompt appears:\n   ✅ CHECK "Remember this decision"\n   Click "Allow"'
-                            : '🔧 FIX:\n\n1. Close QZ Tray completely\n2. Delete certificate cache:\n   • Windows: %APPDATA%\\qz\\auth\\\n   • macOS: ~/Library/Application Support/qz/auth/\n   • Linux: ~/.qz/auth/\n3. Restart QZ Tray\n4. Use HTTPS URL (not HTTP)\n5. When prompt appears:\n   ✅ CHECK "Remember this decision"\n   Click "Allow"';
-
                           toast.error(
-                            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${fixInstructions}`,
+                            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
                             { 
-                              duration: 12000,
+                              duration: 10000,
                               style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
                             }
                           );
                         } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
                           toast.error(
-                            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try browser print as fallback`,
+                            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
                             { 
                               duration: 8000,
                               style: { maxWidth: '500px', whiteSpace: 'pre-line' }
