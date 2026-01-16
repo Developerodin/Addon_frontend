@@ -1104,34 +1104,34 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
   if (isLoadingOptions) {
     return (
-      <div className="flex justify-center items-center py-12">
+      <div className="flex justify-center items-center py-8">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading form options...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-3 opacity-50"></div>
+          <p className="text-xs text-gray-400 font-bold tracking-[0.2em] uppercase">Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4">
       {/* Purchase Header Information */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="form-label">
+          <label className="text-xs font-medium text-gray-600 mb-1 block">
             Purchase Date <span className="text-red-500">*</span>
           </label>
           <input
             type="date"
             value={formData.purchaseDate}
             onChange={(e) => setFormData(prev => ({ ...prev, purchaseDate: e.target.value }))}
-            className="form-control"
+            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
             required
           />
         </div>
 
         <div>
-          <label className="form-label">
+          <label className="text-xs font-medium text-gray-600 mb-1 block">
             Supplier Name <span className="text-red-500">*</span>
           </label>
           <div className="relative" ref={supplierAutocompleteRef}>
@@ -1147,7 +1147,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                   }));
                 }
               }}
-              className="form-control"
+              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
               placeholder="Type to search supplier..."
               required
             />
@@ -1157,11 +1157,11 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                   <div
                     key={supplier.id}
                     onClick={() => selectSupplierSuggestion(supplier)}
-                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                    className="px-3 py-1.5 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
                   >
-                    <div className="font-medium text-gray-900">{supplier.brandName}</div>
+                    <div className="text-xs font-medium text-gray-900">{supplier.brandName}</div>
                     {(supplier.contactPersonName || supplier.city) && (
-                      <div className="text-xs text-gray-500">
+                      <div className="text-[10px] text-gray-500">
                         {supplier.contactPersonName && <span>{supplier.contactPersonName}</span>}
                         {supplier.city && (
                           <span className={supplier.contactPersonName ? "ml-2" : ""}>
@@ -1179,43 +1179,43 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       </div>
 
       {/* Purchase Items Table Section */}
-      <div className="border-t pt-6">
-        <div className="flex justify-between items-center mb-4">
-          <h4 className="text-lg font-semibold">Yarn Items</h4>
+      <div className="border-t pt-4">
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="text-xs font-bold text-gray-800">Yarn Items</h4>
           <button
             type="button"
             onClick={addItem}
-            className="ti-btn ti-btn-primary"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
             disabled={!formData.supplierId}
           >
-            <i className="ri-add-line me-1"></i>
-            Add Yarn Item
+            <i className="ri-add-line text-xs"></i>
+            Add Item
           </button>
         </div>
 
         {!formData.supplierId && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-            <p className="text-sm text-yellow-800">
-              <i className="ri-information-line me-2"></i>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mb-3">
+            <p className="text-xs text-yellow-800">
+              <i className="ri-information-line me-1.5"></i>
               Please select a supplier first to add yarn items
             </p>
           </div>
         )}
 
         {formData.items.length === 0 ? (
-          <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
-            <div className="text-gray-400 mb-4">
-              <i className="ri-shopping-cart-line text-4xl"></i>
+          <div className="text-center py-6 border-2 border-dashed border-gray-300 rounded-lg">
+            <div className="text-gray-400 mb-3">
+              <i className="ri-shopping-cart-line text-3xl"></i>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Items Added</h3>
-            <p className="text-gray-500 mb-4">Add yarn items to create a purchase order.</p>
+            <h3 className="text-xs font-medium text-gray-900 mb-1">No Items Added</h3>
+            <p className="text-[10px] text-gray-500 mb-3">Add yarn items to create a purchase order.</p>
             <button
               type="button"
               onClick={addItem}
-              className="ti-btn ti-btn-primary"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm mx-auto"
               disabled={!formData.supplierId}
             >
-              <i className="ri-add-line me-2"></i>
+              <i className="ri-add-line text-xs"></i>
               Add First Item
             </button>
           </div>
@@ -1223,30 +1223,30 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           <div className="overflow-x-auto" style={{ position: 'relative', overflow: 'visible' }}>
             <div style={{ position: 'relative', overflow: 'visible' }}>
               <table className="min-w-full border border-gray-300 bg-white" style={{ position: 'relative' }}>
-                <thead className="bg-gray-100">
+                <thead className="bg-gray-50/30">
                   <tr>
-                    <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[200px]">
+                    <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[200px]">
                       Yarn Name <span className="text-red-500">*</span>
                     </th>
-                  <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">
+                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
                     Size <span className="text-red-500">*</span>
                   </th>
-                  <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">
+                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
                     Shade Code
                   </th>
-                  <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">
+                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
                     Rate (₹) <span className="text-red-500">*</span>
                   </th>
-                  <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">
+                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
                     Quantity (kg) <span className="text-red-500">*</span>
                   </th>
-                  <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[180px]">
-                    Est. Delivery Date <span className="text-red-500">*</span>
+                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[180px]">
+                    Est. Delivery <span className="text-red-500">*</span>
                   </th>
-                  <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[100px]">
+                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[100px]">
                     GST (%) <span className="text-red-500">*</span>
                   </th>
-                  <th className="border border-gray-300 px-4 py-3 text-center text-sm font-semibold text-gray-700 min-w-[80px]">
+                  <th className="border border-gray-300 px-2 py-1.5 text-center text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[80px]">
                     Action
                   </th>
                 </tr>
@@ -1265,7 +1265,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                   return (
                     <tr key={item.id} className="hover:bg-gray-50">
                       {/* Yarn Name with Autocomplete */}
-                      <td className="border border-gray-300 px-4 py-2" style={{ position: 'relative', overflow: 'visible' }}>
+                      <td className="border border-gray-300 px-2 py-1.5" style={{ position: 'relative', overflow: 'visible' }}>
                         <div className="relative" ref={el => { autocompleteRefs.current[item.id] = el; }} style={{ position: 'relative', zIndex: 1 }}>
                           <input
                             type="text"
@@ -1312,7 +1312,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                               // Prevent click outside handler from closing dropdown when clicking on input
                               e.stopPropagation();
                             }}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
                             placeholder="Type to search..."
                             required
                           />
@@ -1340,11 +1340,11 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                                   <div
                                     key={idx}
                                     onClick={() => selectYarnSuggestion(item.id, option)}
-                                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                    className="px-3 py-1.5 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
                                   >
-                                    <div className="font-medium text-gray-900">{displayName}</div>
+                                    <div className="text-xs font-medium text-gray-900">{displayName}</div>
                                     {(metadata || shadeCode) && (
-                                      <div className="text-xs text-gray-500">
+                                      <div className="text-[10px] text-gray-500">
                                         {metadata && <span>{metadata}</span>}
                                         {shadeCode && <span className={metadata ? "ml-2" : ""}>Shade: {shadeCode}</span>}
                                       </div>
@@ -1358,7 +1358,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       </td>
 
                       {/* Size/Count */}
-                      <td className="border border-gray-300 px-4 py-2">
+                      <td className="border border-gray-300 px-2 py-1.5">
                         <select
                           value={item.sizeCount}
                           onChange={(e) => {
@@ -1369,7 +1369,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                               sizeCountName: selectedOption?.name || value 
                             });
                           }}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
                           required
                           disabled={availableCountSizes.length === 0}
                         >
@@ -1383,18 +1383,18 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       </td>
 
                       {/* Shade Code */}
-                      <td className="border border-gray-300 px-4 py-2">
+                      <td className="border border-gray-300 px-2 py-1.5">
                         <input
                           type="text"
                           value={item.shadeCode}
                           onChange={(e) => updateItem(item.id, { shadeCode: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                          placeholder="Enter shade code"
+                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
+                          placeholder="Shade code"
                         />
                       </td>
 
                       {/* Rate */}
-                      <td className="border border-gray-300 px-4 py-2">
+                      <td className="border border-gray-300 px-2 py-1.5">
                         <input
                           type="text"
                           value={item.rate || ""}
@@ -1413,14 +1413,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                               updateItem(item.id, { rate: 0 });
                             }
                           }}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
                           placeholder="0.00"
                           required
                         />
                       </td>
 
                       {/* Quantity */}
-                      <td className="border border-gray-300 px-4 py-2">
+                      <td className="border border-gray-300 px-2 py-1.5">
                         <input
                           type="text"
                           value={item.qty || ""}
@@ -1439,25 +1439,25 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                               updateItem(item.id, { qty: 0 });
                             }
                           }}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
                           placeholder="0.00"
                           required
                         />
                       </td>
 
                       {/* Estimated Delivery Date */}
-                      <td className="border border-gray-300 px-4 py-2">
+                      <td className="border border-gray-300 px-2 py-1.5">
                         <input
                           type="date"
                           value={item.estimatedDeliveryDate}
                           onChange={(e) => updateItem(item.id, { estimatedDeliveryDate: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
                           required
                         />
                       </td>
 
                       {/* GST */}
-                      <td className="border border-gray-300 px-4 py-2">
+                      <td className="border border-gray-300 px-2 py-1.5">
                         <input
                           type="text"
                           value={item.gst || ""}
@@ -1482,21 +1482,21 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                               updateItem(item.id, { gst: 100 });
                             }
                           }}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
                           placeholder="0.00"
                           required
                         />
                       </td>
 
                       {/* Action - Delete */}
-                      <td className="border border-gray-300 px-4 py-2 text-center">
+                      <td className="border border-gray-300 px-2 py-1.5 text-center">
                         <button
                           type="button"
                           onClick={() => removeItem(item.id)}
-                          className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1 rounded transition-colors"
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50 p-0.5 rounded transition-colors"
                           title="Remove Item"
                         >
-                          <i className="ri-delete-bin-line text-lg"></i>
+                          <i className="ri-delete-bin-line text-xs"></i>
                         </button>
                       </td>
                     </tr>
@@ -1511,25 +1511,25 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
       {/* Totals Section - Between Table and Notes */}
       {formData.items.length > 0 && (
-        <div className="border-t pt-6">
+        <div className="border-t pt-4">
           <div className="max-w-lg ml-auto">
-            <table className="min-w-full border border-gray-300 bg-white">
+            <table className="min-w-full border border-gray-200 bg-white">
               <thead>
                 <tr>
-                  <th className="border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 text-center">SubTotal</th>
-                  <th className="border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 text-center">GST</th>
-                  <th className="border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 text-center">Total</th>
+                  <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-center uppercase tracking-wider">SubTotal</th>
+                  <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-center uppercase tracking-wider">GST</th>
+                  <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-center uppercase tracking-wider">Total</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 text-right">
+                  <td className="border border-gray-200 px-2 py-1.5 text-xs text-gray-900 text-right">
                     ₹{formData.subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
-                  <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 text-right">
+                  <td className="border border-gray-200 px-2 py-1.5 text-xs text-gray-900 text-right">
                     ₹{formData.totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
-                  <td className="border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-900 text-right">
+                  <td className="border border-gray-200 px-2 py-1.5 text-xs font-bold text-gray-900 text-right">
                     ₹{formData.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                 </tr>
@@ -1540,40 +1540,40 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       )}
 
       {/* Notes - Below Table */}
-      <div className="border-t pt-6">
-        <label className="form-label">Notes</label>
+      <div className="border-t pt-4">
+        <label className="text-xs font-medium text-gray-600 mb-1 block">Notes</label>
         <textarea
           value={formData.notes}
           onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-          className="form-control"
+          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
           rows={2}
           placeholder="Additional notes about the purchase order..."
         />
       </div>
 
       {/* Form Actions */}
-      <div className="flex justify-end space-x-3 pt-6 border-t">
+      <div className="flex justify-end gap-2 pt-4 border-t">
         <button
           type="button"
           onClick={onCancel}
-          className="ti-btn ti-btn-light"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
           disabled={isSubmitting}
         >
           Cancel
         </button>
         <button
           type="submit"
-          className="ti-btn ti-btn-primary"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
           disabled={isSubmitting}
         >
           {isSubmitting ? (
             <>
-              <i className="ri-loader-4-line animate-spin me-2"></i>
+              <i className="ri-loader-4-line animate-spin text-xs"></i>
               Submitting...
             </>
           ) : (
             <>
-              <i className="ri-save-line me-2"></i>
+              <i className="ri-save-line text-xs"></i>
               {submitButtonText}
             </>
           )}

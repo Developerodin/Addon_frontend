@@ -288,35 +288,38 @@ const AddPurchasePage = () => {
   };
 
   return (
-    <div className="main-content" style={{ paddingLeft: 0, paddingRight: 0, marginLeft: '-1.5rem', marginRight: '-1.5rem' }}>
+    <div className="main-content !p-[10px]">
       <Seo title="Add Purchase Order" />
       
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Form Container */}
-          <div className="box mt-6">
-            <div className="box-header flex justify-between items-center">
-              <h3 className="box-title">Purchase Order Details</h3>
-              <div className="box-tools">
-                <Link 
-                  href="/yarn-management/purchase-management/purchase" 
-                  className="ti-btn ti-btn-secondary"
-                  title="Back to Purchase Orders"
-                >
-                  <i className="ri-arrow-left-line me-2"></i>
-                  Back
-                </Link>
-              </div>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">New Purchase Order</h1>
             </div>
-            <div className="box-body">
-              <PurchaseForm
-                onSubmit={handleSubmit}
-                onCancel={handleCancel}
-                isSubmitting={isSubmitting}
-                submitButtonText="Submit to Supplier"
-              />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/yarn-management/purchase-management/purchase"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <i className="ri-arrow-left-line text-xs"></i>
+                Back
+              </Link>
             </div>
           </div>
+        </div>
+
+        {/* Form Content */}
+        <div className="px-[10px] pb-[10px]">
+          <PurchaseForm
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            isSubmitting={isSubmitting}
+            submitButtonText="Submit to Supplier"
+          />
         </div>
       </div>
     </div>

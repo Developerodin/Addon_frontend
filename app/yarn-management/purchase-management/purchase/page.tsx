@@ -26,32 +26,32 @@ interface PurchaseOrder {
   notes: string;
   createdAt: string;
   updatedAt: string;
-    packlistDetails?: {
-      packingNumber?: string;
-      trackingNumber?: string; // Legacy field name from API
-      courierName?: string;
-      courierNumber?: string;
-      vehicleNumber?: string;
-      challanNumber?: string;
-      dispatchDate?: string;
-      estimatedDeliveryDate?: string;
-      expectedArrivalDate?: string; // Legacy field name from API
-      numberOfBoxes?: number;
-      totalWeight?: number;
-      notes?: string;
-    };
-    packListDetailsArray?: Array<{
-      packingNumber?: string;
-      courierName?: string;
-      courierNumber?: string;
-      vehicleNumber?: string;
-      challanNumber?: string;
-      dispatchDate?: string;
-      estimatedDeliveryDate?: string;
-      numberOfBoxes?: number;
-      totalWeight?: number;
-      notes?: string;
-    }>;
+  packlistDetails?: {
+    packingNumber?: string;
+    trackingNumber?: string; // Legacy field name from API
+    courierName?: string;
+    courierNumber?: string;
+    vehicleNumber?: string;
+    challanNumber?: string;
+    dispatchDate?: string;
+    estimatedDeliveryDate?: string;
+    expectedArrivalDate?: string; // Legacy field name from API
+    numberOfBoxes?: number;
+    totalWeight?: number;
+    notes?: string;
+  };
+  packListDetailsArray?: Array<{
+    packingNumber?: string;
+    courierName?: string;
+    courierNumber?: string;
+    vehicleNumber?: string;
+    challanNumber?: string;
+    dispatchDate?: string;
+    estimatedDeliveryDate?: string;
+    numberOfBoxes?: number;
+    totalWeight?: number;
+    notes?: string;
+  }>;
 }
 
 interface PurchaseItem {
@@ -60,6 +60,7 @@ interface PurchaseItem {
   sizeCount: string;
   shadeCode: string;
   quantity: number;
+  receivedQuantity?: number;
   rate: number;
   gst: number;
   subTotal: number;
@@ -108,13 +109,13 @@ const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
 // Helper function to map API response to component format
 const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
   const poItems = apiOrder.poItems || apiOrder.items || apiOrder.orderItems || [];
-  
+
   // Get the latest estimated delivery date from items, or use a default
-  const latestDeliveryDate = poItems.length > 0 
+  const latestDeliveryDate = poItems.length > 0
     ? poItems.reduce((latest: string, item: any) => {
-        const itemDate = item.estimatedDeliveryDate || item.estimated_delivery_date;
-        return itemDate && (!latest || new Date(itemDate) > new Date(latest)) ? itemDate : latest;
-      }, '')
+      const itemDate = item.estimatedDeliveryDate || item.estimated_delivery_date;
+      return itemDate && (!latest || new Date(itemDate) > new Date(latest)) ? itemDate : latest;
+    }, '')
     : new Date().toISOString();
 
   return {
@@ -134,6 +135,7 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
       sizeCount: item.sizeCount || item.size_count || item.countSize || '',
       shadeCode: item.shadeCode || item.shade_code || item.shade || '',
       quantity: item.quantity || 0,
+      receivedQuantity: item.receivedQuantity || item.received_quantity || undefined,
       rate: item.rate || item.unitPrice || 0,
       gst: item.gstRate || item.gst || item.gst_rate || 18,
       subTotal: item.subTotal || item.sub_total || (item.quantity * (item.rate || 0)) || 0,
@@ -145,7 +147,7 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
     packlistDetails: (() => {
       const packListData = apiOrder.packListDetails || apiOrder.packlistDetails;
       if (!packListData) return undefined;
-      
+
       // Handle array case (new backend format)
       if (Array.isArray(packListData) && packListData.length > 0) {
         // Return the first entry for backward compatibility
@@ -165,7 +167,7 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
           notes: firstEntry?.notes || ''
         };
       }
-      
+
       // Handle single object case (legacy format)
       return {
         packingNumber: packListData?.packingNumber || packListData?.packing_number || packListData?.trackingNumber || packListData?.tracking_number || '',
@@ -185,7 +187,7 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
     packListDetailsArray: (() => {
       const packListData = apiOrder.packListDetails || apiOrder.packlistDetails;
       if (!packListData) return undefined;
-      
+
       // If it's an array, return it as-is
       if (Array.isArray(packListData)) {
         return packListData.map((entry: any) => ({
@@ -202,7 +204,7 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
           poItems: entry?.poItems || (Array.isArray(entry?.poItems) ? entry.poItems : [])
         }));
       }
-      
+
       // If it's a single object, convert to array
       return [{
         packingNumber: packListData?.packingNumber || packListData?.packing_number || packListData?.trackingNumber || packListData?.tracking_number || '',
@@ -227,18 +229,18 @@ const PurchasePage = () => {
   const user = useSelector((state: any) => state.auth?.user);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  
+
   // Set default dates: one month ago to today
   const getDefaultStartDate = () => {
     const date = new Date();
     date.setMonth(date.getMonth() - 1);
     return date.toISOString().split('T')[0];
   };
-  
+
   const getDefaultEndDate = () => {
     return new Date().toISOString().split('T')[0];
   };
-  
+
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [startDate, setStartDate] = useState<string>(getDefaultStartDate());
   const [endDate, setEndDate] = useState<string>(getDefaultEndDate());
@@ -255,6 +257,9 @@ const PurchasePage = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
   const [isPrinting, setIsPrinting] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Check permission
   const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
@@ -292,7 +297,7 @@ const PurchasePage = () => {
 
         // Fetch all statuses in parallel
         const responses = await Promise.all(
-          statusesToFetch.map(status => 
+          statusesToFetch.map(status =>
             yarnPurchaseOrderService.getPurchaseOrders({ ...baseParams, status_code: status })
           )
         );
@@ -305,17 +310,17 @@ const PurchasePage = () => {
         });
 
         // Deduplicate by order ID
-        const uniqueOrders = allOrders.filter((order, index, self) => 
+        const uniqueOrders = allOrders.filter((order, index, self) =>
           index === self.findIndex((o) => (o._id || o.id) === (order._id || order.id))
         );
-        
+
         const mappedOrders = uniqueOrders.map(mapAPIOrderToComponent);
         setOrders(mappedOrders);
       } else {
         // Filter by selected status
         baseParams.status_code = convertStatusToAPI(statusFilter as PurchaseOrderStatus);
         const response = await yarnPurchaseOrderService.getPurchaseOrders(baseParams);
-        
+
         // Handle both array and object with results property
         const ordersData = Array.isArray(response) ? response : (response.results || []);
         const mappedOrders = ordersData.map(mapAPIOrderToComponent);
@@ -425,7 +430,7 @@ const PurchasePage = () => {
       // Calculate GST - check if same state (CGST/SGST) or different state (IGST)
       const isSameState = supplierState?.toLowerCase() === 'maharashtra' || supplierState?.toLowerCase() === 'mh';
       let taxRowHtml = '';
-      
+
       if (isSameState && orderItems.length > 0) {
         // Same state: Split GST into SGST and CGST
         const avgGstRate = orderItems.reduce((sum: number, item: any) => sum + (item.gstRate || item.gst || 0), 0) / orderItems.length;
@@ -474,10 +479,10 @@ const PurchasePage = () => {
         const quantity = item.quantity || 0;
         const rate = item.rate || 0;
         const amount = quantity * rate;
-        
+
         itemsHtml += `<tr><td>${index + 1}</td><td>${shadeCode}</td><td>${yarnName}${sizeCount !== 'N/A' ? ' - ' + sizeCount : ''}</td><td>${quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>${rate.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>KGS</td><td>${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`;
       });
-      
+
       // Replace the example product rows
       htmlTemplate = htmlTemplate.replace(
         /<tr>\s*<td>1<\/td>[\s\S]*?<td>15,067\.22<\/td>\s*<\/tr>/g,
@@ -528,7 +533,7 @@ const PurchasePage = () => {
     const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
     const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
     const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-    
+
     if (num === 0) return 'Zero';
     if (num < 10) return ones[num];
     if (num < 20) return teens[num - 10];
@@ -568,7 +573,7 @@ const PurchasePage = () => {
         user.email,
         `Status updated to ${newStatus}`
       );
-      
+
       await fetchPurchaseOrders();
       toast.success('Purchase order status updated successfully');
     } catch (error) {
@@ -627,7 +632,14 @@ const PurchasePage = () => {
       // First API call: Update order with packlist details (array)
       await yarnPurchaseOrderService.updatePurchaseOrderWithPacklist(
         orderForPacklist.id,
-        details
+        details.map(d => ({
+          ...d,
+          courierNumber: d.courierNumber || '',
+          courierName: d.courierName || '',
+          vehicleNumber: d.vehicleNumber || '',
+          challanNumber: d.challanNumber || '',
+          notes: d.notes || ''
+        })) as any
       );
 
       // Combine notes from all entries for status update
@@ -644,10 +656,10 @@ const PurchasePage = () => {
         user.email, // Using email as username, adjust if your API expects different field
         combinedNotes
       );
-      
+
       // Refresh orders list
       await fetchPurchaseOrders();
-      
+
       toast.success(`Purchase order updated with ${details.length} packlist ${details.length === 1 ? 'entry' : 'entries'} and marked as in transit successfully`);
       setPacklistModalOpen(false);
       setOrderForPacklist(null);
@@ -688,10 +700,10 @@ const PurchasePage = () => {
         orderForUpdatePacklist.id,
         details
       );
-      
+
       // Refresh orders list
       await fetchPurchaseOrders();
-      
+
       toast.success(`Packlist details updated successfully with ${details.length} ${details.length === 1 ? 'entry' : 'entries'}`);
       setUpdatePacklistModalOpen(false);
       setOrderForUpdatePacklist(null);
@@ -728,14 +740,70 @@ const PurchasePage = () => {
   };
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = 
+    const matchesSearch =
       order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.supplier.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesStatus = statusFilter === "all" || order.status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
+
+  // Handle select all
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedOrders(new Set(paginatedOrders.map(order => order.id)));
+    } else {
+      setSelectedOrders(new Set());
+    }
+  };
+
+  // Handle individual selection
+  const handleSelectOrder = (orderId: string) => {
+    const newSelected = new Set(selectedOrders);
+    if (newSelected.has(orderId)) {
+      newSelected.delete(orderId);
+    } else {
+      newSelected.add(orderId);
+    }
+    setSelectedOrders(newSelected);
+  };
+
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    if (selectedOrders.size === 0) {
+      toast.error('Please select at least one order to delete');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedOrders.size} purchase order(s)?\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      const deletePromises = Array.from(selectedOrders).map(orderId =>
+        yarnPurchaseOrderService.deletePurchaseOrder(orderId)
+      );
+      await Promise.all(deletePromises);
+      toast.success(`${selectedOrders.size} purchase order(s) deleted successfully`);
+      setSelectedOrders(new Set());
+      await fetchPurchaseOrders();
+    } catch (error) {
+      console.error('Failed to delete orders:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete orders');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const getStatusColor = (status: PurchaseOrderStatus) => {
     switch (status) {
@@ -772,269 +840,387 @@ const PurchasePage = () => {
     }
   };
 
+
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Purchase Order" />
-      
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div>
-                <h1 className="box-title text-2xl font-semibold">Purchase Order</h1>
-                <p className="text-gray-600 mt-1">Manage yarn procurement and purchase orders</p>
+
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Purchase Order</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {filteredOrders.length}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search Bar */}
+              <div className="relative">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-32 placeholder:text-gray-400 transition-all font-medium"
+                  placeholder="Search"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
               </div>
-              <div className="box-tools">
-                <Link 
-                  href="/yarn-management/purchase-management/purchase/add"
-                  className="ti-btn ti-btn-primary"
+
+              {/* Show items per page */}
+              <div className="relative group">
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
                 >
-                  <i className="ri-add-line me-1"></i>
-                  New Order
-                </Link>
+                  <option value={10}>Show 10</option>
+                  <option value={25}>Show 25</option>
+                  <option value={50}>Show 50</option>
+                  <option value={100}>Show 100</option>
+                </select>
+                <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none group-hover:text-gray-600 transition-colors"></i>
               </div>
+
+              {/* Status Filter as Sort-like dropdown */}
+              <div className="relative group">
+                <select
+                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-10 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer min-w-[80px]"
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <option value="all">Sort</option>
+                  <option value="submitted to supplier">Submitted</option>
+                  <option value="in transit">In Transit</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="goods received">Received</option>
+                  <option value="QC pending">QC Pending</option>
+                  <option value="stocked">Stocked</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none group-hover:text-gray-600 transition-colors"></i>
+                <i className="ri-sort-desc absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+              </div>
+
+              {/* New Order Button */}
+              <Link
+                href="/yarn-management/purchase-management/purchase/add"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-add-line text-xs"></i>
+                New Order
+              </Link>
+
+              {/* Delete button */}
+              <button
+                onClick={handleBulkDelete}
+                disabled={isDeleting || selectedOrders.size === 0}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${selectedOrders.size > 0
+                  ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100 shadow-sm"
+                  : "bg-white text-red-300 border-gray-100 cursor-not-allowed"
+                  }`}
+              >
+                <i className="ri-delete-bin-line text-xs"></i>
+                Delete
+              </button>
             </div>
           </div>
 
-          {/* Search and Filters */}
-          <div className="box">
-            <div className="box-body">
-              <div className="flex flex-col gap-4">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search by order number or supplier..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-                  <div className="flex gap-2">
-                    <select
-                      className="form-select"
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                    >
-                      <option value="all">All Orders</option>
-                      <option value="submitted to supplier">Submitted to Supplier</option>
-                      <option value="in transit">In Transit</option>
-                      <option value="goods partially received">Goods Partially Received</option>
-                      <option value="goods received">Goods Received</option>
-                      <option value="QC pending">QC Pending</option>
-                      <option value="PO accepted">PO Accepted</option>
-                      <option value="PO accepted partially">PO Accepted Partially</option>
-                      <option value="rejected">Rejected</option>
-                    </select>
-                  <button className="ti-btn ti-btn-light">
-                    <i className="ri-download-line me-1"></i>
-                    Export
-                  </button>
-                </div>
-              </div>
-                <div className="flex flex-col md:flex-row gap-4">
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="form-label text-xs text-gray-600">Start Date</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="form-label text-xs text-gray-600">End Date</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                      />
-                    </div>
-                    {(startDate || endDate) && (
-                      <button
-                        className="ti-btn ti-btn-light self-end"
-                        onClick={() => {
-                          setStartDate("");
-                          setEndDate("");
-                        }}
-                      >
-                        <i className="ri-close-line me-1"></i>
-                        Clear Dates
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
+          {/* Date Filters & Tabs Row */}
+          <div className="flex items-center justify-between border-b border-gray-100">
+            <div className="flex">
+              <button className="px-3 py-2 border-b-2 border-transparent text-gray-800 text-[11px] font-bold relative group">
+                All
+                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500 rounded-t-full"></div>
+              </button>
             </div>
-          </div>
 
-          {/* Purchase Orders Table */}
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">Purchase Orders ({filteredOrders.length})</h3>
-            </div>
-            <div className="box-body">
-              {isLoadingOrders ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading purchase orders...</p>
-                </div>
-              ) : filteredOrders.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-gray-400 mb-4">
-                    <i className="ri-shopping-cart-line text-4xl"></i>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Purchase Orders</h3>
-                  <p className="text-gray-500 mb-4">
-                    {searchTerm
-                      ? "No orders match your search criteria. Try adjusting your search term."
-                      : "No purchase orders found for the selected period."}
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          PO Number
-                        </th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Supplier
-                        </th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Order Date
-                        </th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Expected Delivery
-                        </th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Total Amount
-                        </th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white">
-                      {filteredOrders.map((order) => {
-                        return (
-                          <tr key={order.id} className="hover:bg-gray-50">
-                            <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {order.orderNumber}
-                            </td>
-                            <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {order.supplier}
-                            </td>
-                            <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {new Date(order.orderDate).toLocaleDateString()}
-                            </td>
-                            <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {new Date(order.expectedDelivery).toLocaleDateString()}
-                            </td>
-                            <td className="border border-gray-300 px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                                {order.status}
-                              </span>
-                            </td>
-                            <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              ₹{order.totalAmount.toLocaleString()}
-                            </td>
-                            <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={async () => {
-                                    setSelectedOrder(order);
-                                    setActiveTab('details');
-                                    setDetailsModalOpen(true);
-                                    setIsLoadingDetails(true);
-                                    try {
-                                      const detailedData = await yarnPurchaseOrderService.getPurchaseOrderById(order.id);
-                                      setDetailedOrderData(detailedData);
-                                    } catch (error) {
-                                      console.error('Failed to fetch order details:', error);
-                                      toast.error('Failed to load order details');
-                                      setDetailedOrderData(null);
-                                    } finally {
-                                      setIsLoadingDetails(false);
-                                    }
-                                  }}
-                                  className="text-purple-600 hover:text-purple-900 flex items-center justify-center"
-                                  title="View Details"
-                                >
-                                  <i className="ri-eye-line text-lg"></i>
-                                </button>
-                                <button
-                                  onClick={() => handlePrintInvoice(order)}
-                                  className="text-blue-600 hover:text-blue-900 flex items-center justify-center"
-                                  title="Print Invoice"
-                                  disabled={isPrinting}
-                                >
-                                  {isPrinting ? (
-                                    <i className="ri-loader-4-line text-lg animate-spin"></i>
-                                  ) : (
-                                    <i className="ri-printer-line text-lg"></i>
-                                  )}
-                                </button>
-                                <Link
-                                  href={`/yarn-management/purchase-management/purchase/edit/${order.id}`}
-                                  className="text-green-600 hover:text-green-900 flex items-center justify-center"
-                                  title="Edit"
-                                >
-                                  <i className="ri-edit-line text-lg"></i>
-                                </Link>
-                                <button
-                                  onClick={() => handleDeleteOrder(order)}
-                                  className="text-red-600 hover:text-red-900 flex items-center justify-center"
-                                  title="Delete"
-                                  disabled={isDeleting}
-                                >
-                                  <i className="ri-delete-bin-line text-lg"></i>
-                                </button>
-                                {order.status === 'submitted to supplier' && (
-                                  <button
-                                    onClick={() => handleStatusUpdate(order.id, 'in transit')}
-                                    className="text-xs border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded px-3 py-1 h-7 font-medium"
-                                    title="Mark in Transit"
-                                  >
-                                    Mark in Transit
-                                  </button>
-                                )}
-                                {(order.status === 'goods received' || 
-                                  order.status === 'in transit' || 
-                                  order.status === 'goods partially received') && (
-                                  <button
-                                    onClick={() => {
-                                      setOrderForUpdatePacklist(order);
-                                      setUpdatePacklistModalOpen(true);
-                                    }}
-                                    className="text-xs border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded px-3 py-1 h-7 font-medium"
-                                    title="Update Packlist"
-                                  >
-                                    Update Packlist
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+            <div className="flex items-center gap-3 pr-2">
+              <div className="flex items-center gap-1.5 bg-gray-50/50 px-2 py-1 rounded border border-gray-100 border-dashed">
+                <i className="ri-calendar-line text-[10px] text-gray-400"></i>
+                <input
+                  type="date"
+                  className="bg-transparent border-none text-[10px] font-bold text-gray-600 p-0 outline-none w-24 cursor-pointer"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+                <span className="text-gray-300 text-[10px]">~</span>
+                <input
+                  type="date"
+                  className="bg-transparent border-none text-[10px] font-bold text-gray-600 p-0 outline-none w-24 cursor-pointer"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => {
+                    setStartDate(getDefaultStartDate());
+                    setEndDate(getDefaultEndDate());
+                    setCurrentPage(1);
+                  }}
+                  className="text-[9px] text-purple-400 hover:text-purple-600 font-bold uppercase transition-colors"
+                >
+                  Reset
+                </button>
               )}
             </div>
           </div>
         </div>
+
+        {/* Table Container - NO HORIZONTAL PADDING */}
+        <div className="overflow-x-auto min-h-[300px]">
+          {isLoadingOrders ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+            </div>
+          ) : filteredOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-inbox-line text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">DATA EMPTY</h3>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th className="pl-[10px] pr-1 py-3 text-left w-10 border border-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={paginatedOrders.length > 0 && paginatedOrders.every(order => selectedOrders.has(order.id))}
+                      onChange={handleSelectAll}
+                      className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5"
+                    />
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    PO Number
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Supplier
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Order Date
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider whitespace-nowrap border border-gray-200">
+                    Expected Delivery
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Status
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Summary
+                  </th>
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedOrders.map((order) => {
+                  return (
+                    <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="pl-[10px] pr-1 py-2.5 border border-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={selectedOrders.has(order.id)}
+                          onChange={() => handleSelectOrder(order.id)}
+                          className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5"
+                        />
+                      </td>
+                      <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">
+                        {order.orderNumber}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-200">
+                        {order.supplier}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">
+                        {new Date(order.orderDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">
+                        {new Date(order.expectedDelivery).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-left border border-gray-200">
+                        <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${getStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[12px] font-bold text-gray-800">
+                            ₹{order.totalAmount.toLocaleString()}
+                          </div>
+                          {(() => {
+                            // Calculate total weight from packlist entries
+                            let totalWeight = 0;
+                            if (order.packListDetailsArray && order.packListDetailsArray.length > 0) {
+                              totalWeight = order.packListDetailsArray.reduce((sum, entry) => {
+                                return sum + (entry.totalWeight || 0);
+                              }, 0);
+                            } else if (order.packlistDetails?.totalWeight) {
+                              totalWeight = order.packlistDetails.totalWeight;
+                            }
+                            return totalWeight > 0 ? (
+                              <div className="text-[10px] font-medium text-gray-500">
+                               Rec: {totalWeight.toLocaleString()} kg
+                              </div>
+                            ) : null;
+                          })()}
+                          {(() => {
+                            // Calculate total ordered quantity from all items
+                            const totalOrderedQty = order.items?.reduce((sum, item) => {
+                              return sum + (item.quantity || 0);
+                            }, 0) || 0;
+                            return totalOrderedQty > 0 ? (
+                              <div className="text-[10px] font-medium text-gray-500">
+                                Ord: {totalOrderedQty.toLocaleString()} Kg
+                              </div>
+                            ) : null;
+                          })()}
+                          
+                        </div>
+                      </td>
+                      <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                        <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={async () => {
+                              setSelectedOrder(order);
+                              setActiveTab('details');
+                              setDetailsModalOpen(true);
+                              setIsLoadingDetails(true);
+                              try {
+                                const detailedData = await yarnPurchaseOrderService.getPurchaseOrderById(order.id);
+                                setDetailedOrderData(detailedData);
+                              } catch (error) {
+                                console.error('Failed to fetch order details:', error);
+                                toast.error('Failed to load order details');
+                                setDetailedOrderData(null);
+                              } finally {
+                                setIsLoadingDetails(false);
+                              }
+                            }}
+                            className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100 transition-colors"
+                            title="View Details"
+                          >
+                            <i className="ri-eye-line text-xs"></i>
+                          </button>
+                          <button
+                            onClick={() => handlePrintInvoice(order)}
+                            className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-400 border border-gray-100 rounded hover:bg-gray-100 transition-colors"
+                            title="Print Invoice"
+                            disabled={isPrinting}
+                          >
+                            {isPrinting ? (
+                              <i className="ri-loader-4-line text-xs animate-spin"></i>
+                            ) : (
+                              <i className="ri-printer-line text-xs"></i>
+                            )}
+                          </button>
+                          <Link
+                            href={`/yarn-management/purchase-management/purchase/edit/${order.id}`}
+                            className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors"
+                            title="Edit"
+                          >
+                            <i className="ri-pencil-line text-xs"></i>
+                          </Link>
+                          <button
+                            onClick={() => handleDeleteOrder(order)}
+                            className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors"
+                            title="Delete"
+                            disabled={isDeleting}
+                          >
+                            <i className="ri-delete-bin-line text-xs"></i>
+                          </button>
+                          {order.status === 'submitted to supplier' && (
+                            <button
+                              onClick={() => handleStatusUpdate(order.id, 'in transit')}
+                              className="h-7 px-2 text-[9px] font-bold bg-white text-purple-600 border border-purple-200 rounded hover:bg-purple-50 transition-colors uppercase shadow-sm"
+                            >
+                              Dispatch
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Pagination Section - WITH 10PX PADDING */}
+        <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
+          <div className="text-[11px] font-medium text-[#495057] tracking-tight">
+            Showing <span className="">{startIndex + 1} to {Math.min(endIndex, filteredOrders.length)}</span> of <span className="">{filteredOrders.length}</span> entries <span className="ml-1 opacity-50">→</span>
+          </div>
+
+          <div className="flex items-center">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Prev
+            </button>
+
+            <div className="flex items-center gap-1 mx-2">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                if (
+                  page === 1 ||
+                  page === totalPages ||
+                  (page >= currentPage - 1 && page <= currentPage + 1)
+                ) {
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded transition-all ${currentPage === page
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-gray-400 hover:bg-gray-50'
+                        }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                } else if (page === currentPage - 2 || page === currentPage + 2) {
+                  return <span key={page} className="text-gray-300 text-[10px]">...</span>;
+                }
+                return null;
+              })}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Packlist Modal */}
+      {/* Modals */}
       {orderForPacklist && (
         <PacklistModal
           isOpen={packlistModalOpen}
@@ -1063,7 +1249,6 @@ const PurchasePage = () => {
         />
       )}
 
-      {/* Update Packlist Modal */}
       {orderForUpdatePacklist && (
         <UpdatePacklistModal
           isOpen={updatePacklistModalOpen}
@@ -1093,83 +1278,84 @@ const PurchasePage = () => {
         />
       )}
 
-      {/* Order Details Modal */}
       {selectedOrder && (
-        <div className={`fixed inset-0 z-50 overflow-y-auto ${detailsModalOpen ? '' : 'hidden'}`}>
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            {/* Background overlay */}
-            <div
-              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-              onClick={() => {
-                setDetailsModalOpen(false);
-                setSelectedOrder(null);
-                setDetailedOrderData(null);
-              }}
-            ></div>
+        <div className={`fixed inset-0 z-50 overflow-hidden ${detailsModalOpen ? '' : 'pointer-events-none'}`}>
+          {/* Backdrop */}
+          <div
+            className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${
+              detailsModalOpen ? 'opacity-100' : 'opacity-0'
+            }`}
+            onClick={() => {
+              setDetailsModalOpen(false);
+              setSelectedOrder(null);
+              setDetailedOrderData(null);
+            }}
+          ></div>
 
-            {/* Modal panel */}
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full">
-              {/* Header */}
-              <div className="bg-primary text-white px-6 py-4">
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold">Purchase Order Details</h3>
-                    <p className="text-sm text-white/80 mt-1">{selectedOrder.orderNumber}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => handlePrintInvoice(selectedOrder)}
-                      className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 px-3 py-1.5 rounded hover:bg-white/10"
-                      title="Print Invoice"
-                      disabled={isPrinting}
-                    >
-                      {isPrinting ? (
-                        <i className="ri-loader-4-line text-lg animate-spin"></i>
-                      ) : (
-                        <i className="ri-printer-line text-lg"></i>
-                      )}
-                      <span className="text-sm">{isPrinting ? 'Printing...' : 'Print'}</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDetailsModalOpen(false);
-                        setSelectedOrder(null);
-                        setDetailedOrderData(null);
-                        setActiveTab('details');
-                      }}
-                      className="text-white hover:text-gray-200 transition-colors"
-                    >
-                      <i className="ri-close-line text-xl"></i>
-                    </button>
-                  </div>
+          {/* Side Modal */}
+          <div
+            className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
+              detailsModalOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}
+          >
+            {/* Header */}
+            <div className="bg-primary text-white px-6 py-4 flex-shrink-0">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Purchase Order Details</h3>
+                  <p className="text-sm text-white/80 mt-1">{selectedOrder.orderNumber}</p>
                 </div>
-                {/* Tabs */}
-                <div className="flex gap-1 border-b border-white/20">
+                <div className="flex items-center gap-3">
                   <button
-                    onClick={() => setActiveTab('details')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${
-                      activeTab === 'details'
-                        ? 'text-white border-b-2 border-white'
-                        : 'text-white/70 hover:text-white'
-                    }`}
+                    onClick={() => handlePrintInvoice(selectedOrder)}
+                    className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 px-3 py-1.5 rounded hover:bg-white/10"
+                    title="Print Invoice"
+                    disabled={isPrinting}
                   >
-                    Order Details
+                    {isPrinting ? (
+                      <i className="ri-loader-4-line text-lg animate-spin"></i>
+                    ) : (
+                      <i className="ri-printer-line text-lg"></i>
+                    )}
+                    <span className="text-sm">{isPrinting ? 'Printing...' : 'Print'}</span>
                   </button>
                   <button
-                    onClick={() => setActiveTab('history')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${
-                      activeTab === 'history'
-                        ? 'text-white border-b-2 border-white'
-                        : 'text-white/70 hover:text-white'
-                    }`}
+                    onClick={() => {
+                      setDetailsModalOpen(false);
+                      setSelectedOrder(null);
+                      setDetailedOrderData(null);
+                      setActiveTab('details');
+                    }}
+                    className="text-white hover:text-gray-200 transition-colors"
                   >
-                    Status History
+                    <i className="ri-close-line text-xl"></i>
                   </button>
                 </div>
               </div>
+              <div className="flex gap-1 border-b border-white/20">
+                <button
+                  onClick={() => setActiveTab('details')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'details'
+                    ? 'text-white border-b-2 border-white'
+                    : 'text-white/70 hover:text-white'
+                    }`}
+                >
+                  Order Details
+                </button>
+                <button
+                  onClick={() => setActiveTab('history')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'history'
+                    ? 'text-white border-b-2 border-white'
+                    : 'text-white/70 hover:text-white'
+                    }`}
+                >
+                  Status History
+                </button>
+              </div>
+            </div>
 
-              {/* Content */}
-              <div className="px-6 py-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-4 py-3">
                 {isLoadingDetails ? (
                   <div className="text-center py-12">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -1177,350 +1363,341 @@ const PurchasePage = () => {
                   </div>
                 ) : (
                   <>
-                    {/* Order Details Tab */}
                     {activeTab === 'details' && (
                       <>
-                        {/* Order Information */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                      <div className="space-y-4">
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">PO Number</label>
-                          <div className="mt-1 text-sm text-gray-900 font-medium">
-                            {detailedOrderData?.poNumber || selectedOrder.orderNumber}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Supplier</label>
-                          <div className="mt-1 text-sm text-gray-900">
-                            {detailedOrderData?.supplierName || detailedOrderData?.supplier?.brandName || selectedOrder.supplier}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Order Date</label>
-                          <div className="mt-1 text-sm text-gray-900">
-                            {new Date(detailedOrderData?.createDate || selectedOrder.orderDate).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric'
-                            })}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Expected Delivery</label>
-                          <div className="mt-1 text-sm text-gray-900">
-                            {detailedOrderData?.poItems && detailedOrderData.poItems.length > 0 ? (
-                              new Date(
-                                detailedOrderData.poItems.reduce((latest: string, item: any) => {
-                                  const itemDate = item.estimatedDeliveryDate;
-                                  return itemDate && (!latest || new Date(itemDate) > new Date(latest)) ? itemDate : latest;
-                                }, '')
-                              ).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })
-                            ) : (
-                              new Date(selectedOrder.expectedDelivery).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Status</label>
-                          <div className="mt-1">
-                            <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(detailedOrderData?.currentStatus || selectedOrder.status))}`}>
-                              {convertStatusFromAPI(detailedOrderData?.currentStatus || selectedOrder.status)}
-                            </span>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Sub Total</label>
-                          <div className="mt-1 text-sm text-gray-900">₹{(detailedOrderData?.subTotal || selectedOrder.subTotal).toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">GST</label>
-                          <div className="mt-1 text-sm text-gray-900">₹{(detailedOrderData?.gst || selectedOrder.totalGst).toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Total Amount</label>
-                          <div className="mt-1 text-sm text-gray-900 font-semibold text-lg">₹{(detailedOrderData?.total || selectedOrder.totalAmount).toLocaleString()}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Supplier Details */}
-                    {detailedOrderData?.supplier && (
-                      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                        <label className="text-sm font-medium text-gray-700 mb-3 block">Supplier Details</label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {detailedOrderData.supplier.brandName && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                          <div className="space-y-3">
                             <div>
-                              <label className="text-xs font-medium text-gray-600">Brand Name</label>
-                              <div className="mt-1 text-sm text-gray-900">{detailedOrderData.supplier.brandName}</div>
-                            </div>
-                          )}
-                          {detailedOrderData.supplier.contactPersonName && (
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">Contact Person</label>
-                              <div className="mt-1 text-sm text-gray-900">{detailedOrderData.supplier.contactPersonName}</div>
-                            </div>
-                          )}
-                          {detailedOrderData.supplier.contactNumber && (
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">Contact Number</label>
-                              <div className="mt-1 text-sm text-gray-900">{detailedOrderData.supplier.contactNumber}</div>
-                            </div>
-                          )}
-                          {detailedOrderData.supplier.email && (
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">Email</label>
-                              <div className="mt-1 text-sm text-gray-900">{detailedOrderData.supplier.email}</div>
-                            </div>
-                          )}
-                          {detailedOrderData.supplier.address && (
-                            <div className="md:col-span-2">
-                              <label className="text-xs font-medium text-gray-600">Address</label>
-                              <div className="mt-1 text-sm text-gray-900 whitespace-pre-line">
-                                {detailedOrderData.supplier.address}
-                                {detailedOrderData.supplier.city && `, ${detailedOrderData.supplier.city}`}
-                                {detailedOrderData.supplier.state && `, ${detailedOrderData.supplier.state}`}
+                              <label className="text-xs font-medium text-gray-600">PO Number</label>
+                              <div className="mt-0.5 text-xs text-gray-900 font-medium">
+                                {detailedOrderData?.poNumber || selectedOrder.orderNumber}
                               </div>
                             </div>
-                          )}
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Supplier</label>
+                              <div className="mt-0.5 text-xs text-gray-900">
+                                {detailedOrderData?.supplierName || detailedOrderData?.supplier?.brandName || selectedOrder.supplier}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Order Date</label>
+                              <div className="mt-0.5 text-xs text-gray-900">
+                                {new Date(detailedOrderData?.createDate || selectedOrder.orderDate).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Expected Delivery</label>
+                              <div className="mt-0.5 text-xs text-gray-900">
+                                {detailedOrderData?.poItems && detailedOrderData.poItems.length > 0 ? (
+                                  new Date(
+                                    detailedOrderData.poItems.reduce((latest: string, item: any) => {
+                                      const itemDate = item.estimatedDeliveryDate;
+                                      return itemDate && (!latest || new Date(itemDate) > new Date(latest)) ? itemDate : latest;
+                                    }, '')
+                                  ).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  })
+                                ) : (
+                                  new Date(selectedOrder.expectedDelivery).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  })
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Status</label>
+                              <div className="mt-0.5">
+                                <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(detailedOrderData?.currentStatus || selectedOrder.status))}`}>
+                                  {convertStatusFromAPI(detailedOrderData?.currentStatus || selectedOrder.status)}
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Sub Total</label>
+                              <div className="mt-0.5 text-xs text-gray-900">₹{(detailedOrderData?.subTotal || selectedOrder.subTotal || 0).toLocaleString()}</div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">GST</label>
+                              <div className="mt-0.5 text-xs text-gray-900">₹{(detailedOrderData?.gst || selectedOrder.totalGst || 0).toLocaleString()}</div>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">Total Amount</label>
+                              <div className="mt-0.5 text-xs text-gray-900 font-semibold">₹{(detailedOrderData?.total || selectedOrder.totalAmount || 0).toLocaleString()}</div>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    )}
 
-                    {/* Notes */}
-                    {(detailedOrderData?.notes || selectedOrder.notes) && (
-                      <div className="mb-6">
-                        <label className="text-sm font-medium text-gray-600">Notes</label>
-                        <div className="mt-1 p-3 bg-gray-50 rounded text-sm text-gray-900">
-                          {detailedOrderData?.notes || selectedOrder.notes}
-                        </div>
-                      </div>
-                    )}
+                        {detailedOrderData?.supplier && (
+                          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                            <label className="text-xs font-medium text-gray-700 mb-2 block">Supplier Details</label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {detailedOrderData.supplier.brandName && (
+                                <div>
+                                  <label className="text-[10px] font-medium text-gray-600">Brand Name</label>
+                                  <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.brandName}</div>
+                                </div>
+                              )}
+                              {detailedOrderData.supplier.contactPersonName && (
+                                <div>
+                                  <label className="text-[10px] font-medium text-gray-600">Contact Person</label>
+                                  <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.contactPersonName}</div>
+                                </div>
+                              )}
+                              {detailedOrderData.supplier.contactNumber && (
+                                <div>
+                                  <label className="text-[10px] font-medium text-gray-600">Contact Number</label>
+                                  <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.contactNumber}</div>
+                                </div>
+                              )}
+                              {detailedOrderData.supplier.email && (
+                                <div>
+                                  <label className="text-[10px] font-medium text-gray-600">Email</label>
+                                  <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.email}</div>
+                                </div>
+                              )}
+                              {detailedOrderData.supplier.address && (
+                                <div className="md:col-span-2">
+                                  <label className="text-[10px] font-medium text-gray-600">Address</label>
+                                  <div className="mt-0.5 text-xs text-gray-900 whitespace-pre-line">
+                                    {detailedOrderData.supplier.address}
+                                    {detailedOrderData.supplier.city && `, ${detailedOrderData.supplier.city}`}
+                                    {detailedOrderData.supplier.state && `, ${detailedOrderData.supplier.state}`}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
-                    {/* Items Table */}
-                    <div className="mb-6">
-                      <label className="text-sm font-medium text-gray-600 mb-3 block">Order Items</label>
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full border-collapse border border-gray-300">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Yarn Name</th>
-                              <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Size/Count</th>
-                              <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Shade Code</th>
-                              <th className="border border-gray-300 px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                              <th className="border border-gray-300 px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Rate</th>
-                              <th className="border border-gray-300 px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">GST %</th>
-                              <th className="border border-gray-300 px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Sub Total</th>
-                              <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Est. Delivery</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white">
-                            {(detailedOrderData?.poItems || selectedOrder.items).map((item: any, index: number) => {
-                              const yarnName = item.yarnName || item.yarn?.yarnName || '';
-                              const sizeCount = item.sizeCount || '';
-                              const shadeCode = item.shadeCode || '';
-                              const quantity = item.quantity || 0;
-                              const rate = item.rate || 0;
-                              const gstRate = item.gstRate || item.gst || 18;
-                              const subTotal = item.subTotal || (quantity * rate);
-                              const estimatedDelivery = item.estimatedDeliveryDate || '';
-                              
-                              return (
-                                <tr key={item.id || item._id || index} className="hover:bg-gray-50">
-                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900">{yarnName}</td>
-                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900">{sizeCount}</td>
-                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900">{shadeCode}</td>
-                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900 text-right">{quantity.toLocaleString()}</td>
-                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900 text-right">₹{rate.toLocaleString()}</td>
-                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900 text-right">{gstRate}%</td>
-                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900 text-right">₹{subTotal.toLocaleString()}</td>
-                                  <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900">
-                                    {estimatedDelivery ? new Date(estimatedDelivery).toLocaleDateString() : '-'}
-                                  </td>
+                        {(detailedOrderData?.notes || selectedOrder.notes) && (
+                          <div className="mb-4">
+                            <label className="text-xs font-medium text-gray-600">Notes</label>
+                            <div className="mt-1 p-2 bg-gray-50 rounded text-xs text-gray-900">
+                              {detailedOrderData?.notes || selectedOrder.notes}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mb-4">
+                          <label className="text-xs font-medium text-gray-600 mb-2 block">Order Items</label>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full border-collapse border border-gray-300">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Yarn Name</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Size/Count</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Shade Code</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">Quantity</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">Rate</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">GST %</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">Sub Total</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Est. Delivery</th>
                                 </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                              </thead>
+                              <tbody className="bg-white">
+                                {(detailedOrderData?.poItems || selectedOrder.items || []).map((item: any, index: number) => {
+                                  const yarnName = item.yarnName || item.yarn?.yarnName || '';
+                                  const sizeCount = item.sizeCount || '';
+                                  const shadeCode = item.shadeCode || '';
+                                  const quantity = item.quantity || 0;
+                                  const rate = item.rate || 0;
+                                  const gstRate = item.gstRate || item.gst || 18;
+                                  const subTotal = item.subTotal || (quantity * rate);
+                                  const estimatedDelivery = item.estimatedDeliveryDate || '';
 
-                {/* Packlist Details */}
-                {((selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0) || selectedOrder.packlistDetails) && (
-                  <div className="mb-6">
-                    <label className="text-sm font-medium text-gray-700 mb-3 block">
-                      Packlist Details
-                      {selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0 && (
-                        <span className="text-xs text-gray-500 ml-2">
-                          ({selectedOrder.packListDetailsArray.length} {selectedOrder.packListDetailsArray.length === 1 ? 'entry' : 'entries'})
-                        </span>
-                      )}
-                    </label>
-                    
-                    {/* Display all packlist entries from array */}
-                    {selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0 ? (
-                      <div className="space-y-4">
-                        {selectedOrder.packListDetailsArray.map((packlistEntry, index) => (
-                          <div key={index} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="text-sm font-semibold text-gray-800">
-                                Packlist Entry {index + 1}
-                              </h4>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {packlistEntry.packingNumber && (
-                                <div>
-                                  <label className="text-xs font-medium text-gray-600">Packing Number</label>
-                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.packingNumber}</div>
-                                </div>
-                              )}
-                              {packlistEntry.courierName && (
-                                <div>
-                                  <label className="text-xs font-medium text-gray-600">Courier Name</label>
-                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.courierName}</div>
-                                </div>
-                              )}
-                              {packlistEntry.courierNumber && (
-                                <div>
-                                  <label className="text-xs font-medium text-gray-600">Courier Number</label>
-                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.courierNumber}</div>
-                                </div>
-                              )}
-                              {packlistEntry.vehicleNumber && (
-                                <div>
-                                  <label className="text-xs font-medium text-gray-600">Vehicle Number</label>
-                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.vehicleNumber}</div>
-                                </div>
-                              )}
-                              {packlistEntry.challanNumber && (
-                                <div>
-                                  <label className="text-xs font-medium text-gray-600">Challan Number</label>
-                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.challanNumber}</div>
-                                </div>
-                              )}
-                              {packlistEntry.dispatchDate && (
-                                <div>
-                                  <label className="text-xs font-medium text-gray-600">Dispatch Date</label>
-                                  <div className="mt-1 text-sm text-gray-900">
-                                    {new Date(packlistEntry.dispatchDate).toLocaleDateString()}
-                                  </div>
-                                </div>
-                              )}
-                              {packlistEntry.estimatedDeliveryDate && (
-                                <div>
-                                  <label className="text-xs font-medium text-gray-600">Estimated Delivery Date</label>
-                                  <div className="mt-1 text-sm text-gray-900">
-                                    {new Date(packlistEntry.estimatedDeliveryDate).toLocaleDateString()}
-                                  </div>
-                                </div>
-                              )}
-                              {packlistEntry.numberOfBoxes !== undefined && packlistEntry.numberOfBoxes > 0 && (
-                                <div>
-                                  <label className="text-xs font-medium text-gray-600">Number of Boxes</label>
-                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.numberOfBoxes}</div>
-                                </div>
-                              )}
-                              {packlistEntry.totalWeight !== undefined && packlistEntry.totalWeight > 0 && (
-                                <div>
-                                  <label className="text-xs font-medium text-gray-600">Total Weight (kg)</label>
-                                  <div className="mt-1 text-sm text-gray-900">{packlistEntry.totalWeight}</div>
-                                </div>
-                              )}
-                              {packlistEntry.poItems && Array.isArray(packlistEntry.poItems) && packlistEntry.poItems.length > 0 && (
-                                <div className="md:col-span-2">
-                                  <label className="text-xs font-medium text-gray-600 mb-2 block">PO Items ({packlistEntry.poItems.length})</label>
-                                  <div className="mt-1">
-                                    {selectedOrder.items
-                                      .filter(item => packlistEntry.poItems?.includes(item.id))
-                                      .map((item, idx) => (
-                                        <div key={idx} className="text-sm text-gray-900 mb-1">
-                                          • {item.yarnName} - {item.sizeCount} - {item.shadeCode} (Qty: {item.quantity})
-                                        </div>
-                                      ))}
-                                  </div>
-                                </div>
-                              )}
-                              {packlistEntry.notes && (
-                                <div className="md:col-span-2">
-                                  <label className="text-xs font-medium text-gray-600">Notes</label>
-                                  <div className="mt-1 text-sm text-gray-900 p-2 bg-white rounded border border-gray-200">
-                                    {packlistEntry.notes}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      /* Fallback to single packlistDetails for backward compatibility */
-                      selectedOrder.packlistDetails && (
-                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {(selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber) && (
-                              <div>
-                                <label className="text-xs font-medium text-gray-600">Packing/Tracking Number</label>
-                                <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber}</div>
-                              </div>
-                            )}
-                            {selectedOrder.packlistDetails.courierName && (
-                              <div>
-                                <label className="text-xs font-medium text-gray-600">Courier</label>
-                                <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.courierName}</div>
-                              </div>
-                            )}
-                            {selectedOrder.packlistDetails.courierNumber && (
-                              <div>
-                                <label className="text-xs font-medium text-gray-600">Courier Number</label>
-                                <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.courierNumber}</div>
-                              </div>
-                            )}
-                            {selectedOrder.packlistDetails.vehicleNumber && (
-                              <div>
-                                <label className="text-xs font-medium text-gray-600">Vehicle Number</label>
-                                <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.vehicleNumber}</div>
-                              </div>
-                            )}
-                            {selectedOrder.packlistDetails.challanNumber && (
-                              <div>
-                                <label className="text-xs font-medium text-gray-600">Challan Number</label>
-                                <div className="mt-1 text-sm text-gray-900">{selectedOrder.packlistDetails.challanNumber}</div>
-                              </div>
-                            )}
-                            {selectedOrder.packlistDetails.dispatchDate && (
-                              <div>
-                                <label className="text-xs font-medium text-gray-600">Dispatch Date</label>
-                                <div className="mt-1 text-sm text-gray-900">
-                                  {new Date(selectedOrder.packlistDetails.dispatchDate).toLocaleDateString()}
-                                </div>
-                              </div>
-                            )}
-                            {(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate) && (
-                              <div>
-                                <label className="text-xs font-medium text-gray-600">Expected Arrival</label>
-                                <div className="mt-1 text-sm text-gray-900">
-                                  {new Date(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate || '').toLocaleDateString()}
-                                </div>
-                              </div>
-                            )}
+                                  return (
+                                    <tr key={item.id || item._id || index} className="hover:bg-gray-50">
+                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">{yarnName}</td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">{sizeCount}</td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">{shadeCode}</td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">{quantity.toLocaleString()}</td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">₹{rate.toLocaleString()}</td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">{gstRate}%</td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">₹{subTotal.toLocaleString()}</td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">
+                                        {estimatedDelivery ? new Date(estimatedDelivery).toLocaleDateString() : '-'}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
-                      )
-                    )}
-                  </div>
-                )}
 
-                        {/* Timestamps */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500 pt-4 border-t">
+                        {((selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0) || selectedOrder.packlistDetails) && (
+                          <div className="mb-4">
+                            <label className="text-xs font-medium text-gray-700 mb-2 block">
+                              Packlist Details
+                              {selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0 && (
+                                <span className="text-[10px] text-gray-500 ml-2">
+                                  ({selectedOrder.packListDetailsArray.length} {selectedOrder.packListDetailsArray.length === 1 ? 'entry' : 'entries'})
+                                </span>
+                              )}
+                            </label>
+
+                            {selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0 ? (
+                              <div className="space-y-3">
+                                {selectedOrder.packListDetailsArray.map((packlistEntry, index) => (
+                                  <div key={index} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <h4 className="text-xs font-semibold text-gray-800">
+                                        Packlist Entry {index + 1}
+                                      </h4>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      {packlistEntry.packingNumber && (
+                                        <div>
+                                          <label className="text-[10px] font-medium text-gray-600">Packing Number</label>
+                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.packingNumber}</div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.courierName && (
+                                        <div>
+                                          <label className="text-[10px] font-medium text-gray-600">Courier Name</label>
+                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.courierName}</div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.courierNumber && (
+                                        <div>
+                                          <label className="text-[10px] font-medium text-gray-600">Courier Number</label>
+                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.courierNumber}</div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.vehicleNumber && (
+                                        <div>
+                                          <label className="text-[10px] font-medium text-gray-600">Vehicle Number</label>
+                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.vehicleNumber}</div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.challanNumber && (
+                                        <div>
+                                          <label className="text-[10px] font-medium text-gray-600">Challan Number</label>
+                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.challanNumber}</div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.dispatchDate && (
+                                        <div>
+                                          <label className="text-[10px] font-medium text-gray-600">Dispatch Date</label>
+                                          <div className="mt-0.5 text-xs text-gray-900">
+                                            {new Date(packlistEntry.dispatchDate).toLocaleDateString()}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.estimatedDeliveryDate && (
+                                        <div>
+                                          <label className="text-[10px] font-medium text-gray-600">Estimated Delivery Date</label>
+                                          <div className="mt-0.5 text-xs text-gray-900">
+                                            {new Date(packlistEntry.estimatedDeliveryDate).toLocaleDateString()}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.numberOfBoxes !== undefined && packlistEntry.numberOfBoxes > 0 && (
+                                        <div>
+                                          <label className="text-[10px] font-medium text-gray-600">Number of Boxes</label>
+                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.numberOfBoxes}</div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.totalWeight !== undefined && packlistEntry.totalWeight > 0 && (
+                                        <div>
+                                          <label className="text-[10px] font-medium text-gray-600">Total Weight (kg)</label>
+                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.totalWeight}</div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.poItems && Array.isArray(packlistEntry.poItems) && packlistEntry.poItems.length > 0 && (
+                                        <div className="md:col-span-2">
+                                          <label className="text-[10px] font-medium text-gray-600 mb-1 block">PO Items ({packlistEntry.poItems.length})</label>
+                                          <div className="mt-0.5">
+                                            {(selectedOrder.items || [])
+                                              .filter(item => packlistEntry.poItems?.includes(item.id))
+                                              .map((item, idx) => (
+                                                <div key={idx} className="text-xs text-gray-900 mb-0.5">
+                                                  • {item.yarnName} - {item.sizeCount} - {item.shadeCode} (Qty: {item.quantity})
+                                                </div>
+                                              ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.notes && (
+                                        <div className="md:col-span-2">
+                                          <label className="text-[10px] font-medium text-gray-600">Notes</label>
+                                          <div className="mt-0.5 text-xs text-gray-900 p-1.5 bg-white rounded border border-gray-200">
+                                            {packlistEntry.notes}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              selectedOrder.packlistDetails && (
+                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {(selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber) && (
+                                      <div>
+                                        <label className="text-[10px] font-medium text-gray-600">Packing/Tracking Number</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber}</div>
+                                      </div>
+                                    )}
+                                    {selectedOrder.packlistDetails.courierName && (
+                                      <div>
+                                        <label className="text-[10px] font-medium text-gray-600">Courier</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.courierName}</div>
+                                      </div>
+                                    )}
+                                    {selectedOrder.packlistDetails.courierNumber && (
+                                      <div>
+                                        <label className="text-[10px] font-medium text-gray-600">Courier Number</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.courierNumber}</div>
+                                      </div>
+                                    )}
+                                    {selectedOrder.packlistDetails.vehicleNumber && (
+                                      <div>
+                                        <label className="text-[10px] font-medium text-gray-600">Vehicle Number</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.vehicleNumber}</div>
+                                      </div>
+                                    )}
+                                    {selectedOrder.packlistDetails.challanNumber && (
+                                      <div>
+                                        <label className="text-[10px] font-medium text-gray-600">Challan Number</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.challanNumber}</div>
+                                      </div>
+                                    )}
+                                    {selectedOrder.packlistDetails.dispatchDate && (
+                                      <div>
+                                        <label className="text-[10px] font-medium text-gray-600">Dispatch Date</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">
+                                          {new Date(selectedOrder.packlistDetails.dispatchDate).toLocaleDateString()}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate) && (
+                                      <div>
+                                        <label className="text-[10px] font-medium text-gray-600">Expected Arrival</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">
+                                          {new Date(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate || '').toLocaleDateString()}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-gray-500 pt-3 border-t">
                           <div>
                             <span className="font-medium">Created:</span> {new Date(detailedOrderData?.createDate || selectedOrder.createdAt).toLocaleString()}
                           </div>
@@ -1531,32 +1708,31 @@ const PurchasePage = () => {
                       </>
                     )}
 
-                    {/* Status History Tab */}
                     {activeTab === 'history' && (
                       <>
                         {detailedOrderData?.statusLogs && detailedOrderData.statusLogs.length > 0 ? (
-                          <div className="mb-6">
-                            <label className="text-sm font-medium text-gray-600 mb-3 block">Status History</label>
-                            <div className="space-y-3">
+                          <div className="mb-4">
+                            <label className="text-xs font-medium text-gray-600 mb-2 block">Status History</label>
+                            <div className="space-y-2">
                               {detailedOrderData.statusLogs.map((log: any, index: number) => (
-                                <div key={index} className="p-3 bg-gray-50 rounded-lg border-l-4 border-primary">
+                                <div key={index} className="p-2 bg-gray-50 rounded-lg border-l-4 border-primary">
                                   <div className="flex justify-between items-start">
                                     <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(log.statusCode))}`}>
+                                      <div className="flex items-center gap-2 mb-0.5">
+                                        <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(log.statusCode))}`}>
                                           {convertStatusFromAPI(log.statusCode)}
                                         </span>
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-[10px] text-gray-500">
                                           {new Date(log.updatedAt).toLocaleString()}
                                         </span>
                                       </div>
                                       {log.updatedBy?.username && (
-                                        <div className="text-xs text-gray-600 mt-1">
+                                        <div className="text-[10px] text-gray-600 mt-0.5">
                                           Updated by: <span className="font-medium">{log.updatedBy.username}</span>
                                         </div>
                                       )}
                                       {log.notes && (
-                                        <div className="text-sm text-gray-700 mt-2">{log.notes}</div>
+                                        <div className="text-xs text-gray-700 mt-1">{log.notes}</div>
                                       )}
                                     </div>
                                   </div>
@@ -1565,17 +1741,16 @@ const PurchasePage = () => {
                             </div>
                           </div>
                         ) : (
-                          <div className="text-center py-12">
-                            <div className="text-gray-400 mb-4">
-                              <i className="ri-history-line text-4xl"></i>
+                          <div className="text-center py-8">
+                            <div className="text-gray-400 mb-3">
+                              <i className="ri-history-line text-3xl"></i>
                             </div>
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">No Status History</h3>
-                            <p className="text-gray-500">No status changes have been recorded for this purchase order.</p>
+                            <h3 className="text-sm font-medium text-gray-900 mb-1">No Status History</h3>
+                            <p className="text-xs text-gray-500">No status changes have been recorded for this purchase order.</p>
                           </div>
                         )}
 
-                        {/* Timestamps */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500 pt-4 border-t">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-gray-500 pt-3 border-t">
                           <div>
                             <span className="font-medium">Created:</span> {new Date(detailedOrderData?.createDate || selectedOrder.createdAt).toLocaleString()}
                           </div>
@@ -1587,22 +1762,21 @@ const PurchasePage = () => {
                     )}
                   </>
                 )}
-              </div>
+            </div>
 
-              {/* Footer */}
-              <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setDetailsModalOpen(false);
-                    setSelectedOrder(null);
-                    setDetailedOrderData(null);
-                    setActiveTab('details');
-                  }}
-                  className="ti-btn ti-btn-light"
-                >
-                  Close
-                </button>
-              </div>
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 flex-shrink-0 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setDetailsModalOpen(false);
+                  setSelectedOrder(null);
+                  setDetailedOrderData(null);
+                  setActiveTab('details');
+                }}
+                className="ti-btn ti-btn-light"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
