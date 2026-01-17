@@ -81,24 +81,24 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
 // Helper function to map API response to ReceivedOrder format
 const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
   const poItems = apiOrder.poItems || apiOrder.items || apiOrder.orderItems || [];
-  
-  // Map receivedLotDetails if available
-  const receivedLotDetails: ReceivedLotDetail[] | undefined = apiOrder.receivedLotDetails 
-    ? apiOrder.receivedLotDetails.map((lot: any) => {
-        const normalizedStatus: ReceivedLotDetail['status'] = ['lot_pending', 'lot_qc_pending', 'lot_accepted', 'lot_rejected'].includes(lot.status)
-          ? lot.status
-          : 'lot_pending';
 
-        return {
-          lotNumber: lot.lotNumber || lot.lot_number || '',
-          numberOfCones: lot.numberOfCones || lot.number_of_cones || 0,
-          totalWeight: lot.totalWeight || lot.total_weight || 0,
-          numberOfBoxes: lot.numberOfBoxes || lot.number_of_boxes || 0,
-          status: normalizedStatus
-        };
-      })
+  // Map receivedLotDetails if available
+  const receivedLotDetails: ReceivedLotDetail[] | undefined = apiOrder.receivedLotDetails
+    ? apiOrder.receivedLotDetails.map((lot: any) => {
+      const normalizedStatus: ReceivedLotDetail['status'] = ['lot_pending', 'lot_qc_pending', 'lot_accepted', 'lot_rejected'].includes(lot.status)
+        ? lot.status
+        : 'lot_pending';
+
+      return {
+        lotNumber: lot.lotNumber || lot.lot_number || '',
+        numberOfCones: lot.numberOfCones || lot.number_of_cones || 0,
+        totalWeight: lot.totalWeight || lot.total_weight || 0,
+        numberOfBoxes: lot.numberOfBoxes || lot.number_of_boxes || 0,
+        status: normalizedStatus
+      };
+    })
     : undefined;
-  
+
   return {
     id: apiOrder._id || apiOrder.id || '',
     orderNumber: apiOrder.poNumber || apiOrder.orderNumber || apiOrder.order_number || apiOrder.po_number || '',
@@ -166,6 +166,7 @@ const ProcessOrderPage = () => {
   const [updatingBoxId, setUpdatingBoxId] = useState<string | null>(null);
   const [selectedBoxForDetails, setSelectedBoxForDetails] = useState<YarnBox | null>(null);
   const [isUpdatingOrderStatus, setIsUpdatingOrderStatus] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [lotData, setLotData] = useState<{
     poNumber: string;
     lotDetails: Array<{
@@ -193,7 +194,7 @@ const ProcessOrderPage = () => {
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
   const hasPurchaseOrderReceived = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
   const hasPermission = hasPurchaseManagement || hasPurchaseOrderReceived;
-  
+
   useEffect(() => {
     console.log('Process page - hasPurchaseManagement:', hasPurchaseManagement);
     console.log('Process page - hasPurchaseOrderReceived:', hasPurchaseOrderReceived);
@@ -275,10 +276,10 @@ const ProcessOrderPage = () => {
         });
 
         if (box) {
-          const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
-            ? box.yarnName 
+          const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-')
+            ? box.yarnName
             : '';
-          
+
           // Update boxData with fetched weight, ensuring all fields exist
           setBoxData(prev => ({
             ...prev,
@@ -290,13 +291,13 @@ const ProcessOrderPage = () => {
               numberOfCones: prev[activeBoxId]?.numberOfCones || box.numberOfCones?.toString() || ''
             }
           }));
-          
+
           // Also update rawInputValues to show the weight in the input field
           setRawInputValues(prev => ({
             ...prev,
             [`box-${activeBoxId}-boxWeight`]: weight.toString()
           }));
-          
+
           // Auto-focus cones input after weight is fetched
           setTimeout(() => {
             const coneInput = document.querySelector(`input[data-box-cones="${activeBoxId}"]`) as HTMLInputElement;
@@ -325,13 +326,13 @@ const ProcessOrderPage = () => {
         console.log('Process page - fetching order with id:', orderId);
         const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
         console.log('Process page - API response:', apiOrder);
-        
+
         // Store raw API response for accessing receivedLotDetails with poItems
         setRawApiOrder(apiOrder);
-        
+
         const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
         console.log('Process page - mapped order:', mappedOrder);
-        
+
         setOrder(mappedOrder);
       } catch (error) {
         console.error('Process page - failed to fetch order:', error);
@@ -357,7 +358,7 @@ const ProcessOrderPage = () => {
         const response = await yarnBoxService.getYarnBoxes({
           po_number: order.orderNumber
         });
-        
+
         // Handle both array response and object with results
         let boxesData: YarnBox[] = [];
         if (Array.isArray(response)) {
@@ -367,9 +368,9 @@ const ProcessOrderPage = () => {
         } else if (response && typeof response === 'object') {
           boxesData = [response as YarnBox];
         }
-        
+
         setBoxes(boxesData);
-        
+
         // Initialize box data state, preserving existing data
         setBoxData(prev => {
           const initialBoxData: Record<string, any> = { ...prev };
@@ -378,17 +379,17 @@ const ProcessOrderPage = () => {
             if (boxId) {
               // Get existing data for this box
               const existingData = prev[boxId] || {};
-              
+
               // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
-              const yarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
-                ? box.yarnName 
+              const yarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-')
+                ? box.yarnName
                 : '';
-              
+
               // Auto-fill from PO items if lot number exists
               let autoFilledYarnName = yarnName;
               let autoFilledShadeCode = box.shadeCode || '';
               const boxLotNumber = box.lotNumber || '';
-              
+
               if (boxLotNumber && rawApiOrder) {
                 const poItemData = getPOItemDataFromLotNumber(boxLotNumber);
                 if (poItemData) {
@@ -396,7 +397,7 @@ const ProcessOrderPage = () => {
                   autoFilledShadeCode = poItemData.shadeCode;
                 }
               }
-              
+
               // Only set if box doesn't have existing data, or preserve existing data if it exists
               if (!existingData.yarnName && !existingData.shadeCode && !existingData.lotNumber) {
                 // No existing data, use initialized values
@@ -463,20 +464,20 @@ const ProcessOrderPage = () => {
   // Get lot status by lot number
   const getLotStatus = (lotNumber: string): ReceivedLotDetail['status'] | null => {
     if (!order?.receivedLotDetails || !lotNumber) return null;
-    
+
     const normalizedLotNumber = lotNumber.trim().toUpperCase();
     const lot = order.receivedLotDetails.find(lot => {
       const receivedLotNumber = (lot.lotNumber || '').trim().toUpperCase();
       return receivedLotNumber === normalizedLotNumber;
     });
-    
+
     return lot?.status || null;
   };
 
   // Get lot status display text and color
   const getLotStatusDisplay = (status: ReceivedLotDetail['status'] | null) => {
     if (!status) return { text: 'Pending', color: 'bg-gray-100 text-gray-800' };
-    
+
     switch (status) {
       case 'lot_pending':
         return { text: 'Pending', color: 'bg-gray-100 text-gray-800' };
@@ -509,11 +510,11 @@ const ProcessOrderPage = () => {
       const data = await response.json();
       // Extract weight from response: {"weight":0.65,"weightUnit":"kg",...}
       const weight = data.weight;
-      
+
       if (weight !== undefined && weight !== null) {
         return parseFloat(weight);
       }
-      
+
       return null;
     } catch (error) {
       console.error('Failed to fetch weight:', error);
@@ -531,7 +532,7 @@ const ProcessOrderPage = () => {
     }
 
     // Find the lot in receivedLotDetails
-    const lot = rawApiOrder.receivedLotDetails.find((l: any) => 
+    const lot = rawApiOrder.receivedLotDetails.find((l: any) =>
       (l.lotNumber || '').trim().toUpperCase() === lotNumber.trim().toUpperCase()
     );
 
@@ -546,7 +547,7 @@ const ProcessOrderPage = () => {
     }
 
     // Find the PO item in poItems array
-    const poItem = rawApiOrder.poItems.find((item: any) => 
+    const poItem = rawApiOrder.poItems.find((item: any) =>
       String(item._id || item.id) === String(poItemId)
     );
 
@@ -565,14 +566,14 @@ const ProcessOrderPage = () => {
     if (e.key === 'Enter' && barcodeScanValue.trim()) {
       const scannedBarcode = barcodeScanValue.trim();
       const foundBox = boxes.find(box => box.barcode === scannedBarcode);
-      
+
       if (foundBox) {
         const boxId = foundBox._id || foundBox.id || foundBox.boxId;
-        
+
         // Get lot number from box (check boxData first, then box.lotNumber)
         const existingData = boxData[boxId];
         const lotNumber = existingData?.lotNumber?.trim() || foundBox.lotNumber?.trim() || '';
-        
+
         // Auto-fill data from PO items if lot number exists
         let autoFilledData = {
           yarnName: existingData?.yarnName || '',
@@ -647,7 +648,7 @@ const ProcessOrderPage = () => {
   const validateNumericInput = (value: string, allowDecimal: boolean = true): string => {
     // Allow empty string
     if (value === '') return '';
-    
+
     // Remove any non-numeric characters except decimal point if allowed
     let sanitized = value;
     if (allowDecimal) {
@@ -662,7 +663,7 @@ const ProcessOrderPage = () => {
       // Only allow digits
       sanitized = value.replace(/[^\d]/g, '');
     }
-    
+
     return sanitized;
   };
 
@@ -706,17 +707,17 @@ const ProcessOrderPage = () => {
   // Check if all boxes have weight captured
   const areAllBoxesCompleted = useMemo(() => {
     if (boxes.length === 0) return false;
-    
+
     return boxes.every((box) => {
       const boxId = box._id || box.id || box.boxId;
       const data = boxData[boxId];
-      return data && 
-             data.yarnName && 
-             data.lotNumber && 
-             data.boxWeight && 
-             parseFloat(data.boxWeight) > 0 &&
-             data.numberOfCones && 
-             parseFloat(data.numberOfCones) > 0;
+      return data &&
+        data.yarnName &&
+        data.lotNumber &&
+        data.boxWeight &&
+        parseFloat(data.boxWeight) > 0 &&
+        data.numberOfCones &&
+        parseFloat(data.numberOfCones) > 0;
     });
   }, [boxes, boxData]);
 
@@ -740,17 +741,17 @@ const ProcessOrderPage = () => {
   // Check if all boxes in a lot are completed
   const areAllBoxesInLotCompleted = (lotBoxes: YarnBox[]): boolean => {
     if (lotBoxes.length === 0) return false;
-    
+
     return lotBoxes.every((box) => {
       const boxId = box._id || box.id || box.boxId;
       const data = boxData[boxId];
-      return data && 
-             data.yarnName && 
-             data.lotNumber && 
-             data.boxWeight && 
-             parseFloat(data.boxWeight) > 0 &&
-             data.numberOfCones && 
-             parseFloat(data.numberOfCones) > 0;
+      return data &&
+        data.yarnName &&
+        data.lotNumber &&
+        data.boxWeight &&
+        parseFloat(data.boxWeight) > 0 &&
+        data.numberOfCones &&
+        parseFloat(data.numberOfCones) > 0;
     });
   };
 
@@ -775,7 +776,7 @@ const ProcessOrderPage = () => {
       );
 
       toast.success(`Lot ${lotNumber} sent for QC successfully`);
-      
+
       // Refresh order data
       const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
       const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
@@ -815,7 +816,7 @@ const ProcessOrderPage = () => {
       );
 
       toast.success(`Lot ${lotNumber} rejected successfully`);
-      
+
       // Refresh order data
       const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
       const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
@@ -854,7 +855,7 @@ const ProcessOrderPage = () => {
           'qc_pending': 'QC pending',
           'po_rejected': 'rejected'
         };
-        
+
         const targetStatus = statusMap[statusCode];
         if (targetStatus) {
           await yarnPurchaseOrderService.updatePurchaseOrderStatus(
@@ -868,12 +869,12 @@ const ProcessOrderPage = () => {
       }
 
       toast.success(`Order status updated successfully`);
-      
+
       // Refresh order data
       const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
       const mappedOrder = mapAPIOrderToReceivedOrder(apiOrder);
       setOrder(mappedOrder);
-      
+
       // Navigate back to main page
       router.push('/yarn-management/purchase-management/purchase-order-received');
     } catch (error) {
@@ -933,7 +934,7 @@ const ProcessOrderPage = () => {
       await yarnBoxService.updateYarnBox(apiBoxId, payload);
       toast.success(`Box ${box.boxId} updated successfully`);
       setActiveBoxId(null);
-      
+
       // Refresh boxes
       if (order?.orderNumber) {
         const response = await yarnBoxService.getYarnBoxes({
@@ -946,7 +947,7 @@ const ProcessOrderPage = () => {
           boxesData = (response as any).results || [];
         }
         setBoxes(boxesData);
-        
+
         // Update box data state with refreshed data, preserving existing data for other boxes
         let calculatedBoxData: Record<string, any> = {};
         setBoxData(prev => {
@@ -956,12 +957,12 @@ const ProcessOrderPage = () => {
             if (refreshedBoxId) {
               // Get existing data for this box
               const existingData = prev[refreshedBoxId] || {};
-              
+
               // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
-              const refreshedYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
-                ? box.yarnName 
+              const refreshedYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-')
+                ? box.yarnName
                 : '';
-              
+
               // For the box that was just updated, use server data
               // For other boxes, preserve existing data if it exists and is not empty
               if (refreshedBoxId === boxId) {
@@ -988,17 +989,17 @@ const ProcessOrderPage = () => {
           calculatedBoxData = updatedBoxData;
           return updatedBoxData;
         });
-        
+
         // Check if all boxes are now completed and auto-update status to goods_received
         const allCompleted = boxesData.every((b) => {
           const bId = b._id || b.id || b.boxId;
           const bData = calculatedBoxData[bId] || {};
-          return bData.yarnName && 
-                 bData.lotNumber && 
-                 bData.boxWeight && 
-                 parseFloat(bData.boxWeight) > 0 &&
-                 bData.numberOfCones && 
-                 parseFloat(bData.numberOfCones) > 0;
+          return bData.yarnName &&
+            bData.lotNumber &&
+            bData.boxWeight &&
+            parseFloat(bData.boxWeight) > 0 &&
+            bData.numberOfCones &&
+            parseFloat(bData.numberOfCones) > 0;
         });
 
         if (allCompleted && user && user.id && user.email) {
@@ -1037,7 +1038,7 @@ const ProcessOrderPage = () => {
       const tempDiv = document.createElement('div');
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       tempDiv.appendChild(svg);
-      
+
       // Generate barcode
       JsBarcode(svg, barcodeValue, {
         format: "CODE128",
@@ -1048,13 +1049,13 @@ const ProcessOrderPage = () => {
         margin: 10,
         background: "transparent"
       });
-      
+
       // Get the SVG HTML
       const svgHTML = svg.outerHTML;
-      
+
       // Clean up
       tempDiv.remove();
-      
+
       return svgHTML;
     } catch (error) {
       console.error('Error generating barcode:', error);
@@ -1069,24 +1070,24 @@ const ProcessOrderPage = () => {
     const data = boxData[boxId];
     const yarnName = data?.yarnName || box.yarnName || '';
     const shadeCode = data?.shadeCode || box.shadeCode || '';
-    
+
     // Try to find matching order item to get additional details
     let yarnColour = '';
     let shadeName = '';
-    
+
     if (order && yarnName) {
       const matchingItem = order.items.find(item => item.yarnName === yarnName);
       if (matchingItem) {
         // Use yarnCode as shade number if available
         shadeName = matchingItem.shadeCode || shadeCode || '';
-        
+
         // Try to extract yarn colour from yarnName (format: count/size-colour-type/sub-type)
         // Yarn name format is typically: "40s-Red-Cotton/Combed" or similar
         if (matchingItem.yarnCode) {
           // yarnCode might contain shade information
           shadeName = matchingItem.yarnCode;
         }
-        
+
         // Extract colour from yarnName if it follows the pattern
         if (yarnName.includes('-')) {
           const parts = yarnName.split('-');
@@ -1097,7 +1098,7 @@ const ProcessOrderPage = () => {
         }
       }
     }
-    
+
     // If yarnName contains colour info, try to extract it
     if (!yarnColour && yarnName) {
       const parts = yarnName.split('-');
@@ -1105,10 +1106,10 @@ const ProcessOrderPage = () => {
         yarnColour = parts[1] || '';
       }
     }
-    
+
     // Use shadeCode as shade number (shade number = shade code)
     const shadeNumber = shadeCode || '-';
-    
+
     return {
       yarnName: yarnName || '-',
       shadeCode: shadeNumber,
@@ -1124,23 +1125,25 @@ const ProcessOrderPage = () => {
       return;
     }
 
+    setIsPrinting(true);
     try {
       // Check script status first
       if (!isQZLoaded()) {
         toast.error('QZ Tray script not loaded. Please wait a moment and try again.');
+        setIsPrinting(false);
         return;
       }
 
       // Check connection status - same method as HTML test file
-      const isActive = typeof window !== 'undefined' && 
-                      typeof window.qz !== 'undefined' &&
-                      window.qz.websocket &&
-                      window.qz.websocket.isActive() === true;
-      
+      const isActive = typeof window !== 'undefined' &&
+        typeof window.qz !== 'undefined' &&
+        window.qz.websocket &&
+        window.qz.websocket.isActive() === true;
+
       if (!isActive) {
         // Connect to QZ Tray
         toast.loading('Connecting to QZ Tray...');
-        
+
         // Add timeout for connection
         const connectionPromise = connectQZ();
         const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
@@ -1153,16 +1156,16 @@ const ProcessOrderPage = () => {
         });
 
         const connection = await Promise.race([connectionPromise, timeoutPromise]);
-        
+
         if (!connection.isConnected) {
           toast.dismiss();
           const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
-          
+
           // Enhanced error handling for certificate issues
           if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
             toast.error(
               `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
-              { 
+              {
                 duration: 10000,
                 style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
               }
@@ -1170,7 +1173,7 @@ const ProcessOrderPage = () => {
           } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
             toast.error(
               `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
-              { 
+              {
                 duration: 8000,
                 style: { maxWidth: '500px', whiteSpace: 'pre-line' }
               }
@@ -1179,6 +1182,7 @@ const ProcessOrderPage = () => {
             toast.error(errorMessage, { duration: 6000 });
           }
           console.error('QZ Tray connection error:', errorMessage);
+          setIsPrinting(false);
           return;
         }
       }
@@ -1186,16 +1190,17 @@ const ProcessOrderPage = () => {
       // Get default printer
       toast.loading('Detecting printer...');
       const defaultPrinter = await getDefaultPrinter();
-      
+
       if (!defaultPrinter) {
         toast.dismiss();
         toast.error(
           'No printer found\n\nPlease set a default printer in your system settings:\n• Windows: Settings → Printers & scanners\n• macOS: System Preferences → Printers & Scanners\n• Linux: System Settings → Printers',
-          { 
+          {
             duration: 6000,
             style: { maxWidth: '400px', whiteSpace: 'pre-line' }
           }
         );
+        setIsPrinting(false);
         return;
       }
 
@@ -1216,9 +1221,9 @@ const ProcessOrderPage = () => {
 
       // Print all barcodes
       toast.loading(`Printing ${barcodesToPrint.length} barcode(s) to ${defaultPrinter.name}...`);
+
       const result = await printMultipleBarcodes(barcodesToPrint, {
         printerName: defaultPrinter.name,
-        delayBetweenPrints: 500,
       });
 
       toast.dismiss();
@@ -1240,12 +1245,12 @@ const ProcessOrderPage = () => {
     } catch (error) {
       toast.dismiss();
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred while printing';
-      
+
       // Check if it's a certificate/connection error
       if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('WebSocket')) {
         toast.error(
           `Print Failed: Connection Issue\n\n${errorMessage}\n\n💡 Try:\n1. Ensure QZ Tray is running\n2. Use HTTPS URL (not HTTP)\n3. Accept certificate when prompted\n4. Use browser print as fallback`,
-          { 
+          {
             duration: 8000,
             style: { maxWidth: '500px', whiteSpace: 'pre-line' }
           }
@@ -1254,6 +1259,8 @@ const ProcessOrderPage = () => {
         toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
       }
       console.error('Print error:', error);
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -1263,7 +1270,7 @@ const ProcessOrderPage = () => {
       toast.error('No boxes available to print');
       return;
     }
-    
+
     // Create a print-friendly HTML with all box barcodes grouped by lot
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -1281,9 +1288,9 @@ const ProcessOrderPage = () => {
           </h3>
           <div class="barcode-container">
             ${lotBoxes.map((box) => {
-              const barcodeSVG = generateBarcodeSVG(box.barcode);
-              const details = getBoxPrintDetails(box);
-              return `
+        const barcodeSVG = generateBarcodeSVG(box.barcode);
+        const details = getBoxPrintDetails(box);
+        return `
                 <div class="barcode-item">
                   <div class="box-header-info">
                     <div class="barcode-label">Box ID</div>
@@ -1323,7 +1330,7 @@ const ProcessOrderPage = () => {
                   </div>
                 </div>
               `;
-            }).join('')}
+      }).join('')}
           </div>
         </div>
       `;
@@ -1337,9 +1344,9 @@ const ProcessOrderPage = () => {
         </h3>
         <div class="barcode-container">
           ${boxesByLot.unassigned.map((box) => {
-            const barcodeSVG = generateBarcodeSVG(box.barcode);
-            const details = getBoxPrintDetails(box);
-            return `
+      const barcodeSVG = generateBarcodeSVG(box.barcode);
+      const details = getBoxPrintDetails(box);
+      return `
               <div class="barcode-item">
                 <div class="box-header-info">
                   <div class="barcode-label">Box ID</div>
@@ -1375,7 +1382,7 @@ const ProcessOrderPage = () => {
                 </div>
               </div>
             `;
-          }).join('')}
+    }).join('')}
         </div>
       </div>
     ` : '';
@@ -1523,7 +1530,7 @@ const ProcessOrderPage = () => {
 
     printWindow.document.write(barcodeHTML);
     printWindow.document.close();
-    
+
     setTimeout(() => {
       printWindow.print();
       toast.success(`${boxes.length} box barcode(s) printed successfully (grouped by lot)`);
@@ -1586,7 +1593,7 @@ const ProcessOrderPage = () => {
       <QZTrayUntrustedWarning />
       <QZTrayRequestBlocked />
       <Seo title={`Process Order - ${order.orderNumber}`} />
-      
+
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px]">
           {/* Header Section */}
@@ -1616,22 +1623,27 @@ const ProcessOrderPage = () => {
                 <button
                   type="button"
                   onClick={handlePrintAllBarcodes}
-                  disabled={!qzStatus.connected || !qzStatus.printer}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-[11px] font-bold rounded transition-colors shadow-sm ${
-                    qzStatus.connected && qzStatus.printer
-                      ? 'bg-purple-600 hover:bg-purple-700'
-                      : 'bg-gray-400 cursor-not-allowed'
-                  }`}
+                  disabled={!qzStatus.connected || !qzStatus.printer || isPrinting}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-[11px] font-bold rounded transition-colors shadow-sm ${qzStatus.connected && qzStatus.printer && !isPrinting
+                    ? 'bg-purple-600 hover:bg-purple-700'
+                    : 'bg-gray-400 cursor-not-allowed'
+                    }`}
                   title={
-                    !qzStatus.connected
-                      ? 'QZ Tray not connected'
-                      : !qzStatus.printer
-                      ? 'No printer detected'
-                      : 'Print all box barcodes'
+                    isPrinting
+                      ? 'Printing in progress...'
+                      : !qzStatus.connected
+                        ? 'QZ Tray not connected'
+                        : !qzStatus.printer
+                          ? 'No printer detected'
+                          : 'Print all box barcodes'
                   }
                 >
-                  <i className="ri-printer-line text-xs"></i>
-                  Print All Barcodes
+                  {isPrinting ? (
+                    <i className="ri-loader-4-line animate-spin text-xs"></i>
+                  ) : (
+                    <i className="ri-printer-line text-xs"></i>
+                  )}
+                  {isPrinting ? 'Printing Barcodes...' : 'Print All Barcodes'}
                 </button>
               )}
             </div>
@@ -1736,11 +1748,11 @@ const ProcessOrderPage = () => {
               return bId === activeBoxId;
             });
             if (!activeBox) return null;
-            
+
             const activeBoxData = boxData[activeBoxId] || {};
             const hasWeight = activeBoxData.boxWeight && parseFloat(activeBoxData.boxWeight) > 0;
             const hasCones = activeBoxData.numberOfCones && parseFloat(activeBoxData.numberOfCones) > 0;
-            
+
             // Show indicator only when weight hasn't been entered yet
             if (!hasWeight) {
               return (
@@ -1789,158 +1801,158 @@ const ProcessOrderPage = () => {
               {boxesByLot.sortedLots.map((lotNumber) => {
                 const lotBoxes = boxesByLot.grouped[lotNumber];
                 const handlePrintLotBarcodes = async () => {
-                    if (!order || lotBoxes.length === 0) {
-                      toast.error('No boxes available to print');
+                  if (!order || lotBoxes.length === 0) {
+                    toast.error('No boxes available to print');
+                    return;
+                  }
+
+                  try {
+                    // Check script status first
+                    if (!isQZLoaded()) {
+                      toast.error('QZ Tray script not loaded. Please wait a moment and try again.');
                       return;
                     }
 
-                    try {
-                      // Check script status first
-                      if (!isQZLoaded()) {
-                        toast.error('QZ Tray script not loaded. Please wait a moment and try again.');
-                        return;
-                      }
+                    // Check connection status - same method as HTML test file
+                    const isActive = typeof window !== 'undefined' &&
+                      typeof window.qz !== 'undefined' &&
+                      window.qz.websocket &&
+                      window.qz.websocket.isActive() === true;
 
-                      // Check connection status - same method as HTML test file
-                      const isActive = typeof window !== 'undefined' && 
-                                      typeof window.qz !== 'undefined' &&
-                                      window.qz.websocket &&
-                                      window.qz.websocket.isActive() === true;
-                      
-                      if (!isActive) {
-                        // Connect to QZ Tray
-                        toast.loading('Connecting to QZ Tray...');
-                        
-                        // Add timeout for connection
-                        const connectionPromise = connectQZ();
-                        const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
-                          setTimeout(() => {
-                            resolve({
-                              isConnected: false,
-                              error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
-                            });
-                          }, 10000); // 10 second timeout
-                        });
+                    if (!isActive) {
+                      // Connect to QZ Tray
+                      toast.loading('Connecting to QZ Tray...');
 
-                        const connection = await Promise.race([connectionPromise, timeoutPromise]);
-                        
-                        if (!connection.isConnected) {
-                          toast.dismiss();
-                          const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
-                          
-                          // Enhanced error handling for certificate issues
-                          if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
-                            toast.error(
-                              `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
-                              { 
-                                duration: 10000,
-                                style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
-                              }
-                            );
-                          } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
-                            toast.error(
-                              `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
-                              { 
-                                duration: 8000,
-                                style: { maxWidth: '500px', whiteSpace: 'pre-line' }
-                              }
-                            );
-                          } else {
-                            toast.error(errorMessage, { duration: 6000 });
-                          }
-                          console.error('QZ Tray connection error:', errorMessage);
-                          return;
-                        }
-                      }
+                      // Add timeout for connection
+                      const connectionPromise = connectQZ();
+                      const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
+                        setTimeout(() => {
+                          resolve({
+                            isConnected: false,
+                            error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
+                          });
+                        }, 10000); // 10 second timeout
+                      });
 
-                      // Get default printer
-                      toast.loading('Detecting printer...');
-                      const defaultPrinter = await getDefaultPrinter();
-                      
-                      if (!defaultPrinter) {
+                      const connection = await Promise.race([connectionPromise, timeoutPromise]);
+
+                      if (!connection.isConnected) {
                         toast.dismiss();
-                        toast.error(
-                          'No printer found\n\nPlease set a default printer in your system settings:\n• Windows: Settings → Printers & scanners\n• macOS: System Preferences → Printers & Scanners\n• Linux: System Settings → Printers',
-                          { 
-                            duration: 6000,
-                            style: { maxWidth: '400px', whiteSpace: 'pre-line' }
-                          }
-                        );
+                        const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
+
+                        // Enhanced error handling for certificate issues
+                        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
+                          toast.error(
+                            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
+                            {
+                              duration: 10000,
+                              style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
+                            }
+                          );
+                        } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
+                          toast.error(
+                            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
+                            {
+                              duration: 8000,
+                              style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+                            }
+                          );
+                        } else {
+                          toast.error(errorMessage, { duration: 6000 });
+                        }
+                        console.error('QZ Tray connection error:', errorMessage);
                         return;
                       }
-
-                      // Prepare barcodes for printing
-                      const barcodesToPrint = lotBoxes.map((box) => {
-                        const details = getBoxPrintDetails(box);
-                        return {
-                          barcodeValue: box.barcode,
-                          boxId: box.boxId,
-                          supplier: order.supplier || '',
-                          yarnName: details.yarnName,
-                          shadeCode: details.shadeCode,
-                          yarnColour: details.yarnColour,
-                          shadeName: details.shadeName,
-                          lotNumber: lotNumber,
-                        };
-                      });
-
-                      // Print all barcodes for this lot
-                      toast.loading(`Printing ${barcodesToPrint.length} barcode(s) for ${lotNumber} to ${defaultPrinter.name}...`);
-                      const result = await printMultipleBarcodes(barcodesToPrint, {
-                        printerName: defaultPrinter.name,
-                        delayBetweenPrints: 500,
-                      });
-
-                      toast.dismiss();
-
-                      if (result.success) {
-                        toast.success(`${result.printed} box barcode(s) printed for ${lotNumber}`, { duration: 3000 });
-                      } else {
-                        if (result.printed > 0) {
-                          toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
-                          toast.error(`Failed to print ${result.errors.length} barcode(s): ${result.errors[0] || 'Unknown error'}`, { duration: 5000 });
-                        } else {
-                          const errorMsg = result.errors.length > 0 ? result.errors[0] : 'Unknown error occurred';
-                          toast.error(`Failed to print barcodes: ${errorMsg}`, { duration: 5000 });
-                        }
-                        if (result.errors.length > 0) {
-                          console.error('Print errors:', result.errors);
-                        }
-                      }
-                    } catch (error) {
-                      toast.dismiss();
-                      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred while printing';
-                      
-                      // Check if it's a certificate/connection error
-                      if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('WebSocket')) {
-                        toast.error(
-                          `Print Failed: Connection Issue\n\n${errorMessage}\n\n💡 Try:\n1. Ensure QZ Tray is running\n2. Use HTTPS URL (not HTTP)\n3. Accept certificate when prompted\n4. Use browser print as fallback`,
-                          { 
-                            duration: 8000,
-                            style: { maxWidth: '500px', whiteSpace: 'pre-line' }
-                          }
-                        );
-                      } else {
-                        toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
-                      }
-                      console.error('Print error:', error);
                     }
-                  };
 
-                  // Legacy browser print function (kept as fallback)
-                  const handlePrintLotBarcodesBrowser = () => {
-                    if (!order || lotBoxes.length === 0) {
-                      toast.error('No boxes available to print');
-                      return;
-                    }
-                    
-                    const printWindow = window.open('', '_blank');
-                    if (!printWindow) {
-                      toast.error('Please allow popups to print barcodes');
+                    // Get default printer
+                    toast.loading('Detecting printer...');
+                    const defaultPrinter = await getDefaultPrinter();
+
+                    if (!defaultPrinter) {
+                      toast.dismiss();
+                      toast.error(
+                        'No printer found\n\nPlease set a default printer in your system settings:\n• Windows: Settings → Printers & scanners\n• macOS: System Preferences → Printers & Scanners\n• Linux: System Settings → Printers',
+                        {
+                          duration: 6000,
+                          style: { maxWidth: '400px', whiteSpace: 'pre-line' }
+                        }
+                      );
                       return;
                     }
 
-                    const barcodeHTML = `
+                    // Prepare barcodes for printing
+                    const barcodesToPrint = lotBoxes.map((box) => {
+                      const details = getBoxPrintDetails(box);
+                      return {
+                        barcodeValue: box.barcode,
+                        boxId: box.boxId,
+                        supplier: order.supplier || '',
+                        yarnName: details.yarnName,
+                        shadeCode: details.shadeCode,
+                        yarnColour: details.yarnColour,
+                        shadeName: details.shadeName,
+                        lotNumber: lotNumber,
+                      };
+                    });
+
+                    // Print all barcodes for this lot
+                    toast.loading(`Printing ${barcodesToPrint.length} barcode(s) for ${lotNumber} to ${defaultPrinter.name}...`);
+                    const result = await printMultipleBarcodes(barcodesToPrint, {
+                      printerName: defaultPrinter.name,
+                      delayBetweenPrints: 500,
+                    });
+
+                    toast.dismiss();
+
+                    if (result.success) {
+                      toast.success(`${result.printed} box barcode(s) printed for ${lotNumber}`, { duration: 3000 });
+                    } else {
+                      if (result.printed > 0) {
+                        toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
+                        toast.error(`Failed to print ${result.errors.length} barcode(s): ${result.errors[0] || 'Unknown error'}`, { duration: 5000 });
+                      } else {
+                        const errorMsg = result.errors.length > 0 ? result.errors[0] : 'Unknown error occurred';
+                        toast.error(`Failed to print barcodes: ${errorMsg}`, { duration: 5000 });
+                      }
+                      if (result.errors.length > 0) {
+                        console.error('Print errors:', result.errors);
+                      }
+                    }
+                  } catch (error) {
+                    toast.dismiss();
+                    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred while printing';
+
+                    // Check if it's a certificate/connection error
+                    if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('WebSocket')) {
+                      toast.error(
+                        `Print Failed: Connection Issue\n\n${errorMessage}\n\n💡 Try:\n1. Ensure QZ Tray is running\n2. Use HTTPS URL (not HTTP)\n3. Accept certificate when prompted\n4. Use browser print as fallback`,
+                        {
+                          duration: 8000,
+                          style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+                        }
+                      );
+                    } else {
+                      toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
+                    }
+                    console.error('Print error:', error);
+                  }
+                };
+
+                // Legacy browser print function (kept as fallback)
+                const handlePrintLotBarcodesBrowser = () => {
+                  if (!order || lotBoxes.length === 0) {
+                    toast.error('No boxes available to print');
+                    return;
+                  }
+
+                  const printWindow = window.open('', '_blank');
+                  if (!printWindow) {
+                    toast.error('Please allow popups to print barcodes');
+                    return;
+                  }
+
+                  const barcodeHTML = `
                       <!DOCTYPE html>
                       <html>
                         <head>
@@ -2071,9 +2083,9 @@ const ProcessOrderPage = () => {
                           </div>
                           <div class="barcode-container">
                             ${lotBoxes.map((box) => {
-                              const barcodeSVG = generateBarcodeSVG(box.barcode);
-                              const details = getBoxPrintDetails(box);
-                              return `
+                    const barcodeSVG = generateBarcodeSVG(box.barcode);
+                    const details = getBoxPrintDetails(box);
+                    return `
                                 <div class="barcode-item">
                                   <div class="box-header-info">
                                     <div class="barcode-label">Box ID</div>
@@ -2113,30 +2125,30 @@ const ProcessOrderPage = () => {
                                   </div>
                                 </div>
                               `;
-                            }).join('')}
+                  }).join('')}
                           </div>
                         </body>
                       </html>
                     `;
 
-                    printWindow.document.write(barcodeHTML);
-                    printWindow.document.close();
-                    
-                    setTimeout(() => {
-                      printWindow.print();
-                      toast.success(`${lotBoxes.length} box barcode(s) printed for ${lotNumber}`);
-                    }, 250);
-                  };
+                  printWindow.document.write(barcodeHTML);
+                  printWindow.document.close();
 
-                  const isLotCompleted = areAllBoxesInLotCompleted(lotBoxes);
+                  setTimeout(() => {
+                    printWindow.print();
+                    toast.success(`${lotBoxes.length} box barcode(s) printed for ${lotNumber}`);
+                  }, 250);
+                };
 
-                  const lotStatus = getLotStatus(lotNumber);
-                  const lotStatusDisplay = getLotStatusDisplay(lotStatus);
+                const isLotCompleted = areAllBoxesInLotCompleted(lotBoxes);
 
-                  // Debug logging
-                  if (process.env.NODE_ENV === 'development') {
-                    console.log(`Lot ${lotNumber} status:`, lotStatus, 'from receivedLotDetails:', order?.receivedLotDetails);
-                  }
+                const lotStatus = getLotStatus(lotNumber);
+                const lotStatusDisplay = getLotStatusDisplay(lotStatus);
+
+                // Debug logging
+                if (process.env.NODE_ENV === 'development') {
+                  console.log(`Lot ${lotNumber} status:`, lotStatus, 'from receivedLotDetails:', order?.receivedLotDetails);
+                }
 
                 return (
                   <div key={lotNumber} className="border border-gray-200 rounded-lg overflow-hidden">
@@ -2146,11 +2158,10 @@ const ProcessOrderPage = () => {
                         <span>Lot Number: <span className="text-purple-600 font-bold">{lotNumber}</span></span>
                         {lotStatus && (
                           <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-full ${lotStatusDisplay.color}`}>
-                            <i className={`ri-${
-                              lotStatus === 'lot_qc_pending' || lotStatus === 'lot_pending' ? 'time-line' : 
-                              lotStatus === 'lot_accepted' ? 'check-line' : 
-                              'close-line'
-                            } text-[9px]`}></i>
+                            <i className={`ri-${lotStatus === 'lot_qc_pending' || lotStatus === 'lot_pending' ? 'time-line' :
+                              lotStatus === 'lot_accepted' ? 'check-line' :
+                                'close-line'
+                              } text-[9px]`}></i>
                             {lotStatusDisplay.text}
                           </span>
                         )}
@@ -2163,17 +2174,16 @@ const ProcessOrderPage = () => {
                           type="button"
                           onClick={handlePrintLotBarcodes}
                           disabled={!qzStatus.connected || !qzStatus.printer}
-                          className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm ${
-                            qzStatus.connected && qzStatus.printer
-                              ? 'bg-purple-600 text-white hover:bg-purple-700'
-                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                          }`}
+                          className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm ${qzStatus.connected && qzStatus.printer
+                            ? 'bg-purple-600 text-white hover:bg-purple-700'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
                           title={
                             !qzStatus.connected
                               ? 'QZ Tray not connected'
                               : !qzStatus.printer
-                              ? 'No printer detected'
-                              : `Print barcodes for ${lotNumber}`
+                                ? 'No printer detected'
+                                : `Print barcodes for ${lotNumber}`
                           }
                         >
                           <i className="ri-printer-line text-xs"></i>
@@ -2186,11 +2196,10 @@ const ProcessOrderPage = () => {
                               type="button"
                               onClick={() => handleSendLotForQC(lotNumber, lotBoxes)}
                               disabled={!isLotCompleted || isUpdatingOrderStatus}
-                              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm ${
-                                isLotCompleted && !isUpdatingOrderStatus
-                                  ? 'bg-green-600 text-white hover:bg-green-700'
-                                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              }`}
+                              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm ${isLotCompleted && !isUpdatingOrderStatus
+                                ? 'bg-green-600 text-white hover:bg-green-700'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                }`}
                               title={`Send ${lotNumber} for QC`}
                             >
                               {isUpdatingOrderStatus ? (
@@ -2209,11 +2218,10 @@ const ProcessOrderPage = () => {
                               type="button"
                               onClick={() => handleRejectLot(lotNumber, lotBoxes)}
                               disabled={!isLotCompleted || isUpdatingOrderStatus}
-                              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm ${
-                                isLotCompleted && !isUpdatingOrderStatus
-                                  ? 'bg-red-600 text-white hover:bg-red-700'
-                                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              }`}
+                              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm ${isLotCompleted && !isUpdatingOrderStatus
+                                ? 'bg-red-600 text-white hover:bg-red-700'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                }`}
                               title={`Reject ${lotNumber}`}
                             >
                               {isUpdatingOrderStatus ? (
@@ -2247,289 +2255,14 @@ const ProcessOrderPage = () => {
                           </tr>
                         </thead>
                         <tbody>
-                            {lotBoxes.map((box) => {
-                        const boxId = box._id || box.id || box.boxId;
-                        const isActive = activeBoxId === boxId;
-                        // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
-                        const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
-                          ? box.yarnName 
-                          : '';
-                        
-                        const data = boxData[boxId] || {
-                          yarnName: defaultYarnName,
-                          shadeCode: box.shadeCode || '',
-                          lotNumber: box.lotNumber || '',
-                          boxWeight: box.boxWeight?.toString() || '',
-                          numberOfCones: box.numberOfCones?.toString() || ''
-                        };
-                        const isUpdating = updatingBoxId === boxId;
-
-                  return (
-                    <tr 
-                      key={boxId}
-                      className={`hover:bg-gray-50/50 transition-colors group ${
-                        isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
-                      }`}
-                    >
-                      <td className="px-1.5 py-2 border border-gray-200">
-                        <button
-                          onClick={() => setSelectedBoxForDetails(box)}
-                          className="text-[12px] font-bold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
-                          title="Click to view full details"
-                        >
-                          {truncateId(box.boxId)}
-                        </button>
-                      </td>
-                      <td className="px-1.5 py-2 border border-gray-200">
-                        <button
-                          onClick={() => setSelectedBoxForDetails(box)}
-                          className="text-[12px] text-gray-900 font-mono text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
-                          title="Click to view full details"
-                        >
-                          {truncateId(box.barcode)}
-                        </button>
-                      </td>
-                      <td className="px-1.5 py-2 border border-gray-200">
-                        {isActive && hasMultipleYarnNames() ? (
-                          <select
-                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                            value={data.yarnName}
-                            onChange={(e) => handleYarnNameChange(boxId, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
-                                if (nextInput) {
-                                  (nextInput as HTMLInputElement).focus();
-                                }
-                              }
-                            }}
-                          >
-                            <option value="">Select Yarn Name</option>
-                            {getUniqueYarnNames().map((yarnName) => (
-                              <option key={yarnName} value={yarnName}>
-                                {yarnName}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span className="text-[12px] text-gray-900">{data.yarnName || '-'}</span>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 border border-gray-200">
-                        <span className="text-[12px] text-gray-900">{data.shadeCode || '-'}</span>
-                      </td>
-                      <td className="px-1.5 py-2 border border-gray-200">
-                        <span className="text-[12px] text-gray-900">{data.lotNumber || '-'}</span>
-                      </td>
-                      <td className="px-1.5 py-2 border border-gray-200">
-                        {isActive ? (
-                          <input
-                            type="text"
-                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                            data-box-weight={boxId}
-                            value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
-                              ? rawInputValues[`box-${boxId}-boxWeight`] 
-                              : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              const sanitizedValue = validateNumericInput(value, true);
-                              const key = `box-${boxId}-boxWeight`;
-                              
-                              setRawInputValues(prev => ({
-                                ...prev,
-                                [key]: sanitizedValue
-                              }));
-                              
-                              setBoxData(prev => ({
-                                ...prev,
-                                [boxId]: { ...prev[boxId], boxWeight: sanitizedValue }
-                              }));
-                            }}
-                            onBlur={(e) => {
-                              const value = e.target.value;
-                              const key = `box-${boxId}-boxWeight`;
-                              const numValue = parseFloat(value);
-                              
-                              setRawInputValues(prev => {
-                                const newValues = { ...prev };
-                                delete newValues[key];
-                                return newValues;
-                              });
-                              
-                              if (value === '' || isNaN(numValue) || numValue <= 0) {
-                                setBoxData(prev => ({
-                                  ...prev,
-                                  [boxId]: { ...prev[boxId], boxWeight: '' }
-                                }));
-                              } else {
-                                setBoxData(prev => ({
-                                  ...prev,
-                                  [boxId]: { ...prev[boxId], boxWeight: value }
-                                }));
-                                
-                                // Auto-focus cones input when valid weight is entered
-                                setTimeout(() => {
-                                  const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
-                                  if (coneInput) {
-                                    coneInput.focus();
-                                    coneInput.select();
-                                  }
-                                }, 100);
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                setTimeout(() => {
-                                  const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
-                                  if (coneInput) {
-                                    coneInput.focus();
-                                    coneInput.select();
-                                  }
-                                }, 50);
-                              }
-                            }}
-                            placeholder="0.00"
-                          />
-                        ) : (
-                          <span className="text-[12px] text-gray-900">{data.boxWeight || '-'}</span>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 border border-gray-200">
-                        {isActive ? (
-                          <input
-                            type="text"
-                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                            data-box-cones={boxId}
-                            value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
-                              ? rawInputValues[`box-${boxId}-numberOfCones`] 
-                              : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              const sanitizedValue = validateNumericInput(value, true);
-                              const key = `box-${boxId}-numberOfCones`;
-                              
-                              setRawInputValues(prev => ({
-                                ...prev,
-                                [key]: sanitizedValue
-                              }));
-                              
-                              setBoxData(prev => ({
-                                ...prev,
-                                [boxId]: { ...prev[boxId], numberOfCones: sanitizedValue }
-                              }));
-                            }}
-                            onBlur={(e) => {
-                              const value = e.target.value;
-                              const key = `box-${boxId}-numberOfCones`;
-                              const numValue = parseFloat(value);
-                              
-                              setRawInputValues(prev => {
-                                const newValues = { ...prev };
-                                delete newValues[key];
-                                return newValues;
-                              });
-                              
-                              if (value === '' || isNaN(numValue) || numValue <= 0) {
-                                setBoxData(prev => ({
-                                  ...prev,
-                                  [boxId]: { ...prev[boxId], numberOfCones: '' }
-                                }));
-                              } else {
-                                setBoxData(prev => ({
-                                  ...prev,
-                                  [boxId]: { ...prev[boxId], numberOfCones: value }
-                                }));
-                              }
-                            }}
-                            onKeyDown={async (e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                await handleUpdateBox(box);
-                                
-                                // Reset state and focus back to barcode input
-                                setActiveBoxId(null);
-                                setBarcodeScanValue('');
-                                
-                                // Focus back to barcode input after update
-                                setTimeout(() => {
-                                  if (barcodeInputRef.current) {
-                                    barcodeInputRef.current.focus();
-                                  }
-                                }, 150);
-                              }
-                            }}
-                            placeholder="0"
-                          />
-                        ) : (
-                          <span className="text-[12px] text-gray-900">{data.numberOfCones || '-'}</span>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 border border-gray-200">
-                        {isUpdating ? (
-                          <div className="flex items-center gap-1.5">
-                            <i className="ri-loader-4-line animate-spin text-purple-600 text-xs"></i>
-                            <span className="text-[10px] text-gray-500">Updating...</span>
-                          </div>
-                        ) : isActive ? (
-                          <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-800">
-                            Active
-                          </span>
-                        ) : data.yarnName && data.lotNumber && data.boxWeight && data.numberOfCones ? (
-                          <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-green-100 text-green-800">
-                            Completed
-                          </span>
-                        ) : (
-                          <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-gray-100 text-gray-800">
-                            Pending
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
-      })}
-
-              {/* Unassigned boxes section */}
-              {boxesByLot.unassigned.length > 0 && (
-                <div className="border border-yellow-200 rounded-lg overflow-hidden bg-yellow-50/30">
-                  <div className="bg-yellow-100 px-3 py-2 border-b border-yellow-200">
-                    <h4 className="text-xs font-bold text-gray-900 flex items-center gap-2">
-                      <i className="ri-error-warning-line text-yellow-600 text-xs"></i>
-                      Unassigned Boxes
-                      <span className="text-[10px] font-normal text-gray-600 ml-2">
-                        ({boxesByLot.unassigned.length} {boxesByLot.unassigned.length === 1 ? 'box' : 'boxes'} - Please assign lot numbers)
-                      </span>
-                    </h4>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse border border-gray-200">
-                      <thead>
-                        <tr className="bg-gray-50/30">
-                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
-                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
-                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
-                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
-                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
-                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
-                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">No. of Cones</th>
-                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                          {boxesByLot.unassigned.map((box) => {
+                          {lotBoxes.map((box) => {
                             const boxId = box._id || box.id || box.boxId;
                             const isActive = activeBoxId === boxId;
-                            const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-') 
-                              ? box.yarnName 
+                            // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
+                            const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-')
+                              ? box.yarnName
                               : '';
-                            
+
                             const data = boxData[boxId] || {
                               yarnName: defaultYarnName,
                               shadeCode: box.shadeCode || '',
@@ -2540,11 +2273,10 @@ const ProcessOrderPage = () => {
                             const isUpdating = updatingBoxId === boxId;
 
                             return (
-                              <tr 
+                              <tr
                                 key={boxId}
-                                className={`hover:bg-gray-50/50 transition-colors group ${
-                                  isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
-                                }`}
+                                className={`hover:bg-gray-50/50 transition-colors group ${isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
+                                  }`}
                               >
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   <button
@@ -2595,7 +2327,7 @@ const ProcessOrderPage = () => {
                                   <span className="text-[12px] text-gray-900">{data.shadeCode || '-'}</span>
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
-                                  <span className="text-[12px] text-yellow-600 font-medium">{data.lotNumber || 'Not assigned'}</span>
+                                  <span className="text-[12px] text-gray-900">{data.lotNumber || '-'}</span>
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   {isActive ? (
@@ -2603,19 +2335,19 @@ const ProcessOrderPage = () => {
                                       type="text"
                                       className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                                       data-box-weight={boxId}
-                                      value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined 
-                                        ? rawInputValues[`box-${boxId}-boxWeight`] 
+                                      value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined
+                                        ? rawInputValues[`box-${boxId}-boxWeight`]
                                         : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
                                       onChange={(e) => {
                                         const value = e.target.value;
                                         const sanitizedValue = validateNumericInput(value, true);
                                         const key = `box-${boxId}-boxWeight`;
-                                        
+
                                         setRawInputValues(prev => ({
                                           ...prev,
                                           [key]: sanitizedValue
                                         }));
-                                        
+
                                         setBoxData(prev => ({
                                           ...prev,
                                           [boxId]: { ...prev[boxId], boxWeight: sanitizedValue }
@@ -2625,13 +2357,13 @@ const ProcessOrderPage = () => {
                                         const value = e.target.value;
                                         const key = `box-${boxId}-boxWeight`;
                                         const numValue = parseFloat(value);
-                                        
+
                                         setRawInputValues(prev => {
                                           const newValues = { ...prev };
                                           delete newValues[key];
                                           return newValues;
                                         });
-                                        
+
                                         if (value === '' || isNaN(numValue) || numValue <= 0) {
                                           setBoxData(prev => ({
                                             ...prev,
@@ -2642,7 +2374,7 @@ const ProcessOrderPage = () => {
                                             ...prev,
                                             [boxId]: { ...prev[boxId], boxWeight: value }
                                           }));
-                                          
+
                                           // Auto-focus cones input when valid weight is entered
                                           setTimeout(() => {
                                             const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
@@ -2677,19 +2409,19 @@ const ProcessOrderPage = () => {
                                       type="text"
                                       className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                                       data-box-cones={boxId}
-                                      value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined 
-                                        ? rawInputValues[`box-${boxId}-numberOfCones`] 
+                                      value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined
+                                        ? rawInputValues[`box-${boxId}-numberOfCones`]
                                         : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
                                       onChange={(e) => {
                                         const value = e.target.value;
                                         const sanitizedValue = validateNumericInput(value, true);
                                         const key = `box-${boxId}-numberOfCones`;
-                                        
+
                                         setRawInputValues(prev => ({
                                           ...prev,
                                           [key]: sanitizedValue
                                         }));
-                                        
+
                                         setBoxData(prev => ({
                                           ...prev,
                                           [boxId]: { ...prev[boxId], numberOfCones: sanitizedValue }
@@ -2699,13 +2431,13 @@ const ProcessOrderPage = () => {
                                         const value = e.target.value;
                                         const key = `box-${boxId}-numberOfCones`;
                                         const numValue = parseFloat(value);
-                                        
+
                                         setRawInputValues(prev => {
                                           const newValues = { ...prev };
                                           delete newValues[key];
                                           return newValues;
                                         });
-                                        
+
                                         if (value === '' || isNaN(numValue) || numValue <= 0) {
                                           setBoxData(prev => ({
                                             ...prev,
@@ -2722,11 +2454,11 @@ const ProcessOrderPage = () => {
                                         if (e.key === 'Enter') {
                                           e.preventDefault();
                                           await handleUpdateBox(box);
-                                          
+
                                           // Reset state and focus back to barcode input
                                           setActiveBoxId(null);
                                           setBarcodeScanValue('');
-                                          
+
                                           // Focus back to barcode input after update
                                           setTimeout(() => {
                                             if (barcodeInputRef.current) {
@@ -2756,7 +2488,7 @@ const ProcessOrderPage = () => {
                                       Completed
                                     </span>
                                   ) : (
-                                    <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-yellow-100 text-yellow-800">
+                                    <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-gray-100 text-gray-800">
                                       Pending
                                     </span>
                                   )}
@@ -2768,8 +2500,282 @@ const ProcessOrderPage = () => {
                       </table>
                     </div>
                   </div>
-                )}
-              </div>
+                );
+              })}
+
+              {/* Unassigned boxes section */}
+              {boxesByLot.unassigned.length > 0 && (
+                <div className="border border-yellow-200 rounded-lg overflow-hidden bg-yellow-50/30">
+                  <div className="bg-yellow-100 px-3 py-2 border-b border-yellow-200">
+                    <h4 className="text-xs font-bold text-gray-900 flex items-center gap-2">
+                      <i className="ri-error-warning-line text-yellow-600 text-xs"></i>
+                      Unassigned Boxes
+                      <span className="text-[10px] font-normal text-gray-600 ml-2">
+                        ({boxesByLot.unassigned.length} {boxesByLot.unassigned.length === 1 ? 'box' : 'boxes'} - Please assign lot numbers)
+                      </span>
+                    </h4>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-200">
+                      <thead>
+                        <tr className="bg-gray-50/30">
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">No. of Cones</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {boxesByLot.unassigned.map((box) => {
+                          const boxId = box._id || box.id || box.boxId;
+                          const isActive = activeBoxId === boxId;
+                          const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-')
+                            ? box.yarnName
+                            : '';
+
+                          const data = boxData[boxId] || {
+                            yarnName: defaultYarnName,
+                            shadeCode: box.shadeCode || '',
+                            lotNumber: box.lotNumber || '',
+                            boxWeight: box.boxWeight?.toString() || '',
+                            numberOfCones: box.numberOfCones?.toString() || ''
+                          };
+                          const isUpdating = updatingBoxId === boxId;
+
+                          return (
+                            <tr
+                              key={boxId}
+                              className={`hover:bg-gray-50/50 transition-colors group ${isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
+                                }`}
+                            >
+                              <td className="px-1.5 py-2 border border-gray-200">
+                                <button
+                                  onClick={() => setSelectedBoxForDetails(box)}
+                                  className="text-[12px] font-bold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
+                                  title="Click to view full details"
+                                >
+                                  {truncateId(box.boxId)}
+                                </button>
+                              </td>
+                              <td className="px-1.5 py-2 border border-gray-200">
+                                <button
+                                  onClick={() => setSelectedBoxForDetails(box)}
+                                  className="text-[12px] text-gray-900 font-mono text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
+                                  title="Click to view full details"
+                                >
+                                  {truncateId(box.barcode)}
+                                </button>
+                              </td>
+                              <td className="px-1.5 py-2 border border-gray-200">
+                                {isActive && hasMultipleYarnNames() ? (
+                                  <select
+                                    className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                                    value={data.yarnName}
+                                    onChange={(e) => handleYarnNameChange(boxId, e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
+                                        if (nextInput) {
+                                          (nextInput as HTMLInputElement).focus();
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    <option value="">Select Yarn Name</option>
+                                    {getUniqueYarnNames().map((yarnName) => (
+                                      <option key={yarnName} value={yarnName}>
+                                        {yarnName}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className="text-[12px] text-gray-900">{data.yarnName || '-'}</span>
+                                )}
+                              </td>
+                              <td className="px-1.5 py-2 border border-gray-200">
+                                <span className="text-[12px] text-gray-900">{data.shadeCode || '-'}</span>
+                              </td>
+                              <td className="px-1.5 py-2 border border-gray-200">
+                                <span className="text-[12px] text-yellow-600 font-medium">{data.lotNumber || 'Not assigned'}</span>
+                              </td>
+                              <td className="px-1.5 py-2 border border-gray-200">
+                                {isActive ? (
+                                  <input
+                                    type="text"
+                                    className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                                    data-box-weight={boxId}
+                                    value={rawInputValues[`box-${boxId}-boxWeight`] !== undefined
+                                      ? rawInputValues[`box-${boxId}-boxWeight`]
+                                      : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      const sanitizedValue = validateNumericInput(value, true);
+                                      const key = `box-${boxId}-boxWeight`;
+
+                                      setRawInputValues(prev => ({
+                                        ...prev,
+                                        [key]: sanitizedValue
+                                      }));
+
+                                      setBoxData(prev => ({
+                                        ...prev,
+                                        [boxId]: { ...prev[boxId], boxWeight: sanitizedValue }
+                                      }));
+                                    }}
+                                    onBlur={(e) => {
+                                      const value = e.target.value;
+                                      const key = `box-${boxId}-boxWeight`;
+                                      const numValue = parseFloat(value);
+
+                                      setRawInputValues(prev => {
+                                        const newValues = { ...prev };
+                                        delete newValues[key];
+                                        return newValues;
+                                      });
+
+                                      if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                        setBoxData(prev => ({
+                                          ...prev,
+                                          [boxId]: { ...prev[boxId], boxWeight: '' }
+                                        }));
+                                      } else {
+                                        setBoxData(prev => ({
+                                          ...prev,
+                                          [boxId]: { ...prev[boxId], boxWeight: value }
+                                        }));
+
+                                        // Auto-focus cones input when valid weight is entered
+                                        setTimeout(() => {
+                                          const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
+                                          if (coneInput) {
+                                            coneInput.focus();
+                                            coneInput.select();
+                                          }
+                                        }, 100);
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        setTimeout(() => {
+                                          const coneInput = document.querySelector(`input[data-box-cones="${boxId}"]`) as HTMLInputElement;
+                                          if (coneInput) {
+                                            coneInput.focus();
+                                            coneInput.select();
+                                          }
+                                        }, 50);
+                                      }
+                                    }}
+                                    placeholder="0.00"
+                                  />
+                                ) : (
+                                  <span className="text-[12px] text-gray-900">{data.boxWeight || '-'}</span>
+                                )}
+                              </td>
+                              <td className="px-1.5 py-2 border border-gray-200">
+                                {isActive ? (
+                                  <input
+                                    type="text"
+                                    className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                                    data-box-cones={boxId}
+                                    value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined
+                                      ? rawInputValues[`box-${boxId}-numberOfCones`]
+                                      : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      const sanitizedValue = validateNumericInput(value, true);
+                                      const key = `box-${boxId}-numberOfCones`;
+
+                                      setRawInputValues(prev => ({
+                                        ...prev,
+                                        [key]: sanitizedValue
+                                      }));
+
+                                      setBoxData(prev => ({
+                                        ...prev,
+                                        [boxId]: { ...prev[boxId], numberOfCones: sanitizedValue }
+                                      }));
+                                    }}
+                                    onBlur={(e) => {
+                                      const value = e.target.value;
+                                      const key = `box-${boxId}-numberOfCones`;
+                                      const numValue = parseFloat(value);
+
+                                      setRawInputValues(prev => {
+                                        const newValues = { ...prev };
+                                        delete newValues[key];
+                                        return newValues;
+                                      });
+
+                                      if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                        setBoxData(prev => ({
+                                          ...prev,
+                                          [boxId]: { ...prev[boxId], numberOfCones: '' }
+                                        }));
+                                      } else {
+                                        setBoxData(prev => ({
+                                          ...prev,
+                                          [boxId]: { ...prev[boxId], numberOfCones: value }
+                                        }));
+                                      }
+                                    }}
+                                    onKeyDown={async (e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        await handleUpdateBox(box);
+
+                                        // Reset state and focus back to barcode input
+                                        setActiveBoxId(null);
+                                        setBarcodeScanValue('');
+
+                                        // Focus back to barcode input after update
+                                        setTimeout(() => {
+                                          if (barcodeInputRef.current) {
+                                            barcodeInputRef.current.focus();
+                                          }
+                                        }, 150);
+                                      }
+                                    }}
+                                    placeholder="0"
+                                  />
+                                ) : (
+                                  <span className="text-[12px] text-gray-900">{data.numberOfCones || '-'}</span>
+                                )}
+                              </td>
+                              <td className="px-1.5 py-2 border border-gray-200">
+                                {isUpdating ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <i className="ri-loader-4-line animate-spin text-purple-600 text-xs"></i>
+                                    <span className="text-[10px] text-gray-500">Updating...</span>
+                                  </div>
+                                ) : isActive ? (
+                                  <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-800">
+                                    Active
+                                  </span>
+                                ) : data.yarnName && data.lotNumber && data.boxWeight && data.numberOfCones ? (
+                                  <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-green-100 text-green-800">
+                                    Completed
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-yellow-100 text-yellow-800">
+                                    Pending
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -2779,17 +2785,15 @@ const ProcessOrderPage = () => {
         <div className={`fixed inset-0 z-50 overflow-hidden ${selectedBoxForDetails ? '' : 'pointer-events-none'}`}>
           {/* Backdrop */}
           <div
-            className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${
-              selectedBoxForDetails ? 'opacity-100' : 'opacity-0'
-            }`}
+            className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${selectedBoxForDetails ? 'opacity-100' : 'opacity-0'
+              }`}
             onClick={() => setSelectedBoxForDetails(null)}
           ></div>
 
           {/* Side Modal */}
           <div
-            className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
-              selectedBoxForDetails ? 'translate-x-0' : 'translate-x-full'
-            }`}
+            className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${selectedBoxForDetails ? 'translate-x-0' : 'translate-x-full'
+              }`}
           >
             {/* Header */}
             <div className="bg-primary text-white px-4 py-3 flex-shrink-0">
@@ -2894,11 +2898,10 @@ const ProcessOrderPage = () => {
                   <div>
                     <label className="text-xs font-medium text-gray-600 mb-1 block">Cones Issued</label>
                     <div className="mt-0.5">
-                      <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${
-                        selectedBoxForDetails.conesIssued 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${selectedBoxForDetails.conesIssued
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                        }`}>
                         {selectedBoxForDetails.conesIssued ? 'Yes' : 'No'}
                       </span>
                     </div>
@@ -2937,7 +2940,7 @@ const ProcessOrderPage = () => {
                   All items have been weighed and processed successfully. Please select the next status.
                 </p>
               </div>
-              
+
               <div className="space-y-4 mb-6">
                 <div>
                   <label className="form-label">
@@ -3002,7 +3005,7 @@ const ProcessOrderPage = () => {
                       window.dispatchEvent(new Event('processedOrdersUpdated'));
 
                       toast.success(`Order status updated to ${selectedStatus === 'QC pending' ? 'Send for QC' : 'Rejected'}`);
-                      
+
                       // Navigate back to main page
                       router.push('/yarn-management/purchase-management/purchase-order-received');
                     } catch (error) {

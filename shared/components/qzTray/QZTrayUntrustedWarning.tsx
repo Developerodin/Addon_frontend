@@ -121,16 +121,20 @@ export const QZTrayUntrustedWarning = ({ onDismiss }: QZTrayUntrustedWarningProp
                   </h4>
                   <ol className="list-decimal list-inside space-y-2 text-sm text-yellow-800">
                     <li>
-                      <strong>First, CHECK "Remember this decision" checkbox</strong> ✅ (CRITICAL!)
+                      <strong>1. FIRST, CHECK the "Remember this decision" box</strong> ✅
                     </li>
                     <li>
-                      <strong>Then click "Allow"</strong> button
+                      <strong>2. WAIT for the "Allow" button to become enabled.</strong>
+                      <p className="mt-1 text-xs opacity-90">
+                        If you check the box and the button turns gray (disabled), just <strong>wait 5-10 seconds</strong>.
+                        QZ Tray is processing the security certificate and it will re-enable automatically.
+                      </p>
                     </li>
                     <li>
-                      <strong className="text-blue-600">Note:</strong> After checking the checkbox, the Allow button might appear disabled briefly while QZ Tray processes the certificate. This is normal - just wait a moment and it will become enabled again.
+                      <strong>3. Click "Allow"</strong> once it turns blue again.
                     </li>
-                    <li>
-                      If the button stays disabled, uncheck and re-check "Remember this decision", then click Allow
+                    <li className="text-blue-700 font-medium">
+                      If it stays gray for more than 15 seconds, uncheck and re-check the box, then wait again.
                     </li>
                   </ol>
                 </div>

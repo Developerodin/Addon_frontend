@@ -22,7 +22,10 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
   const [isUntrusted, setIsUntrusted] = useState(false);
 
   const checkStatus = async () => {
+    if (isChecking || (window as any)._qzChecking) return;
+
     setIsChecking(true);
+    (window as any)._qzChecking = true;
     setError(null);
 
     try {
@@ -52,10 +55,10 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
       }
 
       // Check connection - same method as HTML test file
-      const isActive = typeof window !== 'undefined' && 
-                      typeof window.qz !== 'undefined' &&
-                      window.qz.websocket &&
-                      window.qz.websocket.isActive() === true;
+      const isActive = typeof window !== 'undefined' &&
+        typeof window.qz !== 'undefined' &&
+        window.qz.websocket &&
+        window.qz.websocket.isActive() === true;
       setConnected(isActive);
 
       if (!isActive) {
@@ -99,46 +102,51 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
 
   // Check status on mount and periodically
   useEffect(() => {
+    // Initial check
     checkStatus();
 
-    // Check status every 5 seconds
+    // Check status periodically (less aggressive)
     const interval = setInterval(() => {
-      checkStatus();
-    }, 5000);
+      // Logic moved inside to avoid closure capture of stale state if needed, 
+      // but 'isChecking' from the component's state is needed.
+      // However, we MUST avoid triggering this useEffect when state changes.
+      // We use a window property or just a safer check.
+      if (!(window as any)._qzChecking) {
+        checkStatus();
+      }
+    }, 20000); // 20 seconds is plenty for status updates
 
     return () => clearInterval(interval);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // EMPTY dependencies to run only once on mount
 
   // Auto-connect if script is loaded but not connected (only once on mount)
   useEffect(() => {
     if (scriptLoaded && !connected && !isChecking) {
       const autoConnect = async () => {
         try {
+          // Only attempt auto-connect once to avoid prompt loops
           const connection = await connectQZ();
           if (connection.isConnected) {
             await checkStatus();
-          } else {
-            // Don't set error on auto-connect failure - user can manually connect
-            console.log('[QZ Tray] Auto-connect failed:', connection.error);
           }
-        } catch (err: any) {
-          // Don't set error on auto-connect failure
-          console.log('[QZ Tray] Auto-connect error:', err?.message);
+        } catch (err) {
+          console.log('[QZ Tray] Auto-connect silently failed');
         }
       };
 
-      // Small delay before auto-connecting
       const timeout = setTimeout(autoConnect, 2000);
       return () => clearTimeout(timeout);
     }
-  }, [scriptLoaded]); // Only run when script loads, not on every connection change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scriptLoaded]);
 
   const handleManualConnect = async () => {
     if (isChecking) return;
-    
+
     setIsChecking(true);
     setError(null);
-    
+
     try {
       const connection = await connectQZ();
       if (connection.isConnected) {
@@ -158,9 +166,8 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
       {/* Script Status */}
       <div className="flex items-center gap-1" title={scriptLoaded ? 'Script Loaded' : 'Script Not Loaded'}>
         <div
-          className={`w-2 h-2 rounded-full ${
-            scriptLoaded ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
-          }`}
+          className={`w-2 h-2 rounded-full ${scriptLoaded ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+            }`}
         />
         <span className={`text-[10px] ${scriptLoaded ? 'text-green-700' : 'text-gray-500'}`}>
           Script
@@ -169,20 +176,18 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
 
       {/* Connection Status */}
       <div className="flex items-center gap-1" title={
-        connected 
-          ? 'Connected to QZ Tray' 
-          : isUntrusted 
-          ? 'Not Connected - Untrusted website (HTTP). Check "Remember this decision" when prompt appears.'
-          : 'Not Connected to QZ Tray'
+        connected
+          ? 'Connected to QZ Tray'
+          : isUntrusted
+            ? 'Not Connected - Untrusted website (HTTP). Check "Remember this decision" when prompt appears.'
+            : 'Not Connected to QZ Tray'
       }>
         <div
-          className={`w-2 h-2 rounded-full ${
-            connected ? 'bg-green-500 animate-pulse' : isUntrusted ? 'bg-yellow-500' : 'bg-red-500'
-          }`}
+          className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : isUntrusted ? 'bg-yellow-500' : 'bg-red-500'
+            }`}
         />
-        <span className={`text-[10px] ${
-          connected ? 'text-green-700' : isUntrusted ? 'text-yellow-600' : 'text-red-600'
-        }`}>
+        <span className={`text-[10px] ${connected ? 'text-green-700' : isUntrusted ? 'text-yellow-600' : 'text-red-600'
+          }`}>
           QZ Tray
         </span>
         {isUntrusted && !connected && (

@@ -136,48 +136,53 @@ export const loadQZScript = (): Promise<void> => {
 };
 
 /**
- * Digital certificate provided by the user
+ * Digital certificate fetched from the server
  */
-const QZ_CERTIFICATE = `-----BEGIN CERTIFICATE-----
-MIIECzCCAvOgAwIBAgIGAZvLNfeEMA0GCSqGSIb3DQEBCwUAMIGiMQswCQYDVQQG
-EwJVUzELMAkGA1UECAwCTlkxEjAQBgNVBAcMCUNhbmFzdG90YTEbMBkGA1UECgwS
-UVogSW5kdXN0cmllcywgTExDMRswGQYDVQQLDBJRWiBJbmR1c3RyaWVzLCBMTEMx
-HDAaBgkqhkiG9w0BCQEWDXN1cHBvcnRAcXouaW8xGjAYBgNVBAMMEVFaIFRyYXkg
-RGVtbyBDZXJ0MB4XDTI2MDExNjA5MDc1MFoXDTQ2MDExNjA5MDc1MFowgaIxCzAJ
-BgNVBAYTAlVTMQswCQYDVQQIDAJOWTESMBAGA1UEBwwJQ2FuYXN0b3RhMRswGQYD
-VQQKDBJRWiBJbmR1c3RyaWVzLCBMTEMxGzAZBgNVBAsMElFaIEluZHVzdHJpZXMs
-IExMQzEcMBoGCSqGSIb3DQEJARYNc3VwcG9ydEBxei5pbzEaMBgGA1UEAwwRUVog
-VHJheSBEZW1vIENlcnQwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCy
-Hq9PWKlgWckI/1+qBXc29yGQnDet70+NQYTj/FG50nnGLIK5U8seWrO0L2bisPOE
-vppAZFP1l3G2pHySQ8j0z2sqTQyhwUCwKFZU3VmyApITF39AiRXtN3QfYLFFhjQq
-rC7QIhwErGsg4iNmthaN5U2qkgLqoNJxoTE0o5v20aGIt2f9k8AbFbUWmgQU3Wzk
-qWbfxbhl0DPOfah0aOROnwB27cnzW1Zp4aOO3IyXl6CPf1LIn0ahULVbhvjyTysj
-VMzY6WD0JnOOuH7ocLZgNo63IxhD+T6N6vslhS/a2sN96B1mzu33wESIpGsryM2M
-sLsATAwKBva4beD8uBDjAgMBAAGjRTBDMBIGA1UdEwEB/wQIMAYBAf8CAQEwDgYD
-VR0PAQH/BAQDAgEGMB0GA1UdDgQWBBRyIL/rCEojxgVIw316Rs/Su8W51TANBgkq
-hkiG9w0BAQsFAAOCAQEAWgoNjLQcfPQo/CdxwgqiCT8fYYt4y5FLqBUa3ZS+alDE
-Co6TFi3KLRY9g79nGtNP1bwR8saydEvFctQd2j0kR2zwTPzQT31xqCwUyzVr8tHZ
-YN0uwRc15Mzt5aDpego2DUL72XlWJg3TAU8x1/dJxjtlTmd4Z41qptlB76MsxVWr
-SybDhwcFqZzsucStGMrtxnDmCl1eonLl2Q+qYzqBL7xGl4F+VIyPnzqfw3H3J0wz
-kTOPGUbU9POVytVT12XsizbzWPCad7nj8Q2ioPHTnL4vFp/gtj08rEygFRmu+mIc
-kJNY1UAX4y9bLlGt4fgQ+46/sbkRR8bzHIj/mb+hrg==
------END CERTIFICATE-----`;
+let cachedCertificate: string | null = null;
+
+/**
+ * Fetches the digital certificate from the server API
+ */
+const fetchCertificate = async (): Promise<string | null> => {
+  if (cachedCertificate) return cachedCertificate;
+
+  try {
+    const response = await fetch('/api/qz-tray/certificate');
+    if (!response.ok) throw new Error('Failed to fetch certificate');
+    const cert = await response.text();
+    cachedCertificate = cert;
+    return cert;
+  } catch (error) {
+    console.error('[QZ Tray] Error fetching certificate:', error);
+    return null;
+  }
+};
 
 /**
  * Configure QZ Tray security promises for digital signing
+ * MUST only be called once per session
  */
+let securityConfigured = false;
 const configureQZSecurity = () => {
-  if (!isQZLoaded()) return;
+  if (!isQZLoaded() || securityConfigured) return;
+
+  console.log('[QZ Tray] Configuring security promises (SHA1)...');
 
   // 1. Set the certificate
-  window.qz.security.setCertificatePromise((resolve: any) => {
-    resolve(QZ_CERTIFICATE);
+  window.qz.security.setCertificatePromise(async (resolve: any, reject: any) => {
+    const cert = await fetchCertificate();
+    if (cert) {
+      resolve(cert);
+    } else {
+      reject('Could not load certificate from server');
+    }
   });
 
-  // 2. Set the signature algorithm explicitly to SHA1 (common for demo certs)
+  // 2. Set the signature algorithm explicitly to SHA1 (demo cert compatibility)
   window.qz.security.setSignatureAlgorithm("SHA1");
 
   // 3. Set the signature promise (calls our Next.js API route)
+  // This must be set BEFORE connecting to allow automatic trust persistence
   window.qz.security.setSignaturePromise((toSign: string) => {
     return (resolve: any, reject: any) => {
       fetch('/api/qz-tray/sign', {
@@ -198,6 +203,8 @@ const configureQZSecurity = () => {
         });
     };
   });
+
+  securityConfigured = true;
 };
 
 /**
@@ -255,144 +262,103 @@ const showCertificateInstructions = () => {
 
 /**
  * Connect to QZ Tray with automatic certificate handling
+ * Uses a singleton promise to prevent concurrent connection attempts
  */
+let connectionPromise: Promise<QZConnection> | null = null;
 export const connectQZ = async (): Promise<QZConnection> => {
-  try {
-    if (!isQZLoaded()) {
-      await loadQZScript();
-    }
+  if (connectionPromise) {
+    return connectionPromise;
+  }
 
-    if (!window.qz) {
-      return {
-        isConnected: false,
-        error: 'QZ Tray is not installed or not running. Please install QZ Tray from https://qz.io/download/',
-      };
-    }
-
-    // Configure security promises (digital signing)
-    configureQZSecurity();
-
-    // Check if already connected
-    if (window.qz.websocket.isActive()) {
-      return { isConnected: true };
-    }
-
-    // Check site trust status (informational only, don't block)
-    const trustStatus = checkSiteTrust();
-    const isHTTP = typeof window !== 'undefined' && window.location.protocol === 'http:';
-    const isLocalhost = typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    const isUntrusted = isHTTP && !isLocalhost;
-
-    // Get URLs for warning
-    const currentUrl = typeof window !== 'undefined'
-      ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`
-      : '';
-    const httpsUrl = typeof window !== 'undefined'
-      ? `https://${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`
-      : '';
-
-    // Log informational messages (but don't block connection)
-    if (isUntrusted && typeof window !== 'undefined' && (window as any).console) {
-      console.info(`[QZ Tray] ℹ️ HTTP connection detected - certificate prompt may appear`);
-      console.info(`[QZ Tray] 💡 Tip: HTTPS allows QZ Tray to save certificate approvals automatically`);
-    } else if (typeof window !== 'undefined' && (window as any).console) {
-      console.info(`[QZ Tray] ✅ HTTPS connection - certificate will be trusted automatically`);
-    }
-
-    // Show instructions before connecting (in case prompt appears)
-    showCertificateInstructions();
-
-    // Show visual warning if HTTP (untrusted website)
-    if (isUntrusted && typeof window !== 'undefined') {
-      const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(window.location.hostname);
-
-      // Trigger custom event to show warning modal
-      window.dispatchEvent(new CustomEvent('qz-tray-untrusted-warning', {
-        detail: {
-          currentUrl,
-          httpsUrl,
-          isIP,
-          hostname: window.location.hostname
-        }
-      }));
-    }
-
-    // Connect to QZ Tray - match HTML file approach (simple connection without timeout racing)
-    // NOTE: The security prompt cannot be bypassed programmatically for security reasons
-    // User MUST manually check "Remember this decision" when prompt appears
-    // When "Remember this decision" is checked, connection may take longer as QZ Tray saves certificate
-
+  connectionPromise = (async (): Promise<QZConnection> => {
     try {
-      // Simple connection like HTML file - no timeout racing on first attempt
-      // This allows user to interact with security prompt and check "Remember this decision"
-      // The connection will wait for user interaction
-      await window.qz.websocket.connect();
+      if (!isQZLoaded()) {
+        await loadQZScript();
+      }
 
-      // Connection successful
-    } catch (connectError: any) {
-      // If connection fails, check if it's a certificate/trust issue
-      if (connectError?.message?.includes('certificate') ||
-        connectError?.message?.includes('trust') ||
-        connectError?.message?.includes('untrusted') ||
-        connectError?.message?.includes('denied')) {
+      if (!window.qz) {
+        return {
+          isConnected: false,
+          error: 'QZ Tray is not installed or not running. Please install QZ Tray from https://qz.io/download/',
+        };
+      }
+
+      // Configure security promises ONCE (digital signing)
+      if (!securityConfigured) {
+        configureQZSecurity();
+      }
+
+      // Check if already connected
+      if (window.qz.websocket.isActive()) {
+        return { isConnected: true };
+      }
+
+      const isHTTP = typeof window !== 'undefined' && window.location.protocol === 'http:';
+      const isLocalhost = typeof window !== 'undefined' &&
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      const isUntrusted = isHTTP && !isLocalhost;
+
+      // Show instructions before connecting (in case prompt appears)
+      showCertificateInstructions();
+
+      // Show visual warning if HTTP (untrusted website)
+      if (isUntrusted && typeof window !== 'undefined') {
+        const currentUrl = `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
+        const httpsUrl = `https://${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
+        const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(window.location.hostname);
+
+        window.dispatchEvent(new CustomEvent('qz-tray-untrusted-warning', {
+          detail: { currentUrl, httpsUrl, isIP, hostname: window.location.hostname }
+        }));
+      }
+
+      // Connect to QZ Tray
+      try {
+        await window.qz.websocket.connect();
+
+        if (typeof window !== 'undefined' && (window as any).console) {
+          console.info('[QZ Tray] ✅ Connected successfully');
+          if (isUntrusted) {
+            console.info('[QZ Tray] ℹ️ Connected on HTTP - if certificate prompt keeps appearing:');
+            console.info('[QZ Tray] 💡 Tip: Using HTTPS or adding to "Site Manager" fixes this.');
+          }
+        }
+        return { isConnected: true };
+      } catch (connectError: any) {
+        const errorMessage = connectError?.message || 'Failed to connect to QZ Tray.';
+
+        // Handle certificate/trust errors specifically
+        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
+          const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
+          const currentUrl = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}` : '';
+
+          const fixInstructions = isMac
+            ? `\n\n🔧 If "Remember this decision" is grayed out:\n1. Quit QZ Tray\n2. Run: rm -rf ~/Library/Application\\ Support/qz/auth/*\n3. Restart QZ Tray\n4. Check the box BEFORE clicking Allow`
+            : `\n\n🔧 If "Remember this decision" is grayed out:\n1. Close QZ Tray\n2. Delete: %APPDATA%\\qz\\auth\\\n3. Restart QZ Tray\n4. Check the box BEFORE clicking Allow`;
+
+          return {
+            isConnected: false,
+            error: `${errorMessage}\n\n🔒 ACTION REQUIRED:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision"\n3. Click "Allow" again${fixInstructions}`,
+          };
+        }
+
         throw connectError;
       }
-
-      // For other errors (like QZ Tray not running), throw immediately
-      throw connectError;
-    }
-
-    // Provide helpful message
-    if (typeof window !== 'undefined' && (window as any).console) {
-      console.info('[QZ Tray] ✅ Connected successfully');
-
-      // If HTTP, provide optional tip (but connection worked)
-      if (isUntrusted) {
-        console.info('[QZ Tray] ℹ️ Connected on HTTP - if certificate prompt keeps appearing:');
-        console.info('[QZ Tray] 💡 Tip: Using HTTPS allows QZ Tray to save certificate approvals automatically');
-      }
-    }
-
-    return { isConnected: true };
-  } catch (error: any) {
-    const errorMessage = error?.message || 'Failed to connect to QZ Tray. Make sure QZ Tray is running.';
-
-    // Check if QZ Tray is actually running by checking for WebSocket errors
-    const isWebSocketError = errorMessage.includes('WebSocket') ||
-      errorMessage.includes('ECONNREFUSED') ||
-      errorMessage.includes('timeout') ||
-      errorMessage.includes('not running');
-
-    if (isWebSocketError && !errorMessage.includes('certificate') && !errorMessage.includes('trust')) {
+    } catch (error: any) {
+      console.error('[QZ Tray] Connection error:', error);
       return {
         isConnected: false,
-        error: `QZ Tray is not running or not responding.\n\n🔧 Please:\n1. Check if QZ Tray is installed\n2. Start QZ Tray application\n3. Look for QZ Tray icon in system tray/menu bar\n4. If still not working, restart QZ Tray\n\nDownload: https://qz.io/download/`,
+        error: error.message || 'Failed to connect to QZ Tray. Ensure QZ Tray is running.',
       };
+    } finally {
+      // Clear the promise after a small delay to prevent immediate re-attempts if it failed
+      setTimeout(() => {
+        connectionPromise = null;
+      }, 5000);
     }
+  })();
 
-    // If connection fails due to certificate, provide manual instructions
-    if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
-      const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
-      const currentUrl = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}` : '';
-      const httpsUrl = typeof window !== 'undefined' ? `https://${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}` : '';
-      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-
-      const fixSteps = isMac
-        ? `\n\n🔧 If certificate prompt keeps appearing or "Remember this decision" is grayed out:\n\n1. Quit QZ Tray completely\n2. Run in Terminal: rm -rf ~/Library/Application\\ Support/qz/auth/*\n3. Restart QZ Tray\n4. Reconnect and check "Remember this decision" BEFORE clicking "Allow"\n\n💡 Permanent Fix: Open QZ Tray → Site Manager → Add "${currentUrl}"`
-        : `\n\n🔧 If certificate prompt keeps appearing or "Remember this decision" is grayed out:\n\n1. Close QZ Tray completely\n2. Delete folder: %APPDATA%\\qz\\auth\\\n3. Restart QZ Tray\n4. Reconnect and check "Remember this decision" BEFORE clicking "Allow"\n\n💡 Permanent Fix: Open QZ Tray → Site Manager → Add "${currentUrl}"`;
-
-      return {
-        isConnected: false,
-        error: `${errorMessage}\n\n🔒 Certificate Approval Required:\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" checkbox (CRITICAL!)\n3. Click "Allow" again${fixSteps}`,
-      };
-    }
-
-    return {
-      isConnected: false,
-      error: errorMessage,
-    };
-  }
+  return connectionPromise;
 };
 
 /**
@@ -493,73 +459,74 @@ export const generateZPLBarcode = (
     yarnColour = '',
     shadeName = '',
     lotNumber = '',
-    labelWidth = 609, // 3 inches at 203 DPI (default for 4x3 labels)
-    labelHeight = 406, // 2 inches at 203 DPI
   } = options;
 
-  // ZPL commands
+  // 50mm x 70mm label at 203 DPI:
+  // Width: 50mm / 25.4 * 203 ≈ 400 dots
+  // Height: 70mm / 25.4 * 203 ≈ 560 dots
+  const widthDots = 400;
+  const heightDots = 560;
+
+  const fontSize = 24;
+  const smallFontSize = 18;
+  const barcodeHeight = 100;
+  const labelMargin = 20;
+  const lineHeight = 30;
+  let yPos = labelMargin;
+
   // ^XA = Start of label
-  // ^FO = Field Origin (x, y position)
-  // ^A0 = Font 0 (default)
+  // ^PW = Print Width
+  // ^LL = Label Length
+  // ^FO = Field Origin
+  // ^A0 = Font
   // ^FD = Field Data
-  // ^BY = Barcode parameters (module width, ratio, height)
-  // ^BC = Code 128 barcode
-  // ^XZ = End of label
+  // ^BY = Barcode Scale
+  // ^BC = Barcode 128
 
-  const fontSize = 20;
-  const smallFontSize = 15;
-  const barcodeHeight = 80;
-  const lineHeight = 25;
-  let yPos = 20;
+  let zpl = `^XA\n`;
+  zpl += `^PW${widthDots}\n`; // Set width
+  zpl += `^LL${heightDots}\n`; // Set height
+  zpl += `^CF0,${fontSize}\n`; // Set default font
 
-  let zpl = `^XA\n`; // Start label
-  zpl += `^CF0,${fontSize}\n`; // Set font
-
-  // Box ID (top)
+  // Box ID (top, bold)
   if (boxId) {
-    zpl += `^FO20,${yPos}^FDBox ID: ${boxId}^FS\n`;
-    yPos += lineHeight + 5;
+    zpl += `^FO${labelMargin},${yPos}^FDBox: ${boxId}^FS\n`;
+    yPos += lineHeight + 10;
   }
 
-  // Barcode (centered, larger)
-  const barcodeY = yPos;
-  zpl += `^FO20,${barcodeY}^BY3,2,${barcodeHeight}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
-  yPos += barcodeHeight + 15;
+  // Yarn Name
+  if (yarnName) {
+    zpl += `^CF0,${fontSize}\n`;
+    const wrappedYarnName = yarnName.substring(0, 25);
+    zpl += `^FO${labelMargin},${yPos}^FD${wrappedYarnName}^FS\n`;
+    yPos += lineHeight;
+  }
 
-  // Barcode value text below barcode
+  // Shade & Lot on same line if possible (or separate)
   zpl += `^CF0,${smallFontSize}\n`;
-  zpl += `^FO20,${yPos}^FD${barcodeValue}^FS\n`;
-  yPos += lineHeight + 10;
+  if (shadeCode) {
+    zpl += `^FO${labelMargin},${yPos}^FDShade: ${shadeCode}^FS\n`;
+    yPos += lineHeight;
+  }
+  if (lotNumber) {
+    zpl += `^FO${labelMargin},${yPos}^FDLot: ${lotNumber}^FS\n`;
+    yPos += lineHeight + 10;
+  }
 
-  // Details section
-  if (supplier || yarnName || shadeCode || yarnColour || shadeName || lotNumber) {
-    zpl += `^FO20,${yPos}^GB570,1,1^FS\n`; // Horizontal line
-    yPos += 5;
+  // Barcode (centered, scaled)
+  const barcodeY = yPos;
+  // ^BY3 = Barcode module width 3
+  zpl += `^FO${labelMargin},${barcodeY}^BY2,3,${barcodeHeight}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
+  yPos += barcodeHeight + 40;
 
-    if (supplier) {
-      zpl += `^FO20,${yPos}^FDSupplier: ${supplier.substring(0, 30)}^FS\n`;
-      yPos += lineHeight;
-    }
-    if (yarnName) {
-      zpl += `^FO20,${yPos}^FDYarn: ${yarnName.substring(0, 30)}^FS\n`;
-      yPos += lineHeight;
-    }
-    if (shadeCode) {
-      zpl += `^FO20,${yPos}^FDShade: ${shadeCode.substring(0, 30)}^FS\n`;
-      yPos += lineHeight;
-    }
-    if (yarnColour) {
-      zpl += `^FO20,${yPos}^FDColour: ${yarnColour.substring(0, 30)}^FS\n`;
-      yPos += lineHeight;
-    }
-    if (shadeName) {
-      zpl += `^FO20,${yPos}^FDShade Name: ${shadeName.substring(0, 30)}^FS\n`;
-      yPos += lineHeight;
-    }
-    if (lotNumber) {
-      zpl += `^FO20,${yPos}^FDLot: ${lotNumber}^FS\n`;
-      yPos += lineHeight;
-    }
+  // Additional details if available
+  zpl += `^CF0,16\n`;
+  if (supplier) {
+    zpl += `^FO${labelMargin},${yPos}^FDSupplier: ${supplier.substring(0, 30)}^FS\n`;
+    yPos += 20;
+  }
+  if (yarnColour && yarnColour !== shadeCode) {
+    zpl += `^FO${labelMargin},${yPos}^FDColour: ${yarnColour.substring(0, 30)}^FS\n`;
   }
 
   zpl += `^XZ\n`; // End label
@@ -766,35 +733,32 @@ export const printMultipleBarcodes = async (
 
     const config = window.qz.configs.create(printer);
 
-    // Print all barcodes
+    // BATCH PRINTING: Combine all ZPL into a single array and send in one qz.print call
+    // This minimizes security prompts and ensures all labels are sent at once
+    const allLabels: string[] = [];
+
     for (const barcode of barcodes) {
-      try {
-        const zpl = generateZPLBarcode(barcode.barcodeValue, {
-          boxId: barcode.boxId,
-          supplier: barcode.supplier,
-          yarnName: barcode.yarnName,
-          shadeCode: barcode.shadeCode,
-          yarnColour: barcode.yarnColour,
-          shadeName: barcode.shadeName,
-          lotNumber: barcode.lotNumber,
-        });
+      const zpl = generateZPLBarcode(barcode.barcodeValue, {
+        boxId: barcode.boxId,
+        supplier: barcode.supplier,
+        yarnName: barcode.yarnName,
+        shadeCode: barcode.shadeCode,
+        yarnColour: barcode.yarnColour,
+        shadeName: barcode.shadeName,
+        lotNumber: barcode.lotNumber,
+      });
+      allLabels.push(zpl);
+    }
 
-        await window.qz.print(config, [zpl]);
-        printed++;
-      } catch (error: any) {
-        errors.push(`${barcode.barcodeValue}: ${error?.message || 'Print failed'}`);
-      }
-
-      // Small delay between prints
-      if (delay > 0 && printed < barcodes.length) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
+    if (allLabels.length > 0) {
+      await window.qz.print(config, allLabels);
+      printed = allLabels.length;
     }
 
     return {
-      success: errors.length === 0,
+      success: true,
       printed,
-      errors,
+      errors: [],
     };
   } catch (error: any) {
     return {
