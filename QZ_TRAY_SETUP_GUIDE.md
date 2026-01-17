@@ -211,12 +211,20 @@ When you first use QZ Tray from the web application:
 1. **Certificate prompt will appear**:
    - Browser will show a security warning
    - QZ Tray will ask for permission to connect
+   - May show "Untrusted website" if using HTTP or localhost
 
-2. **Click "Allow"**:
-   - Check **"Remember this decision"** checkbox
+2. **IMPORTANT - To Stop Repeated Prompts**:
+   - **ALWAYS check "Remember this decision" checkbox** ✅
    - Click **"Allow"** or **"Yes"**
+   - This stores the certificate permanently
 
-3. **This is a one-time setup** - future connections will be automatic
+3. **If Prompt Keeps Appearing**:
+   - **Check the "Remember this decision" checkbox** - this is critical!
+   - Make sure you're clicking "Allow" (not just closing the dialog)
+   - Try accessing via `https://localhost` instead of `http://localhost`
+   - Clear QZ Tray's certificate cache (see troubleshooting below)
+
+4. **This is a one-time setup** - future connections will be automatic IF you checked "Remember this decision"
 
 ### macOS Specific Permissions
 
@@ -364,21 +372,35 @@ Some antivirus software may flag QZ Tray. If you encounter issues:
 **Symptoms:**
 - Browser shows security warning
 - Connection timeout errors
+- **Certificate prompt keeps appearing repeatedly**
 
 **Solutions:**
 1. **Accept certificate on first connection**:
    - Click "Allow" when prompted
-   - Check "Remember this decision"
+   - **CRITICAL: Check "Remember this decision" checkbox** ✅
+   - If you don't check this, the prompt will appear every time
 
-2. **Check HTTPS requirement**:
+2. **If Prompt Keeps Appearing**:
+   - **Clear QZ Tray certificate cache**:
+     - Close QZ Tray completely
+     - Delete certificate files:
+       - **Windows**: `%APPDATA%\qz\auth\`
+       - **macOS**: `~/Library/Application Support/qz/auth/`
+       - **Linux**: `~/.qz/auth/`
+     - Restart QZ Tray
+     - Try connecting again and **check "Remember this decision"**
+
+3. **Check HTTPS requirement**:
    - QZ Tray requires HTTPS (or localhost)
    - Ensure you're using `https://` not `http://`
+   - For localhost, try `https://localhost:3000` instead of `http://localhost:3000`
 
-3. **Check firewall settings** (see Security & Permissions section)
+4. **Check firewall settings** (see Security & Permissions section)
 
-4. **Check port 8181**:
+5. **Check port 8181**:
    - Ensure port 8181 is not blocked
    - Check if another application is using the port
+   - QZ Tray uses port 8181 by default (or 8182 for secure connections)
 
 ### Issue: "Barcode prints but is unreadable"
 

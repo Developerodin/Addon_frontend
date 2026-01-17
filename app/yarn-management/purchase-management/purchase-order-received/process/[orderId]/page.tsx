@@ -1113,56 +1113,122 @@ const ProcessOrderPage = () => {
       return;
     }
 
-    // Connect to QZ Tray
-    const connection = await connectQZ();
-    if (!connection.isConnected) {
-      toast.error(connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/');
-      return;
-    }
+    try {
+      // Connect to QZ Tray
+      toast.loading('Connecting to QZ Tray...');
+      
+      // Add timeout for connection
+      const connectionPromise = connectQZ();
+      const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
+        setTimeout(() => {
+          resolve({
+            isConnected: false,
+            error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
+          });
+        }, 10000); // 10 second timeout
+      });
 
-    // Get default printer
-    const defaultPrinter = await getDefaultPrinter();
-    if (!defaultPrinter) {
-      toast.error('No printer found. Please set a default printer.');
-      return;
-    }
+      const connection = await Promise.race([connectionPromise, timeoutPromise]);
+      
+      if (!connection.isConnected) {
+        toast.dismiss();
+        const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
+        
+                        // Enhanced error handling for certificate issues
+                        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
+                          toast.error(
+                            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
+                            { 
+                              duration: 10000,
+                              style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
+                            }
+                          );
+                        } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
+                          toast.error(
+                            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
+                            { 
+                              duration: 8000,
+                              style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+                            }
+                          );
+                        } else {
+                          toast.error(errorMessage, { duration: 6000 });
+                        }
+        console.error('QZ Tray connection error:', errorMessage);
+        return;
+      }
 
-    // Prepare barcodes for printing
-    const barcodesToPrint = boxes.map((box) => {
-      const details = getBoxPrintDetails(box);
-      return {
-        barcodeValue: box.barcode,
-        boxId: box.boxId,
-        supplier: order.supplier || '',
-        yarnName: details.yarnName,
-        shadeCode: details.shadeCode,
-        yarnColour: details.yarnColour,
-        shadeName: details.shadeName,
-        lotNumber: box.lotNumber || '',
-      };
-    });
+      // Get default printer
+      toast.loading('Detecting printer...');
+      const defaultPrinter = await getDefaultPrinter();
+      
+      if (!defaultPrinter) {
+        toast.dismiss();
+        toast.error(
+          'No printer found\n\nPlease set a default printer in your system settings:\n• Windows: Settings → Printers & scanners\n• macOS: System Preferences → Printers & Scanners\n• Linux: System Settings → Printers',
+          { 
+            duration: 6000,
+            style: { maxWidth: '400px', whiteSpace: 'pre-line' }
+          }
+        );
+        return;
+      }
 
-    // Print all barcodes
-    toast.loading(`Printing ${barcodesToPrint.length} barcode(s)...`);
-    const result = await printMultipleBarcodes(barcodesToPrint, {
-      printerName: defaultPrinter.name,
-      delayBetweenPrints: 500,
-    });
+      // Prepare barcodes for printing
+      const barcodesToPrint = boxes.map((box) => {
+        const details = getBoxPrintDetails(box);
+        return {
+          barcodeValue: box.barcode,
+          boxId: box.boxId,
+          supplier: order.supplier || '',
+          yarnName: details.yarnName,
+          shadeCode: details.shadeCode,
+          yarnColour: details.yarnColour,
+          shadeName: details.shadeName,
+          lotNumber: box.lotNumber || '',
+        };
+      });
 
-    toast.dismiss();
+      // Print all barcodes
+      toast.loading(`Printing ${barcodesToPrint.length} barcode(s) to ${defaultPrinter.name}...`);
+      const result = await printMultipleBarcodes(barcodesToPrint, {
+        printerName: defaultPrinter.name,
+        delayBetweenPrints: 500,
+      });
 
-    if (result.success) {
-      toast.success(`Successfully printed ${result.printed} barcode(s)`);
-    } else {
-      if (result.printed > 0) {
-        toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
-        toast.error(`Failed to print ${result.errors.length} barcode(s)`, { duration: 4000 });
+      toast.dismiss();
+
+      if (result.success) {
+        toast.success(`Successfully printed ${result.printed} barcode(s)`, { duration: 3000 });
       } else {
-        toast.error('Failed to print barcodes. Please check printer connection.');
+        if (result.printed > 0) {
+          toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
+          toast.error(`Failed to print ${result.errors.length} barcode(s): ${result.errors[0] || 'Unknown error'}`, { duration: 5000 });
+        } else {
+          const errorMsg = result.errors.length > 0 ? result.errors[0] : 'Unknown error occurred';
+          toast.error(`Failed to print barcodes: ${errorMsg}`, { duration: 5000 });
+        }
+        if (result.errors.length > 0) {
+          console.error('Print errors:', result.errors);
+        }
       }
-      if (result.errors.length > 0) {
-        console.error('Print errors:', result.errors);
+    } catch (error) {
+      toast.dismiss();
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred while printing';
+      
+      // Check if it's a certificate/connection error
+      if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('WebSocket')) {
+        toast.error(
+          `Print Failed: Connection Issue\n\n${errorMessage}\n\n💡 Try:\n1. Ensure QZ Tray is running\n2. Use HTTPS URL (not HTTP)\n3. Accept certificate when prompted\n4. Use browser print as fallback`,
+          { 
+            duration: 8000,
+            style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+          }
+        );
+      } else {
+        toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
       }
+      console.error('Print error:', error);
     }
   };
 
@@ -1683,56 +1749,122 @@ const ProcessOrderPage = () => {
                       return;
                     }
 
-                    // Connect to QZ Tray
-                    const connection = await connectQZ();
-                    if (!connection.isConnected) {
-                      toast.error(connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/');
-                      return;
-                    }
+                    try {
+                      // Connect to QZ Tray
+                      toast.loading('Connecting to QZ Tray...');
+                      
+                      // Add timeout for connection
+                      const connectionPromise = connectQZ();
+                      const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
+                        setTimeout(() => {
+                          resolve({
+                            isConnected: false,
+                            error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
+                          });
+                        }, 10000); // 10 second timeout
+                      });
 
-                    // Get default printer
-                    const defaultPrinter = await getDefaultPrinter();
-                    if (!defaultPrinter) {
-                      toast.error('No printer found. Please set a default printer.');
-                      return;
-                    }
+                      const connection = await Promise.race([connectionPromise, timeoutPromise]);
+                      
+                      if (!connection.isConnected) {
+                        toast.dismiss();
+                        const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
+                        
+                        // Enhanced error handling for certificate issues
+                        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
+                          toast.error(
+                            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
+                            { 
+                              duration: 10000,
+                              style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
+                            }
+                          );
+                        } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
+                          toast.error(
+                            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
+                            { 
+                              duration: 8000,
+                              style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+                            }
+                          );
+                        } else {
+                          toast.error(errorMessage, { duration: 6000 });
+                        }
+                        console.error('QZ Tray connection error:', errorMessage);
+                        return;
+                      }
 
-                    // Prepare barcodes for printing
-                    const barcodesToPrint = lotBoxes.map((box) => {
-                      const details = getBoxPrintDetails(box);
-                      return {
-                        barcodeValue: box.barcode,
-                        boxId: box.boxId,
-                        supplier: order.supplier || '',
-                        yarnName: details.yarnName,
-                        shadeCode: details.shadeCode,
-                        yarnColour: details.yarnColour,
-                        shadeName: details.shadeName,
-                        lotNumber: lotNumber,
-                      };
-                    });
+                      // Get default printer
+                      toast.loading('Detecting printer...');
+                      const defaultPrinter = await getDefaultPrinter();
+                      
+                      if (!defaultPrinter) {
+                        toast.dismiss();
+                        toast.error(
+                          'No printer found\n\nPlease set a default printer in your system settings:\n• Windows: Settings → Printers & scanners\n• macOS: System Preferences → Printers & Scanners\n• Linux: System Settings → Printers',
+                          { 
+                            duration: 6000,
+                            style: { maxWidth: '400px', whiteSpace: 'pre-line' }
+                          }
+                        );
+                        return;
+                      }
 
-                    // Print all barcodes for this lot
-                    toast.loading(`Printing ${barcodesToPrint.length} barcode(s) for ${lotNumber}...`);
-                    const result = await printMultipleBarcodes(barcodesToPrint, {
-                      printerName: defaultPrinter.name,
-                      delayBetweenPrints: 500,
-                    });
+                      // Prepare barcodes for printing
+                      const barcodesToPrint = lotBoxes.map((box) => {
+                        const details = getBoxPrintDetails(box);
+                        return {
+                          barcodeValue: box.barcode,
+                          boxId: box.boxId,
+                          supplier: order.supplier || '',
+                          yarnName: details.yarnName,
+                          shadeCode: details.shadeCode,
+                          yarnColour: details.yarnColour,
+                          shadeName: details.shadeName,
+                          lotNumber: lotNumber,
+                        };
+                      });
 
-                    toast.dismiss();
+                      // Print all barcodes for this lot
+                      toast.loading(`Printing ${barcodesToPrint.length} barcode(s) for ${lotNumber} to ${defaultPrinter.name}...`);
+                      const result = await printMultipleBarcodes(barcodesToPrint, {
+                        printerName: defaultPrinter.name,
+                        delayBetweenPrints: 500,
+                      });
 
-                    if (result.success) {
-                      toast.success(`${result.printed} box barcode(s) printed for ${lotNumber}`);
-                    } else {
-                      if (result.printed > 0) {
-                        toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
-                        toast.error(`Failed to print ${result.errors.length} barcode(s)`, { duration: 4000 });
+                      toast.dismiss();
+
+                      if (result.success) {
+                        toast.success(`${result.printed} box barcode(s) printed for ${lotNumber}`, { duration: 3000 });
                       } else {
-                        toast.error('Failed to print barcodes. Please check printer connection.');
+                        if (result.printed > 0) {
+                          toast.success(`Printed ${result.printed} barcode(s)`, { duration: 2000 });
+                          toast.error(`Failed to print ${result.errors.length} barcode(s): ${result.errors[0] || 'Unknown error'}`, { duration: 5000 });
+                        } else {
+                          const errorMsg = result.errors.length > 0 ? result.errors[0] : 'Unknown error occurred';
+                          toast.error(`Failed to print barcodes: ${errorMsg}`, { duration: 5000 });
+                        }
+                        if (result.errors.length > 0) {
+                          console.error('Print errors:', result.errors);
+                        }
                       }
-                      if (result.errors.length > 0) {
-                        console.error('Print errors:', result.errors);
+                    } catch (error) {
+                      toast.dismiss();
+                      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred while printing';
+                      
+                      // Check if it's a certificate/connection error
+                      if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('WebSocket')) {
+                        toast.error(
+                          `Print Failed: Connection Issue\n\n${errorMessage}\n\n💡 Try:\n1. Ensure QZ Tray is running\n2. Use HTTPS URL (not HTTP)\n3. Accept certificate when prompted\n4. Use browser print as fallback`,
+                          { 
+                            duration: 8000,
+                            style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+                          }
+                        );
+                      } else {
+                        toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
                       }
+                      console.error('Print error:', error);
                     }
                   };
 
