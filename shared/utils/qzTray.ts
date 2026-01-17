@@ -434,6 +434,23 @@ export const getAvailablePrinters = async (): Promise<PrinterInfo[]> => {
 };
 
 /**
+ * Helper to create the optimized QZ Tray configuration for 70mm x 50mm thermal labels
+ */
+const getQZConfig = (printer: any) => {
+  if (typeof window === 'undefined' || typeof window.qz === 'undefined') return null;
+
+  return window.qz.configs.create(printer, {
+    size: { width: 70, height: 50 }, // 70mm x 50mm landscape
+    units: "mm",
+    margins: { top: 0, right: 0, bottom: 0, left: 0 },
+    orientation: "landscape",
+    density: 203,
+    interpolation: "nearest-neighbor", // Sharpest for barcodes
+    reconnection: true,
+  });
+};
+
+/**
  * Generate ZPL code for barcode label
  * Optimized for box labels on thermal printers (Zebra, etc.)
  */
@@ -475,6 +492,7 @@ export const generateZPLBarcode = (
   let yPos = 50; // Increased top margin to prevent cutting
 
   let zpl = `^XA\n`;
+  zpl += `^PON\n`;
   zpl += `^PW${widthDots}\n`;
   zpl += `^LL${heightDots}\n`;
   zpl += `^LS0\n`;
@@ -543,34 +561,35 @@ export const generateZPLRack = (
   const contentWidth = labelWidth - (labelMargin * 2);
 
   let zpl = `^XA\n`;
+  zpl += `^PON\n`;
   zpl += `^PW${labelWidth}\n`;
   zpl += `^LL${labelHeight}\n`;
   zpl += `^LS0\n`;
 
-  let yPos = 50;
+  let yPos = 40;
 
   // Zone Identifier
   const zoneLabel = zone === 'LT' ? 'LONG TERM STORAGE' : zone === 'ST' ? 'SHORT TERM STORAGE' : 'YARN STORAGE';
-  zpl += `^CF0,30\n`;
+  zpl += `^CF0,25\n`;
   zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${zoneLabel}^FS\n`;
-  yPos += 45;
+  yPos += 40;
 
-  // Large Rack Code
-  zpl += `^CF0,100\n`;
+  // Large Rack Code - Reduced font size to prevent clipping
+  zpl += `^CF0,80\n`;
   zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${rackCode}^FS\n`;
-  yPos += 110;
+  yPos += 90;
 
   // Details
-  zpl += `^CF0,35\n`;
+  zpl += `^CF0,30\n`;
   if (shelf !== undefined || floor !== undefined) {
     zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDShelf: ${shelf || '-'}  |  Floor: ${floor || '-'}^FS\n`;
-    yPos += 50;
+    yPos += 40;
   }
 
   // Barcode (CODE128)
-  const barcodeHeight = 80;
-  const barcodeX = Math.max(labelMargin, Math.floor((labelWidth - (barcodeValue.length * 20)) / 2));
-  zpl += `^BY3,3,${barcodeHeight}\n`;
+  const barcodeHeight = 100;
+  const barcodeX = Math.max(labelMargin, Math.floor((labelWidth - (barcodeValue.length * 16)) / 2));
+  zpl += `^BY2,3,${barcodeHeight}\n`;
   zpl += `^FO${barcodeX},${yPos}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
 
   zpl += `^XZ\n`;
@@ -598,6 +617,7 @@ export const generateZPLCone = (
   const contentWidth = labelWidth - (labelMargin * 2);
 
   let zpl = `^XA\n`;
+  zpl += `^PON\n`;
   zpl += `^PW${labelWidth}\n`;
   zpl += `^LL${labelHeight}\n`;
   zpl += `^LS0\n`;
@@ -723,8 +743,9 @@ export const printBarcode = async (
       lotNumber: options.lotNumber,
     });
 
-    // Create print config for raw ZPL printing (like HTML file)
-    const config = window.qz.configs.create(printer);
+    // Create print config for raw ZPL printing
+    const config = getQZConfig(printer);
+    if (!config) throw new Error("Could not create QZ configuration");
 
     // Print (ZPL must be passed as an array) - exactly like HTML file
     const copies = options.copies || 1;
@@ -842,7 +863,8 @@ export const printMultipleBarcodes = async (
       };
     }
 
-    const config = window.qz.configs.create(printer);
+    const config = getQZConfig(printer);
+    if (!config) throw new Error("Could not create QZ configuration");
 
     // BATCH PRINTING: Combine all ZPL into a single array and send in one qz.print call
     // This minimizes security prompts and ensures all labels are sent at once
@@ -900,7 +922,8 @@ export const printRacks = async (
     let printerName = options.printerName;
     if (!printerName) printerName = await window.qz.printers.getDefault();
     const printer = await window.qz.printers.find(printerName);
-    const config = window.qz.configs.create(printer);
+    const config = getQZConfig(printer);
+    if (!config) throw new Error("Could not create QZ configuration");
 
     const labels = racks.map(rack =>
       generateZPLRack(rack.rackCode, rack.barcode, {
@@ -939,7 +962,8 @@ export const printCones = async (
     let printerName = options.printerName;
     if (!printerName) printerName = await window.qz.printers.getDefault();
     const printer = await window.qz.printers.find(printerName);
-    const config = window.qz.configs.create(printer);
+    const config = getQZConfig(printer);
+    if (!config) throw new Error("Could not create QZ configuration");
 
     const labels = cones.map(cone =>
       generateZPLCone(cone.barcode, {
