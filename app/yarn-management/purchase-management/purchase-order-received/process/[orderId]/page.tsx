@@ -9,7 +9,7 @@ import { toast } from "react-hot-toast";
 import JsBarcode from "jsbarcode";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { YarnBox, UpdateYarnBoxPayload } from "@/shared/services/yarnBoxService";
-import { QZTrayLoader, QZTrayStatus } from "@/shared/components/qzTray";
+import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printMultipleBarcodes, connectQZ, getDefaultPrinter, isQZLoaded, getAvailablePrinters, PrinterInfo } from "@/shared/utils/qzTray";
 
 interface ReceivedItem {
@@ -1583,6 +1583,8 @@ const ProcessOrderPage = () => {
   return (
     <div className="main-content !p-[10px]">
       <QZTrayLoader />
+      <QZTrayUntrustedWarning />
+      <QZTrayRequestBlocked />
       <Seo title={`Process Order - ${order.orderNumber}`} />
       
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">

@@ -19,12 +19,20 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
   const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUntrusted, setIsUntrusted] = useState(false);
 
   const checkStatus = async () => {
     setIsChecking(true);
     setError(null);
 
     try {
+      // Check if site is untrusted (HTTP on non-localhost)
+      if (typeof window !== 'undefined') {
+        const isHTTP = window.location.protocol === 'http:';
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        setIsUntrusted(isHTTP && !isLocalhost);
+      }
+
       // Check script loading
       const loaded = isQZLoaded();
       setScriptLoaded(loaded);
@@ -160,15 +168,26 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
       </div>
 
       {/* Connection Status */}
-      <div className="flex items-center gap-1" title={connected ? 'Connected to QZ Tray' : 'Not Connected to QZ Tray'}>
+      <div className="flex items-center gap-1" title={
+        connected 
+          ? 'Connected to QZ Tray' 
+          : isUntrusted 
+          ? 'Not Connected - Untrusted website (HTTP). Check "Remember this decision" when prompt appears.'
+          : 'Not Connected to QZ Tray'
+      }>
         <div
           className={`w-2 h-2 rounded-full ${
-            connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+            connected ? 'bg-green-500 animate-pulse' : isUntrusted ? 'bg-yellow-500' : 'bg-red-500'
           }`}
         />
-        <span className={`text-[10px] ${connected ? 'text-green-700' : 'text-red-600'}`}>
+        <span className={`text-[10px] ${
+          connected ? 'text-green-700' : isUntrusted ? 'text-yellow-600' : 'text-red-600'
+        }`}>
           QZ Tray
         </span>
+        {isUntrusted && !connected && (
+          <i className="ri-shield-cross-line text-yellow-600 text-xs" title="Untrusted website - use HTTPS or check 'Remember this decision'"></i>
+        )}
       </div>
 
       {/* Printer Status */}
