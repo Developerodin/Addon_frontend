@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import Seo from "@/shared/layout-components/seo/seo";
-import JsBarcode from "jsbarcode";
+import QRCode from "qrcode";
 import yarnConeService, {
   GenerateConesResponse,
   YarnCone,
@@ -211,40 +211,30 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     }
   };
 
-  // Helper function to generate barcode SVG
-  const generateBarcodeSVG = (barcodeValue: string): string => {
+  // Helper function to generate QR code SVG
+  const generateQRCodeSVG = async (qrValue: string): Promise<string> => {
     try {
-      // Create a temporary container div
-      const tempDiv = document.createElement('div');
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      tempDiv.appendChild(svg);
-      
-      // Generate barcode
-      JsBarcode(svg, barcodeValue, {
-        format: "CODE128",
-        width: 2,
-        height: 60,
-        displayValue: true,
-        fontSize: 14,
-        margin: 10,
-        background: "transparent"
+      // Generate QR code as SVG string
+      const svgString = await QRCode.toString(qrValue, {
+        type: 'svg',
+        width: 80,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        },
+        errorCorrectionLevel: 'M'
       });
       
-      // Get the SVG HTML
-      const svgHTML = svg.outerHTML;
-      
-      // Clean up
-      tempDiv.remove();
-      
-      return svgHTML;
+      return svgString;
     } catch (error) {
-      console.error('Error generating barcode:', error);
-      // Fallback to text if barcode generation fails
-      return `<div style="font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; padding: 10px;">${barcodeValue}</div>`;
+      console.error('Error generating QR code:', error);
+      // Fallback to text if QR code generation fails
+      return `<div style="font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; padding: 10px;">${qrValue}</div>`;
     }
   };
 
-  const handlePrintCones = () => {
+  const handlePrintCones = async () => {
     if (!box || cones.length === 0) {
       toast.error("No cones available to print");
       return;
@@ -253,15 +243,19 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     const printWindow = window.open("", "_blank");
 
     if (!printWindow) {
-      toast.error("Please allow popups to print cone barcodes");
+      toast.error("Please allow popups to print cone QR codes");
       return;
     }
 
-    const barcodeHTML = `
+    // Generate QR code SVGs for all cones
+    const qrCodePromises = cones.map((cone) => generateQRCodeSVG(cone.barcode));
+    const qrCodeSVGs = await Promise.all(qrCodePromises);
+
+    const qrCodeHTML = `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Print Cone Barcodes - ${box.boxId}</title>
+          <title>Print Cone QR Codes - ${box.boxId}</title>
           <style>
             body {
               font-family: Arial, sans-serif;
@@ -273,13 +267,13 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               margin-bottom: 20px;
               border-radius: 5px;
             }
-            .barcode-container {
+            .qr-code-container {
               display: grid;
               grid-template-columns: repeat(2, 1fr);
               gap: 25px;
               margin-top: 20px;
             }
-            .barcode-item {
+            .qr-code-item {
               border: 2px solid #ddd;
               padding: 20px;
               text-align: center;
@@ -294,7 +288,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
             .cone-header-info {
               margin-bottom: 12px;
             }
-            .barcode-label {
+            .qr-code-label {
               font-size: 11px;
               color: #666;
               margin-bottom: 5px;
@@ -302,12 +296,12 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               text-transform: uppercase;
               letter-spacing: 0.5px;
             }
-            .barcode-section {
+            .qr-code-section {
               margin-top: auto;
               padding-top: 15px;
               border-top: 1px solid #e0e0e0;
             }
-            .barcode-value {
+            .qr-code-value {
               font-family: 'Courier New', monospace;
               margin: 10px 0;
               padding: 15px;
@@ -318,7 +312,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               align-items: center;
               border-radius: 4px;
             }
-            .barcode-value svg {
+            .qr-code-value svg {
               max-width: 100%;
               height: auto;
             }
@@ -355,11 +349,11 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               color: #333;
             }
             @media print {
-              .barcode-container {
+              .qr-code-container {
                 grid-template-columns: repeat(2, 1fr);
                 gap: 20px;
               }
-              .barcode-item {
+              .qr-code-item {
                 min-height: 420px;
                 padding: 18px;
               }
@@ -368,17 +362,17 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         </head>
         <body>
           <div class="header-info">
-            <h2 style="margin: 0 0 10px 0;">Cone Barcodes - ${box.boxId}</h2>
+            <h2 style="margin: 0 0 10px 0;">Cone QR Codes - ${box.boxId}</h2>
             <p style="margin: 0;">PO Number: ${box.poNumber} | Yarn: ${box.yarnName || "-"} | Total Cones: ${cones.length}</p>
           </div>
-          <div class="barcode-container">
+          <div class="qr-code-container">
             ${cones
-              .map((cone) => {
-                const barcodeSVG = generateBarcodeSVG(cone.barcode);
+              .map((cone, index) => {
+                const qrCodeSVG = qrCodeSVGs[index];
                 return `
-                <div class="barcode-item">
+                <div class="qr-code-item">
                   <div class="cone-header-info">
-                    <div class="barcode-label">Cone Barcode</div>
+                    <div class="qr-code-label">Cone Barcode</div>
                     <div class="cone-info" style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">${cone.barcode}</div>
                   </div>
                   <div class="cone-details-section">
@@ -399,10 +393,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                       <span class="detail-value">${box.lotNumber || "-"}</span>
                     </div>
                   </div>
-                  <div class="barcode-section">
-                    <div class="barcode-label">Barcode</div>
-                    <div class="barcode-value">
-                      ${barcodeSVG}
+                  <div class="qr-code-section">
+                    <div class="qr-code-label">QR Code</div>
+                    <div class="qr-code-value">
+                      ${qrCodeSVG}
                     </div>
                   </div>
                 </div>
@@ -414,11 +408,11 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       </html>
     `;
 
-    printWindow.document.write(barcodeHTML);
+    printWindow.document.write(qrCodeHTML);
     printWindow.document.close();
     setTimeout(() => {
       printWindow.print();
-      toast.success(`${cones.length} cone barcode(s) printed successfully`);
+      toast.success(`${cones.length} cone QR code(s) printed successfully`);
     }, 250);
   };
 
@@ -486,7 +480,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
               >
                 <i className="ri-printer-line text-xs"></i>
-                Print Cone Barcodes
+                Print Cone QR Codes
               </button>
             )}
           </div>
