@@ -9,8 +9,8 @@ import { toast } from "react-hot-toast";
 import JsBarcode from "jsbarcode";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { YarnBox, UpdateYarnBoxPayload } from "@/shared/services/yarnBoxService";
-import { QZTrayLoader } from "@/shared/components/qzTray";
-import { printMultipleBarcodes, connectQZ, getDefaultPrinter } from "@/shared/utils/qzTray";
+import { QZTrayLoader, QZTrayStatus } from "@/shared/components/qzTray";
+import { printMultipleBarcodes, connectQZ, getDefaultPrinter, isQZLoaded, getAvailablePrinters, PrinterInfo } from "@/shared/utils/qzTray";
 
 interface ReceivedItem {
   id: string;
@@ -177,6 +177,17 @@ const ProcessOrderPage = () => {
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
   const [isFetchingWeight, setIsFetchingWeight] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const [qzStatus, setQzStatus] = useState<{
+    scriptLoaded: boolean;
+    connected: boolean;
+    printer: PrinterInfo | null;
+    printers: PrinterInfo[];
+  }>({
+    scriptLoaded: false,
+    connected: false,
+    printer: null,
+    printers: [],
+  });
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -1114,48 +1125,62 @@ const ProcessOrderPage = () => {
     }
 
     try {
-      // Connect to QZ Tray
-      toast.loading('Connecting to QZ Tray...');
-      
-      // Add timeout for connection
-      const connectionPromise = connectQZ();
-      const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
-        setTimeout(() => {
-          resolve({
-            isConnected: false,
-            error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
-          });
-        }, 10000); // 10 second timeout
-      });
-
-      const connection = await Promise.race([connectionPromise, timeoutPromise]);
-      
-      if (!connection.isConnected) {
-        toast.dismiss();
-        const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
-        
-                        // Enhanced error handling for certificate issues
-                        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
-                          toast.error(
-                            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
-                            { 
-                              duration: 10000,
-                              style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
-                            }
-                          );
-                        } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
-                          toast.error(
-                            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
-                            { 
-                              duration: 8000,
-                              style: { maxWidth: '500px', whiteSpace: 'pre-line' }
-                            }
-                          );
-                        } else {
-                          toast.error(errorMessage, { duration: 6000 });
-                        }
-        console.error('QZ Tray connection error:', errorMessage);
+      // Check script status first
+      if (!isQZLoaded()) {
+        toast.error('QZ Tray script not loaded. Please wait a moment and try again.');
         return;
+      }
+
+      // Check connection status - same method as HTML test file
+      const isActive = typeof window !== 'undefined' && 
+                      typeof window.qz !== 'undefined' &&
+                      window.qz.websocket &&
+                      window.qz.websocket.isActive() === true;
+      
+      if (!isActive) {
+        // Connect to QZ Tray
+        toast.loading('Connecting to QZ Tray...');
+        
+        // Add timeout for connection
+        const connectionPromise = connectQZ();
+        const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
+          setTimeout(() => {
+            resolve({
+              isConnected: false,
+              error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
+            });
+          }, 10000); // 10 second timeout
+        });
+
+        const connection = await Promise.race([connectionPromise, timeoutPromise]);
+        
+        if (!connection.isConnected) {
+          toast.dismiss();
+          const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
+          
+          // Enhanced error handling for certificate issues
+          if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
+            toast.error(
+              `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
+              { 
+                duration: 10000,
+                style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
+              }
+            );
+          } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
+            toast.error(
+              `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
+              { 
+                duration: 8000,
+                style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+              }
+            );
+          } else {
+            toast.error(errorMessage, { duration: 6000 });
+          }
+          console.error('QZ Tray connection error:', errorMessage);
+          return;
+        }
       }
 
       // Get default printer
@@ -1579,17 +1604,35 @@ const ProcessOrderPage = () => {
               </span>
             </div>
 
-            {boxes.length > 0 && (
-              <button
-                type="button"
-                onClick={handlePrintAllBarcodes}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
-                title="Print all box barcodes"
-              >
-                <i className="ri-printer-line text-xs"></i>
-                Print All Barcodes
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {/* QZ Tray Status */}
+              <div className="bg-gray-50 px-2 py-1 rounded border border-gray-200">
+                <QZTrayStatus onStatusChange={setQzStatus} />
+              </div>
+
+              {boxes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handlePrintAllBarcodes}
+                  disabled={!qzStatus.connected || !qzStatus.printer}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-[11px] font-bold rounded transition-colors shadow-sm ${
+                    qzStatus.connected && qzStatus.printer
+                      ? 'bg-purple-600 hover:bg-purple-700'
+                      : 'bg-gray-400 cursor-not-allowed'
+                  }`}
+                  title={
+                    !qzStatus.connected
+                      ? 'QZ Tray not connected'
+                      : !qzStatus.printer
+                      ? 'No printer detected'
+                      : 'Print all box barcodes'
+                  }
+                >
+                  <i className="ri-printer-line text-xs"></i>
+                  Print All Barcodes
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Order Details Grid */}
@@ -1750,48 +1793,62 @@ const ProcessOrderPage = () => {
                     }
 
                     try {
-                      // Connect to QZ Tray
-                      toast.loading('Connecting to QZ Tray...');
-                      
-                      // Add timeout for connection
-                      const connectionPromise = connectQZ();
-                      const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
-                        setTimeout(() => {
-                          resolve({
-                            isConnected: false,
-                            error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
-                          });
-                        }, 10000); // 10 second timeout
-                      });
-
-                      const connection = await Promise.race([connectionPromise, timeoutPromise]);
-                      
-                      if (!connection.isConnected) {
-                        toast.dismiss();
-                        const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
-                        
-                        // Enhanced error handling for certificate issues
-                        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
-                          toast.error(
-                            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
-                            { 
-                              duration: 10000,
-                              style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
-                            }
-                          );
-                        } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
-                          toast.error(
-                            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
-                            { 
-                              duration: 8000,
-                              style: { maxWidth: '500px', whiteSpace: 'pre-line' }
-                            }
-                          );
-                        } else {
-                          toast.error(errorMessage, { duration: 6000 });
-                        }
-                        console.error('QZ Tray connection error:', errorMessage);
+                      // Check script status first
+                      if (!isQZLoaded()) {
+                        toast.error('QZ Tray script not loaded. Please wait a moment and try again.');
                         return;
+                      }
+
+                      // Check connection status - same method as HTML test file
+                      const isActive = typeof window !== 'undefined' && 
+                                      typeof window.qz !== 'undefined' &&
+                                      window.qz.websocket &&
+                                      window.qz.websocket.isActive() === true;
+                      
+                      if (!isActive) {
+                        // Connect to QZ Tray
+                        toast.loading('Connecting to QZ Tray...');
+                        
+                        // Add timeout for connection
+                        const connectionPromise = connectQZ();
+                        const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
+                          setTimeout(() => {
+                            resolve({
+                              isConnected: false,
+                              error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
+                            });
+                          }, 10000); // 10 second timeout
+                        });
+
+                        const connection = await Promise.race([connectionPromise, timeoutPromise]);
+                        
+                        if (!connection.isConnected) {
+                          toast.dismiss();
+                          const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
+                          
+                          // Enhanced error handling for certificate issues
+                          if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
+                            toast.error(
+                              `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
+                              { 
+                                duration: 10000,
+                                style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
+                              }
+                            );
+                          } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
+                            toast.error(
+                              `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
+                              { 
+                                duration: 8000,
+                                style: { maxWidth: '500px', whiteSpace: 'pre-line' }
+                              }
+                            );
+                          } else {
+                            toast.error(errorMessage, { duration: 6000 });
+                          }
+                          console.error('QZ Tray connection error:', errorMessage);
+                          return;
+                        }
                       }
 
                       // Get default printer
@@ -2103,8 +2160,19 @@ const ProcessOrderPage = () => {
                         <button
                           type="button"
                           onClick={handlePrintLotBarcodes}
-                          className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
-                          title={`Print barcodes for ${lotNumber}`}
+                          disabled={!qzStatus.connected || !qzStatus.printer}
+                          className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm ${
+                            qzStatus.connected && qzStatus.printer
+                              ? 'bg-purple-600 text-white hover:bg-purple-700'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                          title={
+                            !qzStatus.connected
+                              ? 'QZ Tray not connected'
+                              : !qzStatus.printer
+                              ? 'No printer detected'
+                              : `Print barcodes for ${lotNumber}`
+                          }
                         >
                           <i className="ri-printer-line text-xs"></i>
                           Print
