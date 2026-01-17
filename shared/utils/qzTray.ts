@@ -461,76 +461,187 @@ export const generateZPLBarcode = (
     lotNumber = '',
   } = options;
 
-  // 50mm x 70mm label at 203 DPI:
-  // Width: 50mm / 25.4 * 203 ≈ 400 dots
-  // Height: 70mm / 25.4 * 203 ≈ 560 dots
-  const widthDots = 400;
-  const heightDots = 560;
+  // 70mm x 50mm label at 203 DPI:
+  // Width: 70mm / 25.4 * 203 ≈ 560 dots
+  // Height: 50mm / 25.4 * 203 ≈ 400 dots
+  const widthDots = 560;
+  const heightDots = 400;
 
-  const fontSize = 24;
-  const smallFontSize = 18;
-  const barcodeHeight = 100;
+  const fontSize = 28;
+  const smallFontSize = 20;
+  const barcodeHeight = 120;
   const labelMargin = 20;
-  const lineHeight = 30;
-  let yPos = labelMargin;
-
-  // ^XA = Start of label
-  // ^PW = Print Width
-  // ^LL = Label Length
-  // ^FO = Field Origin
-  // ^A0 = Font
-  // ^FD = Field Data
-  // ^BY = Barcode Scale
-  // ^BC = Barcode 128
+  const contentWidth = widthDots - (labelMargin * 2);
+  let yPos = 50; // Increased top margin to prevent cutting
 
   let zpl = `^XA\n`;
-  zpl += `^PW${widthDots}\n`; // Set width
-  zpl += `^LL${heightDots}\n`; // Set height
-  zpl += `^CF0,${fontSize}\n`; // Set default font
+  zpl += `^PW${widthDots}\n`;
+  zpl += `^LL${heightDots}\n`;
+  zpl += `^LS0\n`;
 
-  // Box ID (top, bold)
+  // Box ID (Centered)
   if (boxId) {
-    zpl += `^FO${labelMargin},${yPos}^FDBox: ${boxId}^FS\n`;
-    yPos += lineHeight + 10;
+    zpl += `^CF0,${fontSize}\n`;
+    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDBox: ${boxId}^FS\n`;
+    yPos += 45;
   }
 
-  // Yarn Name
+  // Yarn Name (Centered)
   if (yarnName) {
     zpl += `^CF0,${fontSize}\n`;
-    const wrappedYarnName = yarnName.substring(0, 25);
-    zpl += `^FO${labelMargin},${yPos}^FD${wrappedYarnName}^FS\n`;
-    yPos += lineHeight;
+    const wrappedYarnName = yarnName.substring(0, 35);
+    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${wrappedYarnName}^FS\n`;
+    yPos += 40;
   }
 
-  // Shade & Lot on same line if possible (or separate)
+  // Shade & Lot (Centered)
   zpl += `^CF0,${smallFontSize}\n`;
-  if (shadeCode) {
-    zpl += `^FO${labelMargin},${yPos}^FDShade: ${shadeCode}^FS\n`;
-    yPos += lineHeight;
-  }
-  if (lotNumber) {
-    zpl += `^FO${labelMargin},${yPos}^FDLot: ${lotNumber}^FS\n`;
-    yPos += lineHeight + 10;
+  if (shadeCode || lotNumber) {
+    let detailLine = '';
+    if (shadeCode) detailLine += `Shade: ${shadeCode}`;
+    if (shadeCode && lotNumber) detailLine += `  |  `;
+    if (lotNumber) detailLine += `Lot: ${lotNumber}`;
+
+    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${detailLine}^FS\n`;
+    yPos += 35;
   }
 
-  // Barcode (centered, scaled)
-  const barcodeY = yPos;
-  // ^BY3 = Barcode module width 3
-  zpl += `^FO${labelMargin},${barcodeY}^BY2,3,${barcodeHeight}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
-  yPos += barcodeHeight + 40;
+  // Barcode (Centered)
+  // Approximate centering for BY2 barcode
+  // Width = (chars + overhead) * module_width
+  const barcodeX = Math.max(labelMargin, Math.floor((widthDots - (barcodeValue.length * 16)) / 2));
+  zpl += `^FO${barcodeX},${yPos}^BY2,3,${barcodeHeight}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
+  yPos += barcodeHeight + 45;
 
-  // Additional details if available
-  zpl += `^CF0,16\n`;
+  // Footer/Supplier (Centered, smaller)
+  zpl += `^CF0,18\n`;
   if (supplier) {
-    zpl += `^FO${labelMargin},${yPos}^FDSupplier: ${supplier.substring(0, 30)}^FS\n`;
-    yPos += 20;
-  }
-  if (yarnColour && yarnColour !== shadeCode) {
-    zpl += `^FO${labelMargin},${yPos}^FDColour: ${yarnColour.substring(0, 30)}^FS\n`;
+    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${supplier.substring(0, 45)}^FS\n`;
   }
 
-  zpl += `^XZ\n`; // End label
+  zpl += `^XZ\n`;
+  return zpl;
+};
 
+/**
+ * Generate ZPL for a Rack Label
+ * Optimized for 50x70mm labels
+ */
+export const generateZPLRack = (
+  rackCode: string,
+  barcodeValue: string,
+  options: {
+    shelf?: number | string;
+    floor?: number | string;
+    zone?: string;
+  } = {}
+): string => {
+  const { shelf, floor, zone } = options;
+  const labelWidth = 560; // 70mm
+  const labelHeight = 400; // 50mm
+  const labelMargin = 20;
+  const contentWidth = labelWidth - (labelMargin * 2);
+
+  let zpl = `^XA\n`;
+  zpl += `^PW${labelWidth}\n`;
+  zpl += `^LL${labelHeight}\n`;
+  zpl += `^LS0\n`;
+
+  let yPos = 50;
+
+  // Zone Identifier
+  const zoneLabel = zone === 'LT' ? 'LONG TERM STORAGE' : zone === 'ST' ? 'SHORT TERM STORAGE' : 'YARN STORAGE';
+  zpl += `^CF0,30\n`;
+  zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${zoneLabel}^FS\n`;
+  yPos += 45;
+
+  // Large Rack Code
+  zpl += `^CF0,100\n`;
+  zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${rackCode}^FS\n`;
+  yPos += 110;
+
+  // Details
+  zpl += `^CF0,35\n`;
+  if (shelf !== undefined || floor !== undefined) {
+    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDShelf: ${shelf || '-'}  |  Floor: ${floor || '-'}^FS\n`;
+    yPos += 50;
+  }
+
+  // Barcode (CODE128)
+  const barcodeHeight = 80;
+  const barcodeX = Math.max(labelMargin, Math.floor((labelWidth - (barcodeValue.length * 20)) / 2));
+  zpl += `^BY3,3,${barcodeHeight}\n`;
+  zpl += `^FO${barcodeX},${yPos}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
+
+  zpl += `^XZ\n`;
+  return zpl;
+};
+
+/**
+ * Generate ZPL for a Cone Label (with QR Code)
+ * Optimized for 50x70mm labels
+ */
+export const generateZPLCone = (
+  barcodeValue: string,
+  options: {
+    yarnName?: string;
+    poNumber?: string;
+    lotNumber?: string;
+    shadeCode?: string;
+    weight?: number;
+  } = {}
+): string => {
+  const { yarnName, poNumber, lotNumber, shadeCode, weight } = options;
+  const labelWidth = 560; // 70mm
+  const labelHeight = 400; // 50mm
+  const labelMargin = 20;
+  const contentWidth = labelWidth - (labelMargin * 2);
+
+  let zpl = `^XA\n`;
+  zpl += `^PW${labelWidth}\n`;
+  zpl += `^LL${labelHeight}\n`;
+  zpl += `^LS0\n`;
+
+  let yPos = 50;
+
+  // Header
+  zpl += `^CF0,45\n`;
+  zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDCONE LABEL^FS\n`;
+  yPos += 55;
+
+  // Yarn Name (Centered)
+  zpl += `^CF0,35\n`;
+  if (yarnName) {
+    const wrappedYarn = yarnName.length > 30 ? yarnName.substring(0, 27) + '..' : yarnName;
+    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${wrappedYarn}^FS\n`;
+    yPos += 45;
+  }
+
+  // Details (Centered)
+  zpl += `^CF0,25\n`;
+  zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDPO: ${poNumber || '-'}  |  Lot: ${lotNumber || '-'}  |  Shade: ${shadeCode || '-'}^FS\n`;
+  yPos += 35;
+  if (weight !== undefined) {
+    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDWeight: ${weight.toFixed(3)} kg^FS\n`;
+    yPos += 45;
+  } else {
+    yPos += 10;
+  }
+
+  // QR Code (Centered)
+  // ^BQN,2,7 = Magnification 7. Approx width in dots? 
+  // Let's use magnification 6 and calculate offset. 6 dots/module. Approx 150 dots wide.
+  const mag = 6;
+  const qrWidth = mag * 30; // Rough estimate for a standard QR
+  const qrX = Math.floor((labelWidth - qrWidth) / 2);
+  zpl += `^FO${qrX},${yPos}^BQN,2,${mag}^FDQA,${barcodeValue}^FS\n`;
+  yPos += 160;
+
+  // Barcode Text (Centered below QR)
+  zpl += `^CF0,30\n`;
+  zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${barcodeValue}^FS\n`;
+
+  zpl += `^XZ\n`;
   return zpl;
 };
 
@@ -766,5 +877,84 @@ export const printMultipleBarcodes = async (
       printed,
       errors: [...errors, error?.message || 'Failed to print barcodes'],
     };
+  }
+};
+
+/**
+ * Print Rack Barcodes using QZ Tray
+ */
+export const printRacks = async (
+  racks: Array<{
+    rackCode: string;
+    barcode: string;
+    shelf?: number | string;
+    floor?: number | string;
+    zone?: string;
+  }>,
+  options: { printerName?: string } = {}
+): Promise<{ success: boolean; printed: number; error?: string }> => {
+  try {
+    const connection = await connectQZ();
+    if (!connection.isConnected) throw new Error(connection.error);
+
+    let printerName = options.printerName;
+    if (!printerName) printerName = await window.qz.printers.getDefault();
+    const printer = await window.qz.printers.find(printerName);
+    const config = window.qz.configs.create(printer);
+
+    const labels = racks.map(rack =>
+      generateZPLRack(rack.rackCode, rack.barcode, {
+        shelf: rack.shelf,
+        floor: rack.floor,
+        zone: rack.zone
+      })
+    );
+
+    await window.qz.print(config, labels);
+    return { success: true, printed: labels.length };
+  } catch (error: any) {
+    console.error('[QZ Tray] Rack print error:', error);
+    return { success: false, printed: 0, error: error.message };
+  }
+};
+
+/**
+ * Print Cone QR Labels using QZ Tray
+ */
+export const printCones = async (
+  cones: Array<{
+    barcode: string;
+    yarnName?: string;
+    poNumber?: string;
+    lotNumber?: string;
+    shadeCode?: string;
+    weight?: number;
+  }>,
+  options: { printerName?: string } = {}
+): Promise<{ success: boolean; printed: number; error?: string }> => {
+  try {
+    const connection = await connectQZ();
+    if (!connection.isConnected) throw new Error(connection.error);
+
+    let printerName = options.printerName;
+    if (!printerName) printerName = await window.qz.printers.getDefault();
+    const printer = await window.qz.printers.find(printerName);
+    const config = window.qz.configs.create(printer);
+
+    const labels = cones.map(cone =>
+      generateZPLCone(cone.barcode, {
+        yarnName: cone.yarnName,
+        poNumber: cone.poNumber,
+        lotNumber: cone.lotNumber,
+        shadeCode: cone.shadeCode,
+        weight: cone.weight
+      })
+    );
+
+    await window.qz.print(config, labels);
+    return { success: true, printed: labels.length };
+  } catch (error: any) {
+    console.error('[QZ Tray] Cone print error:', error);
+    return { success: false, printed: 0, error: error.message };
   }
 };

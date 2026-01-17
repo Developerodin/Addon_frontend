@@ -12,6 +12,8 @@ import storageSlotService, {
   ConeInSlot,
 } from "@/shared/services/storageSlotService";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
+import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
+import { printRacks } from "@/shared/utils/qzTray";
 
 interface LongTermStorageLayoutProps {
   racks: RackLocation[];
@@ -48,6 +50,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const [selectedRacksForPrint, setSelectedRacksForPrint] = useState<string[]>([]);
   const [rackSlotDetails, setRackSlotDetails] = useState<Map<string, SlotDetailsResponse>>(new Map());
   const [loadingSlotDetails, setLoadingSlotDetails] = useState<Set<string>>(new Set());
+  const [isPrinting, setIsPrinting] = useState(false);
 
   // Fetch storage slots from API
   useEffect(() => {
@@ -156,7 +159,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
       // Fetch details for all racks with barcodes (not just occupied ones)
       const racksWithBarcodes = racks.filter((rack) => rack.barcode);
-      
+
       for (const rack of racksWithBarcodes) {
         // Skip if already loading or already fetched
         if (loadingSlotDetails.has(rack.id) || rackSlotDetails.has(rack.id)) {
@@ -389,7 +392,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     try {
       setIsLoadingRackDetails(true);
       setIsRackModalOpen(true);
-      
+
       // Use cached details if available, otherwise fetch
       let details = rackSlotDetails.get(rack.id);
       if (!details) {
@@ -401,7 +404,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           return newMap;
         });
       }
-      
+
       setRackDetails(details);
     } catch (error) {
       console.error("Failed to fetch rack details:", error);
@@ -430,13 +433,13 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const getRackDisplayData = (rack: RackLocation) => {
     const slotBoxes = getRackSlotBoxes(rack);
     const propBoxes = getRackBoxes(rack);
-    
+
     // If we have slot details, use those (they have PO number)
     if (slotBoxes.length > 0) {
       const totalBoxes = slotBoxes.length;
       const totalWeight = slotBoxes.reduce((sum, box) => sum + (box.boxWeight || 0), 0);
       const totalCones = slotBoxes.reduce((sum, box) => sum + (box.numberOfCones || 0), 0);
-      
+
       return {
         boxes: slotBoxes.map(box => ({
           poNumber: box.poNumber || "-",
@@ -449,13 +452,13 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         isLoading: false,
       };
     }
-    
+
     // Otherwise use boxes from props
     if (propBoxes.length > 0) {
       const totalBoxes = propBoxes.length;
       const totalWeight = propBoxes.reduce((sum, box) => sum + (box.weight || 0), 0);
       const totalCones = propBoxes.reduce((sum, box) => sum + (box.numberOfCones || 0), 0);
-      
+
       return {
         boxes: propBoxes.map(box => ({
           poNumber: "-", // PackedBox doesn't have poNumber
@@ -468,7 +471,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         isLoading: loadingSlotDetails.has(rack.id),
       };
     }
-    
+
     return {
       boxes: [],
       totalBoxes: 0,
@@ -484,7 +487,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       const tempDiv = document.createElement('div');
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       tempDiv.appendChild(svg);
-      
+
       JsBarcode(svg, barcodeValue, {
         format: "CODE128",
         width: 2,
@@ -494,10 +497,10 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         margin: 10,
         background: "transparent"
       });
-      
+
       const svgHTML = svg.outerHTML;
       tempDiv.remove();
-      
+
       return svgHTML;
     } catch (error) {
       console.error('Error generating barcode:', error);
@@ -506,7 +509,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   };
 
   // Handle print selected racks barcode
-  const handlePrintSelectedRacks = () => {
+  const handlePrintSelectedRacks = async () => {
     if (selectedRacksForPrint.length === 0) {
       toast.error("Please select at least one rack");
       return;
@@ -518,267 +521,70 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       return;
     }
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Please allow popups to print barcodes');
-      return;
+    setIsPrinting(true);
+    const toastId = toast.loading(`Printing ${selectedRacks.length} rack barcode(s)...`);
+
+    try {
+      const result = await printRacks(selectedRacks.map(r => ({
+        rackCode: r.rackCode,
+        barcode: r.barcode!,
+        shelf: r.shelf,
+        floor: r.column,
+        zone: 'LT'
+      })));
+
+      if (result.success) {
+        toast.success(`Successfully printed ${result.printed} rack barcode(s)`, { id: toastId });
+      } else {
+        toast.error(result.error || "Failed to print rack barcodes", { id: toastId });
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Printing error", { id: toastId });
+    } finally {
+      setIsPrinting(false);
     }
-
-    const rackBarcodes = selectedRacks.map((rack) => {
-      const barcodeSVG = generateBarcodeSVG(rack.barcode!);
-      return `
-        <div class="barcode-item">
-          <div class="rack-info">
-            <div class="rack-label">${rack.rackCode}</div>
-          </div>
-          <div class="barcode-section">
-            <div class="barcode-label">Barcode</div>
-            <div class="barcode-value">
-              ${barcodeSVG}
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    const barcodeHTML = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Print Selected Rack Barcodes</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              padding: 20px;
-            }
-            .header-info {
-              background: #e9ecef;
-              padding: 15px;
-              margin-bottom: 20px;
-              border-radius: 5px;
-            }
-            .barcode-container {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 25px;
-              margin-top: 20px;
-            }
-            .barcode-item {
-              border: 2px solid #ddd;
-              padding: 20px;
-              text-align: center;
-              page-break-inside: avoid;
-              background: #fff;
-              border-radius: 8px;
-            }
-            .rack-info {
-              margin-bottom: 15px;
-            }
-            .rack-label {
-              font-size: 16px;
-              font-weight: bold;
-              color: #333;
-              margin-bottom: 8px;
-            }
-            .rack-details {
-              font-size: 12px;
-              color: #666;
-              margin-bottom: 3px;
-            }
-            .barcode-section {
-              margin: 15px 0;
-            }
-            .barcode-label {
-              font-size: 11px;
-              color: #666;
-              margin-bottom: 8px;
-              font-weight: 600;
-              text-transform: uppercase;
-            }
-            .barcode-value {
-              margin: 10px 0;
-              padding: 15px;
-              background: #f5f5f5;
-              border: 1px dashed #ccc;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              border-radius: 4px;
-            }
-            .barcode-value svg {
-              max-width: 100%;
-              height: auto;
-            }
-            @media print {
-              .barcode-container {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 20px;
-              }
-              .barcode-item {
-                page-break-inside: avoid;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header-info">
-            <h2 style="margin: 0 0 10px 0;">Selected Rack Barcodes - Long Term Storage</h2>
-            <p style="margin: 0;">Total Selected: ${selectedRacks.length}</p>
-          </div>
-          <div class="barcode-container">
-            ${rackBarcodes}
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(barcodeHTML);
-    printWindow.document.close();
-    
-    setTimeout(() => {
-      printWindow.print();
-      toast.success(`${selectedRacks.length} rack barcode(s) printed successfully`);
-    }, 250);
   };
 
   // Handle print all racks barcode
-  const handlePrintAllRacks = () => {
-    if (racks.length === 0) {
+  const handlePrintAllRacks = async () => {
+    const racksToPrint = racks.filter((rack) => rack.barcode);
+    if (racksToPrint.length === 0) {
       toast.error("No racks available to print");
       return;
     }
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Please allow popups to print barcodes');
-      return;
+    setIsPrinting(true);
+    const toastId = toast.loading(`Printing all ${racksToPrint.length} rack barcodes...`);
+
+    try {
+      const result = await printRacks(racksToPrint.map(r => ({
+        rackCode: r.rackCode,
+        barcode: r.barcode!,
+        shelf: r.shelf,
+        floor: r.column,
+        zone: 'LT'
+      })));
+
+      if (result.success) {
+        toast.success(`Successfully printed all ${result.printed} rack barcodes`, { id: toastId });
+      } else {
+        toast.error(result.error || "Failed to print barcodes", { id: toastId });
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Printing error", { id: toastId });
+    } finally {
+      setIsPrinting(false);
     }
-
-    const rackBarcodes = racks
-      .filter((rack) => rack.barcode)
-      .map((rack) => {
-        const barcodeSVG = generateBarcodeSVG(rack.barcode!);
-        return `
-          <div class="barcode-item">
-            <div class="rack-info">
-              <div class="rack-label">${rack.rackCode}</div>
-              <div class="rack-details">Floor: ${rack.column} | Shelf: ${rack.shelf}</div>
-              <div class="rack-details">Status: ${rack.status}</div>
-            </div>
-            <div class="barcode-section">
-              <div class="barcode-label">Barcode</div>
-              <div class="barcode-value">
-                ${barcodeSVG}
-              </div>
-            </div>
-          </div>
-        `;
-      })
-      .join('');
-
-    const barcodeHTML = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Print All Rack Barcodes</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              padding: 20px;
-            }
-            .header-info {
-              background: #e9ecef;
-              padding: 15px;
-              margin-bottom: 20px;
-              border-radius: 5px;
-            }
-            .barcode-container {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 25px;
-              margin-top: 20px;
-            }
-            .barcode-item {
-              border: 2px solid #ddd;
-              padding: 20px;
-              text-align: center;
-              page-break-inside: avoid;
-              background: #fff;
-              border-radius: 8px;
-            }
-            .rack-info {
-              margin-bottom: 15px;
-            }
-            .rack-label {
-              font-size: 16px;
-              font-weight: bold;
-              color: #333;
-              margin-bottom: 8px;
-            }
-            .rack-details {
-              font-size: 12px;
-              color: #666;
-              margin-bottom: 3px;
-            }
-            .barcode-section {
-              margin: 15px 0;
-            }
-            .barcode-label {
-              font-size: 11px;
-              color: #666;
-              margin-bottom: 8px;
-              font-weight: 600;
-              text-transform: uppercase;
-            }
-            .barcode-value {
-              margin: 10px 0;
-              padding: 15px;
-              background: #f5f5f5;
-              border: 1px dashed #ccc;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              border-radius: 4px;
-            }
-            .barcode-value svg {
-              max-width: 100%;
-              height: auto;
-            }
-            @media print {
-              .barcode-container {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 20px;
-              }
-              .barcode-item {
-                page-break-inside: avoid;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header-info">
-            <h2 style="margin: 0 0 10px 0;">Rack Barcodes - Long Term Storage</h2>
-            <p style="margin: 0;">Total Racks: ${racks.length}</p>
-          </div>
-          <div class="barcode-container">
-            ${rackBarcodes}
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(barcodeHTML);
-    printWindow.document.close();
-    
-    setTimeout(() => {
-      printWindow.print();
-      toast.success(`${racks.length} rack barcode(s) printed successfully`);
-    }, 250);
   };
 
   return (
     <div className="space-y-6">
       {/* Scanning Section */}
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-bold text-gray-800">Long-Term Storage</h2>
+        <QZTrayStatus />
+      </div>
+
       <div className="box">
         <div className="box-header">
           <h3 className="box-title">Store QC-Approved Box</h3>
@@ -864,149 +670,149 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                   gridTemplateColumns: `repeat(${gridDimensions.columns}, minmax(160px, 1fr))`,
                 }}
               >
-              {rackGrid.map((row, rowIndex) =>
-                row.map((rack, colIndex) => {
-                  if (!rack && !preferences.showEmptySlots) return null;
+                {rackGrid.map((row, rowIndex) =>
+                  row.map((rack, colIndex) => {
+                    if (!rack && !preferences.showEmptySlots) return null;
 
-                  const box = rack ? getRackBox(rack) : null;
+                    const box = rack ? getRackBox(rack) : null;
 
-                  return (
-                    <div
-                      key={rack ? rack.id : `empty-${rowIndex}-${colIndex}`}
-                      className={`
+                    return (
+                      <div
+                        key={rack ? rack.id : `empty-${rowIndex}-${colIndex}`}
+                        className={`
                         relative border-2 rounded-xl p-3 min-h-[200px] transition-all cursor-pointer
                         ${getRackStatusColor(rack)}
                         ${rack ? "hover:shadow-lg hover:scale-[1.02]" : ""}
                         flex flex-col
                       `}
-                      onClick={() => {
-                        if (rack) {
-                          handleRackClick(rack);
-                        }
-                      }}
-                    >
-                      {rack ? (
-                        <>
-                          {/* Top Row: Barcode on left, Summary on right */}
-                          <div className="flex justify-between items-start mb-2 gap-2">
-                            {/* Barcode / Rack Code */}
-                            <div className="flex-1">
-                              <div className="text-xs font-bold text-gray-800 mb-1">
-                                {rack.rackCode}
-                              </div>
-                              {rack.barcode && (
-                                <div className="text-[10px] text-gray-500 font-mono">
-                                  {rack.barcode}
+                        onClick={() => {
+                          if (rack) {
+                            handleRackClick(rack);
+                          }
+                        }}
+                      >
+                        {rack ? (
+                          <>
+                            {/* Top Row: Barcode on left, Summary on right */}
+                            <div className="flex justify-between items-start mb-2 gap-2">
+                              {/* Barcode / Rack Code */}
+                              <div className="flex-1">
+                                <div className="text-xs font-bold text-gray-800 mb-1">
+                                  {rack.rackCode}
                                 </div>
-                              )}
+                                {rack.barcode && (
+                                  <div className="text-[10px] text-gray-500 font-mono">
+                                    {rack.barcode}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Summary Box - Show if there's data, regardless of status */}
+                              {(() => {
+                                const displayData = getRackDisplayData(rack);
+                                if (displayData.isLoading && displayData.totalBoxes === 0) {
+                                  return (
+                                    <div className="flex items-center justify-center w-20">
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                                    </div>
+                                  );
+                                }
+                                if (displayData.totalBoxes > 0) {
+                                  const isOccupied = rack.status === "Occupied";
+                                  const bgColor = isOccupied ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200";
+                                  const titleColor = isOccupied ? "text-blue-900" : "text-green-900";
+                                  const contentColor = isOccupied ? "text-blue-800" : "text-green-800";
+                                  return (
+                                    <div className={`${bgColor} border rounded p-1.5 min-w-[70px]`}>
+                                      <div className={`text-[9px] font-semibold ${titleColor} mb-0.5`}>Summary</div>
+                                      <div className={`grid grid-cols-2 gap-0.5 text-[9px] ${contentColor}`}>
+                                        <div className="text-center">
+                                          <div className="font-medium">{displayData.totalBoxes}</div>
+                                          <div className="text-[8px]">Boxes</div>
+                                        </div>
+                                        <div className="text-center">
+                                          <div className="font-medium">{displayData.totalWeight.toFixed(0)}</div>
+                                          <div className="text-[8px]">Kg</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
-                            
-                            {/* Summary Box - Show if there's data, regardless of status */}
+
+                            {/* Table below - Show if there's data, regardless of status */}
                             {(() => {
                               const displayData = getRackDisplayData(rack);
+
                               if (displayData.isLoading && displayData.totalBoxes === 0) {
                                 return (
-                                  <div className="flex items-center justify-center w-20">
+                                  <div className="flex items-center justify-center py-2">
                                     <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                                   </div>
                                 );
                               }
-                              if (displayData.totalBoxes > 0) {
-                                const isOccupied = rack.status === "Occupied";
-                                const bgColor = isOccupied ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200";
-                                const titleColor = isOccupied ? "text-blue-900" : "text-green-900";
-                                const contentColor = isOccupied ? "text-blue-800" : "text-green-800";
+
+                              if (displayData.boxes.length > 0) {
                                 return (
-                                  <div className={`${bgColor} border rounded p-1.5 min-w-[70px]`}>
-                                    <div className={`text-[9px] font-semibold ${titleColor} mb-0.5`}>Summary</div>
-                                    <div className={`grid grid-cols-2 gap-0.5 text-[9px] ${contentColor}`}>
-                                      <div className="text-center">
-                                        <div className="font-medium">{displayData.totalBoxes}</div>
-                                        <div className="text-[8px]">Boxes</div>
-                                      </div>
-                                      <div className="text-center">
-                                        <div className="font-medium">{displayData.totalWeight.toFixed(0)}</div>
-                                        <div className="text-[8px]">Kg</div>
-                                      </div>
-                                    </div>
+                                  <div className="overflow-x-auto max-h-[100px] mt-1">
+                                    <table className="w-full text-[10px]">
+                                      <thead className="bg-gray-100 sticky top-0">
+                                        <tr>
+                                          <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">PO</th>
+                                          <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">Yarn</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="bg-white">
+                                        {displayData.boxes.slice(0, 3).map((box, idx) => (
+                                          <tr key={idx} className="border-b border-gray-100">
+                                            <td className="px-1 py-0.5 text-gray-700 truncate max-w-[60px]" title={box.poNumber}>
+                                              {box.poNumber}
+                                            </td>
+                                            <td className="px-1 py-0.5 text-gray-700 truncate max-w-[80px]" title={box.yarnName}>
+                                              {box.yarnName}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                        {displayData.boxes.length > 3 && (
+                                          <tr>
+                                            <td colSpan={2} className="px-1 py-0.5 text-[9px] text-gray-500 text-center">
+                                              +{displayData.boxes.length - 3} more
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                );
+                              }
+
+                              return null;
+                            })()}
+
+                            {/* Show status only if there's no data */}
+                            {(() => {
+                              const displayData = getRackDisplayData(rack);
+                              if (displayData.totalBoxes === 0 && !displayData.isLoading) {
+                                return (
+                                  <div className="text-xs text-gray-400 text-center py-4">
+                                    {rack.status === "Available" ? "Available" : rack.status}
                                   </div>
                                 );
                               }
                               return null;
                             })()}
+                          </>
+                        ) : (
+                          <div className="text-sm text-gray-400 text-center flex items-center justify-center h-full">
+                            No Rack
                           </div>
-                          
-                          {/* Table below - Show if there's data, regardless of status */}
-                          {(() => {
-                            const displayData = getRackDisplayData(rack);
-                            
-                            if (displayData.isLoading && displayData.totalBoxes === 0) {
-                              return (
-                                <div className="flex items-center justify-center py-2">
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                                </div>
-                              );
-                            }
-                            
-                            if (displayData.boxes.length > 0) {
-                              return (
-                                <div className="overflow-x-auto max-h-[100px] mt-1">
-                                  <table className="w-full text-[10px]">
-                                    <thead className="bg-gray-100 sticky top-0">
-                                      <tr>
-                                        <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">PO</th>
-                                        <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">Yarn</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="bg-white">
-                                      {displayData.boxes.slice(0, 3).map((box, idx) => (
-                                        <tr key={idx} className="border-b border-gray-100">
-                                          <td className="px-1 py-0.5 text-gray-700 truncate max-w-[60px]" title={box.poNumber}>
-                                            {box.poNumber}
-                                          </td>
-                                          <td className="px-1 py-0.5 text-gray-700 truncate max-w-[80px]" title={box.yarnName}>
-                                            {box.yarnName}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                      {displayData.boxes.length > 3 && (
-                                        <tr>
-                                          <td colSpan={2} className="px-1 py-0.5 text-[9px] text-gray-500 text-center">
-                                            +{displayData.boxes.length - 3} more
-                                          </td>
-                                        </tr>
-                                      )}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              );
-                            }
-                            
-                            return null;
-                          })()}
-                          
-                          {/* Show status only if there's no data */}
-                          {(() => {
-                            const displayData = getRackDisplayData(rack);
-                            if (displayData.totalBoxes === 0 && !displayData.isLoading) {
-                              return (
-                                <div className="text-xs text-gray-400 text-center py-4">
-                                  {rack.status === "Available" ? "Available" : rack.status}
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </>
-                      ) : (
-                        <div className="text-sm text-gray-400 text-center flex items-center justify-center h-full">
-                          No Rack
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           )}
@@ -1120,26 +926,35 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  handlePrintAllRacks();
+                onClick={async () => {
+                  await handlePrintAllRacks();
                   setShowPrintBarcodeModal(false);
                   setSelectedRacksForPrint([]);
                 }}
                 className="ti-btn ti-btn-primary"
+                disabled={isPrinting}
               >
-                <i className="ri-printer-line me-1"></i>
+                {isPrinting ? (
+                  <i className="ri-loader-4-line animate-spin me-1"></i>
+                ) : (
+                  <i className="ri-printer-line me-1"></i>
+                )}
                 Print All Racks
               </button>
               <button
-                onClick={() => {
-                  handlePrintSelectedRacks();
+                onClick={async () => {
+                  await handlePrintSelectedRacks();
                   setShowPrintBarcodeModal(false);
                   setSelectedRacksForPrint([]);
                 }}
                 className="ti-btn ti-btn-primary"
-                disabled={selectedRacksForPrint.length === 0}
+                disabled={selectedRacksForPrint.length === 0 || isPrinting}
               >
-                <i className="ri-printer-line me-1"></i>
+                {isPrinting ? (
+                  <i className="ri-loader-4-line animate-spin me-1"></i>
+                ) : (
+                  <i className="ri-printer-line me-1"></i>
+                )}
                 Print Selected ({selectedRacksForPrint.length})
               </button>
             </div>

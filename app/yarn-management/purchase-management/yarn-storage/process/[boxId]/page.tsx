@@ -10,6 +10,8 @@ import yarnConeService, {
   GenerateConesResponse,
   YarnCone,
 } from "@/shared/services/yarnConeService";
+import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
+import { printCones } from "@/shared/utils/qzTray";
 
 
 const getProcessedBoxStorageKey = (boxId: string) =>
@@ -48,6 +50,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   const [activeConeId, setActiveConeId] = useState<string | null>(null);
   const [barcodeScanValue, setBarcodeScanValue] = useState("");
   const [isUpdatingConeId, setIsUpdatingConeId] = useState<string | null>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const boxIdParam = useMemo(() => decodeURIComponent(params.boxId), [params]);
   const storageKey = useMemo(
@@ -225,7 +228,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         },
         errorCorrectionLevel: 'M'
       });
-      
+
       return svgString;
     } catch (error) {
       console.error('Error generating QR code:', error);
@@ -240,180 +243,29 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       return;
     }
 
-    const printWindow = window.open("", "_blank");
+    setIsPrinting(true);
+    const toastId = toast.loading(`Printing ${cones.length} cone QR code(s)...`);
 
-    if (!printWindow) {
-      toast.error("Please allow popups to print cone QR codes");
-      return;
+    try {
+      const result = await printCones(cones.map(cone => ({
+        barcode: cone.barcode,
+        yarnName: box.yarnName,
+        poNumber: box.poNumber,
+        lotNumber: box.lotNumber,
+        shadeCode: box.shadeCode,
+        weight: cone.coneWeight
+      })));
+
+      if (result.success) {
+        toast.success(`Successfully printed ${result.printed} cone QR code(s)`, { id: toastId });
+      } else {
+        toast.error(result.error || "Failed to print cone barcodes", { id: toastId });
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Printing error", { id: toastId });
+    } finally {
+      setIsPrinting(false);
     }
-
-    // Generate QR code SVGs for all cones
-    const qrCodePromises = cones.map((cone) => generateQRCodeSVG(cone.barcode));
-    const qrCodeSVGs = await Promise.all(qrCodePromises);
-
-    const qrCodeHTML = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Print Cone QR Codes - ${box.boxId}</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              padding: 20px;
-            }
-            .header-info {
-              background: #e9ecef;
-              padding: 15px;
-              margin-bottom: 20px;
-              border-radius: 5px;
-            }
-            .qr-code-container {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 25px;
-              margin-top: 20px;
-            }
-            .qr-code-item {
-              border: 2px solid #ddd;
-              padding: 20px;
-              text-align: center;
-              page-break-inside: avoid;
-              min-height: 400px;
-              display: flex;
-              flex-direction: column;
-              justify-content: space-between;
-              background: #fff;
-              border-radius: 8px;
-            }
-            .cone-header-info {
-              margin-bottom: 12px;
-            }
-            .qr-code-label {
-              font-size: 11px;
-              color: #666;
-              margin-bottom: 5px;
-              font-weight: 600;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-            }
-            .qr-code-section {
-              margin-top: auto;
-              padding-top: 15px;
-              border-top: 1px solid #e0e0e0;
-            }
-            .qr-code-value {
-              font-family: 'Courier New', monospace;
-              margin: 10px 0;
-              padding: 15px;
-              background: #f5f5f5;
-              border: 1px dashed #ccc;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              border-radius: 4px;
-            }
-            .qr-code-value svg {
-              max-width: 100%;
-              height: auto;
-            }
-            .cone-details-section {
-              margin: 20px 0;
-              padding: 15px 0;
-              text-align: left;
-              flex: 1;
-            }
-            .detail-row {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 8px;
-              font-size: 12px;
-            }
-            .detail-row:last-child {
-              margin-bottom: 0;
-            }
-            .detail-label {
-              font-weight: 600;
-              color: #555;
-              min-width: 100px;
-            }
-            .detail-value {
-              color: #333;
-              font-weight: 500;
-              text-align: right;
-              flex: 1;
-              word-break: break-word;
-            }
-            .cone-info {
-              font-size: 13px;
-              color: #333;
-            }
-            @media print {
-              .qr-code-container {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 20px;
-              }
-              .qr-code-item {
-                min-height: 420px;
-                padding: 18px;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header-info">
-            <h2 style="margin: 0 0 10px 0;">Cone QR Codes - ${box.boxId}</h2>
-            <p style="margin: 0;">PO Number: ${box.poNumber} | Yarn: ${box.yarnName || "-"} | Total Cones: ${cones.length}</p>
-          </div>
-          <div class="qr-code-container">
-            ${cones
-              .map((cone, index) => {
-                const qrCodeSVG = qrCodeSVGs[index];
-                return `
-                <div class="qr-code-item">
-                  <div class="cone-header-info">
-                    <div class="qr-code-label">Cone Barcode</div>
-                    <div class="cone-info" style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">${cone.barcode}</div>
-                  </div>
-                  <div class="cone-details-section">
-                    <div class="detail-row">
-                      <span class="detail-label">Yarn Name:</span>
-                      <span class="detail-value">${box.yarnName || "-"}</span>
-                    </div>
-                    <div class="detail-row">
-                      <span class="detail-label">PO Number:</span>
-                      <span class="detail-value">${box.poNumber || "-"}</span>
-                    </div>
-                    <div class="detail-row">
-                      <span class="detail-label">Shade Code:</span>
-                      <span class="detail-value">${box.shadeCode || "-"}</span>
-                    </div>
-                    <div class="detail-row">
-                      <span class="detail-label">Lot Number:</span>
-                      <span class="detail-value">${box.lotNumber || "-"}</span>
-                    </div>
-                  </div>
-                  <div class="qr-code-section">
-                    <div class="qr-code-label">QR Code</div>
-                    <div class="qr-code-value">
-                      ${qrCodeSVG}
-                    </div>
-                  </div>
-                </div>
-              `;
-              })
-              .join("")}
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(qrCodeHTML);
-    printWindow.document.close();
-    setTimeout(() => {
-      printWindow.print();
-      toast.success(`${cones.length} cone QR code(s) printed successfully`);
-    }, 250);
   };
 
   if (isLoading) {
@@ -473,16 +325,24 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                 {box.boxId}
               </span>
             </div>
-            {cones.length > 0 && (
-              <button
-                type="button"
-                onClick={handlePrintCones}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
-              >
-                <i className="ri-printer-line text-xs"></i>
-                Print Cone QR Codes
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              <QZTrayStatus />
+              {cones.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handlePrintCones}
+                  disabled={isPrinting}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                >
+                  {isPrinting ? (
+                    <i className="ri-loader-4-line animate-spin text-xs"></i>
+                  ) : (
+                    <i className="ri-printer-line text-xs"></i>
+                  )}
+                  Print Cone QR Codes
+                </button>
+              )}
+            </div>
           </div>
 
           {message && (
@@ -530,8 +390,8 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                     box.qcData.status === "qc_approved"
                       ? "QC Approved"
                       : box.qcData.status === "qc_rejected"
-                      ? "QC Rejected"
-                      : "Pending"
+                        ? "QC Rejected"
+                        : "Pending"
                   }
                 />
                 <DetailItem label="QC Date" value={formatDateTime(box.qcData.date)} />
@@ -628,11 +488,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                     {cones.map((cone: YarnCone) => (
                       <tr
                         key={cone._id}
-                        className={`hover:bg-gray-50/50 transition-colors ${
-                          activeConeId === cone._id
+                        className={`hover:bg-gray-50/50 transition-colors ${activeConeId === cone._id
                             ? "bg-blue-50 border-2 border-blue-400"
                             : ""
-                        }`}
+                          }`}
                       >
                         <td className="px-1.5 py-2 border border-gray-200">
                           <span className="text-xs text-gray-900 font-mono">
@@ -785,9 +644,8 @@ const DetailItem: React.FC<DetailItemProps> = ({ label, value, isMono }) => (
       {label}
     </label>
     <div
-      className={`mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200 ${
-        isMono ? "font-mono" : ""
-      }`}
+      className={`mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200 ${isMono ? "font-mono" : ""
+        }`}
     >
       {value}
     </div>
