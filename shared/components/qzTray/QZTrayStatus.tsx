@@ -97,6 +97,7 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
       setError(err?.message || 'Failed to check status');
     } finally {
       setIsChecking(false);
+      (window as any)._qzChecking = false;
     }
   };
 
