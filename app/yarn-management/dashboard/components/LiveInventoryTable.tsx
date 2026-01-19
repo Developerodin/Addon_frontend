@@ -149,14 +149,11 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                       <SortIcon field="yarnName" />
                     </div>
                   </th>
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                    onClick={() => handleSort("weight")}
-                  >
-                    <div className="flex items-center gap-2">
-                      Weight (kg)
-                      <SortIcon field="weight" />
-                    </div>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
+                    Long Term (kg)
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
+                    Short Term (kg)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
                     Cones (Short-term)
@@ -198,7 +195,10 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                      {item.weight.toLocaleString()} kg
+                      {item.longTermWeight.toLocaleString()} kg
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
+                      {item.shortTermWeight.toLocaleString()} kg
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                       {item.conesShortTerm}

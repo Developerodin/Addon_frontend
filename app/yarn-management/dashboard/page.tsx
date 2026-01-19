@@ -78,7 +78,9 @@ const DashboardPage = () => {
             return {
               id: item._id || item.yarnId,
               yarnName: item.yarnName,
-              weight: totalWeight,
+              weight: totalWeight, // Total weight (LTS + STS)
+              longTermWeight: item.longTermStorage.totalWeight,
+              shortTermWeight: item.shortTermStorage.totalWeight,
               conesLongTerm: item.longTermStorage.numberOfCones,
               conesShortTerm: item.shortTermStorage.numberOfCones,
               blockedQty: blockedQty,

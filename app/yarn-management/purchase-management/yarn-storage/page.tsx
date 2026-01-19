@@ -227,6 +227,24 @@ const YarnStoragePage = () => {
     );
   };
 
+  // Refresh function to reload data after transfers or new box additions
+  const handleRefresh = useCallback(async () => {
+    try {
+      // Refresh racks
+      setRacks(generateRacks());
+      
+      // TODO: If boxes are fetched from API, refresh them here
+      // Example:
+      // const boxesResponse = await yarnBoxService.getYarnBoxes({});
+      // setBoxes(/* map response to PackedBox format */);
+      
+      toast.success("Data refreshed", { duration: 2000 });
+    } catch (error) {
+      console.error("Failed to refresh data:", error);
+      toast.error("Failed to refresh data");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleInternalTransfer = (transferData: InternalTransferData) => {
     // Update short-term inventory
     const existingInventory = shortTermInventory.find(
@@ -407,6 +425,7 @@ const YarnStoragePage = () => {
               boxes={boxes}
               onBoxStore={handleBoxStore}
               onRackUpdate={handleRackUpdate}
+              onRefresh={handleRefresh}
               preferences={{
                 gridColumns: preferences.gridColumns,
                 gridRows: preferences.gridRows,
@@ -418,6 +437,7 @@ const YarnStoragePage = () => {
               inventory={shortTermInventory}
               boxes={boxes}
               onInternalTransfer={handleInternalTransfer}
+              onRefresh={handleRefresh}
               preferences={{
                 gridColumns: preferences.gridColumns,
                 gridRows: preferences.gridRows,

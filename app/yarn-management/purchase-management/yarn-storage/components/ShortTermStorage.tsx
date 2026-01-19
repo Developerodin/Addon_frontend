@@ -15,6 +15,8 @@ import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
 import { printRacks } from "@/shared/utils/qzTray";
 import BarcodeScanner from "./BarcodeScanner";
 import RackDetailsModal from "./RackDetailsModal";
+import RackTransferModal from "./RackTransferModal";
+import ConeTransferModal from "./ConeTransferModal";
 import {
   ShortTermInventory,
   PackedBox,
@@ -30,6 +32,7 @@ interface ShortTermStorageProps {
   inventory: ShortTermInventory[];
   boxes: PackedBox[];
   onInternalTransfer: (transferData: any) => void;
+  onRefresh?: () => void; // Optional callback to refresh data from parent
   preferences: {
     gridColumns: number;
     gridRows: number;
@@ -41,6 +44,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   inventory: _inventory,
   boxes,
   onInternalTransfer,
+  onRefresh,
   preferences,
 }) => {
   const [selectedBox, setSelectedBox] = useState<PackedBox | null>(null);
@@ -57,24 +61,29 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   const [showPrintBarcodeModal, setShowPrintBarcodeModal] = useState(false);
   const [selectedRacksForPrint, setSelectedRacksForPrint] = useState<string[]>([]);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferSourceRack, setTransferSourceRack] = useState<RackLocation | null>(null);
+  const [showConeTransferModal, setShowConeTransferModal] = useState(false);
+  const [rackSlotDetails, setRackSlotDetails] = useState<Map<string, SlotDetailsResponse>>(new Map());
+  const [loadingSlotDetails, setLoadingSlotDetails] = useState<Set<string>>(new Set());
 
   const router = useRouter();
 
   // Fetch storage slots from API for ST zone
-  useEffect(() => {
-    const fetchStorageSlots = async () => {
-      try {
-        setIsLoadingSlots(true);
-        const response = await storageSlotService.getStorageSlots("ST");
-        setStorageSlots(response.results || []);
-      } catch (error) {
-        console.error("Failed to fetch storage slots:", error);
-        toast.error("Failed to load storage slots");
-      } finally {
-        setIsLoadingSlots(false);
-      }
-    };
+  const fetchStorageSlots = async () => {
+    try {
+      setIsLoadingSlots(true);
+      const response = await storageSlotService.getStorageSlots("ST");
+      setStorageSlots(response.results || []);
+    } catch (error) {
+      console.error("Failed to fetch storage slots:", error);
+      toast.error("Failed to load storage slots");
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  };
 
+  useEffect(() => {
     fetchStorageSlots();
   }, []);
 
@@ -132,6 +141,44 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     };
   }, [storageSlots, preferences]);
 
+  // Fetch slot details for all racks (including available ones that might have data)
+  useEffect(() => {
+    const fetchAllRackDetails = async () => {
+      if (racks.length === 0 || isLoadingSlots) return;
+
+      // Fetch details for all racks with barcodes (not just occupied ones)
+      const racksWithBarcodes = racks.filter((rack) => rack.barcode);
+
+      for (const rack of racksWithBarcodes) {
+        // Skip if already loading or already fetched
+        if (loadingSlotDetails.has(rack.id) || rackSlotDetails.has(rack.id)) {
+          continue;
+        }
+
+        try {
+          setLoadingSlotDetails((prev) => new Set(prev).add(rack.id));
+          const details = await storageSlotService.getSlotDetailsByBarcode(rack.barcode);
+          setRackSlotDetails((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(rack.id, details);
+            return newMap;
+          });
+        } catch (error) {
+          console.error(`Failed to fetch details for rack ${rack.rackCode}:`, error);
+        } finally {
+          setLoadingSlotDetails((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(rack.id);
+            return newSet;
+          });
+        }
+      }
+    };
+
+    fetchAllRackDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [racks.length, isLoadingSlots]);
+
   // Organize racks into grid based on shelfNumber (row) and floorNumber (column)
   const rackGrid = useMemo(() => {
     if (isLoadingSlots) {
@@ -171,6 +218,139 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     return boxes.find((b) => b.rackLocation?.id === rack.id);
   };
 
+  // Get slot boxes for a rack (from API) - handles both boxes and cones
+  const getRackSlotBoxes = (rack: RackLocation): BoxInSlot[] => {
+    const details = rackSlotDetails.get(rack.id);
+    if (!details) return [];
+    
+    if (details.type === "boxes") {
+      return details.data as BoxInSlot[];
+    }
+    
+    // If it's cones, convert to box-like format for display
+    if (details.type === "cones") {
+      const cones = details.data as ConeInSlot[];
+      // Group cones by boxId and yarnName to create box-like entries
+      const boxMap = new Map<string, {
+        boxId: string;
+        poNumber: string;
+        yarnName: string;
+        lotNumber: string;
+        boxWeight: number;
+        numberOfCones: number;
+      }>();
+      
+      cones.forEach((cone) => {
+        const key = `${cone.boxId}-${cone.yarnName}`;
+        if (!boxMap.has(key)) {
+          boxMap.set(key, {
+            boxId: cone.boxId,
+            poNumber: cone.poNumber || "-",
+            yarnName: cone.yarnName || "-",
+            lotNumber: "-",
+            boxWeight: 0,
+            numberOfCones: 0,
+          });
+        }
+        const box = boxMap.get(key)!;
+        box.boxWeight += cone.coneWeight || 0;
+        box.numberOfCones += 1;
+      });
+      
+      // Convert to BoxInSlot-like format
+      return Array.from(boxMap.values()).map((box) => ({
+        _id: box.boxId,
+        boxId: box.boxId,
+        poNumber: box.poNumber,
+        barcode: box.boxId,
+        yarnName: box.yarnName,
+        lotNumber: box.lotNumber,
+        boxWeight: box.boxWeight,
+        numberOfCones: box.numberOfCones,
+        tearweight: 0,
+        storedStatus: true,
+        storageLocation: rack.barcode,
+        orderDate: "",
+        orderQty: 0,
+        receivedDate: "",
+        createdAt: "",
+        updatedAt: "",
+        shadeCode: "",
+      } as BoxInSlot));
+    }
+    
+    return [];
+  };
+
+  // Get boxes for a rack (from props - available immediately)
+  const getRackBoxes = (rack: RackLocation): PackedBox[] => {
+    return boxes.filter((b) => b.rackLocation?.id === rack.id);
+  };
+
+  // Get display data for rack - prefer slot details if available, otherwise use boxes prop
+  const getRackDisplayData = (rack: RackLocation) => {
+    const slotBoxes = getRackSlotBoxes(rack);
+    const propBoxes = getRackBoxes(rack);
+    const details = rackSlotDetails.get(rack.id);
+
+    // If we have slot details (boxes or cones), use those
+    if (details && (details.type === "boxes" || details.type === "cones")) {
+      if (slotBoxes.length > 0) {
+        const totalBoxes = slotBoxes.length;
+        const totalWeight = slotBoxes.reduce((sum, box) => sum + (box.boxWeight || 0), 0);
+        const totalCones = slotBoxes.reduce((sum, box) => sum + (box.numberOfCones || 0), 0);
+
+        return {
+          boxes: slotBoxes.map(box => ({
+            poNumber: box.poNumber || "-",
+            yarnName: box.yarnName || "-",
+            lotNumber: box.lotNumber || "-",
+          })),
+          totalBoxes,
+          totalWeight,
+          totalCones,
+          isLoading: false,
+        };
+      }
+      
+      // If details exist but no boxes/cones yet, show loading
+      return {
+        boxes: [],
+        totalBoxes: 0,
+        totalWeight: 0,
+        totalCones: 0,
+        isLoading: loadingSlotDetails.has(rack.id),
+      };
+    }
+
+    // Otherwise use boxes from props
+    if (propBoxes.length > 0) {
+      const totalBoxes = propBoxes.length;
+      const totalWeight = propBoxes.reduce((sum, box) => sum + (box.weight || 0), 0);
+      const totalCones = propBoxes.reduce((sum, box) => sum + (box.numberOfCones || 0), 0);
+
+      return {
+        boxes: propBoxes.map(box => ({
+          poNumber: "-", // PackedBox doesn't have poNumber
+          yarnName: box.yarnName || "-",
+          lotNumber: box.batchNumber || "-",
+        })),
+        totalBoxes,
+        totalWeight,
+        totalCones,
+        isLoading: loadingSlotDetails.has(rack.id),
+      };
+    }
+
+    return {
+      boxes: [],
+      totalBoxes: 0,
+      totalWeight: 0,
+      totalCones: 0,
+      isLoading: loadingSlotDetails.has(rack.id),
+    };
+  };
+
   const handleRackClick = async (rack: RackLocation) => {
     try {
       setIsLoadingRackDetails(true);
@@ -183,6 +363,73 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
       setIsRackModalOpen(false);
     } finally {
       setIsLoadingRackDetails(false);
+    }
+  };
+
+  const handleOpenTransferModal = (rack: RackLocation) => {
+    setTransferSourceRack(rack);
+    setShowTransferModal(true);
+  };
+
+  const handleTransferComplete = async (sourceRackBarcode?: string, destinationRackBarcode?: string) => {
+    // Refresh only affected racks after transfer
+    try {
+      const racksToRefresh: string[] = [];
+      
+      // Add source and destination racks if provided
+      if (sourceRackBarcode) {
+        racksToRefresh.push(sourceRackBarcode);
+      }
+      if (destinationRackBarcode) {
+        racksToRefresh.push(destinationRackBarcode);
+      }
+
+      // Refresh only the affected racks
+      if (racksToRefresh.length > 0) {
+        const refreshPromises = racksToRefresh.map(async (rackBarcode) => {
+          try {
+            const details = await storageSlotService.getSlotDetailsByBarcode(rackBarcode);
+            // Find the rack ID
+            const rack = racks.find((r) => r.barcode === rackBarcode);
+            if (rack) {
+              setRackSlotDetails((prev) => {
+                const newMap = new Map(prev);
+                newMap.set(rack.id, details);
+                return newMap;
+              });
+            }
+          } catch (error) {
+            console.error(`Failed to refresh details for rack ${rackBarcode}:`, error);
+          }
+        });
+        await Promise.all(refreshPromises);
+      } else {
+        // If no specific racks provided, refresh all (fallback)
+        const racksWithBarcodes = racks.filter((rack) => rack.barcode);
+        const refreshPromises = racksWithBarcodes.map(async (rack) => {
+          try {
+            const details = await storageSlotService.getSlotDetailsByBarcode(rack.barcode);
+            setRackSlotDetails((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(rack.id, details);
+              return newMap;
+            });
+          } catch (error) {
+            console.error(`Failed to refresh details for rack ${rack.rackCode}:`, error);
+          }
+        });
+        await Promise.all(refreshPromises);
+      }
+      
+      // Call parent refresh callback if provided
+      if (onRefresh) {
+        onRefresh();
+      }
+      
+      toast.success("Transfer completed and data refreshed successfully");
+    } catch (error) {
+      console.error("Failed to refresh data:", error);
+      toast.error("Transfer completed but failed to refresh some data");
     }
   };
 
@@ -471,7 +718,17 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
           <h2 className="text-xl font-bold text-gray-800">Short-Term Storage</h2>
           <p className="text-gray-600">Yarn inventory for knitting operations</p>
         </div>
-        <QZTrayStatus />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowConeTransferModal(true)}
+            className="ti-btn ti-btn-primary"
+            title="Transfer cone between ST locations"
+          >
+            <i className="ri-arrow-right-left-line me-1"></i>
+            Transfer Cone
+          </button>
+          <QZTrayStatus />
+        </div>
       </div>
 
       <div className="box !bg-transparent border-0 shadow-none">
@@ -778,10 +1035,10 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                       <div
                         key={rack ? rack.id : `empty-${rowIndex}-${colIndex}`}
                         className={`
-                        relative border-2 rounded-xl p-4 min-h-[140px] transition-all cursor-pointer
+                        relative border-2 rounded-xl p-3 min-h-[200px] transition-all cursor-pointer
                         ${getRackStatusColor(rack)}
                         ${rack ? "hover:shadow-lg hover:scale-[1.02]" : ""}
-                        flex flex-col justify-between
+                        flex flex-col
                       `}
                         onClick={() => {
                           if (rack) {
@@ -791,36 +1048,116 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                       >
                         {rack ? (
                           <>
-                            <div className="text-sm font-bold text-gray-800 mb-2">
-                              {rack.rackCode}
-                            </div>
-                            <div className="text-sm text-gray-600 space-y-1">
-                              <div className="flex items-center gap-1">
-                                <i className="ri-building-line text-xs"></i>
-                                <span>Floor: {rack.column}</span>
+                            {/* Top Row: Barcode on left, Summary on right */}
+                            <div className="flex justify-between items-start mb-2 gap-2">
+                              {/* Barcode / Rack Code */}
+                              <div className="flex-1">
+                                <div className="text-xs font-bold text-gray-800 mb-1">
+                                  {rack.rackCode}
+                                </div>
+                                {rack.barcode && (
+                                  <div className="text-[10px] text-gray-500 font-mono">
+                                    {rack.barcode}
+                                  </div>
+                                )}
                               </div>
-                              <div className="flex items-center gap-1">
-                                <i className="ri-stack-line text-xs"></i>
-                                <span>Shelf: {rack.shelf}</span>
-                              </div>
+
+                              {/* Summary Box - Show if there's data, regardless of status */}
+                              {(() => {
+                                const displayData = getRackDisplayData(rack);
+                                if (displayData.isLoading && displayData.totalBoxes === 0) {
+                                  return (
+                                    <div className="flex items-center justify-center w-20">
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                                    </div>
+                                  );
+                                }
+                                if (displayData.totalBoxes > 0) {
+                                  const isOccupied = rack.status === "Occupied";
+                                  const bgColor = isOccupied ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200";
+                                  const titleColor = isOccupied ? "text-blue-900" : "text-green-900";
+                                  const contentColor = isOccupied ? "text-blue-800" : "text-green-800";
+                                  return (
+                                    <div className={`${bgColor} border rounded p-1.5 min-w-[70px]`}>
+                                      <div className={`text-[9px] font-semibold ${titleColor} mb-0.5`}>Summary</div>
+                                      <div className={`grid grid-cols-2 gap-0.5 text-[9px] ${contentColor}`}>
+                                        <div className="text-center">
+                                          <div className="font-medium">{displayData.totalCones}</div>
+                                          <div className="text-[8px]">Cones</div>
+                                        </div>
+                                        <div className="text-center">
+                                          <div className="font-medium">{displayData.totalWeight.toFixed(0)}</div>
+                                          <div className="text-[8px]">Kg</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
-                            {/* {box ? (
-                            <div className="text-xs text-gray-600 space-y-0.5 mt-1">
-                              <div className="truncate font-medium">{box.boxBarcode}</div>
-                              <div className="text-gray-500">
-                                {box.numberOfCones} cones
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-xs text-gray-400 mt-2">
-                              Empty
-                            </div>
-                          )}
-                          {rack.status === "Occupied" && (
-                            <div className="absolute top-1 right-1">
-                              <i className="ri-checkbox-circle-fill text-blue-500 text-sm"></i>
-                            </div>
-                          )} */}
+
+                            {/* Table below - Show if there's data, regardless of status */}
+                            {(() => {
+                              const displayData = getRackDisplayData(rack);
+
+                              if (displayData.isLoading && displayData.totalBoxes === 0) {
+                                return (
+                                  <div className="flex items-center justify-center py-2">
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                                  </div>
+                                );
+                              }
+
+                              if (displayData.boxes.length > 0) {
+                                return (
+                                  <div className="overflow-x-auto max-h-[100px] mt-1">
+                                    <table className="w-full text-[10px]">
+                                      <thead className="bg-gray-100 sticky top-0">
+                                        <tr>
+                                          <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">PO</th>
+                                          <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">Yarn</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="bg-white">
+                                        {displayData.boxes.slice(0, 3).map((box, idx) => (
+                                          <tr key={idx} className="border-b border-gray-100">
+                                            <td className="px-1 py-0.5 text-gray-700 truncate max-w-[60px]" title={box.poNumber}>
+                                              {box.poNumber}
+                                            </td>
+                                            <td className="px-1 py-0.5 text-gray-700 truncate max-w-[80px]" title={box.yarnName}>
+                                              {box.yarnName}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                        {displayData.boxes.length > 3 && (
+                                          <tr>
+                                            <td colSpan={2} className="px-1 py-0.5 text-[9px] text-gray-500 text-center">
+                                              +{displayData.boxes.length - 3} more
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                );
+                              }
+
+                              return null;
+                            })()}
+
+                            {/* Show status only if there's no data */}
+                            {(() => {
+                              const displayData = getRackDisplayData(rack);
+                              if (displayData.totalBoxes === 0 && !displayData.isLoading) {
+                                return (
+                                  <div className="text-xs text-gray-400 text-center py-4">
+                                    {rack.status === "Available" ? "Available" : rack.status}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </>
                         ) : (
                           <div className="text-sm text-gray-400 text-center flex items-center justify-center h-full">
@@ -858,6 +1195,30 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         zoneType={rackDetails?.zoneType || ""}
         dataType={rackDetails?.type || "cones"}
         isLoading={isLoadingRackDetails}
+        onTransferSTToST={(rack) => handleOpenTransferModal(rack)}
+      />
+
+      {/* Transfer Modal */}
+      <RackTransferModal
+        isOpen={showTransferModal}
+        onClose={() => {
+          setShowTransferModal(false);
+          setTransferSourceRack(null);
+        }}
+        transferType="ST_TO_ST"
+        sourceRack={transferSourceRack}
+        availableRacks={racks}
+        onTransferComplete={handleTransferComplete}
+      />
+
+      {/* Cone Transfer Modal */}
+      <ConeTransferModal
+        isOpen={showConeTransferModal}
+        onClose={() => {
+          setShowConeTransferModal(false);
+        }}
+        availableRacks={racks}
+        onTransferComplete={handleTransferComplete}
       />
 
       {/* Print Barcode Modal */}

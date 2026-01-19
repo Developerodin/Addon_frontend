@@ -4,6 +4,7 @@ import { toast } from "react-hot-toast";
 import JsBarcode from "jsbarcode";
 import BarcodeScanner from "./BarcodeScanner";
 import RackDetailsModal from "./RackDetailsModal";
+import RackTransferModal from "./RackTransferModal";
 import { RackLocation, PackedBox } from "../types";
 import storageSlotService, {
   StorageSlot,
@@ -20,6 +21,7 @@ interface LongTermStorageLayoutProps {
   boxes: PackedBox[];
   onBoxStore: (boxId: string, rackId: string) => void;
   onRackUpdate: (rack: RackLocation) => void;
+  onRefresh?: () => void; // Optional callback to refresh data from parent
   preferences: {
     gridColumns: number;
     gridRows: number;
@@ -32,6 +34,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   boxes,
   onBoxStore,
   onRackUpdate,
+  onRefresh,
   preferences,
 }) => {
   const [selectedBox, setSelectedBox] = useState<PackedBox | null>(null);
@@ -51,22 +54,26 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const [rackSlotDetails, setRackSlotDetails] = useState<Map<string, SlotDetailsResponse>>(new Map());
   const [loadingSlotDetails, setLoadingSlotDetails] = useState<Set<string>>(new Set());
   const [isPrinting, setIsPrinting] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferSourceRack, setTransferSourceRack] = useState<RackLocation | null>(null);
+  const [transferType, setTransferType] = useState<"LT_TO_LT" | "LT_TO_ST">("LT_TO_LT");
+  const [transferBoxId, setTransferBoxId] = useState<string | undefined>(undefined);
 
   // Fetch storage slots from API
-  useEffect(() => {
-    const fetchStorageSlots = async () => {
-      try {
-        setIsLoadingSlots(true);
-        const response = await storageSlotService.getStorageSlots("LT");
-        setStorageSlots(response.results || []);
-      } catch (error) {
-        console.error("Failed to fetch storage slots:", error);
-        toast.error("Failed to load storage slots");
-      } finally {
-        setIsLoadingSlots(false);
-      }
-    };
+  const fetchStorageSlots = async () => {
+    try {
+      setIsLoadingSlots(true);
+      const response = await storageSlotService.getStorageSlots("LT");
+      setStorageSlots(response.results || []);
+    } catch (error) {
+      console.error("Failed to fetch storage slots:", error);
+      toast.error("Failed to load storage slots");
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  };
 
+  useEffect(() => {
     fetchStorageSlots();
   }, []);
 
@@ -235,12 +242,36 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         return;
       }
 
-      if (mappedBox.status === "Stored") {
-        toast.error("Box is already stored");
+      // Check if box is already stored
+      if (mappedBox.status === "Stored" && boxDetails.storageLocation) {
+        // Box is already stored - open transfer modal
+        const currentStorageLocation = boxDetails.storageLocation;
+        
+        // Find the source rack from the storage location
+        const sourceRack = racks.find((r) => r.barcode === currentStorageLocation);
+        
+        if (sourceRack) {
+          // Determine transfer type based on storage location
+          if (currentStorageLocation.startsWith("LT-")) {
+            // Box is in long-term storage - can transfer LT→LT or LT→ST
+            setTransferSourceRack(sourceRack);
+            setTransferType("LT_TO_LT"); // Default to LT→LT, user can change
+            setTransferBoxId(boxDetails.boxId); // Store box ID to pre-select in modal
+            setShowTransferModal(true);
+            toast.success(`Box ${boxDetails.boxId || trimmedBarcode} found. Select destination rack for transfer.`);
+          } else if (currentStorageLocation.startsWith("ST-")) {
+            // Box is in short-term storage - should use ShortTermStorage component
+            toast.error("Box is in short-term storage. Please use Short-Term Storage tab for transfers.");
+          } else {
+            toast.error("Box storage location is invalid");
+          }
+        } else {
+          toast.error(`Source rack not found for location: ${currentStorageLocation}`);
+        }
         return;
       }
 
-      // Open modal with box details
+      // Box is not stored yet - open allocate modal
       setSelectedBox(mappedBox);
       setStorageRackCode("");
       setShowAllocateModal(true);
@@ -343,6 +374,23 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       // Update local state via callback
       handleStoreBox(selectedBox.id, rack.id);
 
+      // Refresh only the affected rack after storing new box
+      try {
+        // Refresh only the rack details where box was stored (no need to refresh all slots)
+        const details = await storageSlotService.getSlotDetailsByBarcode(storageRackCode.trim());
+        setRackSlotDetails((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(rack.id, details);
+          return newMap;
+        });
+        // Call parent refresh callback if provided
+        if (onRefresh) {
+          onRefresh();
+        }
+      } catch (error) {
+        console.error("Failed to refresh data after storing box:", error);
+      }
+
       // Close modal and reset state
       setShowAllocateModal(false);
       setStorageRackCode("");
@@ -412,6 +460,86 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       setIsRackModalOpen(false);
     } finally {
       setIsLoadingRackDetails(false);
+    }
+  };
+
+  const handleOpenTransferModal = (rack: RackLocation, type: "LT_TO_LT" | "LT_TO_ST") => {
+    setTransferSourceRack(rack);
+    setTransferType(type);
+    setShowTransferModal(true);
+  };
+
+  const handleTransferComplete = async (sourceRackBarcode?: string, destinationRackBarcode?: string) => {
+    // Refresh only affected racks after transfer
+    try {
+      const racksToRefresh: string[] = [];
+      
+      // Add source rack if provided
+      if (sourceRackBarcode) {
+        racksToRefresh.push(sourceRackBarcode);
+      }
+      
+      // Add destination rack if provided
+      if (destinationRackBarcode) {
+        racksToRefresh.push(destinationRackBarcode);
+      }
+      
+      // If transferSourceRack exists, add it too
+      if (transferSourceRack?.barcode && !racksToRefresh.includes(transferSourceRack.barcode)) {
+        racksToRefresh.push(transferSourceRack.barcode);
+      }
+
+      // Refresh only the affected racks
+      if (racksToRefresh.length > 0) {
+        const refreshPromises = racksToRefresh.map(async (rackBarcode) => {
+          try {
+            const details = await storageSlotService.getSlotDetailsByBarcode(rackBarcode);
+            // Find the rack ID
+            const rack = racks.find((r) => r.barcode === rackBarcode);
+            if (rack) {
+              setRackSlotDetails((prev) => {
+                const newMap = new Map(prev);
+                newMap.set(rack.id, details);
+                return newMap;
+              });
+              
+              // If rack details modal is open for this rack, update it
+              if (isRackModalOpen && rackDetails?.storageSlot?.barcode === rackBarcode) {
+                setRackDetails(details);
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to refresh details for rack ${rackBarcode}:`, error);
+          }
+        });
+        await Promise.all(refreshPromises);
+      } else {
+        // Fallback: refresh all racks if no specific racks provided
+        const racksWithBarcodes = racks.filter((rack) => rack.barcode);
+        const refreshPromises = racksWithBarcodes.map(async (rack) => {
+          try {
+            const details = await storageSlotService.getSlotDetailsByBarcode(rack.barcode);
+            setRackSlotDetails((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(rack.id, details);
+              return newMap;
+            });
+          } catch (error) {
+            console.error(`Failed to refresh details for rack ${rack.rackCode}:`, error);
+          }
+        });
+        await Promise.all(refreshPromises);
+      }
+      
+      // Call parent refresh callback if provided
+      if (onRefresh) {
+        onRefresh();
+      }
+      
+      toast.success("Data refreshed successfully");
+    } catch (error) {
+      console.error("Failed to refresh data:", error);
+      toast.error("Failed to refresh some data");
     }
   };
 
@@ -840,6 +968,23 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         zoneType={rackDetails?.zoneType || ""}
         dataType={rackDetails?.type || "boxes"}
         isLoading={isLoadingRackDetails}
+        onTransferLTToLT={(rack) => handleOpenTransferModal(rack, "LT_TO_LT")}
+        onTransferLTToST={(rack) => handleOpenTransferModal(rack, "LT_TO_ST")}
+      />
+
+      {/* Transfer Modal */}
+      <RackTransferModal
+        isOpen={showTransferModal}
+        onClose={() => {
+          setShowTransferModal(false);
+          setTransferSourceRack(null);
+          setTransferBoxId(undefined);
+        }}
+        transferType={transferType}
+        sourceRack={transferSourceRack}
+        availableRacks={racks}
+        onTransferComplete={handleTransferComplete}
+        initialBoxId={transferBoxId}
       />
 
       {/* Print Barcode Modal */}

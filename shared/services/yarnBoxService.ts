@@ -100,6 +100,30 @@ export interface CreateBulkYarnBoxPayload {
   lotDetails: LotDetail[];
 }
 
+export interface TransferBoxesPayload {
+  boxIds: string[];
+  toStorageLocation: string;
+  transferDate?: string;
+}
+
+export interface TransferBoxesResponse {
+  message: string;
+  transferType: 'LT_TO_ST' | 'LT_TO_LT' | 'ST_TO_ST';
+  boxesTransferred: number;
+  results: Array<{
+    yarnName: string;
+    yarnId: string;
+    boxIds: string[];
+    boxesTransferred: number;
+    totalWeight: number;
+    totalNetWeight: number;
+    totalCones: number;
+    fromLocations: string[];
+    toStorageLocation: string;
+    transactionId: string;
+  }>;
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === 'undefined') return null;
 
@@ -232,6 +256,13 @@ class YarnBoxService {
   async updateQCStatus(payload: UpdateQCStatusPayload): Promise<any> {
     return this.makeRequest<any>('/update-qc-status', {
       method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async transferBoxes(payload: TransferBoxesPayload): Promise<TransferBoxesResponse> {
+    return this.makeRequest<TransferBoxesResponse>('/transfer', {
+      method: 'POST',
       body: JSON.stringify(payload),
     });
   }

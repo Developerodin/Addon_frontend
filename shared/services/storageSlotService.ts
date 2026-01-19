@@ -75,6 +75,38 @@ export interface SlotDetailsResponse {
   data: BoxInSlot[] | ConeInSlot[];
 }
 
+export interface TransferHistoryItem {
+  transactionType: "internal_transfer" | "yarn_stocked" | string;
+  transactionDate: string;
+  yarnName: string;
+  weight: number;
+  boxIds: string[];
+  fromLocation: string | null;
+  toLocation: string | null;
+}
+
+export interface StorageHistoryResponse {
+  storageLocation: string;
+  currentInventory: {
+    totalBoxes: number;
+    totalWeight: number;
+    yarns: Array<{
+      yarnName: string;
+      boxes: Array<{
+        boxId: string;
+        boxWeight: number;
+        netWeight: number;
+        numberOfCones: number;
+        receivedDate: string;
+      }>;
+      totalWeight: number;
+      totalNetWeight: number;
+      boxCount: number;
+    }>;
+  };
+  transferHistory: TransferHistoryItem[];
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === "undefined") return null;
 
@@ -163,6 +195,12 @@ class StorageSlotService {
 
   async getSlotDetailsByBarcode(barcode: string): Promise<SlotDetailsResponse> {
     return this.makeRequest<SlotDetailsResponse>(`/slots/barcode/${barcode}`, {
+      method: "GET",
+    });
+  }
+
+  async getSlotHistory(storageLocation: string): Promise<StorageHistoryResponse> {
+    return this.makeRequest<StorageHistoryResponse>(`/slots/${storageLocation}/history`, {
       method: "GET",
     });
   }

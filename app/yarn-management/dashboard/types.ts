@@ -2,6 +2,8 @@ export interface YarnInventory {
   id: string;
   yarnName: string;
   weight: number; // in kg (total from LTS + STS)
+  longTermWeight: number; // total weight in long-term storage
+  shortTermWeight: number; // total weight in short-term storage
   conesLongTerm: number; // number of cones in long-term storage
   conesShortTerm: number; // number of cones in short-term storage
   blockedQty: number; // blocked quantity for production
