@@ -129,14 +129,14 @@ type YarnSortField =
 
 const ISSUE_TOLERANCE_DEFAULT = 0.2;
 
-const getIssuedQty = (requirement: YarnRequirement, transactions: YarnTransaction[]) => {
+const getIssuedQty = (requirement: YarnRequirement, transactions: YarnTransaction[], orderNumber: string) => {
   return transactions
-    .filter(t => t.yarnName === requirement.yarnName && t.transactionType === "yarn_issued")
+    .filter(t => t.yarnName === requirement.yarnName && t.transactionType === "yarn_issued" && t.orderno === orderNumber)
     .reduce((sum, t) => sum + t.transactionNetWeight, 0);
 };
 
-const getRequirementStatus = (requirement: YarnRequirement, transactions: YarnTransaction[]): RequirementStatus => {
-  const issued = getIssuedQty(requirement, transactions);
+const getRequirementStatus = (requirement: YarnRequirement, transactions: YarnTransaction[], orderNumber: string): RequirementStatus => {
+  const issued = getIssuedQty(requirement, transactions, orderNumber);
   const issuedInGrams = issued * 1000; // Convert kg to grams for comparison
   if (issuedInGrams === 0) {
     return "Not Issued";
@@ -155,7 +155,7 @@ const getOrderStatus = (order: ProductionOrder, transactions: YarnTransaction[])
     return "Not Issued";
   }
   
-  const requirementStatuses = order.bom.map(req => getRequirementStatus(req, transactions));
+  const requirementStatuses = order.bom.map(req => getRequirementStatus(req, transactions, order.orderNumber));
   if (requirementStatuses.every((status) => status === "Issued")) {
     return "Issued";
   }
@@ -198,7 +198,7 @@ const getOrderTotals = (order: ProductionOrder, transactions: YarnTransaction[])
     aggregatedYarns.forEach((value) => {
       totals.required += value.required;
       // Get issued qty only once per yarn name (not per article)
-      totals.issued += getIssuedQty(value.requirement, transactions);
+      totals.issued += getIssuedQty(value.requirement, transactions, order.orderNumber);
     });
   } else if (order.bom && order.bom.length > 0) {
     // Fallback to current BOM if articleBoms not available
@@ -215,7 +215,7 @@ const getOrderTotals = (order: ProductionOrder, transactions: YarnTransaction[])
     
     // Get issued qty once per unique yarn name
     yarnMap.forEach((requirement) => {
-      totals.issued += getIssuedQty(requirement, transactions);
+      totals.issued += getIssuedQty(requirement, transactions, order.orderNumber);
     });
   }
   
@@ -856,12 +856,12 @@ const YarnIssuePage = () => {
           bValue = b.requiredQty;
           break;
         case "issuedQty":
-          aValue = getIssuedQty(a, allYarnTransactions);
-          bValue = getIssuedQty(b, allYarnTransactions);
+          aValue = getIssuedQty(a, allYarnTransactions, selectedOrder.orderNumber);
+          bValue = getIssuedQty(b, allYarnTransactions, selectedOrder.orderNumber);
           break;
         case "status":
-          aValue = getRequirementStatus(a, allYarnTransactions);
-          bValue = getRequirementStatus(b, allYarnTransactions);
+          aValue = getRequirementStatus(a, allYarnTransactions, selectedOrder.orderNumber);
+          bValue = getRequirementStatus(b, allYarnTransactions, selectedOrder.orderNumber);
           break;
         default:
           aValue = 0;
@@ -1002,7 +1002,7 @@ const YarnIssuePage = () => {
     const yarnCatalogId = activeRequirement.yarnCode;
 
     // Check if we're exceeding the required quantity
-    const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions);
+    const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder.orderNumber);
     const currentIssuedInGrams = currentIssued * 1000; // Convert kg to grams for comparison
     const totalNetWeightInGrams = totalNetWeight * 1000; // Convert kg to grams for comparison
     const maxAllowed = activeRequirement.requiredQty * (1 + activeRequirement.tolerancePercent);
@@ -1121,7 +1121,7 @@ const YarnIssuePage = () => {
       const statusAfterIssue = updatedTotalInGrams + 0.0001 >= activeRequirement.requiredQty ? "Issued" : "Partially Issued";
 
       toast.success(
-        `${formatKg(totalNetWeight)} issued successfully. Status: ${statusAfterIssue}.`
+        `${formatKg(totalNetWeight * 1000)} issued successfully. Status: ${statusAfterIssue}.`
       );
 
       // Close modal and reset
@@ -1546,13 +1546,13 @@ const YarnIssuePage = () => {
                         </thead>
                         <tbody className="bg-white">
                           {sortedRequirements.map((requirement) => {
-                            const issuedQty = getIssuedQty(requirement, allYarnTransactions);
+                            const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder.orderNumber);
                             const issuedQtyInGrams = issuedQty * 1000; // Convert kg to grams for comparison
                             const remaining = Math.max(
                               requirement.requiredQty - issuedQtyInGrams,
                               0
                             );
-                            const status = getRequirementStatus(requirement, allYarnTransactions);
+                            const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder.orderNumber);
                             const isActive = activeRequirementId === requirement.id;
 
                             return (
@@ -1708,13 +1708,13 @@ const YarnIssuePage = () => {
                           </thead>
                           <tbody className="bg-white">
                             {sortedRequirements.map((requirement) => {
-                              const issuedQty = getIssuedQty(requirement, allYarnTransactions);
+                              const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder.orderNumber);
                               const issuedQtyInGrams = issuedQty * 1000; // Convert kg to grams for comparison
                               const remaining = Math.max(
                                 requirement.requiredQty - issuedQtyInGrams,
                                 0
                               );
-                              const status = getRequirementStatus(requirement, allYarnTransactions);
+                              const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder.orderNumber);
                               const isActive = activeRequirementId === requirement.id;
 
                               return (
@@ -1845,35 +1845,35 @@ const YarnIssuePage = () => {
                         </div>
                         <span
                           className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
-                            getRequirementStatus(activeRequirement, allYarnTransactions)
+                            getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder?.orderNumber || "")
                           )}`}
                         >
-                          {getRequirementStatus(activeRequirement, allYarnTransactions)}
+                          {getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder?.orderNumber || "")}
                         </span>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                         <div className="bg-white rounded p-3 border border-gray-100">
                           <p className="text-gray-500">Required</p>
                           <p className="text-sm font-medium text-gray-900">
-                            {formatKg(activeRequirement.requiredQty)}
+                            {formatKgDisplay(activeRequirement.requiredQty)}
                           </p>
                         </div>
                         <div className="bg-white rounded p-3 border border-gray-100">
                           <p className="text-gray-500">Issued</p>
                           <p className="text-sm font-medium text-blue-600">
-                            {formatKg(getIssuedQty(activeRequirement, allYarnTransactions) * 1000)}
+                            {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder?.orderNumber || "") * 1000)}
                           </p>
                         </div>
                         <div className="bg-white rounded p-3 border border-gray-100">
                           <p className="text-gray-500">Short-Term Available</p>
                           <p className="text-sm font-medium text-green-600">
-                            {formatKg(activeRequirement.shortTermAvailable)}
+                            {formatKgDisplay(activeRequirement.shortTermAvailable)}
                           </p>
                         </div>
                         <div className="bg-white rounded p-3 border border-gray-100">
                           <p className="text-gray-500">Long-Term Available</p>
                           <p className="text-sm font-medium text-orange-600">
-                            {formatKg(activeRequirement.longTermAvailable)}
+                            {formatKgDisplay(activeRequirement.longTermAvailable)}
                           </p>
                         </div>
                       </div>
@@ -2158,11 +2158,9 @@ const YarnIssuePage = () => {
                     Total Weight (kg) <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
                     className="form-control"
-                    placeholder="Enter total weight"
+                    placeholder="Enter total weight (e.g., 0.05, 1.25, 0.5)"
                     value={transactionForm.totalWeight}
                     onChange={(e) => handleTransactionFormChange("totalWeight", e.target.value)}
                   />
@@ -2173,11 +2171,9 @@ const YarnIssuePage = () => {
                     Number of Cones <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="number"
-                    min="1"
-                    step="1"
+                    type="text"
                     className="form-control"
-                    placeholder="Enter number of cones"
+                    placeholder="Enter number of cones (e.g., 1, 2, 5)"
                     value={transactionForm.numberOfCones}
                     onChange={(e) => handleTransactionFormChange("numberOfCones", e.target.value)}
                   />
@@ -2188,11 +2184,9 @@ const YarnIssuePage = () => {
                     Total Tear Weight (kg)
                   </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
                     className="form-control"
-                    placeholder="Enter tear weight"
+                    placeholder="Enter tear weight (e.g., 0.05, 1.25, 0.5)"
                     value={transactionForm.totalTearWeight}
                     onChange={(e) => handleTransactionFormChange("totalTearWeight", e.target.value)}
                   />
@@ -2203,9 +2197,7 @@ const YarnIssuePage = () => {
                     Total Net Weight (kg)
                   </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
                     className="form-control bg-gray-50"
                     placeholder="Auto-calculated"
                     value={transactionForm.totalNetWeight}
@@ -2216,19 +2208,19 @@ const YarnIssuePage = () => {
                   </p>
                 </div>
 
-                {activeRequirement && (
+                {activeRequirement && selectedOrder && (
                   <div className="p-3 bg-blue-50 rounded-md">
                     <p className="text-xs text-gray-600">
                       <span className="font-semibold">Yarn:</span> {activeRequirement.yarnName}
                     </p>
                     <p className="text-xs text-gray-600 mt-1">
-                      <span className="font-semibold">Order:</span> {selectedOrder?.orderNumber}
+                      <span className="font-semibold">Order:</span> {selectedOrder.orderNumber}
                     </p>
                     <p className="text-xs text-gray-600 mt-1">
-                      <span className="font-semibold">Required:</span> {formatKg(activeRequirement.requiredQty)} |{" "}
-                      <span className="font-semibold">Issued:</span> {formatKg(getIssuedQty(activeRequirement, allYarnTransactions) * 1000)} |{" "}
+                      <span className="font-semibold">Required:</span> {formatKgDisplay(activeRequirement.requiredQty)} |{" "}
+                      <span className="font-semibold">Issued:</span> {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder.orderNumber) * 1000)} |{" "}
                       <span className="font-semibold">Remaining:</span>{" "}
-                      {formatKg(Math.max(activeRequirement.requiredQty - (getIssuedQty(activeRequirement, allYarnTransactions) * 1000), 0))}
+                      {formatKgDisplay(Math.max(activeRequirement.requiredQty - (getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder.orderNumber) * 1000), 0))}
                     </p>
                   </div>
                 )}
