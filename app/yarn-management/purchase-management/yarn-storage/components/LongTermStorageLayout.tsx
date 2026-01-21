@@ -62,7 +62,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4',
+    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -659,7 +659,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     }
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75') => {
     if (size === '4x6') {
       setPrintSettings({
         ...printSettings,
@@ -667,12 +667,19 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         paperWidth: 812,
         paperHeight: 1218,
       });
-    } else {
+    } else if (size === '6x4') {
       setPrintSettings({
         ...printSettings,
         paperSize: '6x4',
         paperWidth: 1218,
         paperHeight: 812,
+      });
+    } else if (size === '1.96x2.75') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '1.96x2.75',
+        paperWidth: 398,  // 1.96 inches × 203 DPI
+        paperHeight: 558, // 2.75 inches × 203 DPI
       });
     }
   };
@@ -1239,37 +1246,48 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Paper Size
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Paper Size
+                  </label>
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="paperSize"
+                        value="4x6"
+                        checked={printSettings.paperSize === '4x6'}
+                        onChange={() => handlePaperSizeChange('4x6')}
+                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">4" × 6"</span>
                     </label>
-                    <div className="flex gap-4">
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="paperSize"
-                          value="4x6"
-                          checked={printSettings.paperSize === '4x6'}
-                          onChange={() => handlePaperSizeChange('4x6')}
-                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">4" × 6"</span>
-                      </label>
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="paperSize"
-                          value="6x4"
-                          checked={printSettings.paperSize === '6x4'}
-                          onChange={() => handlePaperSizeChange('6x4')}
-                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">6" × 4"</span>
-                      </label>
-                    </div>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="paperSize"
+                        value="6x4"
+                        checked={printSettings.paperSize === '6x4'}
+                        onChange={() => handlePaperSizeChange('6x4')}
+                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">6" × 4"</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="paperSize"
+                        value="1.96x2.75"
+                        checked={printSettings.paperSize === '1.96x2.75'}
+                        onChange={() => handlePaperSizeChange('1.96x2.75')}
+                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">1.96" × 2.75"</span>
+                    </label>
                   </div>
+                </div>
 
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Top Margin (dots)
