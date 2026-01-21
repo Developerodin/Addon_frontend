@@ -10,7 +10,7 @@ import JsBarcode from "jsbarcode";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { YarnBox, UpdateYarnBoxPayload } from "@/shared/services/yarnBoxService";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
-import { printMultipleBarcodes, connectQZ, getDefaultPrinter, isQZLoaded, getAvailablePrinters, PrinterInfo } from "@/shared/utils/qzTray";
+import { printMultipleBarcodes, printDoubleBarcodes, connectQZ, getDefaultPrinter, isQZLoaded, getAvailablePrinters, PrinterInfo } from "@/shared/utils/qzTray";
 
 interface ReceivedItem {
   id: string;
@@ -1219,10 +1219,11 @@ const ProcessOrderPage = () => {
         };
       });
 
-      // Print all barcodes
-      toast.loading(`Printing ${barcodesToPrint.length} barcode(s) to ${defaultPrinter.name}...`);
+      // Print all barcodes (2 per label in landscape mode)
+      const labelCount = Math.ceil(barcodesToPrint.length / 2);
+      toast.loading(`Printing ${barcodesToPrint.length} item(s) on ${labelCount} label(s) to ${defaultPrinter.name}...`);
 
-      const result = await printMultipleBarcodes(barcodesToPrint, {
+      const result = await printDoubleBarcodes(barcodesToPrint, {
         printerName: defaultPrinter.name,
       });
 
@@ -1896,11 +1897,11 @@ const ProcessOrderPage = () => {
                       };
                     });
 
-                    // Print all barcodes for this lot
-                    toast.loading(`Printing ${barcodesToPrint.length} barcode(s) for ${lotNumber} to ${defaultPrinter.name}...`);
-                    const result = await printMultipleBarcodes(barcodesToPrint, {
+                    // Print all barcodes for this lot (2 per label in landscape mode)
+                    const labelCount = Math.ceil(barcodesToPrint.length / 2);
+                    toast.loading(`Printing ${barcodesToPrint.length} item(s) on ${labelCount} label(s) for ${lotNumber} to ${defaultPrinter.name}...`);
+                    const result = await printDoubleBarcodes(barcodesToPrint, {
                       printerName: defaultPrinter.name,
-                      delayBetweenPrints: 500,
                     });
 
                     toast.dismiss();

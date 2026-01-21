@@ -452,7 +452,7 @@ const getQZConfig = (printer: any) => {
 
 /**
  * Generate ZPL code for barcode label
- * Optimized for box labels on thermal printers (Zebra, etc.)
+ * Optimized for 4x6 inch labels on TSC TE 244 (203 DPI) thermal printer
  */
 export const generateZPLBarcode = (
   barcodeValue: string,
@@ -478,67 +478,118 @@ export const generateZPLBarcode = (
     lotNumber = '',
   } = options;
 
-  // 70mm x 50mm label at 203 DPI:
-  // Width: 70mm / 25.4 * 203 ≈ 560 dots
-  // Height: 50mm / 25.4 * 203 ≈ 400 dots
-  const widthDots = 560;
-  const heightDots = 400;
+  // 4x6 inch label at 203 DPI (TSC TE 244):
+  // Width: 4 inches * 203 DPI = 812 dots
+  // Height: 6 inches * 203 DPI = 1218 dots
+  const widthDots = 812;
+  const heightDots = 1218;
 
-  const fontSize = 28;
-  const smallFontSize = 20;
-  const barcodeHeight = 120;
-  const labelMargin = 20;
-  const contentWidth = widthDots - (labelMargin * 2);
-  let yPos = 50; // Increased top margin to prevent cutting
+  // ZPL Logic for 4x6 Inch Label (203 DPI)
+  const zplData = [
+    `^XA`,              // Start
+    `^PW812`,           // 4 inch width
+    `^LL1218`,          // 6 inch length
+    `^CI28`,            // UTF-8 support
 
-  let zpl = `^XA\n`;
-  zpl += `^PON\n`;
-  zpl += `^PW${widthDots}\n`;
-  zpl += `^LL${heightDots}\n`;
-  zpl += `^LS0\n`;
+    // -- Header Section --
+    // Box ID (Smaller font at top)
+    `^FO50,50^A0N,35,35^FDBox ID: ${boxId}^FS`,
 
-  // Box ID (Centered)
-  if (boxId) {
-    zpl += `^CF0,${fontSize}\n`;
-    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDBox: ${boxId}^FS\n`;
-    yPos += 45;
-  }
+    // -- Details Section (Smaller Font) --
+    // Spaced 60-70 dots apart to prevent overlap
+    `^FO50,120^A0N,30,30^FDYarn: ${yarnName}^FS`,
+    `^FO50,170^A0N,30,30^FDLot: ${lotNumber}^FS`,
+    `^FO50,220^A0N,30,30^FDShade: ${shadeCode}^FS`,
 
-  // Yarn Name (Centered)
-  if (yarnName) {
-    zpl += `^CF0,${fontSize}\n`;
-    const wrappedYarnName = yarnName.substring(0, 35);
-    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${wrappedYarnName}^FS\n`;
-    yPos += 40;
-  }
+    // -- Barcode Section --
+    // ^BY2,2,100 -> Width=2 (Narrow), Ratio=2, Height=100 dots
+    `^BY2,2,100`,
+    
+    // Positioned lower at Y=300 to clear all text
+    // ^BC -> Code 128
+    // N, 100, Y, N, N -> Normal, 100 Height, Print Text Below, No text above, No Check digit
+    `^FO50,300^BCN,100,Y,N,N^FD${barcodeValue}^FS`,
 
-  // Shade & Lot (Centered)
-  zpl += `^CF0,${smallFontSize}\n`;
-  if (shadeCode || lotNumber) {
-    let detailLine = '';
-    if (shadeCode) detailLine += `Shade: ${shadeCode}`;
-    if (shadeCode && lotNumber) detailLine += `  |  `;
-    if (lotNumber) detailLine += `Lot: ${lotNumber}`;
+    `^XZ`               // End
+  ];
 
-    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${detailLine}^FS\n`;
-    yPos += 35;
-  }
+  return zplData.join('\n');
+};
 
-  // Barcode (Centered)
-  // Approximate centering for BY2 barcode
-  // Width = (chars + overhead) * module_width
-  const barcodeX = Math.max(labelMargin, Math.floor((widthDots - (barcodeValue.length * 16)) / 2));
-  zpl += `^FO${barcodeX},${yPos}^BY2,3,${barcodeHeight}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
-  yPos += barcodeHeight + 45;
+/**
+ * Generate ZPL for double label printing (2 items per 4x6 label)
+ * Optimized for 4x6 inch labels on TSC TE 244 (203 DPI) thermal printer
+ * Professional layout: Header (Product/Brand), Details List, Barcode, Footer
+ * Prints two items vertically stacked (Top: Y=0-609, Bottom: Y=609-1218)
+ */
+export const generateZPLDoubleLabel = (
+  item1: {
+    barcodeValue: string;
+    boxId?: string;
+    yarnName?: string;
+    lotNumber?: string;
+    shadeCode?: string;
+    supplier?: string;
+  } | null,
+  item2?: {
+    barcodeValue: string;
+    boxId?: string;
+    yarnName?: string;
+    lotNumber?: string;
+    shadeCode?: string;
+    supplier?: string;
+  } | null
+): string => {
+  // Helper: Generates ZPL for a single item at a specific Y position
+  // yOffset = 0 for Top Label, 609 for Bottom Label
+  const createLabelZpl = (
+    product: {
+      barcodeValue: string;
+      boxId?: string;
+      yarnName?: string;
+      lotNumber?: string;
+      shadeCode?: string;
+      supplier?: string;
+    } | null,
+    yOffset: number
+  ): string => {
+    if (!product) return ''; // Handle case where we have an odd number of items
 
-  // Footer/Supplier (Centered, smaller)
-  zpl += `^CF0,18\n`;
-  if (supplier) {
-    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${supplier.substring(0, 45)}^FS\n`;
-  }
+    const boxId = product.boxId || '';
+    const yarnName = product.yarnName || '';
+    const lotNumber = product.lotNumber || '';
+    const shadeCode = product.shadeCode || '';
+    const barcodeValue = product.barcodeValue || '';
+    const supplier = product.supplier || 'YARN LABEL';
 
-  zpl += `^XZ\n`;
-  return zpl;
+    return `
+      ^FO20,${30 + yOffset}^A0N,30,30^FD${supplier}^FS
+      ^FO20,${80 + yOffset}^A0N,30,30^FDBox ID: ${boxId}^FS
+      ^FO20,${120 + yOffset}^A0N,30,30^FDYarn: ${yarnName}^FS
+      ^FO20,${160 + yOffset}^A0N,30,30^FDLot: ${lotNumber}^FS
+      ^FO20,${200 + yOffset}^A0N,30,30^FDShade: ${shadeCode}^FS
+      ^BY2,2,100
+      ^FO40,${260 + yOffset}^BCN,100,Y,N,N^FD${barcodeValue}^FS
+      ^FO600,${400 + yOffset}^A0N,20,20^FDMade in India^FS`;
+  };
+
+  const zplData = [
+    `^XA`,              // Start ZPL
+    `^PW812`,           // Width 4 inches
+    `^LL1218`,          // Length 6 inches
+    `^CI28`,            // UTF-8 Encoding
+
+    // --- LABEL 1 (Top Half: 0 to 3 inches) ---
+    createLabelZpl(item1, 0),
+
+    // --- LABEL 2 (Bottom Half: 3 to 6 inches) ---
+    // Add 609 dots (3 inches) to Y position for second label
+    createLabelZpl(item2 || null, 609),
+
+    `^XZ`               // End ZPL
+  ];
+
+  return zplData.join('\n');
 };
 
 /**
@@ -898,6 +949,129 @@ export const printMultipleBarcodes = async (
       success: false,
       printed,
       errors: [...errors, error?.message || 'Failed to print barcodes'],
+    };
+  }
+};
+
+/**
+ * Print multiple barcodes using double-label format (2 items per 4x6 label)
+ * Automatically pairs items and prints them vertically stacked
+ * Saves paper by printing 2 items per label
+ */
+export const printDoubleBarcodes = async (
+  barcodes: Array<{
+    barcodeValue: string;
+    boxId?: string;
+    yarnName?: string;
+    shadeCode?: string;
+    lotNumber?: string;
+    supplier?: string;
+  }>,
+  options: {
+    printerName?: string;
+  } = {}
+): Promise<{ success: boolean; printed: number; errors: string[] }> => {
+  const errors: string[] = [];
+  let printed = 0;
+
+  try {
+    // Connect once at the start
+    if (typeof window === 'undefined' || typeof window.qz === 'undefined') {
+      if (!isQZLoaded()) {
+        await loadQZScript();
+      }
+    }
+
+    if (typeof window === 'undefined' || typeof window.qz === 'undefined') {
+      return {
+        success: false,
+        printed: 0,
+        errors: ['QZ Tray script not loaded'],
+      };
+    }
+
+    // Connect if not connected
+    if (!window.qz.websocket.isActive()) {
+      await window.qz.websocket.connect();
+    }
+
+    if (!window.qz.websocket.isActive()) {
+      return {
+        success: false,
+        printed: 0,
+        errors: ['Not connected to QZ Tray'],
+      };
+    }
+
+    // Get printer once
+    let printerName = options.printerName;
+    if (!printerName) {
+      printerName = await window.qz.printers.getDefault();
+      if (!printerName) {
+        return {
+          success: false,
+          printed: 0,
+          errors: ['No default printer found'],
+        };
+      }
+    }
+
+    const printer = await window.qz.printers.find(printerName);
+    if (!printer) {
+      return {
+        success: false,
+        printed: 0,
+        errors: [`Printer "${printerName}" not found`],
+      };
+    }
+
+    const config = getQZConfig(printer);
+    if (!config) throw new Error("Could not create QZ configuration");
+
+    // BATCH PRINTING: Pair items and create double labels
+    const allLabels: string[] = [];
+
+    // Process items in pairs
+    for (let i = 0; i < barcodes.length; i += 2) {
+      const item1 = barcodes[i];
+      const item2 = i + 1 < barcodes.length ? barcodes[i + 1] : null;
+
+      const zpl = generateZPLDoubleLabel(
+        {
+          barcodeValue: item1.barcodeValue,
+          boxId: item1.boxId,
+          yarnName: item1.yarnName,
+          shadeCode: item1.shadeCode,
+          lotNumber: item1.lotNumber,
+          supplier: item1.supplier,
+        },
+        item2 ? {
+          barcodeValue: item2.barcodeValue,
+          boxId: item2.boxId,
+          yarnName: item2.yarnName,
+          shadeCode: item2.shadeCode,
+          lotNumber: item2.lotNumber,
+          supplier: item2.supplier,
+        } : null
+      );
+      allLabels.push(zpl);
+    }
+
+    if (allLabels.length > 0) {
+      await window.qz.print(config, allLabels);
+      printed = barcodes.length; // Count actual items printed, not label sheets
+    }
+
+    return {
+      success: true,
+      printed,
+      errors: [],
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      printed,
+      errors: [...errors, error?.message || 'Failed to print double barcodes'],
     };
   }
 };
