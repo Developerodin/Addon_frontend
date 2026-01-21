@@ -190,6 +190,26 @@ const ProcessOrderPage = () => {
     printers: [],
   });
 
+  // Print settings modal state
+  const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
+  const [printSettings, setPrintSettings] = useState({
+    paperSize: '4x6' as '4x6' | '6x4',
+    paperWidth: 812, // 4 inches at 203 DPI
+    paperHeight: 1218, // 6 inches at 203 DPI
+    labelsPerPage: 2, // Number of labels to print on single sheet (1-6)
+    firstLabelTopMargin: 0, // Top margin for first label only
+    supplierFontSize: 30,
+    detailsFontSize: 30,
+    barcodeHeight: 100,
+    supplierYPos: 30,
+    boxIdYPos: 80,
+    yarnYPos: 120,
+    lotYPos: 160,
+    shadeYPos: 200,
+    barcodeYPos: 260,
+    footerYPos: 400,
+  });
+
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
   const hasPurchaseOrderReceived = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
@@ -1119,12 +1139,42 @@ const ProcessOrderPage = () => {
     };
   };
 
+  const handlePaperSizeChange = (size: '4x6' | '6x4') => {
+    if (size === '4x6') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '4x6',
+        paperWidth: 812, // 4 inches
+        paperHeight: 1218, // 6 inches
+      });
+    } else {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '6x4',
+        paperWidth: 1218, // 6 inches
+        paperHeight: 812, // 4 inches
+      });
+    }
+  };
+
   const handlePrintAllBarcodes = async () => {
     if (!order || boxes.length === 0) {
       toast.error('No boxes available to print');
       return;
     }
 
+    // Show print settings modal first
+    setShowPrintSettingsModal(true);
+  };
+
+  const executePrintWithSettings = async () => {
+    setShowPrintSettingsModal(false);
+    
+    if (!order || boxes.length === 0) {
+      toast.error('No boxes available to print');
+      return;
+    }
+    
     setIsPrinting(true);
     try {
       // Check script status first
@@ -1219,12 +1269,13 @@ const ProcessOrderPage = () => {
         };
       });
 
-      // Print all barcodes (2 per label in landscape mode)
-      const labelCount = Math.ceil(barcodesToPrint.length / 2);
-      toast.loading(`Printing ${barcodesToPrint.length} item(s) on ${labelCount} label(s) to ${defaultPrinter.name}...`);
+      // Print all barcodes with custom labels per page
+      const pageCount = Math.ceil(barcodesToPrint.length / printSettings.labelsPerPage);
+      toast.loading(`Printing ${barcodesToPrint.length} item(s) on ${pageCount} page(s) (${printSettings.labelsPerPage} labels/page) to ${defaultPrinter.name}...`);
 
       const result = await printDoubleBarcodes(barcodesToPrint, {
         printerName: defaultPrinter.name,
+        customSettings: printSettings,
       });
 
       toast.dismiss();
@@ -1897,11 +1948,12 @@ const ProcessOrderPage = () => {
                       };
                     });
 
-                    // Print all barcodes for this lot (2 per label in landscape mode)
-                    const labelCount = Math.ceil(barcodesToPrint.length / 2);
-                    toast.loading(`Printing ${barcodesToPrint.length} item(s) on ${labelCount} label(s) for ${lotNumber} to ${defaultPrinter.name}...`);
+                    // Print all barcodes for this lot with custom labels per page
+                    const pageCount = Math.ceil(barcodesToPrint.length / printSettings.labelsPerPage);
+                    toast.loading(`Printing ${barcodesToPrint.length} item(s) on ${pageCount} page(s) (${printSettings.labelsPerPage} labels/page) for ${lotNumber} to ${defaultPrinter.name}...`);
                     const result = await printDoubleBarcodes(barcodesToPrint, {
                       printerName: defaultPrinter.name,
+                      customSettings: printSettings,
                     });
 
                     toast.dismiss();
@@ -3031,6 +3083,303 @@ const ProcessOrderPage = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Settings Modal */}
+      {showPrintSettingsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Print Settings</h3>
+              <button
+                onClick={() => setShowPrintSettingsModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Paper Size Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Paper Size
+                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="4x6"
+                          checked={printSettings.paperSize === '4x6'}
+                          onChange={() => handlePaperSizeChange('4x6')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">4" × 6" (Portrait)</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="6x4"
+                          checked={printSettings.paperSize === '6x4'}
+                          onChange={() => handlePaperSizeChange('6x4')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">6" × 4" (Landscape)</span>
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Current: {printSettings.paperWidth} × {printSettings.paperHeight} dots
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Top Margin for First Label
+                      <span className="text-xs text-gray-500 ml-1">(for small roll sizes)</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.firstLabelTopMargin}
+                      onChange={(e) => setPrintSettings({ ...printSettings, firstLabelTopMargin: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="0"
+                      max="200"
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Adds space at top of first label only (dots)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Labels Per Page */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Labels Per Page
+                  </label>
+                  <select
+                    value={printSettings.labelsPerPage}
+                    onChange={(e) => setPrintSettings({ ...printSettings, labelsPerPage: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                  >
+                    <option value={1}>1 Label per page (Full size)</option>
+                    <option value={2}>2 Labels per page (Default)</option>
+                    <option value={3}>3 Labels per page</option>
+                    <option value={4}>4 Labels per page</option>
+                    <option value={5}>5 Labels per page</option>
+                    <option value={6}>6 Labels per page</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Choose how many labels to fit on a single sheet
+                  </p>
+                </div>
+              </div>
+
+              {/* Font Sizes Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">Font Sizes</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Supplier Name Font Size
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.supplierFontSize}
+                      onChange={(e) => setPrintSettings({ ...printSettings, supplierFontSize: parseInt(e.target.value) || 30 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="10"
+                      max="100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Details Font Size (Box, Yarn, Lot, Shade)
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.detailsFontSize}
+                      onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 30 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="10"
+                      max="100"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Barcode Height (dots)
+                  </label>
+                  <input
+                    type="number"
+                    value={printSettings.barcodeHeight}
+                    onChange={(e) => setPrintSettings({ ...printSettings, barcodeHeight: parseInt(e.target.value) || 100 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    min="50"
+                    max="200"
+                  />
+                </div>
+              </div>
+
+              {/* Y-Positions Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">Y-Positions (Vertical Spacing)</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Supplier Y Position
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.supplierYPos}
+                      onChange={(e) => setPrintSettings({ ...printSettings, supplierYPos: parseInt(e.target.value) || 30 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="0"
+                      max="600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Box ID Y Position
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.boxIdYPos}
+                      onChange={(e) => setPrintSettings({ ...printSettings, boxIdYPos: parseInt(e.target.value) || 80 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="0"
+                      max="600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Yarn Y Position
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.yarnYPos}
+                      onChange={(e) => setPrintSettings({ ...printSettings, yarnYPos: parseInt(e.target.value) || 120 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="0"
+                      max="600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Lot Y Position
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.lotYPos}
+                      onChange={(e) => setPrintSettings({ ...printSettings, lotYPos: parseInt(e.target.value) || 160 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="0"
+                      max="600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Shade Y Position
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.shadeYPos}
+                      onChange={(e) => setPrintSettings({ ...printSettings, shadeYPos: parseInt(e.target.value) || 200 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="0"
+                      max="600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Barcode Y Position
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.barcodeYPos}
+                      onChange={(e) => setPrintSettings({ ...printSettings, barcodeYPos: parseInt(e.target.value) || 260 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="0"
+                      max="600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Footer Y Position
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.footerYPos}
+                      onChange={(e) => setPrintSettings({ ...printSettings, footerYPos: parseInt(e.target.value) || 400 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="0"
+                      max="600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Reset to Default Button */}
+              <div className="pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => setPrintSettings({
+                    paperSize: '4x6',
+                    paperWidth: 812,
+                    paperHeight: 1218,
+                    labelsPerPage: 2,
+                    firstLabelTopMargin: 0,
+                    supplierFontSize: 30,
+                    detailsFontSize: 30,
+                    barcodeHeight: 100,
+                    supplierYPos: 30,
+                    boxIdYPos: 80,
+                    yarnYPos: 120,
+                    lotYPos: 160,
+                    shadeYPos: 200,
+                    barcodeYPos: 260,
+                    footerYPos: 400,
+                  })}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  <i className="ri-restart-line mr-2"></i>
+                  Reset to Default
+                </button>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowPrintSettingsModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executePrintWithSettings}
+                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
+              >
+                <i className="ri-printer-line mr-2"></i>
+                Print with These Settings
+              </button>
             </div>
           </div>
         </div>

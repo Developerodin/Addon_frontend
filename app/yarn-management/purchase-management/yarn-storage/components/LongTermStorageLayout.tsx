@@ -59,6 +59,29 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const [transferType, setTransferType] = useState<"LT_TO_LT" | "LT_TO_ST">("LT_TO_LT");
   const [transferBoxId, setTransferBoxId] = useState<string | undefined>(undefined);
 
+  // Print settings modal state
+  const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
+  const [printSettings, setPrintSettings] = useState({
+    paperSize: '4x6' as '4x6' | '6x4',
+    paperWidth: 812,
+    paperHeight: 1218,
+    labelsPerPage: 4,
+    columnsPerRow: 2,
+    firstLabelTopMargin: 0,
+    showCutLines: true,
+    zoneFontSize: 20,
+    rackCodeFontSize: 50,
+    detailsFontSize: 20,
+    barcodeHeight: 70,
+  });
+  const [racksReadyToPrint, setRacksReadyToPrint] = useState<Array<{
+    rackCode: string;
+    barcode: string;
+    shelf?: number | string;
+    floor?: number | string;
+    zone?: string;
+  }>>([]);
+
   // Fetch storage slots from API
   const fetchStorageSlots = async () => {
     try {
@@ -636,8 +659,26 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     }
   };
 
+  const handlePaperSizeChange = (size: '4x6' | '6x4') => {
+    if (size === '4x6') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '4x6',
+        paperWidth: 812,
+        paperHeight: 1218,
+      });
+    } else {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '6x4',
+        paperWidth: 1218,
+        paperHeight: 812,
+      });
+    }
+  };
+
   // Handle print selected racks barcode
-  const handlePrintSelectedRacks = async () => {
+  const handlePrintSelectedRacks = () => {
     if (selectedRacksForPrint.length === 0) {
       toast.error("Please select at least one rack");
       return;
@@ -649,54 +690,63 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       return;
     }
 
-    setIsPrinting(true);
-    const toastId = toast.loading(`Printing ${selectedRacks.length} rack barcode(s)...`);
-
-    try {
-      const result = await printRacks(selectedRacks.map(r => ({
-        rackCode: r.rackCode,
-        barcode: r.barcode!,
-        shelf: r.shelf,
-        floor: r.column,
-        zone: 'LT'
-      })));
-
-      if (result.success) {
-        toast.success(`Successfully printed ${result.printed} rack barcode(s)`, { id: toastId });
-      } else {
-        toast.error(result.error || "Failed to print rack barcodes", { id: toastId });
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Printing error", { id: toastId });
-    } finally {
-      setIsPrinting(false);
-    }
+    // Prepare racks for printing and show settings modal
+    setRacksReadyToPrint(selectedRacks.map(r => ({
+      rackCode: r.rackCode,
+      barcode: r.barcode!,
+      shelf: r.shelf,
+      floor: r.column,
+      zone: 'LT'
+    })));
+    setShowPrintBarcodeModal(false);
+    setShowPrintSettingsModal(true);
   };
 
   // Handle print all racks barcode
-  const handlePrintAllRacks = async () => {
+  const handlePrintAllRacks = () => {
     const racksToPrint = racks.filter((rack) => rack.barcode);
     if (racksToPrint.length === 0) {
       toast.error("No racks available to print");
       return;
     }
 
+    // Prepare racks for printing and show settings modal
+    setRacksReadyToPrint(racksToPrint.map(r => ({
+      rackCode: r.rackCode,
+      barcode: r.barcode!,
+      shelf: r.shelf,
+      floor: r.column,
+      zone: 'LT'
+    })));
+    setShowPrintBarcodeModal(false);
+    setShowPrintSettingsModal(true);
+  };
+
+  // Execute print with settings
+  const executePrintWithSettings = async () => {
+    setShowPrintSettingsModal(false);
+
+    if (racksReadyToPrint.length === 0) {
+      toast.error("No racks selected to print");
+      return;
+    }
+
     setIsPrinting(true);
-    const toastId = toast.loading(`Printing all ${racksToPrint.length} rack barcodes...`);
+    const rowsPerPage = Math.ceil(printSettings.labelsPerPage / printSettings.columnsPerRow);
+    const labelsPerSheet = rowsPerPage * printSettings.columnsPerRow;
+    const pageCount = Math.ceil(racksReadyToPrint.length / labelsPerSheet);
+    const layoutInfo = printSettings.columnsPerRow === 2 ? `${rowsPerPage} rows × 2 columns` : `${printSettings.labelsPerPage} rows × 1 column`;
+    const toastId = toast.loading(`Printing ${racksReadyToPrint.length} rack(s) on ${pageCount} page(s) (${layoutInfo})...`);
 
     try {
-      const result = await printRacks(racksToPrint.map(r => ({
-        rackCode: r.rackCode,
-        barcode: r.barcode!,
-        shelf: r.shelf,
-        floor: r.column,
-        zone: 'LT'
-      })));
+      const result = await printRacks(racksReadyToPrint, { customSettings: printSettings });
 
       if (result.success) {
-        toast.success(`Successfully printed all ${result.printed} rack barcodes`, { id: toastId });
+        toast.success(`Successfully printed ${result.printed} rack barcode(s)`, { id: toastId });
+        setSelectedRacksForPrint([]);
+        setRacksReadyToPrint([]);
       } else {
-        toast.error(result.error || "Failed to print barcodes", { id: toastId });
+        toast.error(result.error || "Failed to print rack barcodes", { id: toastId });
       }
     } catch (error: any) {
       toast.error(error.message || "Printing error", { id: toastId });
@@ -1164,6 +1214,228 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     Confirm
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Settings Modal */}
+      {showPrintSettingsModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Print Settings - Rack Barcodes</h3>
+              <button
+                onClick={() => setShowPrintSettingsModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Paper Settings */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Paper Size
+                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="4x6"
+                          checked={printSettings.paperSize === '4x6'}
+                          onChange={() => handlePaperSizeChange('4x6')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">4" × 6"</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="6x4"
+                          checked={printSettings.paperSize === '6x4'}
+                          onChange={() => handlePaperSizeChange('6x4')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">6" × 4"</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Top Margin (dots)
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.firstLabelTopMargin}
+                      onChange={(e) => setPrintSettings({ ...printSettings, firstLabelTopMargin: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      min="0"
+                      max="200"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Layout Settings */}
+              <div className="space-y-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">Layout Settings</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Columns Per Row
+                    </label>
+                    <select
+                      value={printSettings.columnsPerRow}
+                      onChange={(e) => setPrintSettings({ ...printSettings, columnsPerRow: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                    >
+                      <option value={1}>1 Column (Full Width)</option>
+                      <option value={2}>2 Columns (Side by Side)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Total Labels Per Page
+                    </label>
+                    <select
+                      value={printSettings.labelsPerPage}
+                      onChange={(e) => setPrintSettings({ ...printSettings, labelsPerPage: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                    >
+                      <option value={1}>1 Label</option>
+                      <option value={2}>2 Labels</option>
+                      <option value={3}>3 Labels</option>
+                      <option value={4}>4 Labels (Recommended)</option>
+                      <option value={6}>6 Labels</option>
+                      <option value={8}>8 Labels</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={printSettings.showCutLines}
+                      onChange={(e) => setPrintSettings({ ...printSettings, showCutLines: e.target.checked })}
+                      className="w-4 h-4 text-purple-600 focus:ring-purple-500 rounded"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Show cut lines (easier to cut labels)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Font & Size Settings */}
+              <div className="space-y-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">Font & Size Settings</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Zone Label Font Size
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.zoneFontSize}
+                      onChange={(e) => setPrintSettings({ ...printSettings, zoneFontSize: parseInt(e.target.value) || 20 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      min="10"
+                      max="40"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Rack Code Font Size
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.rackCodeFontSize}
+                      onChange={(e) => setPrintSettings({ ...printSettings, rackCodeFontSize: parseInt(e.target.value) || 50 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      min="30"
+                      max="80"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Details Font Size
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.detailsFontSize}
+                      onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 20 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      min="10"
+                      max="40"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Barcode Height (dots)
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.barcodeHeight}
+                      onChange={(e) => setPrintSettings({ ...printSettings, barcodeHeight: parseInt(e.target.value) || 70 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      min="50"
+                      max="120"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => setPrintSettings({
+                    paperSize: '4x6',
+                    paperWidth: 812,
+                    paperHeight: 1218,
+                    labelsPerPage: 4,
+                    columnsPerRow: 2,
+                    firstLabelTopMargin: 0,
+                    showCutLines: true,
+                    zoneFontSize: 20,
+                    rackCodeFontSize: 50,
+                    detailsFontSize: 20,
+                    barcodeHeight: 70,
+                  })}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                >
+                  <i className="ri-restart-line mr-2"></i>
+                  Reset to Default
+                </button>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowPrintSettingsModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executePrintWithSettings}
+                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md"
+              >
+                <i className="ri-printer-line mr-2"></i>
+                Print Rack Barcodes
               </button>
             </div>
           </div>

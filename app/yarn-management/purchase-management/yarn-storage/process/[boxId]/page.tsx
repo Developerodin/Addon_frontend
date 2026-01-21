@@ -52,6 +52,26 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   const [isUpdatingConeId, setIsUpdatingConeId] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
 
+  // Print settings modal state
+  const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
+  const [printSettings, setPrintSettings] = useState({
+    paperSize: '4x6' as '4x6' | '6x4',
+    paperWidth: 812,
+    paperHeight: 1218,
+    labelsPerPage: 2,
+    firstLabelTopMargin: 0,
+    supplierFontSize: 30,
+    detailsFontSize: 30,
+    barcodeHeight: 100,
+    supplierYPos: 30,
+    boxIdYPos: 80,
+    yarnYPos: 120,
+    lotYPos: 160,
+    shadeYPos: 200,
+    barcodeYPos: 260,
+    footerYPos: 400,
+  });
+
   const boxIdParam = useMemo(() => decodeURIComponent(params.boxId), [params]);
   const storageKey = useMemo(
     () => getProcessedBoxStorageKey(boxIdParam),
@@ -237,24 +257,58 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     }
   };
 
+  const handlePaperSizeChange = (size: '4x6' | '6x4') => {
+    if (size === '4x6') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '4x6',
+        paperWidth: 812,
+        paperHeight: 1218,
+      });
+    } else {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '6x4',
+        paperWidth: 1218,
+        paperHeight: 812,
+      });
+    }
+  };
+
   const handlePrintCones = async () => {
     if (!box || cones.length === 0) {
       toast.error("No cones available to print");
       return;
     }
 
+    // Show print settings modal first
+    setShowPrintSettingsModal(true);
+  };
+
+  const executePrintWithSettings = async () => {
+    setShowPrintSettingsModal(false);
+
+    if (!box || cones.length === 0) {
+      toast.error("No cones available to print");
+      return;
+    }
+
     setIsPrinting(true);
-    const toastId = toast.loading(`Printing ${cones.length} cone QR code(s)...`);
+    const pageCount = Math.ceil(cones.length / printSettings.labelsPerPage);
+    const toastId = toast.loading(`Printing ${cones.length} cone(s) on ${pageCount} page(s) (${printSettings.labelsPerPage} labels/page)...`);
 
     try {
-      const result = await printCones(cones.map(cone => ({
-        barcode: cone.barcode,
-        yarnName: box.yarnName,
-        poNumber: box.poNumber,
-        lotNumber: box.lotNumber,
-        shadeCode: box.shadeCode,
-        weight: cone.coneWeight
-      })));
+      const result = await printCones(
+        cones.map(cone => ({
+          barcode: cone.barcode,
+          yarnName: box.yarnName,
+          poNumber: box.poNumber,
+          lotNumber: box.lotNumber,
+          shadeCode: box.shadeCode,
+          weight: cone.coneWeight
+        })),
+        { customSettings: printSettings }
+      );
 
       if (result.success) {
         toast.success(`Successfully printed ${result.printed} cone QR code(s)`, { id: toastId });
@@ -628,6 +682,149 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
           </div>
         </div>
       </div>
+
+      {/* Print Settings Modal */}
+      {showPrintSettingsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Print Settings - Cone QR Labels</h3>
+              <button
+                onClick={() => setShowPrintSettingsModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Paper Size Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Paper Size
+                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="4x6"
+                          checked={printSettings.paperSize === '4x6'}
+                          onChange={() => handlePaperSizeChange('4x6')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">4" × 6" (Portrait)</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="6x4"
+                          checked={printSettings.paperSize === '6x4'}
+                          onChange={() => handlePaperSizeChange('6x4')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">6" × 4" (Landscape)</span>
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Current: {printSettings.paperWidth} × {printSettings.paperHeight} dots
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Top Margin for First Label
+                      <span className="text-xs text-gray-500 ml-1">(for small roll sizes)</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.firstLabelTopMargin}
+                      onChange={(e) => setPrintSettings({ ...printSettings, firstLabelTopMargin: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="0"
+                      max="200"
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Adds space at top of first label only (dots)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Labels Per Page */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Labels Per Page
+                  </label>
+                  <select
+                    value={printSettings.labelsPerPage}
+                    onChange={(e) => setPrintSettings({ ...printSettings, labelsPerPage: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                  >
+                    <option value={1}>1 Label per page (Full size)</option>
+                    <option value={2}>2 Labels per page (Default)</option>
+                    <option value={3}>3 Labels per page</option>
+                    <option value={4}>4 Labels per page</option>
+                    <option value={5}>5 Labels per page</option>
+                    <option value={6}>6 Labels per page</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Choose how many cone labels to fit on a single sheet
+                  </p>
+                </div>
+              </div>
+
+              {/* Reset to Default Button */}
+              <div className="pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => setPrintSettings({
+                    paperSize: '4x6',
+                    paperWidth: 812,
+                    paperHeight: 1218,
+                    labelsPerPage: 2,
+                    firstLabelTopMargin: 0,
+                    supplierFontSize: 30,
+                    detailsFontSize: 30,
+                    barcodeHeight: 100,
+                    supplierYPos: 30,
+                    boxIdYPos: 80,
+                    yarnYPos: 120,
+                    lotYPos: 160,
+                    shadeYPos: 200,
+                    barcodeYPos: 260,
+                    footerYPos: 400,
+                  })}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  <i className="ri-restart-line mr-2"></i>
+                  Reset to Default
+                </button>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowPrintSettingsModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executePrintWithSettings}
+                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
+              >
+                <i className="ri-printer-line mr-2"></i>
+                Print Cone QR Labels
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

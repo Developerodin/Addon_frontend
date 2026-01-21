@@ -517,29 +517,55 @@ export const generateZPLBarcode = (
 };
 
 /**
- * Generate ZPL for double label printing (2 items per 4x6 label)
+ * Generate ZPL for multiple label printing (1-6 items per page)
  * Optimized for 4x6 inch labels on TSC TE 244 (203 DPI) thermal printer
  * Professional layout: Header (Product/Brand), Details List, Barcode, Footer
- * Prints two items vertically stacked (Top: Y=0-609, Bottom: Y=609-1218)
+ * Dynamically stacks items based on labelsPerPage setting
  */
 export const generateZPLDoubleLabel = (
-  item1: {
+  items: Array<{
     barcodeValue: string;
     boxId?: string;
     yarnName?: string;
     lotNumber?: string;
     shadeCode?: string;
     supplier?: string;
-  } | null,
-  item2?: {
-    barcodeValue: string;
-    boxId?: string;
-    yarnName?: string;
-    lotNumber?: string;
-    shadeCode?: string;
-    supplier?: string;
-  } | null
+  } | null>,
+  customSettings?: {
+    paperWidth?: number;
+    paperHeight?: number;
+    labelsPerPage?: number;
+    firstLabelTopMargin?: number;
+    supplierFontSize?: number;
+    detailsFontSize?: number;
+    barcodeHeight?: number;
+    supplierYPos?: number;
+    boxIdYPos?: number;
+    yarnYPos?: number;
+    lotYPos?: number;
+    shadeYPos?: number;
+    barcodeYPos?: number;
+    footerYPos?: number;
+  }
 ): string => {
+  // Default settings
+  const settings = {
+    paperWidth: customSettings?.paperWidth || 812,
+    paperHeight: customSettings?.paperHeight || 1218,
+    labelsPerPage: customSettings?.labelsPerPage || 2,
+    firstLabelTopMargin: customSettings?.firstLabelTopMargin || 0,
+    supplierFontSize: customSettings?.supplierFontSize || 30,
+    detailsFontSize: customSettings?.detailsFontSize || 30,
+    barcodeHeight: customSettings?.barcodeHeight || 100,
+    supplierYPos: customSettings?.supplierYPos || 30,
+    boxIdYPos: customSettings?.boxIdYPos || 80,
+    yarnYPos: customSettings?.yarnYPos || 120,
+    lotYPos: customSettings?.lotYPos || 160,
+    shadeYPos: customSettings?.shadeYPos || 200,
+    barcodeYPos: customSettings?.barcodeYPos || 260,
+    footerYPos: customSettings?.footerYPos || 400,
+  };
+
   // Helper: Generates ZPL for a single item at a specific Y position
   // yOffset = 0 for Top Label, 609 for Bottom Label
   const createLabelZpl = (
@@ -563,38 +589,48 @@ export const generateZPLDoubleLabel = (
     const supplier = product.supplier || 'YARN LABEL';
 
     return `
-      ^FO20,${30 + yOffset}^A0N,30,30^FD${supplier}^FS
-      ^FO20,${80 + yOffset}^A0N,30,30^FDBox ID: ${boxId}^FS
-      ^FO20,${120 + yOffset}^A0N,30,30^FDYarn: ${yarnName}^FS
-      ^FO20,${160 + yOffset}^A0N,30,30^FDLot: ${lotNumber}^FS
-      ^FO20,${200 + yOffset}^A0N,30,30^FDShade: ${shadeCode}^FS
-      ^BY2,2,100
-      ^FO40,${260 + yOffset}^BCN,100,Y,N,N^FD${barcodeValue}^FS
-      ^FO600,${400 + yOffset}^A0N,20,20^FDMade in India^FS`;
+      ^FO20,${settings.supplierYPos + yOffset}^A0N,${settings.supplierFontSize},${settings.supplierFontSize}^FD${supplier}^FS
+      ^FO20,${settings.boxIdYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FDBox ID: ${boxId}^FS
+      ^FO20,${settings.yarnYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FDYarn: ${yarnName}^FS
+      ^FO20,${settings.lotYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FDLot: ${lotNumber}^FS
+      ^FO20,${settings.shadeYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FDShade: ${shadeCode}^FS
+      ^BY2,2,${settings.barcodeHeight}
+      ^FO40,${settings.barcodeYPos + yOffset}^BCN,${settings.barcodeHeight},Y,N,N^FD${barcodeValue}^FS
+      ^FO600,${settings.footerYPos + yOffset}^A0N,20,20^FDMade in India^FS`;
   };
+
+  // Calculate space per label based on labelsPerPage
+  const spacePerLabel = Math.floor(settings.paperHeight / settings.labelsPerPage);
 
   const zplData = [
     `^XA`,              // Start ZPL
-    `^PW812`,           // Width 4 inches
-    `^LL1218`,          // Length 6 inches
+    `^PW${settings.paperWidth}`,           // Custom paper width
+    `^LL${settings.paperHeight}`,          // Custom paper height
     `^CI28`,            // UTF-8 Encoding
-
-    // --- LABEL 1 (Top Half: 0 to 3 inches) ---
-    createLabelZpl(item1, 0),
-
-    // --- LABEL 2 (Bottom Half: 3 to 6 inches) ---
-    // Add 609 dots (3 inches) to Y position for second label
-    createLabelZpl(item2 || null, 609),
-
-    `^XZ`               // End ZPL
   ];
+
+  // Generate ZPL for each item
+  for (let i = 0; i < items.length && i < settings.labelsPerPage; i++) {
+    const item = items[i];
+    if (!item) continue;
+
+    // Calculate Y offset for this label
+    // First label gets the top margin, others are evenly spaced
+    const yOffset = i === 0 
+      ? settings.firstLabelTopMargin 
+      : (spacePerLabel * i);
+
+    zplData.push(createLabelZpl(item, yOffset));
+  }
+
+  zplData.push(`^XZ`); // End ZPL
 
   return zplData.join('\n');
 };
 
 /**
  * Generate ZPL for a Rack Label
- * Optimized for 50x70mm labels
+ * Works with both standalone and batched printing on 4x6 paper
  */
 export const generateZPLRack = (
   rackCode: string,
@@ -603,47 +639,72 @@ export const generateZPLRack = (
     shelf?: number | string;
     floor?: number | string;
     zone?: string;
+    labelWidth?: number;
+    labelHeight?: number;
+    xOffset?: number;
+    yOffset?: number;
+    zoneFontSize?: number;
+    rackCodeFontSize?: number;
+    detailsFontSize?: number;
+    barcodeHeight?: number;
   } = {}
 ): string => {
-  const { shelf, floor, zone } = options;
-  const labelWidth = 560; // 70mm
-  const labelHeight = 400; // 50mm
+  const { 
+    shelf, 
+    floor, 
+    zone, 
+    labelWidth = 812, 
+    labelHeight = 400,
+    xOffset = 0,
+    yOffset = 0,
+    zoneFontSize = 25,
+    rackCodeFontSize = 60,
+    detailsFontSize = 25,
+    barcodeHeight = 80
+  } = options;
+  
   const labelMargin = 20;
   const contentWidth = labelWidth - (labelMargin * 2);
 
-  let zpl = `^XA\n`;
-  zpl += `^PON\n`;
-  zpl += `^PW${labelWidth}\n`;
-  zpl += `^LL${labelHeight}\n`;
-  zpl += `^LS0\n`;
+  // For standalone printing, include ^XA/^XZ
+  // For batched printing, these will be excluded
+  const isStandalone = yOffset === 0 && xOffset === 0 && !options.labelWidth;
+  
+  let zpl = '';
+  
+  if (isStandalone) {
+    zpl += `^XA\n`;
+    zpl += `^PW${labelWidth}\n`;
+    zpl += `^LL${labelHeight}\n`;
+    zpl += `^CI28\n`;
+  }
 
-  let yPos = 40;
+  let yPos = 20 + yOffset;
+  const xPos = labelMargin + xOffset;
 
   // Zone Identifier
   const zoneLabel = zone === 'LT' ? 'LONG TERM STORAGE' : zone === 'ST' ? 'SHORT TERM STORAGE' : 'YARN STORAGE';
-  zpl += `^CF0,25\n`;
-  zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${zoneLabel}^FS\n`;
-  yPos += 40;
+  zpl += `^FO${xPos},${yPos}^A0N,${zoneFontSize},${zoneFontSize}^FD${zoneLabel}^FS\n`;
+  yPos += zoneFontSize + 10;
 
-  // Large Rack Code - Reduced font size to prevent clipping
-  zpl += `^CF0,80\n`;
-  zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${rackCode}^FS\n`;
-  yPos += 90;
+  // Large Rack Code
+  zpl += `^FO${xPos},${yPos}^A0N,${rackCodeFontSize},${rackCodeFontSize}^FD${rackCode}^FS\n`;
+  yPos += rackCodeFontSize + 10;
 
   // Details
-  zpl += `^CF0,30\n`;
   if (shelf !== undefined || floor !== undefined) {
-    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDShelf: ${shelf || '-'}  |  Floor: ${floor || '-'}^FS\n`;
-    yPos += 40;
+    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FDShelf: ${shelf || '-'}  |  Floor: ${floor || '-'}^FS\n`;
+    yPos += detailsFontSize + 10;
   }
 
   // Barcode (CODE128)
-  const barcodeHeight = 100;
-  const barcodeX = Math.max(labelMargin, Math.floor((labelWidth - (barcodeValue.length * 16)) / 2));
-  zpl += `^BY2,3,${barcodeHeight}\n`;
-  zpl += `^FO${barcodeX},${yPos}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
+  zpl += `^BY2,2,${barcodeHeight}\n`;
+  zpl += `^FO${xPos},${yPos}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
 
-  zpl += `^XZ\n`;
+  if (isStandalone) {
+    zpl += `^XZ\n`;
+  }
+  
   return zpl;
 };
 
@@ -969,6 +1030,22 @@ export const printDoubleBarcodes = async (
   }>,
   options: {
     printerName?: string;
+    customSettings?: {
+      paperWidth?: number;
+      paperHeight?: number;
+      labelsPerPage?: number;
+      firstLabelTopMargin?: number;
+      supplierFontSize?: number;
+      detailsFontSize?: number;
+      barcodeHeight?: number;
+      supplierYPos?: number;
+      boxIdYPos?: number;
+      yarnYPos?: number;
+      lotYPos?: number;
+      shadeYPos?: number;
+      barcodeYPos?: number;
+      footerYPos?: number;
+    };
   } = {}
 ): Promise<{ success: boolean; printed: number; errors: string[] }> => {
   const errors: string[] = [];
@@ -1028,32 +1105,35 @@ export const printDoubleBarcodes = async (
     const config = getQZConfig(printer);
     if (!config) throw new Error("Could not create QZ configuration");
 
-    // BATCH PRINTING: Pair items and create double labels
+    // BATCH PRINTING: Group items based on labelsPerPage setting
     const allLabels: string[] = [];
+    const labelsPerPage = options.customSettings?.labelsPerPage || 2;
 
-    // Process items in pairs
-    for (let i = 0; i < barcodes.length; i += 2) {
-      const item1 = barcodes[i];
-      const item2 = i + 1 < barcodes.length ? barcodes[i + 1] : null;
+    // Process items in groups
+    for (let i = 0; i < barcodes.length; i += labelsPerPage) {
+      // Collect items for this page
+      const pageItems: Array<{
+        barcodeValue: string;
+        boxId?: string;
+        yarnName?: string;
+        shadeCode?: string;
+        lotNumber?: string;
+        supplier?: string;
+      }> = [];
 
-      const zpl = generateZPLDoubleLabel(
-        {
-          barcodeValue: item1.barcodeValue,
-          boxId: item1.boxId,
-          yarnName: item1.yarnName,
-          shadeCode: item1.shadeCode,
-          lotNumber: item1.lotNumber,
-          supplier: item1.supplier,
-        },
-        item2 ? {
-          barcodeValue: item2.barcodeValue,
-          boxId: item2.boxId,
-          yarnName: item2.yarnName,
-          shadeCode: item2.shadeCode,
-          lotNumber: item2.lotNumber,
-          supplier: item2.supplier,
-        } : null
-      );
+      for (let j = 0; j < labelsPerPage && (i + j) < barcodes.length; j++) {
+        const barcode = barcodes[i + j];
+        pageItems.push({
+          barcodeValue: barcode.barcodeValue,
+          boxId: barcode.boxId,
+          yarnName: barcode.yarnName,
+          shadeCode: barcode.shadeCode,
+          lotNumber: barcode.lotNumber,
+          supplier: barcode.supplier,
+        });
+      }
+
+      const zpl = generateZPLDoubleLabel(pageItems, options.customSettings);
       allLabels.push(zpl);
     }
 
@@ -1078,6 +1158,7 @@ export const printDoubleBarcodes = async (
 
 /**
  * Print Rack Barcodes using QZ Tray
+ * Supports custom settings for paper size, labels per page, columns, cut lines, etc.
  */
 export const printRacks = async (
   racks: Array<{
@@ -1087,7 +1168,21 @@ export const printRacks = async (
     floor?: number | string;
     zone?: string;
   }>,
-  options: { printerName?: string } = {}
+  options: {
+    printerName?: string;
+    customSettings?: {
+      paperWidth?: number;
+      paperHeight?: number;
+      labelsPerPage?: number;
+      columnsPerRow?: number;
+      firstLabelTopMargin?: number;
+      showCutLines?: boolean;
+      zoneFontSize?: number;
+      rackCodeFontSize?: number;
+      detailsFontSize?: number;
+      barcodeHeight?: number;
+    };
+  } = {}
 ): Promise<{ success: boolean; printed: number; error?: string }> => {
   try {
     const connection = await connectQZ();
@@ -1099,16 +1194,101 @@ export const printRacks = async (
     const config = getQZConfig(printer);
     if (!config) throw new Error("Could not create QZ configuration");
 
-    const labels = racks.map(rack =>
-      generateZPLRack(rack.rackCode, rack.barcode, {
-        shelf: rack.shelf,
-        floor: rack.floor,
-        zone: rack.zone
-      })
-    );
+    // If custom settings with labelsPerPage > 1, batch the racks
+    const labelsPerPage = options.customSettings?.labelsPerPage || 1;
+    const columnsPerRow = options.customSettings?.columnsPerRow || 1;
+    const showCutLines = options.customSettings?.showCutLines !== false; // default true
+    
+    if (labelsPerPage > 1 && options.customSettings) {
+      // Generate multi-label pages
+      const labels: string[] = [];
+      const paperWidth = options.customSettings.paperWidth || 812;
+      const paperHeight = options.customSettings.paperHeight || 1218;
+      const firstLabelTopMargin = options.customSettings.firstLabelTopMargin || 0;
+      
+      // Calculate label dimensions based on columns
+      const labelWidth = Math.floor(paperWidth / columnsPerRow);
+      const rowsPerPage = Math.ceil(labelsPerPage / columnsPerRow);
+      const labelHeight = Math.floor(paperHeight / rowsPerPage);
+      
+      // Font sizes based on label size
+      const zoneFontSize = options.customSettings.zoneFontSize || 20;
+      const rackCodeFontSize = options.customSettings.rackCodeFontSize || 50;
+      const detailsFontSize = options.customSettings.detailsFontSize || 20;
+      const barcodeHeight = options.customSettings.barcodeHeight || 70;
 
-    await window.qz.print(config, labels);
-    return { success: true, printed: labels.length };
+      // Calculate labels per page (rows * columns)
+      const labelsPerSheet = rowsPerPage * columnsPerRow;
+
+      for (let i = 0; i < racks.length; i += labelsPerSheet) {
+        let zpl = `^XA\n^PW${paperWidth}\n^LL${paperHeight}\n^CI28\n`;
+        
+        // Add each rack to this page in grid layout
+        for (let j = 0; j < labelsPerSheet && (i + j) < racks.length; j++) {
+          const rack = racks[i + j];
+          
+          // Calculate row and column position
+          const row = Math.floor(j / columnsPerRow);
+          const col = j % columnsPerRow;
+          
+          // Calculate offsets
+          const xOffset = col * labelWidth;
+          const yOffset = row === 0 ? firstLabelTopMargin : (row * labelHeight);
+          
+          // Generate rack ZPL with offset and dimensions
+          const rackZpl = generateZPLRack(rack.rackCode, rack.barcode, {
+            shelf: rack.shelf,
+            floor: rack.floor,
+            zone: rack.zone,
+            labelWidth: labelWidth,
+            labelHeight: labelHeight,
+            xOffset: xOffset,
+            yOffset: yOffset,
+            zoneFontSize: zoneFontSize,
+            rackCodeFontSize: rackCodeFontSize,
+            detailsFontSize: detailsFontSize,
+            barcodeHeight: barcodeHeight
+          });
+          
+          zpl += rackZpl;
+        }
+        
+        // Add cut lines if enabled
+        if (showCutLines) {
+          // Horizontal cut lines (between rows)
+          for (let row = 1; row < rowsPerPage; row++) {
+            const y = row * labelHeight;
+            // Draw dashed line across the page
+            zpl += `^FO0,${y}^GB${paperWidth},1,1^FS\n`;
+          }
+          
+          // Vertical cut line (between columns, only if 2 columns)
+          if (columnsPerRow === 2) {
+            const x = labelWidth;
+            // Draw dashed line down the page
+            zpl += `^FO${x},0^GB1,${paperHeight},1^FS\n`;
+          }
+        }
+        
+        zpl += `^XZ\n`;
+        labels.push(zpl);
+      }
+      
+      await window.qz.print(config, labels);
+      return { success: true, printed: racks.length };
+    } else {
+      // Single label per page (original behavior)
+      const labels = racks.map(rack =>
+        generateZPLRack(rack.rackCode, rack.barcode, {
+          shelf: rack.shelf,
+          floor: rack.floor,
+          zone: rack.zone
+        })
+      );
+
+      await window.qz.print(config, labels);
+      return { success: true, printed: labels.length };
+    }
   } catch (error: any) {
     console.error('[QZ Tray] Rack print error:', error);
     return { success: false, printed: 0, error: error.message };
@@ -1117,6 +1297,7 @@ export const printRacks = async (
 
 /**
  * Print Cone QR Labels using QZ Tray
+ * Supports custom settings for paper size, labels per page, etc.
  */
 export const printCones = async (
   cones: Array<{
@@ -1127,7 +1308,15 @@ export const printCones = async (
     shadeCode?: string;
     weight?: number;
   }>,
-  options: { printerName?: string } = {}
+  options: {
+    printerName?: string;
+    customSettings?: {
+      paperWidth?: number;
+      paperHeight?: number;
+      labelsPerPage?: number;
+      firstLabelTopMargin?: number;
+    };
+  } = {}
 ): Promise<{ success: boolean; printed: number; error?: string }> => {
   try {
     const connection = await connectQZ();
@@ -1139,18 +1328,64 @@ export const printCones = async (
     const config = getQZConfig(printer);
     if (!config) throw new Error("Could not create QZ configuration");
 
-    const labels = cones.map(cone =>
-      generateZPLCone(cone.barcode, {
-        yarnName: cone.yarnName,
-        poNumber: cone.poNumber,
-        lotNumber: cone.lotNumber,
-        shadeCode: cone.shadeCode,
-        weight: cone.weight
-      })
-    );
+    // If custom settings with labelsPerPage > 1, batch the cones
+    const labelsPerPage = options.customSettings?.labelsPerPage || 1;
+    
+    if (labelsPerPage > 1 && options.customSettings) {
+      // Generate multi-label pages
+      const labels: string[] = [];
+      const paperWidth = options.customSettings.paperWidth || 812;
+      const paperHeight = options.customSettings.paperHeight || 1218;
+      const firstLabelTopMargin = options.customSettings.firstLabelTopMargin || 0;
+      const spacePerLabel = Math.floor(paperHeight / labelsPerPage);
 
-    await window.qz.print(config, labels);
-    return { success: true, printed: labels.length };
+      for (let i = 0; i < cones.length; i += labelsPerPage) {
+        let zpl = `^XA\n^PW${paperWidth}\n^LL${paperHeight}\n^CI28\n`;
+        
+        // Add each cone to this page
+        for (let j = 0; j < labelsPerPage && (i + j) < cones.length; j++) {
+          const cone = cones[i + j];
+          const yOffset = j === 0 ? firstLabelTopMargin : (spacePerLabel * j);
+          
+          // Generate cone ZPL with offset
+          const coneZpl = generateZPLCone(cone.barcode, {
+            yarnName: cone.yarnName,
+            poNumber: cone.poNumber,
+            lotNumber: cone.lotNumber,
+            shadeCode: cone.shadeCode,
+            weight: cone.weight
+          });
+          
+          // Extract the content between ^XA and ^XZ and apply offset
+          const content = coneZpl.replace(/\^XA\n?/, '').replace(/\^XZ\n?/, '');
+          const offsetContent = content.replace(/\^FO(\d+),(\d+)/g, (match, x, y) => {
+            return `^FO${x},${parseInt(y) + yOffset}`;
+          });
+          
+          zpl += offsetContent;
+        }
+        
+        zpl += `^XZ\n`;
+        labels.push(zpl);
+      }
+      
+      await window.qz.print(config, labels);
+      return { success: true, printed: cones.length };
+    } else {
+      // Single label per page (original behavior)
+      const labels = cones.map(cone =>
+        generateZPLCone(cone.barcode, {
+          yarnName: cone.yarnName,
+          poNumber: cone.poNumber,
+          lotNumber: cone.lotNumber,
+          shadeCode: cone.shadeCode,
+          weight: cone.weight
+        })
+      );
+
+      await window.qz.print(config, labels);
+      return { success: true, printed: labels.length };
+    }
   } catch (error: any) {
     console.error('[QZ Tray] Cone print error:', error);
     return { success: false, printed: 0, error: error.message };
