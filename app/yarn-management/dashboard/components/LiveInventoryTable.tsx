@@ -150,29 +150,20 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                     </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                    Long Term (kg)
+                    Available in Long Term (kg)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                    Short Term (kg)
+                    Available in Short Term (kg)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
                     Cones (Short-term)
                   </th>
                   <th
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                    onClick={() => handleSort("blockedQty")}
-                  >
-                    <div className="flex items-center gap-2">
-                      Blocked Qty
-                      <SortIcon field="blockedQty" />
-                    </div>
-                  </th>
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
                     onClick={() => handleSort("availableQty")}
                   >
                     <div className="flex items-center gap-2">
-                      Available Qty
+                      Total Available Qty
                       <SortIcon field="availableQty" />
                     </div>
                   </th>
@@ -202,11 +193,6 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                       {item.conesShortTerm}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                      <span className="text-orange-600 font-medium">
-                        {item.blockedQty.toLocaleString()} kg
-                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                       <span className="text-green-600 font-medium">
