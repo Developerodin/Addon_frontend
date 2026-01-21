@@ -51,6 +51,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   const [barcodeScanValue, setBarcodeScanValue] = useState("");
   const [isUpdatingConeId, setIsUpdatingConeId] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  
+  // Cone selection state
+  const [selectedCones, setSelectedCones] = useState<Set<string>>(new Set());
+  const [showPrintSelectionModal, setShowPrintSelectionModal] = useState(false);
 
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
@@ -58,18 +62,13 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     paperSize: '4x6' as '4x6' | '6x4',
     paperWidth: 812,
     paperHeight: 1218,
-    labelsPerPage: 2,
+    labelsPerPage: 4,
+    columnsPerRow: 2,
     firstLabelTopMargin: 0,
-    supplierFontSize: 30,
-    detailsFontSize: 30,
-    barcodeHeight: 100,
-    supplierYPos: 30,
-    boxIdYPos: 80,
-    yarnYPos: 120,
-    lotYPos: 160,
-    shadeYPos: 200,
-    barcodeYPos: 260,
-    footerYPos: 400,
+    showCutLines: true,
+    qrCodeSize: 5,
+    titleFontSize: 25,
+    detailsFontSize: 20,
   });
 
   const boxIdParam = useMemo(() => decodeURIComponent(params.boxId), [params]);
@@ -281,8 +280,40 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       return;
     }
 
-    // Show print settings modal first
+    // Show selection modal first
+    setShowPrintSelectionModal(true);
+  };
+
+  const handlePrintAll = () => {
+    setShowPrintSelectionModal(false);
     setShowPrintSettingsModal(true);
+  };
+
+  const handlePrintSelected = () => {
+    if (selectedCones.size === 0) {
+      toast.error("Please select at least one cone to print");
+      return;
+    }
+    setShowPrintSelectionModal(false);
+    setShowPrintSettingsModal(true);
+  };
+
+  const toggleConeSelection = (coneId: string) => {
+    const newSelected = new Set(selectedCones);
+    if (newSelected.has(coneId)) {
+      newSelected.delete(coneId);
+    } else {
+      newSelected.add(coneId);
+    }
+    setSelectedCones(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedCones.size === cones.length) {
+      setSelectedCones(new Set());
+    } else {
+      setSelectedCones(new Set(cones.map(c => c._id)));
+    }
   };
 
   const executePrintWithSettings = async () => {
@@ -293,13 +324,26 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       return;
     }
 
+    // Determine which cones to print
+    const conesToPrint = selectedCones.size > 0 
+      ? cones.filter(cone => selectedCones.has(cone._id))
+      : cones;
+
+    if (conesToPrint.length === 0) {
+      toast.error("No cones selected to print");
+      return;
+    }
+
     setIsPrinting(true);
-    const pageCount = Math.ceil(cones.length / printSettings.labelsPerPage);
-    const toastId = toast.loading(`Printing ${cones.length} cone(s) on ${pageCount} page(s) (${printSettings.labelsPerPage} labels/page)...`);
+    const rowsPerPage = Math.ceil(printSettings.labelsPerPage / printSettings.columnsPerRow);
+    const labelsPerSheet = rowsPerPage * printSettings.columnsPerRow;
+    const pageCount = Math.ceil(conesToPrint.length / labelsPerSheet);
+    const layoutInfo = printSettings.columnsPerRow === 2 ? `${rowsPerPage} rows × 2 columns` : `${printSettings.labelsPerPage} rows × 1 column`;
+    const toastId = toast.loading(`Printing ${conesToPrint.length} cone(s) on ${pageCount} page(s) (${layoutInfo})...`);
 
     try {
       const result = await printCones(
-        cones.map(cone => ({
+        conesToPrint.map(cone => ({
           barcode: cone.barcode,
           yarnName: box.yarnName,
           poNumber: box.poNumber,
@@ -312,6 +356,8 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
 
       if (result.success) {
         toast.success(`Successfully printed ${result.printed} cone QR code(s)`, { id: toastId });
+        // Clear selection after successful print
+        setSelectedCones(new Set());
       } else {
         toast.error(result.error || "Failed to print cone barcodes", { id: toastId });
       }
@@ -683,6 +729,110 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         </div>
       </div>
 
+      {/* Print Selection Modal */}
+      {showPrintSelectionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Select Cones to Print</h3>
+              <button
+                onClick={() => setShowPrintSelectionModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Select All Checkbox */}
+              <div className="mb-4 pb-4 border-b border-gray-200">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedCones.size === cones.length && cones.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 text-purple-600 focus:ring-purple-500 rounded"
+                  />
+                  <span className="ml-2 text-sm font-medium text-gray-700">
+                    Select All ({cones.length} cones)
+                  </span>
+                </label>
+              </div>
+
+              {/* Cones List */}
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {cones.map((cone) => (
+                  <div
+                    key={cone._id}
+                    className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${
+                      selectedCones.has(cone._id)
+                        ? 'bg-purple-50 border-purple-300'
+                        : 'bg-white border-gray-200 hover:bg-gray-50'
+                    }`}
+                    onClick={() => toggleConeSelection(cone._id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedCones.has(cone._id)}
+                      onChange={() => toggleConeSelection(cone._id)}
+                      className="w-4 h-4 text-purple-600 focus:ring-purple-500 rounded"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <div className="ml-3 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-900">
+                          {cone.barcode}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          Weight: {formatWeight(cone.coneWeight)}
+                        </span>
+                      </div>
+                      {cone.coneStorageId && (
+                        <span className="text-xs text-gray-500">
+                          Storage: {cone.coneStorageId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {selectedCones.size > 0 && (
+                <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                  <span className="text-sm font-medium text-purple-900">
+                    {selectedCones.size} cone(s) selected
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowPrintSelectionModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePrintAll}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+              >
+                <i className="ri-printer-line mr-2"></i>
+                Print All ({cones.length})
+              </button>
+              <button
+                onClick={handlePrintSelected}
+                disabled={selectedCones.size === 0}
+                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="ri-printer-line mr-2"></i>
+                Print Selected ({selectedCones.size})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Print Settings Modal */}
       {showPrintSettingsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -698,7 +848,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Paper Size Section */}
+              {/* Paper Settings */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
                 
@@ -717,7 +867,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                           onChange={() => handlePaperSizeChange('4x6')}
                           className="w-4 h-4 text-purple-600 focus:ring-purple-500"
                         />
-                        <span className="ml-2 text-sm text-gray-700">4" × 6" (Portrait)</span>
+                        <span className="ml-2 text-sm text-gray-700">4" × 6"</span>
                       </label>
                       <label className="flex items-center cursor-pointer">
                         <input
@@ -728,54 +878,125 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                           onChange={() => handlePaperSizeChange('6x4')}
                           className="w-4 h-4 text-purple-600 focus:ring-purple-500"
                         />
-                        <span className="ml-2 text-sm text-gray-700">6" × 4" (Landscape)</span>
+                        <span className="ml-2 text-sm text-gray-700">6" × 4"</span>
                       </label>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Current: {printSettings.paperWidth} × {printSettings.paperHeight} dots
-                    </p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Top Margin for First Label
-                      <span className="text-xs text-gray-500 ml-1">(for small roll sizes)</span>
+                      Top Margin (dots)
                     </label>
                     <input
                       type="number"
                       value={printSettings.firstLabelTopMargin}
                       onChange={(e) => setPrintSettings({ ...printSettings, firstLabelTopMargin: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
                       min="0"
                       max="200"
-                      placeholder="0"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Adds space at top of first label only (dots)
-                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Layout Settings */}
+              <div className="space-y-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">Layout Settings</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Columns Per Row
+                    </label>
+                    <select
+                      value={printSettings.columnsPerRow}
+                      onChange={(e) => setPrintSettings({ ...printSettings, columnsPerRow: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                    >
+                      <option value={1}>1 Column (Full Width)</option>
+                      <option value={2}>2 Columns (Side by Side)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Total Labels Per Page
+                    </label>
+                    <select
+                      value={printSettings.labelsPerPage}
+                      onChange={(e) => setPrintSettings({ ...printSettings, labelsPerPage: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                    >
+                      <option value={1}>1 Label</option>
+                      <option value={2}>2 Labels</option>
+                      <option value={3}>3 Labels</option>
+                      <option value={4}>4 Labels (Recommended)</option>
+                      <option value={6}>6 Labels</option>
+                      <option value={8}>8 Labels</option>
+                    </select>
                   </div>
                 </div>
 
-                {/* Labels Per Page */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Labels Per Page
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={printSettings.showCutLines}
+                      onChange={(e) => setPrintSettings({ ...printSettings, showCutLines: e.target.checked })}
+                      className="w-4 h-4 text-purple-600 focus:ring-purple-500 rounded"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Show cut lines (easier to cut labels)</span>
                   </label>
-                  <select
-                    value={printSettings.labelsPerPage}
-                    onChange={(e) => setPrintSettings({ ...printSettings, labelsPerPage: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-                  >
-                    <option value={1}>1 Label per page (Full size)</option>
-                    <option value={2}>2 Labels per page (Default)</option>
-                    <option value={3}>3 Labels per page</option>
-                    <option value={4}>4 Labels per page</option>
-                    <option value={5}>5 Labels per page</option>
-                    <option value={6}>6 Labels per page</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Choose how many cone labels to fit on a single sheet
-                  </p>
+                </div>
+              </div>
+
+              {/* QR Code & Font Settings */}
+              <div className="space-y-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">QR Code & Font Settings</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      QR Code Size
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.qrCodeSize}
+                      onChange={(e) => setPrintSettings({ ...printSettings, qrCodeSize: parseInt(e.target.value) || 5 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      min="3"
+                      max="10"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Module size (3-10)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Title Font Size
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.titleFontSize}
+                      onChange={(e) => setPrintSettings({ ...printSettings, titleFontSize: parseInt(e.target.value) || 25 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      min="15"
+                      max="40"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Details Font Size
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.detailsFontSize}
+                      onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 20 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      min="10"
+                      max="30"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -786,20 +1007,15 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                     paperSize: '4x6',
                     paperWidth: 812,
                     paperHeight: 1218,
-                    labelsPerPage: 2,
+                    labelsPerPage: 4,
+                    columnsPerRow: 2,
                     firstLabelTopMargin: 0,
-                    supplierFontSize: 30,
-                    detailsFontSize: 30,
-                    barcodeHeight: 100,
-                    supplierYPos: 30,
-                    boxIdYPos: 80,
-                    yarnYPos: 120,
-                    lotYPos: 160,
-                    shadeYPos: 200,
-                    barcodeYPos: 260,
-                    footerYPos: 400,
+                    showCutLines: true,
+                    qrCodeSize: 5,
+                    titleFontSize: 25,
+                    detailsFontSize: 20,
                   })}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
                 >
                   <i className="ri-restart-line mr-2"></i>
                   Reset to Default

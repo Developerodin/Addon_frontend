@@ -710,7 +710,7 @@ export const generateZPLRack = (
 
 /**
  * Generate ZPL for a Cone Label (with QR Code)
- * Optimized for 50x70mm labels
+ * Works with both standalone and batched printing on 4x6 paper
  */
 export const generateZPLCone = (
   barcodeValue: string,
@@ -720,60 +720,79 @@ export const generateZPLCone = (
     lotNumber?: string;
     shadeCode?: string;
     weight?: number;
+    labelWidth?: number;
+    labelHeight?: number;
+    xOffset?: number;
+    yOffset?: number;
+    qrCodeSize?: number;
+    titleFontSize?: number;
+    detailsFontSize?: number;
   } = {}
 ): string => {
-  const { yarnName, poNumber, lotNumber, shadeCode, weight } = options;
-  const labelWidth = 560; // 70mm
-  const labelHeight = 400; // 50mm
+  const { 
+    yarnName, 
+    poNumber, 
+    lotNumber, 
+    shadeCode, 
+    weight,
+    labelWidth = 812,
+    labelHeight = 400,
+    xOffset = 0,
+    yOffset = 0,
+    qrCodeSize = 5,
+    titleFontSize = 25,
+    detailsFontSize = 20
+  } = options;
+  
   const labelMargin = 20;
   const contentWidth = labelWidth - (labelMargin * 2);
 
-  let zpl = `^XA\n`;
-  zpl += `^PON\n`;
-  zpl += `^PW${labelWidth}\n`;
-  zpl += `^LL${labelHeight}\n`;
-  zpl += `^LS0\n`;
+  // For standalone printing, include ^XA/^XZ
+  // For batched printing, these will be excluded
+  const isStandalone = yOffset === 0 && xOffset === 0 && !options.labelWidth;
+  
+  let zpl = '';
+  
+  if (isStandalone) {
+    zpl += `^XA\n`;
+    zpl += `^PW${labelWidth}\n`;
+    zpl += `^LL${labelHeight}\n`;
+    zpl += `^CI28\n`;
+  }
 
-  let yPos = 50;
+  let yPos = 15 + yOffset;
+  const xPos = labelMargin + xOffset;
 
-  // Header
-  zpl += `^CF0,45\n`;
-  zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDCONE LABEL^FS\n`;
-  yPos += 55;
-
-  // Yarn Name (Centered)
-  zpl += `^CF0,35\n`;
+  // Yarn Name
   if (yarnName) {
     const wrappedYarn = yarnName.length > 30 ? yarnName.substring(0, 27) + '..' : yarnName;
-    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${wrappedYarn}^FS\n`;
-    yPos += 45;
+    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize + 2},${detailsFontSize + 2}^FD${wrappedYarn}^FS\n`;
+    yPos += detailsFontSize + 7;
   }
 
-  // Details (Centered)
-  zpl += `^CF0,25\n`;
-  zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDPO: ${poNumber || '-'}  |  Lot: ${lotNumber || '-'}  |  Shade: ${shadeCode || '-'}^FS\n`;
-  yPos += 35;
-  if (weight !== undefined) {
-    zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FDWeight: ${weight.toFixed(3)} kg^FS\n`;
-    yPos += 45;
-  } else {
-    yPos += 10;
+  // Details
+  zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FDPO: ${poNumber || '-'}^FS\n`;
+  yPos += detailsFontSize + 2;
+  
+  zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FDLot: ${lotNumber || '-'} | Shade: ${shadeCode || '-'}^FS\n`;
+  yPos += detailsFontSize + 5;
+
+  // Add spacing before barcode text
+  yPos += 8;
+
+  // Barcode Text ABOVE QR Code (to prevent overlap)
+  zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FD${barcodeValue}^FS\n`;
+  yPos += detailsFontSize + 8;
+
+  // QR Code below the barcode text
+  const qrWidth = qrCodeSize * 30;
+  const qrX = xPos + Math.floor((contentWidth - qrWidth) / 2);
+  zpl += `^FO${qrX},${yPos}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
+
+  if (isStandalone) {
+    zpl += `^XZ\n`;
   }
-
-  // QR Code (Centered)
-  // ^BQN,2,7 = Magnification 7. Approx width in dots? 
-  // Let's use magnification 6 and calculate offset. 6 dots/module. Approx 150 dots wide.
-  const mag = 6;
-  const qrWidth = mag * 30; // Rough estimate for a standard QR
-  const qrX = Math.floor((labelWidth - qrWidth) / 2);
-  zpl += `^FO${qrX},${yPos}^BQN,2,${mag}^FDQA,${barcodeValue}^FS\n`;
-  yPos += 160;
-
-  // Barcode Text (Centered below QR)
-  zpl += `^CF0,30\n`;
-  zpl += `^FO${labelMargin},${yPos}^FB${contentWidth},1,0,C^FD${barcodeValue}^FS\n`;
-
-  zpl += `^XZ\n`;
+  
   return zpl;
 };
 
@@ -1297,7 +1316,7 @@ export const printRacks = async (
 
 /**
  * Print Cone QR Labels using QZ Tray
- * Supports custom settings for paper size, labels per page, etc.
+ * Supports custom settings for paper size, labels per page, columns, cut lines, etc.
  */
 export const printCones = async (
   cones: Array<{
@@ -1314,7 +1333,12 @@ export const printCones = async (
       paperWidth?: number;
       paperHeight?: number;
       labelsPerPage?: number;
+      columnsPerRow?: number;
       firstLabelTopMargin?: number;
+      showCutLines?: boolean;
+      qrCodeSize?: number;
+      titleFontSize?: number;
+      detailsFontSize?: number;
     };
   } = {}
 ): Promise<{ success: boolean; printed: number; error?: string }> => {
@@ -1330,6 +1354,8 @@ export const printCones = async (
 
     // If custom settings with labelsPerPage > 1, batch the cones
     const labelsPerPage = options.customSettings?.labelsPerPage || 1;
+    const columnsPerRow = options.customSettings?.columnsPerRow || 1;
+    const showCutLines = options.customSettings?.showCutLines !== false; // default true
     
     if (labelsPerPage > 1 && options.customSettings) {
       // Generate multi-label pages
@@ -1337,32 +1363,67 @@ export const printCones = async (
       const paperWidth = options.customSettings.paperWidth || 812;
       const paperHeight = options.customSettings.paperHeight || 1218;
       const firstLabelTopMargin = options.customSettings.firstLabelTopMargin || 0;
-      const spacePerLabel = Math.floor(paperHeight / labelsPerPage);
+      
+      // Calculate label dimensions based on columns
+      const labelWidth = Math.floor(paperWidth / columnsPerRow);
+      const rowsPerPage = Math.ceil(labelsPerPage / columnsPerRow);
+      const labelHeight = Math.floor(paperHeight / rowsPerPage);
+      
+      // Font sizes
+      const qrCodeSize = options.customSettings.qrCodeSize || 5;
+      const titleFontSize = options.customSettings.titleFontSize || 25;
+      const detailsFontSize = options.customSettings.detailsFontSize || 20;
 
-      for (let i = 0; i < cones.length; i += labelsPerPage) {
+      // Calculate labels per page (rows * columns)
+      const labelsPerSheet = rowsPerPage * columnsPerRow;
+
+      for (let i = 0; i < cones.length; i += labelsPerSheet) {
         let zpl = `^XA\n^PW${paperWidth}\n^LL${paperHeight}\n^CI28\n`;
         
-        // Add each cone to this page
-        for (let j = 0; j < labelsPerPage && (i + j) < cones.length; j++) {
+        // Add each cone to this page in grid layout
+        for (let j = 0; j < labelsPerSheet && (i + j) < cones.length; j++) {
           const cone = cones[i + j];
-          const yOffset = j === 0 ? firstLabelTopMargin : (spacePerLabel * j);
           
-          // Generate cone ZPL with offset
+          // Calculate row and column position
+          const row = Math.floor(j / columnsPerRow);
+          const col = j % columnsPerRow;
+          
+          // Calculate offsets
+          const xOffset = col * labelWidth;
+          const yOffset = row === 0 ? firstLabelTopMargin : (row * labelHeight);
+          
+          // Generate cone ZPL with offset and dimensions
           const coneZpl = generateZPLCone(cone.barcode, {
             yarnName: cone.yarnName,
             poNumber: cone.poNumber,
             lotNumber: cone.lotNumber,
             shadeCode: cone.shadeCode,
-            weight: cone.weight
+            weight: cone.weight,
+            labelWidth: labelWidth,
+            labelHeight: labelHeight,
+            xOffset: xOffset,
+            yOffset: yOffset,
+            qrCodeSize: qrCodeSize,
+            titleFontSize: titleFontSize,
+            detailsFontSize: detailsFontSize
           });
           
-          // Extract the content between ^XA and ^XZ and apply offset
-          const content = coneZpl.replace(/\^XA\n?/, '').replace(/\^XZ\n?/, '');
-          const offsetContent = content.replace(/\^FO(\d+),(\d+)/g, (match, x, y) => {
-            return `^FO${x},${parseInt(y) + yOffset}`;
-          });
+          zpl += coneZpl;
+        }
+        
+        // Add cut lines if enabled
+        if (showCutLines) {
+          // Horizontal cut lines (between rows)
+          for (let row = 1; row < rowsPerPage; row++) {
+            const y = row * labelHeight;
+            zpl += `^FO0,${y}^GB${paperWidth},1,1^FS\n`;
+          }
           
-          zpl += offsetContent;
+          // Vertical cut line (between columns, only if 2 columns)
+          if (columnsPerRow === 2) {
+            const x = labelWidth;
+            zpl += `^FO${x},0^GB1,${paperHeight},1^FS\n`;
+          }
         }
         
         zpl += `^XZ\n`;
