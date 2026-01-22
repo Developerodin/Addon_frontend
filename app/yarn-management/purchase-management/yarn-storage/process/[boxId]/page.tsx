@@ -601,8 +601,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                         <td className="px-1.5 py-2 border border-gray-200">
                           {activeConeId === cone._id ? (
                             <input
-                              type="number"
-                              step="0.001"
+                              type="text"
                               className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                               value={coneInputs[cone._id]?.coneWeight || ""}
                               onChange={(e) =>
@@ -629,8 +628,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                         <td className="px-1.5 py-2 border border-gray-200">
                           {activeConeId === cone._id ? (
                             <input
-                              type="number"
-                              step="0.001"
+                              type="text"
                               className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                               value={coneInputs[cone._id]?.tearWeight || ""}
                               onChange={(e) =>

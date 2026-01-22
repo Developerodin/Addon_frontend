@@ -83,6 +83,27 @@ interface ReturnRecord {
   lastUpdated: string;
 }
 
+interface ReturnTransaction {
+  _id: string;
+  orderno: string;
+  yarnName: string;
+  transactionType: string;
+  transactionDate: string;
+  transactionNetWeight: number;
+  transactionTotalWeight: number;
+  transactionTearWeight: number;
+  transactionConeCount: number;
+  createdAt: string;
+  updatedAt: string;
+  yarn?: {
+    _id: string;
+    yarnName: string;
+    yarnType?: {
+      name: string;
+    };
+  };
+}
+
 const getOrderStatusFromCones = (cones: Cone[]): OrderStatus => {
   if (cones.length === 0) return "Awaiting Return";
   const returned = cones.filter((cone) => cone.status === "Returned").length;
@@ -130,6 +151,35 @@ const getAccessToken = (): string | null => {
   }
 };
 
+// Helper function to extract transactions from nested API response structure
+const extractTransactions = (data: any): any[] => {
+  if (!data) return [];
+  
+  // Handle paginated response
+  if (data.results) {
+    data = data.results;
+  }
+  
+  // If not an array, return empty
+  if (!Array.isArray(data)) {
+    return [];
+  }
+  
+  // Extract transactions from nested structure
+  const transactions: any[] = [];
+  data.forEach((item: any) => {
+    // Check if item has a transactions array (nested structure)
+    if (item.transactions && Array.isArray(item.transactions)) {
+      transactions.push(...item.transactions);
+    } else if (item.transactionType) {
+      // If item is already a transaction, add it directly
+      transactions.push(item);
+    }
+  });
+  
+  return transactions;
+};
+
 const statusBadgeColor = (status: ReturnStatus | OrderStatus) => {
   switch (status) {
     case "Awaiting":
@@ -151,10 +201,9 @@ const YarnReturnPage = () => {
 
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [history, setHistory] = useState<ReturnRecord[]>([]);
+  const [returnTransactions, setReturnTransactions] = useState<ReturnTransaction[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [activeConeId, setActiveConeId] = useState<string | null>(null);
-  const [historyStatusFilter, setHistoryStatusFilter] =
-    useState<ReturnStatus | "all">("all");
   const [historySearchTerm, setHistorySearchTerm] = useState("");
   const [historyDateRange, setHistoryDateRange] = useState<{
     from: string;
@@ -171,7 +220,11 @@ const YarnReturnPage = () => {
   const [currentConeBarcode, setCurrentConeBarcode] = useState<string | null>(null); // Track which cone needs rack
   const [barcodeLoading, setBarcodeLoading] = useState(false);
   const [storingCone, setStoringCone] = useState(false);
+  const [emptyCones, setEmptyCones] = useState<Set<string>>(new Set()); // Track which cones are empty (no yarn left)
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showConeTypeModal, setShowConeTypeModal] = useState(false);
+  const [pendingConeBarcode, setPendingConeBarcode] = useState<string | null>(null);
+  const [pendingConeData, setPendingConeData] = useState<any>(null);
   const [transactionForm, setTransactionForm] = useState({
     totalWeight: "",
     numberOfCones: "1",
@@ -224,21 +277,18 @@ const YarnReturnPage = () => {
               let issuedTransactions: any[] = [];
               if (transactionsResponse.ok) {
                 const transactionsData = await transactionsResponse.json();
-                // Handle both array and paginated response formats
-                issuedTransactions = Array.isArray(transactionsData)
-                  ? transactionsData
-                  : (transactionsData.results || []);
+                // Extract transactions from nested structure
+                issuedTransactions = extractTransactions(transactionsData);
                 // Filter to only yarn_issued transactions
                 issuedTransactions = issuedTransactions.filter((tx: any) => tx.transactionType === "yarn_issued");
               }
 
               // Also fetch returned transactions to check which cones are already returned
-              // Try the specific endpoint first, then fallback to querying all transactions
+              // Query all transactions for this order and filter by type
               let returnedTransactions: any[] = [];
               try {
-                // Try specific endpoint
-                const returnedResponse = await fetch(
-                  `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-returned-by-order/${order.orderNumber}`,
+                const allTransactionsResponse = await fetch(
+                  `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${order.orderNumber}`,
                   {
                     headers: {
                       "Content-Type": "application/json",
@@ -246,29 +296,14 @@ const YarnReturnPage = () => {
                     },
                   }
                 );
-                if (returnedResponse.ok) {
-                  returnedTransactions = await returnedResponse.json();
-                } else {
-                  // Fallback: query all transactions for this order and filter by type
-                  const allTransactionsResponse = await fetch(
-                    `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${order.orderNumber}`,
-                    {
-                      headers: {
-                        "Content-Type": "application/json",
-                        ...(token && { Authorization: `Bearer ${token}` }),
-                      },
-                    }
-                  );
-                  if (allTransactionsResponse.ok) {
-                    const allTransactions = await allTransactionsResponse.json();
-                    returnedTransactions = Array.isArray(allTransactions)
-                      ? allTransactions.filter((tx: any) => tx.transactionType === "yarn_returned")
-                      : (allTransactions.results || []).filter((tx: any) => tx.transactionType === "yarn_returned");
-                  }
+                if (allTransactionsResponse.ok) {
+                  const allTransactions = await allTransactionsResponse.json();
+                  returnedTransactions = extractTransactions(allTransactions);
+                  returnedTransactions = returnedTransactions.filter((tx: any) => tx.transactionType === "yarn_returned");
                 }
               } catch (err) {
                 // API might not exist yet, that's okay
-                console.warn("Returned transactions API not available:", err);
+                console.warn("Failed to fetch returned transactions:", err);
               }
 
               // Convert transactions to cones
@@ -294,7 +329,7 @@ const YarnReturnPage = () => {
                   );
 
                   // Handle multiple cones in one transaction (numberOfCones > 1)
-                  const numberOfCones = tx.numberOfCones || 1;
+                  const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
                   const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
 
                   for (let i = 0; i < numberOfCones; i++) {
@@ -380,6 +415,39 @@ const YarnReturnPage = () => {
 
         setOrders(ordersWithIssuedCones);
         setHistory(ordersWithIssuedCones.map((order) => buildHistoryRecord(order)));
+
+        // Fetch all return transactions for all orders
+        const uniqueOrderNumbers = Array.from(new Set(ordersWithIssuedCones.map(o => o.orderNumber)));
+        const allReturnTransactions: ReturnTransaction[] = [];
+        
+        await Promise.all(
+          uniqueOrderNumbers.map(async (orderNumber) => {
+            try {
+              const transactionsResponse = await fetch(
+                `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${orderNumber}`,
+                {
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(token && { Authorization: `Bearer ${token}` }),
+                  },
+                }
+              );
+
+              if (transactionsResponse.ok) {
+                const transactionsData = await transactionsResponse.json();
+                const transactions = extractTransactions(transactionsData);
+                const returnedTxs = transactions.filter(
+                  (tx: any) => tx.transactionType === "yarn_returned"
+                ) as ReturnTransaction[];
+                allReturnTransactions.push(...returnedTxs);
+              }
+            } catch (err) {
+              console.warn(`Failed to fetch return transactions for order ${orderNumber}:`, err);
+            }
+          })
+        );
+
+        setReturnTransactions(allReturnTransactions);
       } catch (error) {
         console.error("Error fetching orders:", error);
         toast.error("Failed to load production orders");
@@ -391,31 +459,134 @@ const YarnReturnPage = () => {
     fetchOrders();
   }, [hasPermission]);
 
-  const pendingOrders = useMemo(
-    () => orders.filter((order) => order.status !== "Returned"),
-    [orders]
-  );
+  // Filter pending orders - exclude orders where all cones have been returned
+  // Check both cone status and return transaction cone counts
+  const pendingOrders = useMemo(() => {
+    return orders.filter((order) => {
+      // If order status is already "Returned", exclude it
+      if (order.status === "Returned") {
+        return false;
+      }
+
+      // Check if all cones are marked as returned (most reliable check)
+      const allConesReturned =
+        order.cones.length > 0 &&
+        order.cones.every((cone) => cone.status === "Returned");
+
+      if (allConesReturned) {
+        return false; // Exclude from pending
+      }
+
+      // Get return transactions for this order (same order number)
+      const orderReturnTransactions = returnTransactions.filter(
+        (tx) => tx.orderno === order.orderNumber
+      );
+
+      if (orderReturnTransactions.length === 0) {
+        // No return transactions, show in pending
+        return true;
+      }
+
+      // Count total cones in the order
+      const totalConesInOrder = order.cones.length;
+
+      // Count total cones returned from return transactions
+      const totalConesReturned = orderReturnTransactions.reduce(
+        (sum, tx) => sum + (tx.transactionConeCount || 1),
+        0
+      );
+
+      // If returned cones count >= total cones, exclude from pending
+      if (totalConesReturned >= totalConesInOrder) {
+        return false;
+      }
+
+      // If we have some returned cones but not all, still show in pending
+      return true;
+    });
+  }, [orders, returnTransactions]);
 
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId) ?? null,
     [orders, selectedOrderId]
   );
 
+  // Calculate pending cones (cones that haven't been returned)
+  // Count based on return transactions history, not just cone status
   const totalPendingCones = useMemo(
     () =>
-      pendingOrders.reduce(
-        (sum, order) =>
-          sum +
-          order.cones.filter((cone) => cone.status !== "Returned").length,
-        0
-      ),
-    [pendingOrders]
+      pendingOrders.reduce((sum, order) => {
+        // Get return transactions for this order
+        const orderReturnTransactions = returnTransactions.filter(
+          (tx) => tx.orderno === order.orderNumber
+        );
+        
+        // Count total cones returned from return transactions (from history)
+        const totalConesReturnedFromHistory = orderReturnTransactions.reduce(
+          (txSum, tx) => txSum + (tx.transactionConeCount || 1),
+          0
+        );
+        
+        // Total cones in the order
+        const totalConesInOrder = order.cones.length;
+        
+        // Actual pending cones = total cones - cones returned in history
+        const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
+        
+        return sum + actualPendingCones;
+      }, 0),
+    [pendingOrders, returnTransactions]
   );
 
-  const totalCompletedOrders = useMemo(
-    () => orders.filter((order) => order.status === "Returned").length,
-    [orders]
+  // Calculate returned cones from return transactions
+  const totalReturnedCones = useMemo(
+    () =>
+      returnTransactions.reduce(
+        (sum, tx) => sum + (tx.transactionConeCount || 1),
+        0
+      ),
+    [returnTransactions]
   );
+
+  // Calculate orders where all cones have been returned
+  const totalCompletedOrders = useMemo(() => {
+    return orders.filter((order) => {
+      // Check if order status is "Returned"
+      if (order.status === "Returned") {
+        return true;
+      }
+
+      // Check if all cones are marked as returned
+      const allConesReturned =
+        order.cones.length > 0 &&
+        order.cones.every((cone) => cone.status === "Returned");
+
+      if (allConesReturned) {
+        return true;
+      }
+
+      // Get return transactions for this order
+      const orderReturnTransactions = returnTransactions.filter(
+        (tx) => tx.orderno === order.orderNumber
+      );
+
+      if (orderReturnTransactions.length === 0) {
+        return false;
+      }
+
+      // Count total cones in the order
+      const totalConesInOrder = order.cones.length;
+
+      // Count total cones returned from return transactions
+      const totalConesReturned = orderReturnTransactions.reduce(
+        (sum, tx) => sum + (tx.transactionConeCount || 1),
+        0
+      );
+
+      // Order is completed if returned cones >= total cones
+      return totalConesReturned >= totalConesInOrder;
+    }).length;
+  }, [orders, returnTransactions]);
 
   useEffect(() => {
     if (!pendingToastShown.current && pendingOrders.length > 0) {
@@ -426,31 +597,35 @@ const YarnReturnPage = () => {
     }
   }, [pendingOrders]);
 
-  const filteredHistory = useMemo(() => {
-    return history
-      .filter((record) => {
+  const filteredReturnTransactions = useMemo(() => {
+    return returnTransactions
+      .filter((transaction) => {
+        // Filter by order number search
         if (
           historySearchTerm &&
-          !record.productionOrder
+          !transaction.orderno
+            .toLowerCase()
+            .includes(historySearchTerm.toLowerCase()) &&
+          !transaction.yarnName
             .toLowerCase()
             .includes(historySearchTerm.toLowerCase())
         ) {
           return false;
         }
-        if (historyStatusFilter !== "all" && record.status !== historyStatusFilter) {
-          return false;
-        }
+        
+        // Filter by date range
         if (historyDateRange.from) {
           const fromDate = new Date(historyDateRange.from);
-          if (new Date(record.lastUpdated) < fromDate) {
+          const transactionDate = new Date(transaction.transactionDate);
+          if (transactionDate < fromDate) {
             return false;
           }
         }
         if (historyDateRange.to) {
           const toDate = new Date(historyDateRange.to);
-          const recordDate = new Date(record.lastUpdated);
-          recordDate.setHours(0, 0, 0, 0);
-          if (recordDate > toDate) {
+          const transactionDate = new Date(transaction.transactionDate);
+          transactionDate.setHours(0, 0, 0, 0);
+          if (transactionDate > toDate) {
             return false;
           }
         }
@@ -458,10 +633,10 @@ const YarnReturnPage = () => {
       })
       .sort(
         (a, b) =>
-          new Date(b.lastUpdated).getTime() -
-          new Date(a.lastUpdated).getTime()
+          new Date(b.transactionDate || b.createdAt).getTime() -
+          new Date(a.transactionDate || a.createdAt).getTime()
       );
-  }, [history, historyDateRange.from, historyDateRange.to, historySearchTerm, historyStatusFilter]);
+  }, [returnTransactions, historyDateRange.from, historyDateRange.to, historySearchTerm]);
 
   if (isLoading || ordersLoading) {
     return (
@@ -518,6 +693,10 @@ const YarnReturnPage = () => {
     setScannedBarcodes([]);
     setScannedConeData(new Map());
     setRackBarcodes(new Map());
+    setEmptyCones(new Set());
+    setShowConeTypeModal(false);
+    setPendingConeBarcode(null);
+    setPendingConeData(null);
     setScanningMode("cone");
     setCurrentConeBarcode(null);
     setActiveConeId(null);
@@ -612,6 +791,28 @@ const YarnReturnPage = () => {
 
       console.log("✅ Cone updated with storage location");
 
+      // Update stored cone data with latest coneWeight from API response
+      const updatedConeData = new Map(scannedConeData);
+      const existingConeData = updatedConeData.get(coneBarcode);
+      if (existingConeData) {
+        // Get the latest coneWeight from the API response (remaining yarn weight)
+        const latestConeWeight = coneDetails.coneWeight || 0;
+        updatedConeData.set(coneBarcode, {
+          ...existingConeData,
+          coneDetails: {
+            ...existingConeData.coneDetails,
+            ...coneDetails, // Update with latest API response including coneWeight
+          },
+          coneWeight: latestConeWeight, // Update top-level coneWeight with latest value
+        });
+        setScannedConeData(updatedConeData);
+        console.log("📦 Updated cone data with latest coneWeight:", {
+          barcode: coneBarcode,
+          coneWeight: latestConeWeight,
+          coneDetailsConeWeight: coneDetails.coneWeight,
+        });
+      }
+
       // Store rack barcode mapping
       const newRackBarcodes = new Map(rackBarcodes);
       newRackBarcodes.set(coneBarcode, rackBarcode);
@@ -625,20 +826,23 @@ const YarnReturnPage = () => {
 
       toast.success(`Cone stored in rack ${rackBarcode}`);
       
-      // Check if all cones have been scanned and stored
+      // Check if all cones have been scanned and stored (or are empty)
       const numberOfCones = parseInt(transactionForm.numberOfCones) || 1;
-      console.log("🔢 Checking if all cones stored:", {
+      const conesNeedingRack = scannedBarcodes.filter(b => !emptyCones.has(b));
+      const allConesScanned = scannedBarcodes.length >= numberOfCones;
+      const allConesStored = newRackBarcodes.size >= conesNeedingRack.length;
+      const shouldOpenModal = allConesScanned && allConesStored;
+      
+      console.log("🔢 Checking if all cones processed:", {
         scannedCount: scannedBarcodes.length,
         storedCount: newRackBarcodes.size,
         requiredCount: numberOfCones,
+        emptyConesCount: emptyCones.size,
+        conesNeedingRackCount: conesNeedingRack.length,
         scannedBarcodes: Array.from(scannedBarcodes),
         rackBarcodes: Array.from(newRackBarcodes.entries()),
+        emptyCones: Array.from(emptyCones),
       });
-      
-      // Check if we should open the modal
-      const allConesScanned = scannedBarcodes.length >= numberOfCones;
-      const allConesStored = newRackBarcodes.size >= numberOfCones;
-      const shouldOpenModal = allConesScanned && allConesStored;
       
       console.log("📋 Modal check:", {
         allConesScanned,
@@ -647,16 +851,39 @@ const YarnReturnPage = () => {
       });
       
       if (shouldOpenModal) {
-        // All cones scanned and stored, open modal
-        console.log("✅ All cones scanned and stored, opening modal");
+        // All cones scanned and stored (or empty), open modal
+        console.log("✅ All cones scanned and processed, opening modal");
+        
+        // Auto-fill form with cone weights
+        const totalConeWeight = scannedBarcodes.reduce((sum, barcode) => {
+          const coneData = scannedConeData.get(barcode);
+          const coneWeight = coneData?.coneWeight || coneData?.coneDetails?.coneWeight || 0;
+          return sum + coneWeight;
+        }, 0);
+        
+        setTransactionForm((prev) => ({
+          ...prev,
+          totalWeight: totalConeWeight > 0 ? totalConeWeight.toFixed(2) : prev.totalWeight,
+          totalNetWeight: totalConeWeight > 0 ? totalConeWeight.toFixed(2) : prev.totalNetWeight,
+        }));
+        
         setShowReturnModal(true);
-        toast.success(`All ${numberOfCones} cone(s) scanned and stored. Fill in the transaction details.`);
+        toast.success(`All ${numberOfCones} cone(s) scanned and processed. Fill in the transaction details.`);
       } else {
-        // Reset to scan next cone only if not opening modal
-        console.log("🔄 Resetting to scan next cone");
-        setScanningMode("cone");
-        setCurrentConeBarcode(null);
-        setBarcodeInput("");
+        // Find next cone that needs rack barcode
+        const nextConeNeedingRack = scannedBarcodes.find(b => !emptyCones.has(b) && !newRackBarcodes.has(b));
+        if (nextConeNeedingRack) {
+          console.log("🔄 Switching to next cone needing rack:", nextConeNeedingRack);
+          setScanningMode("rack");
+          setCurrentConeBarcode(nextConeNeedingRack);
+          setBarcodeInput("");
+        } else {
+          // All cones that need rack have been stored, continue scanning more cones
+          console.log("🔄 All rack cones stored, continuing to scan more cones");
+          setScanningMode("cone");
+          setCurrentConeBarcode(null);
+          setBarcodeInput("");
+        }
       }
     } catch (error) {
       console.error("❌ Error storing cone in rack:", {
@@ -669,6 +896,105 @@ const YarnReturnPage = () => {
       toast.error(error instanceof Error ? error.message : "Failed to store cone in rack");
     } finally {
       setStoringCone(false);
+    }
+  };
+
+  const handleConeTypeSelection = (isEmpty: boolean) => {
+    if (!pendingConeBarcode || !pendingConeData) {
+      toast.error("Cone data not found.");
+      setShowConeTypeModal(false);
+      return;
+    }
+
+    const { coneDetails, cone, coneWeight } = pendingConeData;
+    const value = pendingConeBarcode;
+
+    // Get coneWeight from coneDetails (remaining yarn weight)
+    const storedConeWeight = coneDetails?.coneWeight || coneWeight || 0;
+
+    // Add to scanned barcodes and store cone data
+    const newScannedBarcodes = [...scannedBarcodes, value];
+    const newScannedConeData = new Map(scannedConeData);
+    newScannedConeData.set(value, { 
+      ...coneDetails, 
+      cone, 
+      isConeEmpty: isEmpty, 
+      coneWeight: storedConeWeight,
+      coneDetails: coneDetails, // Keep full coneDetails for reference
+    });
+    
+    console.log("💾 Storing cone with coneWeight:", {
+      barcode: value,
+      coneWeight: storedConeWeight,
+      fromConeDetails: coneDetails?.coneWeight,
+    });
+    
+    // Update empty cones set
+    const newEmptyCones = new Set(emptyCones);
+    if (isEmpty) {
+      newEmptyCones.add(value);
+    } else {
+      newEmptyCones.delete(value);
+    }
+    setEmptyCones(newEmptyCones);
+    
+    console.log("💾 Storing cone data:", {
+      barcode: value,
+      scannedBarcodesCount: newScannedBarcodes.length,
+      coneId: cone.id,
+      coneStatus: cone.status,
+      isConeEmpty: isEmpty,
+    });
+    
+    setScannedBarcodes(newScannedBarcodes);
+    setScannedConeData(newScannedConeData);
+
+    // Close modal and reset pending data
+    setShowConeTypeModal(false);
+    setPendingConeBarcode(null);
+    setPendingConeData(null);
+
+    // If cone is empty, skip rack scanning and proceed directly
+    if (isEmpty) {
+      console.log("📦 Cone is empty, skipping rack scanning");
+      toast.success(`Empty cone scanned. No rack barcode needed.`);
+      
+      // Check if all cones have been scanned
+      const numberOfCones = parseInt(transactionForm.numberOfCones) || 1;
+      if (newScannedBarcodes.length >= numberOfCones) {
+        // All cones scanned, check if any need rack barcode
+        const conesNeedingRack = newScannedBarcodes.filter(b => !newEmptyCones.has(b));
+        if (conesNeedingRack.length === 0) {
+          // All cones are empty, open modal directly
+          console.log("✅ All cones scanned and are empty, opening modal");
+          
+          // Auto-fill form with 0 weights for empty cones
+          setTransactionForm((prev) => ({
+            ...prev,
+            totalWeight: "0",
+            totalTearWeight: "0",
+            totalNetWeight: "0",
+          }));
+          
+          setShowReturnModal(true);
+          toast.success(`All ${numberOfCones} cone(s) scanned. Fill in the transaction details.`);
+        } else {
+          // Some cones need rack barcode
+          setScanningMode("rack");
+          setCurrentConeBarcode(conesNeedingRack[0]);
+          toast.success(`Cone scanned. Now scan the rack barcode for remaining cones.`);
+        }
+      } else {
+        // More cones to scan, continue with next cone
+        setScanningMode("cone");
+        setCurrentConeBarcode(null);
+      }
+    } else {
+      // Cone has remaining yarn, require rack barcode
+      console.log("🔄 Switching to rack scanning mode for cone:", value);
+      setScanningMode("rack");
+      setCurrentConeBarcode(value);
+      toast.success(`Cone scanned. Now scan the rack barcode for this cone.`);
     }
   };
 
@@ -726,7 +1052,7 @@ const YarnReturnPage = () => {
         orderConesBarcodes: selectedOrder.cones.map(c => c.barcode),
       });
       
-      // Check if cone is already returned
+      // Check if cone is already returned (from API response)
       if (coneDetails.returnStatus === "returned") {
         console.log("⚠️ Cone already returned:", value);
         toast("This cone has already been marked as returned.", {
@@ -737,8 +1063,29 @@ const YarnReturnPage = () => {
       }
 
       // Find the cone in the selected order (try multiple matching strategies)
+      // Only search in pending cones (not returned ones) - this prevents showing returned cones
+      const pendingCones = selectedOrder.cones.filter(
+        (item) => item.status !== "Returned"
+      );
+      
+      // If no pending cones, this order has no cones to return
+      if (pendingCones.length === 0) {
+        console.log("⚠️ No pending cones in order:", selectedOrder.orderNumber);
+        toast("This order has no pending cones to return.", {
+          icon: "ℹ️",
+        });
+        setBarcodeInput("");
+        return;
+      }
+      
       console.log("🔎 Attempting to find cone in order by barcode:", value);
-      let cone = selectedOrder.cones.find(
+      console.log("📊 Order cones:", {
+        total: selectedOrder.cones.length,
+        pending: pendingCones.length,
+        returned: selectedOrder.cones.length - pendingCones.length,
+      });
+      
+      let cone = pendingCones.find(
         (item) => item.barcode.toLowerCase() === value.toLowerCase()
       );
 
@@ -752,7 +1099,7 @@ const YarnReturnPage = () => {
         console.log("❌ Cone not found by barcode, trying _id match...");
         // If not found by barcode, try matching by _id
         if (coneDetails._id) {
-          cone = selectedOrder.cones.find(
+          cone = pendingCones.find(
             (item) => item.id === coneDetails._id || item.id === coneDetails.id
           );
           
@@ -816,27 +1163,20 @@ const YarnReturnPage = () => {
         return;
       }
 
-      // Add to scanned barcodes and store cone data
-      const newScannedBarcodes = [...scannedBarcodes, value];
-      const newScannedConeData = new Map(scannedConeData);
-      newScannedConeData.set(value, { ...coneDetails, cone });
+      // Get cone weight from API response
+      const coneWeight = coneDetails.coneWeight || 0;
       
-      console.log("💾 Storing cone data:", {
+      console.log("🔍 Cone scanned, showing type selection modal:", {
         barcode: value,
-        scannedBarcodesCount: newScannedBarcodes.length,
-        coneId: cone.id,
-        coneStatus: cone.status,
+        coneWeight,
+        issuedWeight: coneDetails.issueWeight || cone.issuedWeight || 0,
       });
-      
-      setScannedBarcodes(newScannedBarcodes);
-      setScannedConeData(newScannedConeData);
-      setBarcodeInput("");
 
-      // Switch to rack scanning mode for this cone
-      console.log("🔄 Switching to rack scanning mode for cone:", value);
-      setScanningMode("rack");
-      setCurrentConeBarcode(value);
-      toast.success(`Cone scanned. Now scan the rack barcode for this cone.`);
+      // Store pending cone data and show modal for user to select type
+      setPendingConeBarcode(value);
+      setPendingConeData({ coneDetails, cone, coneWeight });
+      setBarcodeInput("");
+      setShowConeTypeModal(true);
     } catch (error) {
       console.error("Error fetching cone:", error);
       toast.error("Failed to fetch cone details. Please check the barcode.");
@@ -882,17 +1222,14 @@ const YarnReturnPage = () => {
       return;
     }
 
-    // Check if all cones have been stored in racks
-    const allConesStored = scannedBarcodes.every(barcode => rackBarcodes.has(barcode));
+    // Check if all non-empty cones have been stored in racks
+    const conesNeedingRack = scannedBarcodes.filter(barcode => !emptyCones.has(barcode));
+    const allConesStored = conesNeedingRack.every(barcode => rackBarcodes.has(barcode));
     if (!allConesStored) {
-      toast.error("All cones must be stored in racks before submitting return transaction.");
+      const missingRackCones = conesNeedingRack.filter(barcode => !rackBarcodes.has(barcode));
+      toast.error(`All cones with remaining yarn must be stored in racks. Missing rack for: ${missingRackCones.join(", ")}`);
       return;
     }
-
-    // Calculate weight per cone
-    const weightPerCone = totalNetWeight / numberOfCones;
-    const tearWeightPerCone = totalTearWeight / numberOfCones;
-    const totalWeightPerCone = totalWeight / numberOfCones;
 
     setSubmittingReturn(true);
     try {
@@ -906,6 +1243,58 @@ const YarnReturnPage = () => {
         
         if (!cone) {
           throw new Error(`Cone data not found for barcode: ${barcode}`);
+        }
+
+        // Check if this cone is empty
+        const isConeEmpty = emptyCones.has(barcode);
+        
+        // Get original cone weight, issued weight, and tear weight
+        const originalConeWeight = coneDataFromMap?.coneWeight || 
+                                   coneDataFromMap?.coneDetails?.coneWeight || 
+                                   0;
+        const issuedWeight = cone.issuedWeight || 
+                            coneDataFromMap?.coneDetails?.issueWeight || 
+                            0;
+        // Use tearWeight from cone details (already on cone) or from user input
+        const coneTearWeight = coneDataFromMap?.coneDetails?.tearWeight || 0;
+        const userTearWeight = parseFloat(transactionForm.totalTearWeight) || 0;
+        const tearWeight = coneTearWeight || userTearWeight; // Prefer cone's tearWeight, fallback to user input
+        
+        // For empty cones: weights are 0
+        // For cones with remaining yarn: calculate remaining weight
+        let weightPerCone: number;
+        let tearWeightPerCone: number;
+        let totalWeightPerCone: number;
+        let returnWeight: number; // Remaining yarn weight to return
+        
+        if (isConeEmpty) {
+          // Empty cone: all weights are 0
+          weightPerCone = 0;
+          tearWeightPerCone = 0;
+          totalWeightPerCone = 0;
+          returnWeight = 0;
+          console.log("📦 Empty cone detected, setting all weights to 0:", barcode);
+        } else {
+          // Cone with remaining yarn: calculate remaining weight
+          // Remaining weight = coneWeight - issuedWeight - tearWeight
+          // Example: 25 - 2.2 - 0.5 = 22.3
+          returnWeight = Math.max(0, originalConeWeight - issuedWeight - tearWeight);
+          
+          // Use user input for transaction, but returnWeight is the calculated remaining weight
+          weightPerCone = totalNetWeight / numberOfCones;
+          tearWeightPerCone = totalTearWeight / numberOfCones;
+          totalWeightPerCone = totalWeight / numberOfCones;
+          
+          console.log("📦 Cone with remaining yarn, calculating weights:", {
+            barcode,
+            originalConeWeight,
+            issuedWeight,
+            tearWeight,
+            returnWeight, // This is the remaining weight (22.3)
+            weightPerCone, // From user input
+            tearWeightPerCone,
+            totalWeightPerCone,
+          });
         }
 
         // Get yarn ID from cone data - it should be a MongoDB ObjectId
@@ -982,7 +1371,8 @@ const YarnReturnPage = () => {
             
             if (txListResponse.ok) {
               const txListData = await txListResponse.json();
-              const issuedTransactions = Array.isArray(txListData) ? txListData : (txListData.results || []);
+              let issuedTransactions = extractTransactions(txListData);
+              issuedTransactions = issuedTransactions.filter((tx: any) => tx.transactionType === "yarn_issued");
               
               console.log("📋 Found issued transactions:", issuedTransactions.length);
               
@@ -1085,6 +1475,50 @@ const YarnReturnPage = () => {
           throw new Error(`Cone ID not found for barcode: ${barcode}`);
         }
 
+        // Prepare cone update data based on whether it's empty or has remaining yarn
+        const coneUpdateData: any = {
+          returnStatus: "returned",
+          returnWeight: returnWeight, // Use calculated remaining weight (coneWeight - issuedWeight - tearWeight)
+        };
+
+        if (isConeEmpty) {
+          // Empty cone: set coneWeight = 0, tearWeight = 0, don't update storage
+          coneUpdateData.coneWeight = 0;
+          coneUpdateData.tearWeight = 0;
+          // Don't update coneStorageId for empty cones
+          console.log("📦 Updating empty cone:", {
+            coneId,
+            barcode,
+            coneWeight: 0,
+            tearWeight: 0,
+            returnWeight: 0,
+          });
+        } else {
+          // Cone with remaining yarn: update coneWeight to remaining weight, update storage location
+          // Remaining weight = originalConeWeight - issuedWeight - tearWeight
+          coneUpdateData.coneWeight = returnWeight; // Remaining weight (e.g., 22.3)
+          coneUpdateData.tearWeight = tearWeightPerCone;
+          
+          // Update storage location with rack barcode
+          const rackBarcode = rackBarcodes.get(barcode);
+          if (rackBarcode) {
+            coneUpdateData.coneStorageId = rackBarcode;
+          }
+          
+          console.log("📦 Updating cone with remaining yarn:", {
+            coneId,
+            barcode,
+            originalConeWeight,
+            issuedWeight,
+            coneTearWeight: tearWeight,
+            calculatedReturnWeight: returnWeight, // 22.3
+            coneWeight: returnWeight, // Updated to remaining weight
+            transactionTearWeight: tearWeightPerCone,
+            returnWeight: returnWeight, // Same as remaining weight
+            coneStorageId: rackBarcode,
+          });
+        }
+
         // Update cone return status via separate API call
         const updateConeResponse = await fetch(`${API_BASE_URL}/yarn-management/yarn-cones/${coneId}`, {
           method: "PATCH",
@@ -1092,10 +1526,7 @@ const YarnReturnPage = () => {
             "Content-Type": "application/json",
             ...(token && { Authorization: `Bearer ${token}` }),
           },
-          body: JSON.stringify({
-            returnStatus: "returned",
-            returnWeight: weightPerCone,
-          }),
+          body: JSON.stringify(coneUpdateData),
         });
 
         if (!updateConeResponse.ok) {
@@ -1104,7 +1535,7 @@ const YarnReturnPage = () => {
           // Continue even if status update fails, but log the error
         }
 
-        return { barcode, cone, coneId };
+        return { barcode, cone, coneId, weightPerCone };
       });
 
       // Wait for all transactions to complete
@@ -1118,12 +1549,12 @@ const YarnReturnPage = () => {
 
         const updatedCones = order.cones.map((cone) => {
           // Check if this cone was returned
-          const returnedResult = results.find((r) => r.cone.id === cone.id);
+          const returnedResult = results.find((r) => r.cone.id === cone.id || r.cone.barcode === cone.barcode);
           if (returnedResult) {
             return {
               ...cone,
-              returnedWeight: weightPerCone,
-              balanceWeight: Math.max(cone.issuedWeight - weightPerCone, 0),
+              returnedWeight: returnedResult.weightPerCone,
+              balanceWeight: Math.max(cone.issuedWeight - returnedResult.weightPerCone, 0),
               status: "Returned" as ConeStatus,
               lastReturnedAt: new Date().toISOString(),
             };
@@ -1159,6 +1590,7 @@ const YarnReturnPage = () => {
         setScannedBarcodes([]);
         setScannedConeData(new Map());
         setRackBarcodes(new Map());
+        setEmptyCones(new Set());
         setScanningMode("cone");
         setCurrentConeBarcode(null);
         setActiveConeId(null);
@@ -1189,13 +1621,15 @@ const YarnReturnPage = () => {
           );
 
           if (transactionsResponse.ok) {
-            const issuedTransactions = await transactionsResponse.json();
+            const issuedData = await transactionsResponse.json();
+            let issuedTransactions = extractTransactions(issuedData);
+            issuedTransactions = issuedTransactions.filter((tx: any) => tx.transactionType === "yarn_issued");
             
             // Fetch returned transactions
             let returnedTransactions: any[] = [];
             try {
-              const returnedResponse = await fetch(
-                `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-returned-by-order/${selectedOrder.orderNumber}`,
+              const allTransactionsResponse = await fetch(
+                `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${selectedOrder.orderNumber}`,
                 {
                   headers: {
                     "Content-Type": "application/json",
@@ -1203,59 +1637,61 @@ const YarnReturnPage = () => {
                   },
                 }
               );
-              if (returnedResponse.ok) {
-                returnedTransactions = await returnedResponse.json();
+              if (allTransactionsResponse.ok) {
+                const allTransactions = await allTransactionsResponse.json();
+                returnedTransactions = extractTransactions(allTransactions);
+                returnedTransactions = returnedTransactions.filter((tx: any) => tx.transactionType === "yarn_returned");
               }
             } catch (err) {
-              // Try fallback query
-              try {
-                const allTransactionsResponse = await fetch(
-                  `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${selectedOrder.orderNumber}`,
-                  {
-                    headers: {
-                      "Content-Type": "application/json",
-                      ...(token && { Authorization: `Bearer ${token}` }),
-                    },
-                  }
-                );
-                if (allTransactionsResponse.ok) {
-                  const allTransactions = await allTransactionsResponse.json();
-                  returnedTransactions = Array.isArray(allTransactions)
-                    ? allTransactions.filter((tx: any) => tx.transactionType === "yarn_returned")
-                    : (allTransactions.results || []).filter((tx: any) => tx.transactionType === "yarn_returned");
-                }
-              } catch (e) {
-                console.warn("Could not fetch returned transactions:", e);
-              }
+              console.warn("Could not fetch returned transactions:", err);
             }
 
             // Update cones with latest data
             const conesMap = new Map<string, Cone>();
             issuedTransactions.forEach((tx: any) => {
-              if (tx.transactionType === "yarn_issued" && tx.coneBarcode) {
-                const coneId = tx.coneBarcode || tx._id || crypto.randomUUID();
+              if (tx.transactionType === "yarn_issued") {
+                // Use coneBarcode if available, otherwise use transaction ID
+                const coneBarcode = tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`;
+                const coneId = coneBarcode;
+                
+                // Find matching returned transaction (match by coneBarcode or transaction ID)
                 const returnedTx = returnedTransactions.find(
-                  (rt: any) => rt.coneBarcode === tx.coneBarcode && rt.transactionType === "yarn_returned"
+                  (rt: any) => {
+                    if (tx.coneBarcode && rt.coneBarcode) {
+                      return rt.coneBarcode === tx.coneBarcode && rt.transactionType === "yarn_returned";
+                    }
+                    // If no coneBarcode, match by issued transaction ID
+                    return rt.issuedTransactionId === (tx._id || tx.id) && rt.transactionType === "yarn_returned";
+                  }
                 );
 
-                conesMap.set(coneId, {
-                  id: coneId,
-                  barcode: tx.coneBarcode || tx.barcode || "N/A",
-                  yarnCode: tx.yarn?.id || tx.yarn || "N/A",
-                  yarnName: tx.yarnName || "Unknown Yarn",
-                  yarnType: tx.yarn?.yarnType?.name || "Unknown",
-                  issuedWeight: tx.transactionNetWeight || tx.totalNetWeight || 0,
-                  returnedWeight: returnedTx ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) : undefined,
-                  balanceWeight: returnedTx ? Math.max(
-                    (tx.transactionNetWeight || tx.totalNetWeight || 0) - 
-                    (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0),
-                    0
-                  ) : undefined,
-                  status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
-                  lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
-                  transactionId: tx._id || tx.id,
-                  yarnCatalogId: tx.yarn?.id || tx.yarn,
-                });
+                // Handle multiple cones in one transaction
+                const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
+                const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
+
+                for (let i = 0; i < numberOfCones; i++) {
+                  const coneIndex = numberOfCones > 1 ? i + 1 : 0;
+                  const uniqueConeId = numberOfCones > 1 ? `${coneId}-${coneIndex}` : coneId;
+                  const uniqueBarcode = numberOfCones > 1 ? `${coneBarcode}-${coneIndex}` : coneBarcode;
+
+                  conesMap.set(uniqueConeId, {
+                    id: uniqueConeId,
+                    barcode: uniqueBarcode,
+                    yarnCode: tx.yarn?.id || tx.yarn || "N/A",
+                    yarnName: tx.yarnName || "Unknown Yarn",
+                    yarnType: tx.yarn?.yarnType?.name || "Unknown",
+                    issuedWeight: weightPerCone,
+                    returnedWeight: returnedTx ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones : undefined,
+                    balanceWeight: returnedTx ? Math.max(
+                      weightPerCone - ((returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones),
+                      0
+                    ) : undefined,
+                    status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
+                    lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
+                    transactionId: tx._id || tx.id,
+                    yarnCatalogId: tx.yarn?.id || tx.yarn,
+                  });
+                }
               }
             });
 
@@ -1273,10 +1709,56 @@ const YarnReturnPage = () => {
                 };
               })
             );
+
+            // Refresh return transactions for this order
+            const newReturnTransactions = returnedTransactions as ReturnTransaction[];
+            setReturnTransactions((prev) => {
+              // Remove old transactions for this order and add new ones
+              const filtered = prev.filter(tx => tx.orderno !== selectedOrder.orderNumber);
+              return [...filtered, ...newReturnTransactions];
+            });
           }
         } catch (error) {
           console.error("Error refetching transactions:", error);
           // Don't show error to user, local state is already updated
+        }
+
+        // Also refresh all return transactions to ensure we have the latest data
+        try {
+          const token = getAccessToken();
+          const allOrderNumbers = Array.from(new Set(orders.map(o => o.orderNumber)));
+          const allReturnTransactions: ReturnTransaction[] = [];
+          
+          await Promise.all(
+            allOrderNumbers.map(async (orderNumber) => {
+              try {
+                const transactionsResponse = await fetch(
+                  `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${orderNumber}`,
+                  {
+                    headers: {
+                      "Content-Type": "application/json",
+                      ...(token && { Authorization: `Bearer ${token}` }),
+                    },
+                  }
+                );
+
+                if (transactionsResponse.ok) {
+                  const transactionsData = await transactionsResponse.json();
+                  const transactions = extractTransactions(transactionsData);
+                  const returnedTxs = transactions.filter(
+                    (tx: any) => tx.transactionType === "yarn_returned"
+                  ) as ReturnTransaction[];
+                  allReturnTransactions.push(...returnedTxs);
+                }
+              } catch (err) {
+                console.warn(`Failed to refresh return transactions for order ${orderNumber}:`, err);
+              }
+            })
+          );
+
+          setReturnTransactions(allReturnTransactions);
+        } catch (error) {
+          console.error("Error refreshing return transactions:", error);
         }
       }
     } catch (error) {
@@ -1307,7 +1789,7 @@ const YarnReturnPage = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                 <div className="box">
                   <div className="box-body text-center">
                     <div className="text-2xl font-bold text-blue-600">
@@ -1325,6 +1807,16 @@ const YarnReturnPage = () => {
                     </div>
                     <div className="text-sm text-gray-600">
                       Cones Pending Return
+                    </div>
+                  </div>
+                </div>
+                <div className="box">
+                  <div className="box-body text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {totalReturnedCones}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      Cones Returned
                     </div>
                   </div>
                 </div>
@@ -1390,9 +1882,24 @@ const YarnReturnPage = () => {
                         </thead>
                         <tbody className="bg-white">
                           {pendingOrders.map((order) => {
-                            const returned = order.cones.filter(
-                              (cone) => cone.status === "Returned"
-                            ).length;
+                            // Get return transactions for this order from return history
+                            const orderReturnTransactions = returnTransactions.filter(
+                              (tx) => tx.orderno === order.orderNumber
+                            );
+                            
+                            // Count total cones returned from return transactions (from history)
+                            const totalConesReturnedFromHistory = orderReturnTransactions.reduce(
+                              (sum, tx) => sum + (tx.transactionConeCount || 1),
+                              0
+                            );
+                            
+                            // Total cones in the order
+                            const totalConesInOrder = order.cones.length;
+                            
+                            // Actual pending cones = total cones - cones returned in history
+                            // This ensures we only count cones that haven't been returned yet
+                            const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
+                            
                             return (
                               <tr
                                 key={order.id}
@@ -1413,7 +1920,7 @@ const YarnReturnPage = () => {
                                   {order.knittingSupervisor}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {returned}/{order.cones.length}
+                                  {actualPendingCones} pending
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
                                   <span
@@ -1452,22 +1959,10 @@ const YarnReturnPage = () => {
                 <input
                   type="text"
                   className="form-control md:w-48"
-                  placeholder="Search order..."
+                  placeholder="Search order or yarn..."
                   value={historySearchTerm}
                   onChange={(event) => setHistorySearchTerm(event.target.value)}
                 />
-                <select
-                  className="form-select md:w-40"
-                  value={historyStatusFilter}
-                  onChange={(event) =>
-                    setHistoryStatusFilter(event.target.value as ReturnStatus | "all")
-                  }
-                >
-                  <option value="all">All Status</option>
-                  <option value="Awaiting">Awaiting</option>
-                  <option value="Partial">Partial</option>
-                  <option value="Returned">Returned</option>
-                </select>
                 <input
                   type="date"
                   className="form-control md:w-40"
@@ -1493,7 +1988,7 @@ const YarnReturnPage = () => {
               </div>
             </div>
             <div className="box-body">
-              {filteredHistory.length === 0 ? (
+              {filteredReturnTransactions.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-gray-400 mb-4">
                     <i className="ri-time-line text-4xl"></i>
@@ -1515,53 +2010,57 @@ const YarnReturnPage = () => {
                           Production Order
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Knitting Completed
+                          Transaction Date
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Returned Cones
+                          Yarn Name
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Pending Cones
+                          Net Weight (kg)
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Status
+                          Total Weight (kg)
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
+                          Tear Weight (kg)
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
+                          Cones
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
-                          Last Updated
+                          Created At
                         </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
-                      {filteredHistory.map((record) => (
+                      {filteredReturnTransactions.map((transaction) => (
                         <tr
-                          key={record.id}
+                          key={transaction._id}
                           className="hover:bg-gray-50 transition-colors"
                         >
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-b border-gray-300">
-                            {record.productionOrder}
+                            {transaction.orderno}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                            {new Date(
-                              record.knittingCompletedAt
-                            ).toLocaleString()}
+                            {new Date(transaction.transactionDate).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                            {record.returnedCones}
+                            {transaction.yarnName}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                            {record.pendingCones}
+                            {transaction.transactionNetWeight?.toFixed(2) || "0.00"}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
-                            <span
-                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusBadgeColor(
-                                record.status
-                              )}`}
-                            >
-                              {record.status}
-                            </span>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
+                            {transaction.transactionTotalWeight?.toFixed(2) || "0.00"}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
+                            {transaction.transactionTearWeight?.toFixed(2) || "0.00"}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
+                            {transaction.transactionConeCount || 1}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-b border-gray-300">
-                            {new Date(record.lastUpdated).toLocaleString()}
+                            {new Date(transaction.createdAt).toLocaleString()}
                           </td>
                         </tr>
                       ))}
@@ -1585,6 +2084,10 @@ const YarnReturnPage = () => {
               setScannedBarcodes([]);
               setScannedConeData(new Map());
               setRackBarcodes(new Map());
+              setEmptyCones(new Set());
+              setShowConeTypeModal(false);
+              setPendingConeBarcode(null);
+              setPendingConeData(null);
               setScanningMode("cone");
               setCurrentConeBarcode(null);
             }}
@@ -1609,6 +2112,10 @@ const YarnReturnPage = () => {
                       setScannedBarcodes([]);
                       setScannedConeData(new Map());
                       setRackBarcodes(new Map());
+                      setEmptyCones(new Set());
+                      setShowConeTypeModal(false);
+                      setPendingConeBarcode(null);
+                      setPendingConeData(null);
                       setScanningMode("cone");
                       setCurrentConeBarcode(null);
                       setActiveConeId(null);
@@ -1638,7 +2145,26 @@ const YarnReturnPage = () => {
                             Floor: {selectedOrder.floor}
                           </p>
                           <p className="text-xs text-gray-500">
-                            Cones: {selectedOrder.cones.filter(c => c.status !== "Returned").length} pending
+                            Cones: {(() => {
+                              // Get return transactions for this order from return history
+                              const orderReturnTransactions = returnTransactions.filter(
+                                (tx) => tx.orderno === selectedOrder.orderNumber
+                              );
+                              
+                              // Count total cones returned from return transactions (from history)
+                              const totalConesReturnedFromHistory = orderReturnTransactions.reduce(
+                                (sum, tx) => sum + (tx.transactionConeCount || 1),
+                                0
+                              );
+                              
+                              // Total cones in the order
+                              const totalConesInOrder = selectedOrder.cones.length;
+                              
+                              // Actual pending cones = total cones - cones returned in history
+                              const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
+                              
+                              return actualPendingCones;
+                            })()} pending
                           </p>
                         </div>
                         <span
@@ -1674,6 +2200,8 @@ const YarnReturnPage = () => {
                             if (scannedBarcodes.length > 0) {
                               setScannedBarcodes([]);
                               setScannedConeData(new Map());
+                              setRackBarcodes(new Map());
+                              setEmptyCones(new Set());
                             }
                           }}
                           disabled={scannedBarcodes.length > 0}
@@ -1710,24 +2238,38 @@ const YarnReturnPage = () => {
                               <div className="flex flex-wrap gap-1">
                                 {scannedBarcodes.map((barcode, index) => {
                                   const rackBarcode = rackBarcodes.get(barcode);
+                                  const isConeEmpty = emptyCones.has(barcode);
                                   return (
                                     <span
                                       key={index}
-                                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
+                                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                        isConeEmpty 
+                                          ? "bg-gray-100 text-gray-800" 
+                                          : "bg-blue-100 text-blue-800"
+                                      }`}
                                     >
                                       Cone: {barcode}
-                                      {rackBarcode && <span className="ml-1 text-green-700">→ Rack: {rackBarcode}</span>}
+                                      {isConeEmpty ? (
+                                        <span className="ml-1 text-gray-600">(Empty)</span>
+                                      ) : rackBarcode ? (
+                                        <span className="ml-1 text-green-700">→ Rack: {rackBarcode}</span>
+                                      ) : (
+                                        <span className="ml-1 text-orange-600">(Needs Rack)</span>
+                                      )}
                                       <button
                                         type="button"
                                         onClick={() => {
                                           const newBarcodes = scannedBarcodes.filter((_, i) => i !== index);
                                           const newConeData = new Map(scannedConeData);
                                           const newRackBarcodes = new Map(rackBarcodes);
+                                          const newEmptyCones = new Set(emptyCones);
                                           newConeData.delete(barcode);
                                           newRackBarcodes.delete(barcode);
+                                          newEmptyCones.delete(barcode);
                                           setScannedBarcodes(newBarcodes);
                                           setScannedConeData(newConeData);
                                           setRackBarcodes(newRackBarcodes);
+                                          setEmptyCones(newEmptyCones);
                                           if (currentConeBarcode === barcode) {
                                             setCurrentConeBarcode(null);
                                             setScanningMode("cone");
@@ -1815,6 +2357,7 @@ const YarnReturnPage = () => {
                     setScannedBarcodes([]);
                     setScannedConeData(new Map());
                     setRackBarcodes(new Map());
+                    setEmptyCones(new Set());
                     setScanningMode("cone");
                     setCurrentConeBarcode(null);
                     setActiveConeId(null);
@@ -1837,12 +2380,20 @@ const YarnReturnPage = () => {
                         const coneData = scannedConeData.get(barcode);
                         const cone = coneData?.cone;
                         const rackBarcode = rackBarcodes.get(barcode);
+                        const isConeEmpty = emptyCones.has(barcode);
                         return (
-                          <div key={index} className="border border-gray-200 rounded p-3 bg-white">
+                          <div key={index} className={`border rounded p-3 ${
+                            isConeEmpty ? "bg-gray-50 border-gray-300" : "bg-white border-gray-200"
+                          }`}>
                             <div className="grid grid-cols-2 gap-3 text-sm">
                               <div>
                                 <span className="text-gray-500">Barcode:</span>
                                 <span className="ml-2 font-medium">{barcode}</span>
+                                {isConeEmpty && (
+                                  <span className="ml-2 px-2 py-0.5 rounded text-xs bg-gray-200 text-gray-700">
+                                    Empty
+                                  </span>
+                                )}
                               </div>
                               <div>
                                 <span className="text-gray-500">Yarn Name:</span>
@@ -1856,16 +2407,30 @@ const YarnReturnPage = () => {
                                   {cone?.issuedWeight?.toFixed(2) || "N/A"} kg
                                 </span>
                               </div>
-                              {rackBarcode && (
+                              <div>
+                                <span className="text-gray-500">Cone Weight:</span>
+                                <span className="ml-2 font-medium">
+                                  {(() => {
+                                    // Get coneWeight - check top level first, then coneDetails
+                                    const coneWeight = coneData?.coneWeight ?? 
+                                                      coneData?.coneDetails?.coneWeight ?? 
+                                                      0;
+                                    return typeof coneWeight === 'number' && coneWeight >= 0 
+                                      ? coneWeight.toFixed(2) 
+                                      : "0.00";
+                                  })()} kg
+                                </span>
+                              </div>
+                              {!isConeEmpty && rackBarcode && (
                                 <div>
                                   <span className="text-gray-500">Storage Rack:</span>
                                   <span className="ml-2 font-medium text-green-700">{rackBarcode}</span>
                                 </div>
                               )}
-                              {coneData?.coneWeight && (
+                              {isConeEmpty && (
                                 <div>
-                                  <span className="text-gray-500">Cone Weight:</span>
-                                  <span className="ml-2 font-medium">{coneData.coneWeight} kg</span>
+                                  <span className="text-gray-500">Status:</span>
+                                  <span className="ml-2 font-medium text-gray-600">No storage needed</span>
                                 </div>
                               )}
                             </div>
@@ -1881,9 +2446,8 @@ const YarnReturnPage = () => {
                         Total Weight (kg) <span className="text-red-500">*</span>
                       </label>
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         className="form-control"
                         placeholder="Enter total weight"
                         value={transactionForm.totalWeight}
@@ -1896,9 +2460,8 @@ const YarnReturnPage = () => {
                         Number of Cones <span className="text-red-500">*</span>
                       </label>
                       <input
-                        type="number"
-                        min="1"
-                        step="1"
+                        type="text"
+                        inputMode="numeric"
                         className="form-control"
                         placeholder="Enter number of cones"
                         value={transactionForm.numberOfCones}
@@ -1911,9 +2474,8 @@ const YarnReturnPage = () => {
                         Total Tear Weight (kg)
                       </label>
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         className="form-control"
                         placeholder="Enter tear weight"
                         value={transactionForm.totalTearWeight}
@@ -1926,9 +2488,8 @@ const YarnReturnPage = () => {
                         Total Net Weight (kg)
                       </label>
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         className="form-control bg-gray-50"
                         placeholder="Auto-calculated"
                         value={transactionForm.totalNetWeight}
@@ -1963,6 +2524,7 @@ const YarnReturnPage = () => {
                         setScannedBarcodes([]);
                         setScannedConeData(new Map());
                         setRackBarcodes(new Map());
+                        setEmptyCones(new Set());
                         setScanningMode("cone");
                         setCurrentConeBarcode(null);
                         setActiveConeId(null);
@@ -1990,6 +2552,75 @@ const YarnReturnPage = () => {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cone Type Selection Modal */}
+      {showConeTypeModal && pendingConeBarcode && pendingConeData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="box-header border-b border-gray-200 px-6 py-4">
+              <div className="flex justify-between items-center">
+                <h3 className="box-title text-lg">Select Cone Type</h3>
+                <button
+                  onClick={() => {
+                    setShowConeTypeModal(false);
+                    setPendingConeBarcode(null);
+                    setPendingConeData(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <i className="ri-close-line text-xl"></i>
+                </button>
+              </div>
+            </div>
+            <div className="box-body p-6">
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  <span className="font-semibold">Barcode:</span> {pendingConeBarcode}
+                </p>
+                {pendingConeData.cone && (
+                  <>
+                    <p className="text-sm text-gray-600 mb-2">
+                      <span className="font-semibold">Yarn Name:</span> {pendingConeData.cone.yarnName || "N/A"}
+                    </p>
+                    <p className="text-sm text-gray-600 mb-2">
+                      <span className="font-semibold">Issued Weight:</span> {pendingConeData.cone.issuedWeight?.toFixed(2) || "N/A"} kg
+                    </p>
+                    <p className="text-sm text-gray-600 mb-2">
+                      <span className="font-semibold">Cone Weight:</span> {(pendingConeData.coneWeight ?? pendingConeData.coneDetails?.coneWeight ?? 0).toFixed(2)} kg
+                    </p>
+                  </>
+                )}
+              </div>
+              
+              <p className="text-sm font-semibold text-gray-900 mb-4">
+                Is this cone empty or does it have remaining yarn?
+              </p>
+
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => handleConeTypeSelection(true)}
+                  className="p-6 border-2 border-gray-300 rounded-lg hover:border-primary hover:bg-primary/5 transition-colors text-center"
+                >
+                  <div className="text-4xl mb-2">📦</div>
+                  <div className="text-lg font-semibold text-gray-900">Empty</div>
+                  <div className="text-xs text-gray-500 mt-1">No yarn left</div>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => handleConeTypeSelection(false)}
+                  className="p-6 border-2 border-gray-300 rounded-lg hover:border-primary hover:bg-primary/5 transition-colors text-center"
+                >
+                  <div className="text-4xl mb-2">🧵</div>
+                  <div className="text-lg font-semibold text-gray-900">Remaining Yarn</div>
+                  <div className="text-xs text-gray-500 mt-1">Has yarn left</div>
+                </button>
+              </div>
             </div>
           </div>
         </div>
