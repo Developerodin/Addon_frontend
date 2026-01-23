@@ -1,6 +1,15 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
+import { FileUploadService, formatFileSize, getFileIcon } from "@/shared/services/fileUploadService";
+
+export interface PacklistFile {
+  url: string;
+  key: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+}
 
 export interface PacklistDetails {
   packingNumber: string;
@@ -16,6 +25,7 @@ export interface PacklistDetails {
   packlistFile?: File;
   packlistFileName?: string;
   poItems?: string[]; // Array of PO item IDs
+  files?: PacklistFile[]; // Array of uploaded files
 }
 
 interface PurchaseOrder {
@@ -62,9 +72,11 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
       numberOfBoxes: 0,
       totalWeight: 0,
       notes: "",
-      poItems: []
+      poItems: [],
+      files: []
     }
   ]);
+  const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
 
   // Pre-fill estimated delivery date from order when modal opens
   useEffect(() => {
@@ -95,9 +107,11 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
           numberOfBoxes: 0,
           totalWeight: 0,
           notes: "",
-          poItems: []
+          poItems: [],
+          files: []
         }
       ]);
+      setUploadingFiles({});
     }
   }, [isOpen, order]);
 
@@ -152,9 +166,11 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
           numberOfBoxes: 0,
           totalWeight: 0,
           notes: "",
-          poItems: []
+          poItems: [],
+          files: []
         }
       ]);
+      setUploadingFiles({});
     } catch (error) {
       console.error("Packlist submission error:", error);
     }
@@ -209,7 +225,8 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
         numberOfBoxes: 0,
         totalWeight: 0,
         notes: "",
-        poItems: []
+        poItems: [],
+        files: []
       }
     ]);
   };
@@ -242,6 +259,70 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
         return;
       }
     }
+  };
+
+  const handleFileUpload = async (entryIndex: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileKey = `${entryIndex}-${Date.now()}`;
+    setUploadingFiles(prev => ({ ...prev, [fileKey]: true }));
+
+    try {
+      const uploadPromises = Array.from(files).map(async (file) => {
+        const uploadedFile = await FileUploadService.uploadFile(file);
+        return {
+          url: uploadedFile.url,
+          key: uploadedFile.key,
+          originalName: uploadedFile.originalName,
+          mimeType: uploadedFile.mimeType,
+          size: uploadedFile.size
+        };
+      });
+
+      const uploadedFiles = await Promise.all(uploadPromises);
+      
+      setPacklistEntries(prev => 
+        prev.map((entry, idx) => 
+          idx === entryIndex 
+            ? { 
+                ...entry, 
+                files: [...(entry.files || []), ...uploadedFiles] 
+              }
+            : entry
+        )
+      );
+
+      toast.success(`${uploadedFiles.length} file(s) uploaded successfully`);
+    } catch (error) {
+      console.error('File upload error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to upload file(s)');
+    } finally {
+      setUploadingFiles(prev => {
+        const newState = { ...prev };
+        delete newState[fileKey];
+        return newState;
+      });
+      // Reset input
+      event.target.value = '';
+    }
+  };
+
+  const handleFileRemove = (entryIndex: number, fileKey: string) => {
+    setPacklistEntries(prev => 
+      prev.map((entry, idx) => 
+        idx === entryIndex 
+          ? { 
+              ...entry, 
+              files: (entry.files || []).filter(f => f.key !== fileKey) 
+            }
+          : entry
+      )
+    );
+  };
+
+  const handleFileView = (url: string) => {
+    window.open(url, '_blank');
   };
 
   return (
@@ -650,6 +731,81 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                         rows={2}
                         placeholder="Additional notes about the shipment..."
                       />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">
+                        Files
+                        {entry.files && entry.files.length > 0 && (
+                          <span className="text-[10px] text-gray-500 ml-2">
+                            ({entry.files.length} uploaded)
+                          </span>
+                        )}
+                      </label>
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <input
+                            type="file"
+                            multiple
+                            onChange={(e) => handleFileUpload(entryIndex, e)}
+                            className="hidden"
+                            id={`file-upload-${entryIndex}`}
+                            disabled={isSubmitting || Object.values(uploadingFiles).some(v => v)}
+                          />
+                          <label
+                            htmlFor={`file-upload-${entryIndex}`}
+                            className={`flex items-center justify-center gap-2 px-3 py-2 text-xs border border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 transition-colors ${
+                              isSubmitting || Object.values(uploadingFiles).some(v => v) ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                          >
+                            <i className="ri-upload-cloud-2-line text-sm"></i>
+                            <span className="font-medium">
+                              {Object.values(uploadingFiles).some(v => v) ? 'Uploading...' : 'Upload Files'}
+                            </span>
+                          </label>
+                        </div>
+                        {entry.files && entry.files.length > 0 && (
+                          <div className="space-y-1.5">
+                            {entry.files.map((file, fileIndex) => (
+                              <div
+                                key={file.key}
+                                className="flex items-center justify-between p-2 bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                              >
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <span className="text-base">{getFileIcon(file.mimeType)}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-medium text-gray-900 truncate">
+                                      {file.originalName}
+                                    </div>
+                                    <div className="text-[10px] text-gray-500">
+                                      {formatFileSize(file.size)} • {file.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleFileView(file.url)}
+                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                    title="View/Preview"
+                                  >
+                                    <i className="ri-eye-line text-sm"></i>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleFileRemove(entryIndex, file.key)}
+                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                    title="Remove"
+                                    disabled={isSubmitting}
+                                  >
+                                    <i className="ri-delete-bin-line text-sm"></i>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

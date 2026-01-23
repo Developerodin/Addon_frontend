@@ -16,9 +16,9 @@ export interface PurchaseOrderItem {
 export interface PacklistDetails {
   packingNumber: string;
   courierName: string;
-  courierNumber: string;
-  vehicleNumber: string;
-  challanNumber: string;
+  courierNumber?: string;
+  vehicleNumber?: string;
+  challanNumber?: string;
   dispatchDate: string;
   estimatedDeliveryDate: string;
   numberOfBoxes: number;
@@ -26,6 +26,14 @@ export interface PacklistDetails {
   notes?: string;
   packlistFile?: File;
   packlistFileName?: string;
+  poItems?: string[];
+  files?: Array<{
+    url: string;
+    key: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+  }>;
 }
 
 export type PurchaseOrderStatus =
@@ -273,6 +281,13 @@ class YarnPurchaseOrderService {
         totalWeight: number;
         notes?: string;
         poItems?: string[];
+        files?: Array<{
+          url: string;
+          key: string;
+          originalName: string;
+          mimeType: string;
+          size: number;
+        }>;
       }>;
     } = {
       notes: combinedNotes,
@@ -288,6 +303,7 @@ class YarnPurchaseOrderService {
         totalWeight: detail.totalWeight,
         notes: detail.notes || '',
         poItems: detail.poItems || [],
+        files: detail.files || [],
       })),
     };
 

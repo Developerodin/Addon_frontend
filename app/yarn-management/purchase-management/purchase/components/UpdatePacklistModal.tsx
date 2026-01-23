@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
-import { PacklistDetails } from "./PacklistModal";
+import { PacklistDetails, PacklistFile } from "./PacklistModal";
+import { FileUploadService, formatFileSize, getFileIcon } from "@/shared/services/fileUploadService";
 
 interface PurchaseOrder {
   id: string;
@@ -32,6 +33,7 @@ interface ExistingPacklistData {
   totalWeight?: number;
   notes?: string;
   poItems?: string[];
+  files?: PacklistFile[];
 }
 
 interface UpdatePacklistModalProps {
@@ -90,7 +92,8 @@ const normalizePacklistData = (
       numberOfBoxes: item.numberOfBoxes || 0,
       totalWeight: item.totalWeight || 0,
       notes: item.notes || "",
-      poItems: Array.isArray(item.poItems) ? item.poItems : (item.poItems ? [item.poItems] : [])
+      poItems: Array.isArray(item.poItems) ? item.poItems : (item.poItems ? [item.poItems] : []),
+      files: item.files || []
     };
   });
 };
@@ -104,6 +107,7 @@ const UpdatePacklistModal: React.FC<UpdatePacklistModalProps> = ({
   isSubmitting = false
 }) => {
   const [packlistEntries, setPacklistEntries] = useState<PacklistDetails[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
   const prevIsOpenRef = React.useRef(false);
 
   // Initialize form with existing data when modal opens
@@ -123,13 +127,15 @@ const UpdatePacklistModal: React.FC<UpdatePacklistModalProps> = ({
           numberOfBoxes: 0,
           totalWeight: 0,
           notes: "",
-          poItems: []
+          poItems: [],
+          files: []
         }
       ];
-      // Ensure poItems is always an array
+      // Ensure poItems and files are always arrays
       const entriesWithPoItems = initialEntries.map(entry => ({
         ...entry,
-        poItems: Array.isArray(entry.poItems) ? entry.poItems : []
+        poItems: Array.isArray(entry.poItems) ? entry.poItems : [],
+        files: Array.isArray(entry.files) ? entry.files : []
       }));
       setPacklistEntries(entriesWithPoItems);
     }
@@ -241,9 +247,74 @@ const UpdatePacklistModal: React.FC<UpdatePacklistModalProps> = ({
         numberOfBoxes: 0,
         totalWeight: 0,
         notes: "",
-        poItems: []
+        poItems: [],
+        files: []
       }
     ]);
+  };
+
+  const handleFileUpload = async (entryIndex: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileKey = `${entryIndex}-${Date.now()}`;
+    setUploadingFiles(prev => ({ ...prev, [fileKey]: true }));
+
+    try {
+      const uploadPromises = Array.from(files).map(async (file) => {
+        const uploadedFile = await FileUploadService.uploadFile(file);
+        return {
+          url: uploadedFile.url,
+          key: uploadedFile.key,
+          originalName: uploadedFile.originalName,
+          mimeType: uploadedFile.mimeType,
+          size: uploadedFile.size
+        };
+      });
+
+      const uploadedFiles = await Promise.all(uploadPromises);
+      
+      setPacklistEntries(prev => 
+        prev.map((entry, idx) => 
+          idx === entryIndex 
+            ? { 
+                ...entry, 
+                files: [...(entry.files || []), ...uploadedFiles] 
+              }
+            : entry
+        )
+      );
+
+      toast.success(`${uploadedFiles.length} file(s) uploaded successfully`);
+    } catch (error) {
+      console.error('File upload error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to upload file(s)');
+    } finally {
+      setUploadingFiles(prev => {
+        const newState = { ...prev };
+        delete newState[fileKey];
+        return newState;
+      });
+      // Reset input
+      event.target.value = '';
+    }
+  };
+
+  const handleFileRemove = (entryIndex: number, fileKey: string) => {
+    setPacklistEntries(prev => 
+      prev.map((entry, idx) => 
+        idx === entryIndex 
+          ? { 
+              ...entry, 
+              files: (entry.files || []).filter(f => f.key !== fileKey) 
+            }
+          : entry
+      )
+    );
+  };
+
+  const handleFileView = (url: string) => {
+    window.open(url, '_blank');
   };
 
   const removeEntry = (index: number) => {
@@ -677,6 +748,81 @@ const UpdatePacklistModal: React.FC<UpdatePacklistModalProps> = ({
                           rows={3}
                           placeholder="Additional notes about the shipment..."
                         />
+                      </div>
+
+                      <div>
+                        <label className="form-label">
+                          Files
+                          {entry.files && entry.files.length > 0 && (
+                            <span className="text-xs text-gray-600 ml-2">
+                              ({entry.files.length} uploaded)
+                            </span>
+                          )}
+                        </label>
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <input
+                              type="file"
+                              multiple
+                              onChange={(e) => handleFileUpload(entryIndex, e)}
+                              className="hidden"
+                              id={`file-upload-update-${entryIndex}`}
+                              disabled={isSubmitting || Object.values(uploadingFiles).some(v => v)}
+                            />
+                            <label
+                              htmlFor={`file-upload-update-${entryIndex}`}
+                              className={`flex items-center justify-center gap-2 px-3 py-2 text-sm border border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 transition-colors ${
+                                isSubmitting || Object.values(uploadingFiles).some(v => v) ? 'opacity-50 cursor-not-allowed' : ''
+                              }`}
+                            >
+                              <i className="ri-upload-cloud-2-line"></i>
+                              <span className="font-medium">
+                                {Object.values(uploadingFiles).some(v => v) ? 'Uploading...' : 'Upload Files'}
+                              </span>
+                            </label>
+                          </div>
+                          {entry.files && entry.files.length > 0 && (
+                            <div className="space-y-2">
+                              {entry.files.map((file) => (
+                                <div
+                                  key={file.key}
+                                  className="flex items-center justify-between p-2 bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className="text-lg">{getFileIcon(file.mimeType)}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-medium text-gray-900 truncate">
+                                        {file.originalName}
+                                      </div>
+                                      <div className="text-xs text-gray-500">
+                                        {formatFileSize(file.size)} • {file.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFileView(file.url)}
+                                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                      title="View/Preview"
+                                    >
+                                      <i className="ri-eye-line"></i>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFileRemove(entryIndex, file.key)}
+                                      className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                      title="Remove"
+                                      disabled={isSubmitting}
+                                    >
+                                      <i className="ri-delete-bin-line"></i>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

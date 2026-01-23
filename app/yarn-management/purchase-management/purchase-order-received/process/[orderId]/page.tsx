@@ -82,19 +82,38 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
 const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
   const poItems = apiOrder.poItems || apiOrder.items || apiOrder.orderItems || [];
 
-  // Map receivedLotDetails if available
+  // Map receivedLotDetails if available and calculate received quantities
+  const receivedQuantitiesMap = new Map<string, number>();
   const receivedLotDetails: ReceivedLotDetail[] | undefined = apiOrder.receivedLotDetails
     ? apiOrder.receivedLotDetails.map((lot: any) => {
       const normalizedStatus: ReceivedLotDetail['status'] = ['lot_pending', 'lot_qc_pending', 'lot_accepted', 'lot_rejected'].includes(lot.status)
         ? lot.status
         : 'lot_pending';
 
+      // Map poItems and calculate received quantities
+      const mappedPoItems = (lot.poItems || []).map((poItem: any) => {
+        const poItemId = String(poItem.poItem || poItem.po_item || '');
+        const receivedQty = poItem.receivedQuantity || poItem.received_quantity || 0;
+        
+        // Accumulate received quantities for each poItem
+        if (poItemId) {
+          const currentQty = receivedQuantitiesMap.get(poItemId) || 0;
+          receivedQuantitiesMap.set(poItemId, currentQty + receivedQty);
+        }
+        
+        return {
+          poItem: poItemId,
+          receivedQuantity: receivedQty
+        };
+      });
+
       return {
         lotNumber: lot.lotNumber || lot.lot_number || '',
         numberOfCones: lot.numberOfCones || lot.number_of_cones || 0,
         totalWeight: lot.totalWeight || lot.total_weight || 0,
         numberOfBoxes: lot.numberOfBoxes || lot.number_of_boxes || 0,
-        status: normalizedStatus
+        status: normalizedStatus,
+        poItems: mappedPoItems
       };
     })
     : undefined;
@@ -108,18 +127,23 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
     receivedBy: apiOrder.receivedBy || apiOrder.received_by || apiOrder.updatedBy?.username || '',
     status: convertStatusFromAPI(apiOrder.currentStatus || apiOrder.status || apiOrder.status_code || 'in_transit'),
     totalAmount: apiOrder.total || apiOrder.totalAmount || apiOrder.total_amount || apiOrder.grandTotal || 0,
-    items: poItems.map((item: any, index: number) => ({
-      id: item._id || item.id || `${index}`,
-      yarnCode: item.shadeCode || item.shade_code || item.shade || item.yarnCode || '',
-      yarnName: item.yarnName || item.yarn?.yarnName || item.yarn_name || item.yarn?.name || '',
-      sizeCount: item.sizeCount || item.size_count || item.countSize || '',
-      shadeCode: item.shadeCode || item.shade_code || item.shade || '',
-      orderedQuantity: item.quantity || 0,
-      receivedQuantity: item.receivedQuantity || item.received_quantity || item.quantity || 0,
-      unitPrice: item.rate || item.unitPrice || 0,
-      totalPrice: item.subTotal || item.sub_total || (item.quantity * (item.rate || 0)) || 0,
-      qualityStatus: item.qualityStatus || item.quality_status || 'Pending' as 'Approved' | 'Rejected' | 'Pending'
-    })),
+    items: poItems.map((item: any, index: number) => {
+      const itemId = String(item._id || item.id || `${index}`);
+      const receivedQuantity = receivedQuantitiesMap.get(itemId) || item.receivedQuantity || item.received_quantity || 0;
+      
+      return {
+        id: itemId,
+        yarnCode: item.shadeCode || item.shade_code || item.shade || item.yarnCode || '',
+        yarnName: item.yarnName || item.yarn?.yarnName || item.yarn_name || item.yarn?.name || '',
+        sizeCount: item.sizeCount || item.size_count || item.countSize || '',
+        shadeCode: item.shadeCode || item.shade_code || item.shade || '',
+        orderedQuantity: item.quantity || 0,
+        receivedQuantity: receivedQuantity,
+        unitPrice: item.rate || item.unitPrice || 0,
+        totalPrice: item.subTotal || item.sub_total || (item.quantity * (item.rate || 0)) || 0,
+        qualityStatus: item.qualityStatus || item.quality_status || 'Pending' as 'Approved' | 'Rejected' | 'Pending'
+      };
+    }),
     notes: apiOrder.notes || apiOrder.remarks || '',
     createdAt: apiOrder.createDate || apiOrder.createdAt || apiOrder.created_at || new Date().toISOString(),
     updatedAt: apiOrder.lastUpdateDate || apiOrder.updatedAt || apiOrder.updated_at || new Date().toISOString(),
@@ -177,6 +201,7 @@ const ProcessOrderPage = () => {
   // Store raw input values as strings to allow typing "0" and "0.5"
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
   const [isFetchingWeight, setIsFetchingWeight] = useState(false);
+  const [isOrderItemsSummaryOpen, setIsOrderItemsSummaryOpen] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const [qzStatus, setQzStatus] = useState<{
     scriptLoaded: boolean;
@@ -1762,6 +1787,76 @@ const ProcessOrderPage = () => {
               </div>
             )}
           </div>
+
+          {/* Order Items Summary - Accordion */}
+          {order.items && order.items.length > 0 && (
+            <div className="mb-4 bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setIsOrderItemsSummaryOpen(!isOrderItemsSummaryOpen)}
+                className="w-full px-3 py-2.5 flex items-center justify-between hover:bg-gray-100 transition-colors"
+              >
+                <h4 className="text-xs font-bold text-gray-800">Order Items Summary</h4>
+                <i className={`ri-arrow-${isOrderItemsSummaryOpen ? 'up' : 'down'}-s-line text-gray-600 text-sm transition-transform`}></i>
+              </button>
+              {isOrderItemsSummaryOpen && (
+                <div className="px-3 pb-3">
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-200">
+                      <thead>
+                        <tr className="bg-gray-50/30">
+                          <th className="px-2 py-1.5 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                          <th className="px-2 py-1.5 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Size/Count</th>
+                          <th className="px-2 py-1.5 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
+                          <th className="px-2 py-1.5 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Ordered (kg)</th>
+                          <th className="px-2 py-1.5 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received (kg)</th>
+                          <th className="px-2 py-1.5 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Pending (kg)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.items.map((item, idx) => {
+                          const pendingQuantity = Math.max(0, item.orderedQuantity - item.receivedQuantity);
+                          return (
+                            <tr key={item.id || idx} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-2 py-1.5 border border-gray-200 text-xs text-gray-900">{item.yarnName}</td>
+                              <td className="px-2 py-1.5 border border-gray-200 text-xs text-gray-900">{item.sizeCount}</td>
+                              <td className="px-2 py-1.5 border border-gray-200 text-xs text-gray-900">{item.shadeCode}</td>
+                              <td className="px-2 py-1.5 text-right border border-gray-200 text-xs text-gray-900 font-medium">{item.orderedQuantity.toLocaleString()}</td>
+                              <td className="px-2 py-1.5 text-right border border-gray-200 text-xs text-gray-900">{item.receivedQuantity.toLocaleString()}</td>
+                              <td className={`px-2 py-1.5 text-right border border-gray-200 text-xs font-medium ${
+                                pendingQuantity > 0 ? 'text-orange-600' : 'text-green-600'
+                              }`}>
+                                {pendingQuantity.toLocaleString()}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-100/50">
+                          <td colSpan={3} className="px-2 py-1.5 border border-gray-200 text-xs font-bold text-gray-900 text-right">Total:</td>
+                          <td className="px-2 py-1.5 text-right border border-gray-200 text-xs font-bold text-gray-900">
+                            {order.items.reduce((sum, item) => sum + item.orderedQuantity, 0).toLocaleString()}
+                          </td>
+                          <td className="px-2 py-1.5 text-right border border-gray-200 text-xs font-bold text-gray-900">
+                            {order.items.reduce((sum, item) => sum + item.receivedQuantity, 0).toLocaleString()}
+                          </td>
+                          <td className={`px-2 py-1.5 text-right border border-gray-200 text-xs font-bold ${
+                            order.items.reduce((sum, item) => sum + Math.max(0, item.orderedQuantity - item.receivedQuantity), 0) > 0 
+                              ? 'text-orange-600' 
+                              : 'text-green-600'
+                          }`}>
+                            {order.items.reduce((sum, item) => sum + Math.max(0, item.orderedQuantity - item.receivedQuantity), 0).toLocaleString()}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {order.notes && (
             <div className="mb-4 p-2 bg-gray-50 rounded border border-gray-200">
               <p className="text-[10px] uppercase text-gray-500 mb-1">Notes</p>

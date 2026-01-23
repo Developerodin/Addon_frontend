@@ -271,7 +271,23 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
       
       return undefined;
     })(),
-    receivedLotDetails: apiOrder.receivedLotDetails || apiOrder.received_lot_details || undefined
+    receivedLotDetails: (() => {
+      const receivedLots = apiOrder.receivedLotDetails || apiOrder.received_lot_details;
+      if (!receivedLots || !Array.isArray(receivedLots)) return undefined;
+      
+      // Map receivedLotDetails to ensure proper structure with poItems
+      return receivedLots.map((lot: any) => ({
+        lotNumber: lot.lotNumber || lot.lot_number || '',
+        numberOfCones: lot.numberOfCones || lot.number_of_cones || 0,
+        totalWeight: lot.totalWeight || lot.total_weight || 0,
+        numberOfBoxes: lot.numberOfBoxes || lot.number_of_boxes || 0,
+        status: lot.status || 'lot_pending',
+        poItems: (lot.poItems || []).map((poItem: any) => ({
+          poItem: poItem.poItem || poItem.po_item || '',
+          receivedQuantity: poItem.receivedQuantity || poItem.received_quantity || 0
+        }))
+      }));
+    })()
   };
 };
 
@@ -1021,14 +1037,8 @@ const PurchaseOrderReceivedPage = () => {
                       <SortIcon field="status" />
                     </div>
                   </th>
-                  <th
-                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort("totalAmount")}
-                  >
-                    <div className="flex items-center gap-1">
-                      Total Amount
-                      <SortIcon field="totalAmount" />
-                    </div>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Summary
                   </th>
                   <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                     Actions
@@ -1061,8 +1071,61 @@ const PurchaseOrderReceivedPage = () => {
                           {order.status}
                         </span>
                       </td>
-                      <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-800 border border-gray-200">
-                        ₹{order.totalAmount.toLocaleString()}
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[12px] font-bold text-gray-800">
+                            ₹{order.totalAmount.toLocaleString()}
+                          </div>
+                          {(() => {
+                            // Calculate total received weight from receivedLotDetails
+                            let totalReceivedWeight = 0;
+                            if (order.receivedLotDetails && order.receivedLotDetails.length > 0) {
+                              totalReceivedWeight = order.receivedLotDetails.reduce((sum, lot) => {
+                                const lotWeight = lot.poItems?.reduce((lotSum, poItem) => {
+                                  return lotSum + (poItem.receivedQuantity || 0);
+                                }, 0) || 0;
+                                return sum + lotWeight;
+                              }, 0);
+                            } else if (order.packListDetails && order.packListDetails.length > 0) {
+                              // Fallback to packlist totalWeight if receivedLotDetails not available
+                              totalReceivedWeight = order.packListDetails.reduce((sum, entry) => {
+                                return sum + (entry.totalWeight || 0);
+                              }, 0);
+                            } else if (order.packlistDetails?.totalWeight) {
+                              totalReceivedWeight = order.packlistDetails.totalWeight;
+                            }
+                            
+                            // Calculate total ordered quantity from all items
+                            const totalOrderedQty = order.items?.reduce((sum, item) => {
+                              return sum + (item.quantity || 0);
+                            }, 0) || 0;
+                            
+                            // Calculate pending quantity
+                            const pendingQuantity = Math.max(0, totalOrderedQty - totalReceivedWeight);
+                            
+                            return (
+                              <>
+                                {totalReceivedWeight > 0 && (
+                                  <div className="text-[10px] font-medium text-gray-500">
+                                    Rec: {totalReceivedWeight.toLocaleString()} kg
+                                  </div>
+                                )}
+                                {totalOrderedQty > 0 && (
+                                  <div className="text-[10px] font-medium text-gray-500">
+                                    Ord: {totalOrderedQty.toLocaleString()} Kg
+                                  </div>
+                                )}
+                                {(pendingQuantity > 0 || (totalOrderedQty > 0 && totalReceivedWeight === 0)) && (
+                                  <div className={`text-[10px] font-medium ${
+                                    pendingQuantity > 0 ? 'text-orange-600' : 'text-green-600'
+                                  }`}>
+                                    Pending: {pendingQuantity.toLocaleString()} kg
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
                       </td>
                       <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
                         <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">

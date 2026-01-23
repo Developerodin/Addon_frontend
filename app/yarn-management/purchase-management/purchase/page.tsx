@@ -10,6 +10,7 @@ import { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService"
 import PacklistModal, { PacklistDetails } from "./components/PacklistModal";
 import UpdatePacklistModal from "./components/UpdatePacklistModal";
 import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
+import { formatFileSize, getFileIcon } from "@/shared/services/fileUploadService";
 
 interface PurchaseOrder {
   id: string;
@@ -51,6 +52,13 @@ interface PurchaseOrder {
     numberOfBoxes?: number;
     totalWeight?: number;
     notes?: string;
+    files?: Array<{
+      url: string;
+      key: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+    }>;
   }>;
 }
 
@@ -201,7 +209,8 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
           numberOfBoxes: entry?.numberOfBoxes || entry?.number_of_boxes || 0,
           totalWeight: entry?.totalWeight || entry?.total_weight || 0,
           notes: entry?.notes || '',
-          poItems: entry?.poItems || (Array.isArray(entry?.poItems) ? entry.poItems : [])
+          poItems: entry?.poItems || (Array.isArray(entry?.poItems) ? entry.poItems : []),
+          files: entry?.files || []
         }));
       }
 
@@ -214,10 +223,11 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
         challanNumber: packListData?.challanNumber || packListData?.challan_number || '',
         dispatchDate: packListData?.dispatchDate || packListData?.dispatch_date || '',
         estimatedDeliveryDate: packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || packListData?.expectedArrivalDate || packListData?.expected_arrival_date || '',
-        numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes || 0,
-        totalWeight: packListData?.totalWeight || packListData?.total_weight || 0,
-        notes: packListData?.notes || '',
-        poItems: packListData?.poItems || (Array.isArray(packListData?.poItems) ? packListData.poItems : [])
+          numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes || 0,
+          totalWeight: packListData?.totalWeight || packListData?.total_weight || 0,
+          notes: packListData?.notes || '',
+          poItems: packListData?.poItems || (Array.isArray(packListData?.poItems) ? packListData.poItems : []),
+          files: packListData?.files || []
       }];
     })()
   };
@@ -617,19 +627,7 @@ const PurchasePage = () => {
 
     setIsUpdatingStatus(true);
     try {
-      // Handle file upload if packlist file is provided (from any entry)
-      const entryWithFile = details.find(d => d.packlistFile);
-      if (entryWithFile?.packlistFile) {
-        // TODO: Implement API call to upload packlist file
-        // Example: await uploadPacklistFile(orderForPacklist.id, entryWithFile.packlistFile);
-        console.log('Packlist file to upload:', {
-          fileName: entryWithFile.packlistFileName,
-          fileSize: entryWithFile.packlistFile.size,
-          fileType: entryWithFile.packlistFile.type
-        });
-      }
-
-      // First API call: Update order with packlist details (array)
+      // First API call: Update order with packlist details (array) including files
       await yarnPurchaseOrderService.updatePurchaseOrderWithPacklist(
         orderForPacklist.id,
         details.map(d => ({
@@ -638,7 +636,8 @@ const PurchasePage = () => {
           courierName: d.courierName || '',
           vehicleNumber: d.vehicleNumber || '',
           challanNumber: d.challanNumber || '',
-          notes: d.notes || ''
+          notes: d.notes || '',
+          files: d.files || []
         })) as any
       );
 
@@ -684,21 +683,13 @@ const PurchasePage = () => {
 
     setIsUpdatingStatus(true);
     try {
-      // Handle file upload if packlist file is provided (from any entry)
-      const entryWithFile = details.find(d => d.packlistFile);
-      if (entryWithFile?.packlistFile) {
-        // TODO: Implement API call to upload packlist file
-        console.log('Packlist file to upload:', {
-          fileName: entryWithFile.packlistFileName,
-          fileSize: entryWithFile.packlistFile.size,
-          fileType: entryWithFile.packlistFile.type
-        });
-      }
-
-      // Update order with packlist details (array) - no status change
+      // Update order with packlist details (array) including files - no status change
       await yarnPurchaseOrderService.updatePurchaseOrderWithPacklist(
         orderForUpdatePacklist.id,
-        details
+        details.map(d => ({
+          ...d,
+          files: d.files || []
+        })) as any
       );
 
       // Refresh orders list
@@ -1633,6 +1624,41 @@ const PurchasePage = () => {
                                           <label className="text-[10px] font-medium text-gray-600">Notes</label>
                                           <div className="mt-0.5 text-xs text-gray-900 p-1.5 bg-white rounded border border-gray-200">
                                             {packlistEntry.notes}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {packlistEntry.files && packlistEntry.files.length > 0 && (
+                                        <div className="md:col-span-2">
+                                          <label className="text-[10px] font-medium text-gray-600 mb-1 block">
+                                            Files ({packlistEntry.files.length})
+                                          </label>
+                                          <div className="space-y-1.5">
+                                            {packlistEntry.files.map((file) => (
+                                              <div
+                                                key={file.key}
+                                                className="flex items-center justify-between p-2 bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                                              >
+                                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                  <span className="text-base">{getFileIcon(file.mimeType)}</span>
+                                                  <div className="flex-1 min-w-0">
+                                                    <div className="text-xs font-medium text-gray-900 truncate">
+                                                      {file.originalName}
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-500">
+                                                      {formatFileSize(file.size)} • {file.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => window.open(file.url, '_blank')}
+                                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                  title="View/Preview"
+                                                >
+                                                  <i className="ri-eye-line text-sm"></i>
+                                                </button>
+                                              </div>
+                                            ))}
                                           </div>
                                         </div>
                                       )}
