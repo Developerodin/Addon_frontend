@@ -21,7 +21,7 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
   const [error, setError] = useState<string | null>(null);
   const [isUntrusted, setIsUntrusted] = useState(false);
 
-  const checkStatus = async () => {
+  const checkStatus = async (fetchPrinters: boolean = false) => {
     if (isChecking || (window as any)._qzChecking) return;
 
     setIsChecking(true);
@@ -74,23 +74,34 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
         return;
       }
 
-      // Get printers
-      try {
-        const availablePrinters = await getAvailablePrinters();
-        setPrinters(availablePrinters);
+      // Only fetch printers if explicitly requested (e.g., after manual connect or refresh)
+      // This prevents auto-connecting and certificate dialog on page load
+      if (fetchPrinters) {
+        try {
+          const availablePrinters = await getAvailablePrinters();
+          setPrinters(availablePrinters);
 
-        const defaultPrinter = await getDefaultPrinter();
-        setPrinter(defaultPrinter);
+          const defaultPrinter = await getDefaultPrinter();
+          setPrinter(defaultPrinter);
 
+          onStatusChange?.({
+            scriptLoaded: true,
+            connected: true,
+            printer: defaultPrinter,
+            printers: availablePrinters,
+          });
+        } catch (printerError: any) {
+          console.error('Error getting printers:', printerError);
+          setError(printerError?.message || 'Failed to get printer information');
+        }
+      } else {
+        // Just update connection status without fetching printers
         onStatusChange?.({
           scriptLoaded: true,
           connected: true,
-          printer: defaultPrinter,
-          printers: availablePrinters,
+          printer: printer, // Keep existing printer info
+          printers: printers, // Keep existing printers list
         });
-      } catch (printerError: any) {
-        console.error('Error getting printers:', printerError);
-        setError(printerError?.message || 'Failed to get printer information');
       }
     } catch (err: any) {
       console.error('Error checking QZ Tray status:', err);
@@ -101,19 +112,21 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
     }
   };
 
-  // Check status on mount and periodically
+  // Check status on mount and periodically (without auto-connecting or fetching printers)
+  // Auto-connect removed - connection will only happen when printing
+  // Printer fetching removed - only fetch when user explicitly requests (refresh button or manual connect)
   useEffect(() => {
-    // Initial check
-    checkStatus();
+    // Initial check (only checks status, doesn't connect or fetch printers)
+    checkStatus(false);
 
-    // Check status periodically (less aggressive)
+    // Check status periodically (less aggressive, no printer fetching)
     const interval = setInterval(() => {
       // Logic moved inside to avoid closure capture of stale state if needed, 
       // but 'isChecking' from the component's state is needed.
       // However, we MUST avoid triggering this useEffect when state changes.
       // We use a window property or just a safer check.
       if (!(window as any)._qzChecking) {
-        checkStatus();
+        checkStatus(false); // Don't fetch printers automatically
       }
     }, 20000); // 20 seconds is plenty for status updates
 
@@ -121,26 +134,8 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // EMPTY dependencies to run only once on mount
 
-  // Auto-connect if script is loaded but not connected (only once on mount)
-  useEffect(() => {
-    if (scriptLoaded && !connected && !isChecking) {
-      const autoConnect = async () => {
-        try {
-          // Only attempt auto-connect once to avoid prompt loops
-          const connection = await connectQZ();
-          if (connection.isConnected) {
-            await checkStatus();
-          }
-        } catch (err) {
-          console.log('[QZ Tray] Auto-connect silently failed');
-        }
-      };
-
-      const timeout = setTimeout(autoConnect, 2000);
-      return () => clearTimeout(timeout);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scriptLoaded]);
+  // Auto-connect removed - connection and certificate fetch will only happen when printing
+  // This prevents the certificate API from being called on page render
 
   const handleManualConnect = async () => {
     if (isChecking) return;
@@ -151,7 +146,8 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
     try {
       const connection = await connectQZ();
       if (connection.isConnected) {
-        await checkStatus();
+        // After manual connect, fetch printer info
+        await checkStatus(true);
       } else {
         setError(connection.error || 'Failed to connect');
       }
@@ -228,10 +224,10 @@ export const QZTrayStatus = ({ onStatusChange }: QZTrayStatusProps) => {
       {/* Refresh Button - show when connected */}
       {connected && (
         <button
-          onClick={checkStatus}
+          onClick={() => checkStatus(true)}
           disabled={isChecking}
           className="flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-[9px] font-bold rounded hover:bg-gray-200 transition-colors disabled:opacity-50"
-          title="Refresh status"
+          title="Refresh status and printer info"
         >
           <i className={`ri-refresh-line text-xs ${isChecking ? 'animate-spin' : ''}`}></i>
         </button>
