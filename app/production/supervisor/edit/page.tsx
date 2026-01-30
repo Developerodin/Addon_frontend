@@ -80,6 +80,9 @@ const EditOrderContent = () => {
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [yarnCatalogs, setYarnCatalogs] = useState<YarnCatalogMap>({});
+  const [showMachineModal, setShowMachineModal] = useState(false);
+  const [machineModalArticleIndex, setMachineModalArticleIndex] = useState<number | null>(null);
+  const [machineSearchQuery, setMachineSearchQuery] = useState('');
 
   // Load order data and machines
   useEffect(() => {
@@ -91,7 +94,7 @@ const EditOrderContent = () => {
     }
   }, [orderId]);
 
-  // Load both order and machines together
+  //  Load both order and machines together
   const loadOrderAndMachines = async () => {
     if (!orderId) return;
     
@@ -113,12 +116,14 @@ const EditOrderContent = () => {
     }
   };
 
-  // Valid production floors
+  // Valid production floors (API may return e.g. "knitting Floor" – match case-insensitively)
   const validProductionFloors = [
     'Knitting', 'Linking', 'Checking', 'Washing', 'Boarding', 
     'Silicon', 'Secondary Checking', 'Branding', 'Final Checking', 
     'Warehouse', 'Dispatch'
   ];
+  const floorMatches = (floor: string) =>
+    validProductionFloors.some((f) => floor?.toLowerCase().includes(f.toLowerCase()));
 
   // Fetch machines from API
   const fetchMachines = async () => {
@@ -139,7 +144,7 @@ const EditOrderContent = () => {
       const machinesArray = Array.isArray(data.results) ? data.results : [];
       // Filter machines to only include those with valid production floors
       const validMachines = machinesArray.filter((machine: Machine) => 
-        validProductionFloors.includes(machine.floor)
+        floorMatches(machine.floor)
       );
       setMachines(validMachines);
     } catch (error) {
@@ -912,19 +917,23 @@ const EditOrderContent = () => {
                               </select>
                             </td>
                             <td className="px-2 py-2">
-                              <select
-                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8"
-                                value={article.machineId || ''}
-                                onChange={(e) => handleArticleChange(index, 'machineId', e.target.value)}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMachineModalArticleIndex(index);
+                                  setMachineSearchQuery('');
+                                  setShowMachineModal(true);
+                                }}
                                 disabled={isLoadingMachines}
+                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8 text-left bg-white border border-gray-300 rounded flex items-center justify-between gap-1"
                               >
-                                <option value="">Select Machine</option>
-                                {machines.map((machine) => (
-                                  <option key={machine._id || machine.id} value={machine._id || machine.id}>
-                                    {machine.machineCode}
-                                  </option>
-                                ))}
-                              </select>
+                                <span className="truncate">
+                                  {article.machineId
+                                    ? machines.find((m) => (m._id || m.id) === article.machineId)?.machineCode ?? 'Select Machine'
+                                    : 'Select Machine'}
+                                </span>
+                                <i className="ri-arrow-down-s-line text-gray-500 shrink-0" />
+                              </button>
                             </td>
                             <td className="px-2 py-2">
                               <input
@@ -1076,6 +1085,79 @@ const EditOrderContent = () => {
           </div>
         </div>
       </div>
+
+      {/* Machine Selection Modal */}
+      {showMachineModal && machineModalArticleIndex !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Select Machine</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMachineModal(false);
+                  setMachineModalArticleIndex(null);
+                  setMachineSearchQuery('');
+                }}
+                className="ti-btn ti-btn-light ti-btn-sm"
+              >
+                <i className="ri-close-line" />
+              </button>
+            </div>
+            <div className="p-4 border-b">
+              <input
+                type="text"
+                className="form-control w-full"
+                placeholder="Search by machine code, number, model or floor..."
+                value={machineSearchQuery}
+                onChange={(e) => setMachineSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+              {(() => {
+                const q = machineSearchQuery.trim().toLowerCase();
+                const filtered = q
+                  ? machines.filter(
+                      (m) =>
+                        (m.machineCode ?? '').toLowerCase().includes(q) ||
+                        (m.machineNumber ?? '').toLowerCase().includes(q) ||
+                        (m.model ?? '').toLowerCase().includes(q) ||
+                        (m.floor ?? '').toLowerCase().includes(q)
+                    )
+                  : machines;
+                return filtered.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">No machines found</div>
+                ) : (
+                  <ul className="divide-y divide-gray-200 max-h-[50vh] overflow-y-auto">
+                    {filtered.map((machine) => {
+                      const id = machine._id || machine.id;
+                      return (
+                        <li key={id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleArticleChange(machineModalArticleIndex, 'machineId', id ?? '');
+                              setShowMachineModal(false);
+                              setMachineModalArticleIndex(null);
+                              setMachineSearchQuery('');
+                            }}
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex justify-between items-center gap-2"
+                          >
+                            <span className="font-medium">{machine.machineCode}</span>
+                            <span className="text-gray-500 text-xs truncate">
+                              {machine.machineNumber} · {machine.model} · {machine.floor}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Product Selection Modal */}
       {showProductModal && (

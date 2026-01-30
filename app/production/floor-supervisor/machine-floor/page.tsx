@@ -409,6 +409,11 @@ const MachineFloorPage = () => {
     return 'text-red-600';
   };
 
+  /** Coerce API values to renderable primitives (avoids "Objects are not valid as React child") */
+  const safeNumber = (v: unknown): number => (typeof v === 'number' && !Number.isNaN(v) ? v : 0);
+  const safeProgress = (v: unknown): string => `${safeNumber(v)}%`;
+  const safeString = (v: unknown): string => (typeof v === 'string' ? v : typeof v === 'object' && v !== null ? '' : v != null ? String(v) : '');
+
   const closeDetailsModal = () => {
     setShowDetailsModal(false);
     setSelectedMachine(null);
@@ -630,13 +635,13 @@ const MachineFloorPage = () => {
                             <span className="text-sm text-gray-900">{machine.floor}</span>
                           </td>
                           <td className="px-4 py-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(machine.status)}`}>
-                              {machine.status}
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(typeof machine.status === 'string' ? machine.status : '')}`}>
+                              {typeof machine.status === 'string' ? machine.status : 'N/A'}
                             </span>
                           </td>
                           <td className="px-4 py-4">
                             <span className="text-sm text-gray-900">
-                              {machine.assignedSupervisor?.name || 'Not Assigned'}
+                              {typeof machine.assignedSupervisor?.name === 'string' ? machine.assignedSupervisor.name : 'Not Assigned'}
                             </span>
                           </td>
                           <td className="px-4 py-4">
@@ -674,7 +679,7 @@ const MachineFloorPage = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold">Machine Analytics - {selectedMachine.machineCode}</h3>
+              <h3 className="text-xl font-semibold">Machine Analytics - {safeString(selectedMachine.machineCode)}</h3>
               <button
                 onClick={closeDetailsModal}
                 className="text-gray-400 hover:text-gray-600"
@@ -689,16 +694,16 @@ const MachineFloorPage = () => {
                 <label className="text-sm font-medium text-gray-600">Machine Details</label>
                 <div className="mt-1 space-y-1">
                   <div className="text-sm text-gray-900">
-                    <strong>Code:</strong> {selectedMachine.machineCode}
+                    <strong>Code:</strong> {safeString(selectedMachine.machineCode)}
                   </div>
                   <div className="text-sm text-gray-900">
-                    <strong>Number:</strong> {selectedMachine.machineNumber}
+                    <strong>Number:</strong> {safeString(selectedMachine.machineNumber)}
                   </div>
                   <div className="text-sm text-gray-900">
-                    <strong>Model:</strong> {selectedMachine.model}
+                    <strong>Model:</strong> {safeString(selectedMachine.model)}
                   </div>
                   <div className="text-sm text-gray-900">
-                    <strong>Floor:</strong> {selectedMachine.floor}
+                    <strong>Floor:</strong> {safeString(selectedMachine.floor)}
                   </div>
                 </div>
               </div>
@@ -707,12 +712,12 @@ const MachineFloorPage = () => {
                 <div className="mt-1 space-y-1">
                   <div className="text-sm text-gray-900">
                     <strong>Status:</strong> 
-                    <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedMachine.status)}`}>
-                      {selectedMachine.status}
+                    <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(typeof selectedMachine.status === 'string' ? selectedMachine.status : '')}`}>
+                      {typeof selectedMachine.status === 'string' ? selectedMachine.status : 'N/A'}
                     </span>
                   </div>
                   <div className="text-sm text-gray-900">
-                    <strong>Supervisor:</strong> {selectedMachine.assignedSupervisor?.name || 'Not Assigned'}
+                    <strong>Supervisor:</strong> {typeof selectedMachine.assignedSupervisor?.name === 'string' ? selectedMachine.assignedSupervisor.name : 'Not Assigned'}
                   </div>
                   <div className="text-sm text-gray-900">
                     <strong>Last Maintenance:</strong> {formatDate(selectedMachine.lastMaintenanceDate)}
@@ -732,15 +737,15 @@ const MachineFloorPage = () => {
                   <h4 className="text-lg font-medium text-gray-900 mb-4">Current Status</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="text-center p-3 bg-blue-50 rounded-lg">
-                      <div className="text-2xl font-bold text-blue-600">{machineStatus.machine.status}</div>
+                      <div className="text-2xl font-bold text-blue-600">{typeof machineStatus.machine?.status === 'string' ? machineStatus.machine.status : 'N/A'}</div>
                       <div className="text-sm text-gray-600">Current Status</div>
                     </div>
                     <div className="text-center p-3 bg-green-50 rounded-lg">
-                      <div className="text-lg font-bold text-green-600">{machineStatus.currentWorkload.activeArticles}</div>
+                      <div className="text-lg font-bold text-green-600">{safeNumber(machineStatus.currentWorkload?.activeArticles)}</div>
                       <div className="text-sm text-gray-600">Active Articles</div>
                     </div>
                     <div className="text-center p-3 bg-purple-50 rounded-lg">
-                      <div className="text-2xl font-bold text-purple-600">{machineStatus.recentActivity.averageProgress}%</div>
+                      <div className="text-2xl font-bold text-purple-600">{safeProgress(machineStatus.recentActivity?.averageProgress)}</div>
                       <div className="text-sm text-gray-600">Avg Progress</div>
                     </div>
                   </div>
@@ -754,21 +759,21 @@ const MachineFloorPage = () => {
                           <div key={index} className="p-3 bg-gray-50 rounded-lg">
                             <div className="flex justify-between items-start">
                               <div>
-                                <div className="font-medium text-gray-900">{article.articleNumber}</div>
-                                <div className="text-sm text-gray-600">Order: {article.orderNumber}</div>
-                                <div className="text-sm text-gray-600">Qty: {article.plannedQuantity.toLocaleString()}</div>
+                                <div className="font-medium text-gray-900">{safeString(article.articleNumber)}</div>
+                                <div className="text-sm text-gray-600">Order: {safeString(article.orderNumber)}</div>
+                                <div className="text-sm text-gray-600">Qty: {safeNumber(article.plannedQuantity).toLocaleString()}</div>
                                 {/* Note: M4 quantity would need to be added to the machine status API response */}
                               </div>
                               <div className="text-right">
                                 <div className={`text-xs px-2 py-1 rounded mb-1 ${
-                                  article.priority === 'High' ? 'bg-red-100 text-red-800' :
-                                  article.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  safeString(article.priority) === 'High' ? 'bg-red-100 text-red-800' :
+                                  safeString(article.priority) === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
                                   'bg-green-100 text-green-800'
                                 }`}>
-                                  {article.priority}
+                                  {safeString(article.priority)}
                                 </div>
-                                <div className="text-sm font-medium text-blue-600">{article.progress}%</div>
-                                <div className="text-xs text-gray-500">{article.currentFloor}</div>
+                                <div className="text-sm font-medium text-blue-600">{safeProgress(article.progress)}</div>
+                                <div className="text-xs text-gray-500">{safeString(article.currentFloor)}</div>
                               </div>
                             </div>
                           </div>
@@ -789,19 +794,19 @@ const MachineFloorPage = () => {
                   <h4 className="text-lg font-medium text-gray-900 mb-4">Performance Metrics (Last 30 Days)</h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="text-center p-3 bg-green-50 rounded-lg">
-                      <div className="text-xl font-bold text-green-600">{machinePerformance.performance.completionRate}%</div>
+                      <div className="text-xl font-bold text-green-600">{safeProgress(machinePerformance.performance?.completionRate)}</div>
                       <div className="text-sm text-gray-600">Completion Rate</div>
                     </div>
                     <div className="text-center p-3 bg-blue-50 rounded-lg">
-                      <div className="text-xl font-bold text-blue-600">{machinePerformance.performance.totalCompletedQuantity.toLocaleString()}</div>
+                      <div className="text-xl font-bold text-blue-600">{safeNumber(machinePerformance.performance?.totalCompletedQuantity).toLocaleString()}</div>
                       <div className="text-sm text-gray-600">Total Production</div>
                     </div>
                     <div className="text-center p-3 bg-orange-50 rounded-lg">
-                      <div className="text-xl font-bold text-orange-600">{machinePerformance.efficiency.capacityEfficiency}%</div>
+                      <div className="text-xl font-bold text-orange-600">{safeProgress(machinePerformance.efficiency?.capacityEfficiency)}</div>
                       <div className="text-sm text-gray-600">Capacity Efficiency</div>
                     </div>
                     <div className="text-center p-3 bg-purple-50 rounded-lg">
-                      <div className="text-xl font-bold text-purple-600">{machinePerformance.quality.defectRate}%</div>
+                      <div className="text-xl font-bold text-purple-600">{safeProgress(machinePerformance.quality?.defectRate)}</div>
                       <div className="text-sm text-gray-600">Defect Rate</div>
                     </div>
                   </div>
@@ -809,11 +814,11 @@ const MachineFloorPage = () => {
                   <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <div className="text-sm font-medium text-gray-700 mb-2">Throughput</div>
-                      <div className="text-lg font-bold text-gray-900">{machinePerformance.performance.throughput.toLocaleString()} units</div>
+                      <div className="text-lg font-bold text-gray-900">{safeNumber(machinePerformance.performance?.throughput).toLocaleString()} units</div>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <div className="text-sm font-medium text-gray-700 mb-2">Total Defects</div>
-                      <div className="text-lg font-bold text-gray-900">{machinePerformance.quality.totalDefects.toLocaleString()}</div>
+                      <div className="text-lg font-bold text-gray-900">{safeNumber(machinePerformance.quality?.totalDefects).toLocaleString()}</div>
                     </div>
                   </div>
                 </div>
@@ -825,26 +830,26 @@ const MachineFloorPage = () => {
                   <h4 className="text-lg font-medium text-gray-900 mb-4">Today's Workload</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div className="text-center p-3 bg-indigo-50 rounded-lg">
-                      <div className="text-xl font-bold text-indigo-600">{machineWorkload.workload.totalArticles}</div>
+                      <div className="text-xl font-bold text-indigo-600">{safeNumber(machineWorkload.workload?.totalArticles)}</div>
                       <div className="text-sm text-gray-600">Total Articles</div>
                     </div>
                     <div className="text-center p-3 bg-teal-50 rounded-lg">
-                      <div className="text-xl font-bold text-teal-600">{machineWorkload.workload.completionRate}%</div>
+                      <div className="text-xl font-bold text-teal-600">{safeProgress(machineWorkload.workload?.completionRate)}</div>
                       <div className="text-sm text-gray-600">Completion Rate</div>
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div className="text-center p-3 bg-blue-50 rounded-lg">
-                      <div className="text-lg font-bold text-blue-600">{machineWorkload.workload.totalPlannedQuantity.toLocaleString()}</div>
+                      <div className="text-lg font-bold text-blue-600">{safeNumber(machineWorkload.workload?.totalPlannedQuantity).toLocaleString()}</div>
                       <div className="text-sm text-gray-600">Planned Qty</div>
                     </div>
                     <div className="text-center p-3 bg-green-50 rounded-lg">
-                      <div className="text-lg font-bold text-green-600">{machineWorkload.workload.totalCompletedQuantity.toLocaleString()}</div>
+                      <div className="text-lg font-bold text-green-600">{safeNumber(machineWorkload.workload?.totalCompletedQuantity).toLocaleString()}</div>
                       <div className="text-sm text-gray-600">Completed Qty</div>
                     </div>
                     <div className="text-center p-3 bg-orange-50 rounded-lg">
-                      <div className="text-lg font-bold text-orange-600">{machineWorkload.workload.remainingQuantity.toLocaleString()}</div>
+                      <div className="text-lg font-bold text-orange-600">{safeNumber(machineWorkload.workload?.remainingQuantity).toLocaleString()}</div>
                       <div className="text-sm text-gray-600">Remaining Qty</div>
                     </div>
                   </div>
@@ -856,20 +861,20 @@ const MachineFloorPage = () => {
                         {machineWorkload.articles.map((article, index) => (
                           <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                             <div>
-                              <div className="font-medium text-gray-900">{article.articleNumber}</div>
-                              <div className="text-sm text-gray-600">Order: {article.orderNumber}</div>
-                              <div className="text-sm text-gray-600">Qty: {article.plannedQuantity.toLocaleString()}</div>
+                              <div className="font-medium text-gray-900">{safeString(article.articleNumber)}</div>
+                              <div className="text-sm text-gray-600">Order: {safeString(article.orderNumber)}</div>
+                              <div className="text-sm text-gray-600">Qty: {safeNumber(article.plannedQuantity).toLocaleString()}</div>
                             </div>
                             <div className="text-right">
                               <div className={`text-xs px-2 py-1 rounded mb-1 ${
-                                article.priority === 'High' ? 'bg-red-100 text-red-800' :
-                                article.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                safeString(article.priority) === 'High' ? 'bg-red-100 text-red-800' :
+                                safeString(article.priority) === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
                                 'bg-green-100 text-green-800'
                               }`}>
-                                {article.priority}
+                                {safeString(article.priority)}
                               </div>
-                              <div className="text-sm font-medium text-blue-600">{article.progress}%</div>
-                              <div className="text-xs text-gray-500">{article.status}</div>
+                              <div className="text-sm font-medium text-blue-600">{safeProgress(article.progress)}</div>
+                              <div className="text-xs text-gray-500">{safeString(article.status)}</div>
                             </div>
                           </div>
                         ))}
@@ -886,37 +891,37 @@ const MachineFloorPage = () => {
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div className="text-center p-3 bg-blue-50 rounded-lg">
-                      <div className="text-xl font-bold text-blue-600">{machineAnalytics.usage.totalArticles}</div>
+                      <div className="text-xl font-bold text-blue-600">{safeNumber(machineAnalytics.usage?.totalArticles)}</div>
                       <div className="text-sm text-gray-600">Total Articles</div>
                     </div>
                     <div className="text-center p-3 bg-green-50 rounded-lg">
-                      <div className="text-xl font-bold text-green-600">{machineAnalytics.usage.totalOrders}</div>
+                      <div className="text-xl font-bold text-green-600">{safeNumber(machineAnalytics.usage?.totalOrders)}</div>
                       <div className="text-sm text-gray-600">Total Orders</div>
                     </div>
                     <div className="text-center p-3 bg-purple-50 rounded-lg">
-                      <div className="text-xl font-bold text-purple-600">{machineAnalytics.usage.averageProgress}%</div>
+                      <div className="text-xl font-bold text-purple-600">{safeProgress(machineAnalytics.usage?.averageProgress)}</div>
                       <div className="text-sm text-gray-600">Avg Progress</div>
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div className="text-center p-3 bg-indigo-50 rounded-lg">
-                      <div className="text-lg font-bold text-indigo-600">{machineAnalytics.usage.totalPlannedQuantity.toLocaleString()}</div>
+                      <div className="text-lg font-bold text-indigo-600">{safeNumber(machineAnalytics.usage?.totalPlannedQuantity).toLocaleString()}</div>
                       <div className="text-sm text-gray-600">Planned Quantity</div>
                     </div>
                     <div className="text-center p-3 bg-teal-50 rounded-lg">
-                      <div className="text-lg font-bold text-teal-600">{machineAnalytics.usage.totalCompletedQuantity.toLocaleString()}</div>
+                      <div className="text-lg font-bold text-teal-600">{safeNumber(machineAnalytics.usage?.totalCompletedQuantity).toLocaleString()}</div>
                       <div className="text-sm text-gray-600">Completed Quantity</div>
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div className="text-center p-3 bg-orange-50 rounded-lg">
-                      <div className="text-lg font-bold text-orange-600">{machineAnalytics.capacity.dailyUtilization}%</div>
+                      <div className="text-lg font-bold text-orange-600">{safeProgress(machineAnalytics.capacity?.dailyUtilization)}</div>
                       <div className="text-sm text-gray-600">Daily Utilization</div>
                     </div>
                     <div className="text-center p-3 bg-red-50 rounded-lg">
-                      <div className="text-lg font-bold text-red-600">{machineAnalytics.capacity.shiftUtilization}%</div>
+                      <div className="text-lg font-bold text-red-600">{safeProgress(machineAnalytics.capacity?.shiftUtilization)}</div>
                       <div className="text-sm text-gray-600">Shift Utilization</div>
                     </div>
                   </div>
@@ -928,19 +933,19 @@ const MachineFloorPage = () => {
                         {machineAnalytics.orders.map((order, index) => (
                           <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                             <div>
-                              <div className="font-medium text-gray-900">{order.articleNumber}</div>
-                              <div className="text-sm text-gray-600">Qty: {order.plannedQuantity.toLocaleString()}</div>
+                              <div className="font-medium text-gray-900">{safeString(order.articleNumber)}</div>
+                              <div className="text-sm text-gray-600">Qty: {safeNumber(order.plannedQuantity).toLocaleString()}</div>
                             </div>
                             <div className="text-right">
                               <div className={`text-xs px-2 py-1 rounded mb-1 ${
-                                order.priority === 'High' ? 'bg-red-100 text-red-800' :
-                                order.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                safeString(order.priority) === 'High' ? 'bg-red-100 text-red-800' :
+                                safeString(order.priority) === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
                                 'bg-green-100 text-green-800'
                               }`}>
-                                {order.priority}
+                                {safeString(order.priority)}
                               </div>
-                              <div className="text-sm font-medium text-blue-600">{order.progress}%</div>
-                              <div className="text-xs text-gray-500">{order.status}</div>
+                              <div className="text-sm font-medium text-blue-600">{safeProgress(order.progress)}</div>
+                              <div className="text-xs text-gray-500">{safeString(order.status)}</div>
                             </div>
                           </div>
                         ))}

@@ -45,12 +45,70 @@ interface PurchaseOrder {
   }>;
 }
 
+/** Optional existing packlist (single or array) for pre-fill e.g. when order is goods partially received */
+export interface ExistingPacklistDataInput {
+  packingNumber?: string;
+  trackingNumber?: string;
+  courierName?: string;
+  courierNumber?: string;
+  vehicleNumber?: string;
+  challanNumber?: string;
+  dispatchDate?: string;
+  estimatedDeliveryDate?: string;
+  expectedArrivalDate?: string; // legacy API field
+  numberOfBoxes?: number;
+  totalWeight?: number;
+  notes?: string;
+  poItems?: string[];
+  files?: PacklistFile[];
+}
+
 interface PacklistModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (details: PacklistDetails[]) => Promise<void>;
   order: PurchaseOrder | null;
+  /** When provided (e.g. order status is goods partially received), form opens with this data pre-filled */
+  existingPacklistData?: ExistingPacklistDataInput | ExistingPacklistDataInput[];
   isSubmitting?: boolean;
+}
+
+const defaultEntry = (order: PurchaseOrder | null): PacklistDetails => ({
+  packingNumber: "",
+  courierName: "",
+  courierNumber: "",
+  vehicleNumber: "",
+  challanNumber: "",
+  dispatchDate: new Date().toISOString().split('T')[0],
+  estimatedDeliveryDate: order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : "",
+  numberOfBoxes: 0,
+  totalWeight: 0,
+  notes: "",
+  poItems: [],
+  files: []
+});
+
+function normalizeExistingPacklist(
+  data: ExistingPacklistDataInput | ExistingPacklistDataInput[] | undefined,
+  order: PurchaseOrder | null
+): PacklistDetails[] {
+  if (!data) return [];
+  const arr = Array.isArray(data) ? data : [data];
+  const formatDate = (s?: string) => (s ? new Date(s).toISOString().split('T')[0] : "");
+  return arr.map((item) => ({
+    packingNumber: item.packingNumber || item.trackingNumber || "",
+    courierName: item.courierName || "",
+    courierNumber: item.courierNumber || "",
+    vehicleNumber: item.vehicleNumber || "",
+    challanNumber: item.challanNumber || "",
+    dispatchDate: formatDate(item.dispatchDate) || new Date().toISOString().split('T')[0],
+    estimatedDeliveryDate: formatDate(item.estimatedDeliveryDate) || formatDate(item.expectedArrivalDate) || (order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : ""),
+    numberOfBoxes: item.numberOfBoxes ?? 0,
+    totalWeight: item.totalWeight ?? 0,
+    notes: item.notes || "",
+    poItems: Array.isArray(item.poItems) ? item.poItems : [],
+    files: item.files || []
+  }));
 }
 
 const PacklistModal: React.FC<PacklistModalProps> = ({
@@ -58,59 +116,27 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
   onClose,
   onSubmit,
   order,
+  existingPacklistData,
   isSubmitting = false
 }) => {
-  const [packlistEntries, setPacklistEntries] = useState<PacklistDetails[]>([
-    {
-      packingNumber: "",
-      courierName: "",
-      courierNumber: "",
-      vehicleNumber: "",
-      challanNumber: "",
-      dispatchDate: new Date().toISOString().split('T')[0],
-      estimatedDeliveryDate: "",
-      numberOfBoxes: 0,
-      totalWeight: 0,
-      notes: "",
-      poItems: [],
-      files: []
-    }
-  ]);
+  const [packlistEntries, setPacklistEntries] = useState<PacklistDetails[]>([defaultEntry(null)]);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
+  const prevOpenRef = React.useRef(false);
 
-  // Pre-fill estimated delivery date from order when modal opens
+  // When modal opens: pre-fill from existingPacklistData (e.g. goods partially received) or default one entry
   useEffect(() => {
-    if (isOpen && order?.expectedDelivery) {
-      const expectedDate = new Date(order.expectedDelivery).toISOString().split('T')[0];
-      setPacklistEntries(prev => 
-        prev.map((entry, idx) => 
-          idx === 0 
-            ? { ...entry, estimatedDeliveryDate: expectedDate }
-            : entry
-        )
-      );
+    if (isOpen && !prevOpenRef.current) {
+      const normalized = normalizeExistingPacklist(existingPacklistData, order);
+      const initial = normalized.length > 0 ? normalized : [defaultEntry(order)];
+      setPacklistEntries(initial.map((e) => ({ ...e, poItems: e.poItems || [], files: e.files || [] })));
     }
-  }, [isOpen, order]);
+    prevOpenRef.current = isOpen;
+  }, [isOpen, existingPacklistData, order]);
 
-  // Reset form when modal closes
+  // Reset when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setPacklistEntries([
-        {
-          packingNumber: "",
-          courierName: "",
-          courierNumber: "",
-          vehicleNumber: "",
-          challanNumber: "",
-          dispatchDate: new Date().toISOString().split('T')[0],
-          estimatedDeliveryDate: order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : "",
-          numberOfBoxes: 0,
-          totalWeight: 0,
-          notes: "",
-          poItems: [],
-          files: []
-        }
-      ]);
+      setPacklistEntries([defaultEntry(order)]);
       setUploadingFiles({});
     }
   }, [isOpen, order]);
@@ -153,23 +179,7 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
 
     try {
       await onSubmit(packlistEntries);
-      // Reset form on success
-      setPacklistEntries([
-        {
-          packingNumber: "",
-          courierName: "",
-          courierNumber: "",
-          vehicleNumber: "",
-          challanNumber: "",
-          dispatchDate: new Date().toISOString().split('T')[0],
-          estimatedDeliveryDate: order?.expectedDelivery ? new Date(order.expectedDelivery).toISOString().split('T')[0] : "",
-          numberOfBoxes: 0,
-          totalWeight: 0,
-          notes: "",
-          poItems: [],
-          files: []
-        }
-      ]);
+      setPacklistEntries([defaultEntry(order)]);
       setUploadingFiles({});
     } catch (error) {
       console.error("Packlist submission error:", error);

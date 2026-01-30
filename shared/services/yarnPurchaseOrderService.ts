@@ -251,7 +251,9 @@ class YarnPurchaseOrderService {
 
   async updatePurchaseOrderWithPacklist(
     orderId: string,
-    packlistDetails: PacklistDetails[]
+    packlistDetails: PacklistDetails[],
+    /** When provided (e.g. order is goods partially received), sent as-is so backend does not overwrite/clear received lots. */
+    receivedLotDetails?: ReceivedLotDetail[]
   ): Promise<PurchaseOrder> {
     if (!orderId) {
       throw new Error('Order ID is required');
@@ -289,6 +291,7 @@ class YarnPurchaseOrderService {
           size: number;
         }>;
       }>;
+      receivedLotDetails?: ReceivedLotDetail[];
     } = {
       notes: combinedNotes,
       packListDetails: packlistDetails.map(detail => ({
@@ -306,6 +309,10 @@ class YarnPurchaseOrderService {
         files: detail.files || [],
       })),
     };
+
+    if (receivedLotDetails != null && receivedLotDetails.length > 0) {
+      payload.receivedLotDetails = receivedLotDetails;
+    }
 
     return this.makeRequest<PurchaseOrder>(`/${orderId}`, {
       method: 'PATCH',

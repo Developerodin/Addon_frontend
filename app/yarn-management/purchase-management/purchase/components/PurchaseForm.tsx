@@ -680,6 +680,11 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   }, [formData.items.map(i => i.id).join(',')]); // Run when items change (by tracking their IDs)
 
   const addItem = () => {
+    // Prefill est. delivery: first day of next month (from today)
+    const today = new Date();
+    const firstDayNextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const defaultEstDelivery = firstDayNextMonth.toISOString().split("T")[0];
+
     const newItem: YarnPurchaseItem = {
       id: Date.now().toString(),
       yarnName: "",
@@ -689,8 +694,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       shadeCode: "",
       rate: 0,
       qty: 0,
-      estimatedDeliveryDate: "",
-      gst: 0,
+      estimatedDeliveryDate: defaultEstDelivery,
+      gst: 5,
       subTotal: 0
     };
     

@@ -60,6 +60,15 @@ interface PurchaseOrder {
       size: number;
     }>;
   }>;
+  /** Present when status is goods partially received / goods received; pass as-is on packlist update so backend does not clear. */
+  receivedLotDetails?: Array<{
+    lotNumber: string;
+    numberOfCones: number;
+    totalWeight: number;
+    numberOfBoxes: number;
+    poItems: Array<{ poItem: string; receivedQuantity: number }>;
+    status: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
+  }>;
 }
 
 interface PurchaseItem {
@@ -229,6 +238,21 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
           poItems: packListData?.poItems || (Array.isArray(packListData?.poItems) ? packListData.poItems : []),
           files: packListData?.files || []
       }];
+    })(),
+    receivedLotDetails: (() => {
+      const receivedLots = apiOrder.receivedLotDetails || apiOrder.received_lot_details;
+      if (!receivedLots || !Array.isArray(receivedLots)) return undefined;
+      return receivedLots.map((lot: any) => ({
+        lotNumber: lot.lotNumber || lot.lot_number || '',
+        numberOfCones: (lot.numberOfCones ?? lot.number_of_cones) ?? 0,
+        totalWeight: (lot.totalWeight ?? lot.total_weight) ?? 0,
+        numberOfBoxes: (lot.numberOfBoxes ?? lot.number_of_boxes) ?? 0,
+        status: lot.status || 'lot_pending',
+        poItems: (lot.poItems || []).map((poItem: any) => ({
+          poItem: poItem.poItem || poItem.po_item || '',
+          receivedQuantity: (poItem.receivedQuantity ?? poItem.received_quantity) ?? 0
+        }))
+      }));
     })()
   };
 };
@@ -627,7 +651,11 @@ const PurchasePage = () => {
 
     setIsUpdatingStatus(true);
     try {
-      // First API call: Update order with packlist details (array) including files
+      // First API call: Update order with packlist details (array) including files. For goods partially received, pass existing receivedLotDetails so backend does not clear them.
+      const receivedLots =
+        orderForPacklist.status === 'goods partially received' && orderForPacklist.receivedLotDetails?.length
+          ? orderForPacklist.receivedLotDetails
+          : undefined;
       await yarnPurchaseOrderService.updatePurchaseOrderWithPacklist(
         orderForPacklist.id,
         details.map(d => ({
@@ -638,28 +666,33 @@ const PurchasePage = () => {
           challanNumber: d.challanNumber || '',
           notes: d.notes || '',
           files: d.files || []
-        })) as any
+        })) as any,
+        receivedLots
       );
 
-      // Combine notes from all entries for status update
-      const combinedNotes = details
-        .map(d => d.notes)
-        .filter(Boolean)
-        .join('; ') || 'Shipment collected by courier';
+      // Only update status to "in transit" when current status is "submitted to supplier" or "in transit". For "goods partially received", keep that status (packlist update only).
+      const shouldSetInTransit = orderForPacklist.status === 'submitted to supplier' || orderForPacklist.status === 'in transit';
+      if (shouldSetInTransit) {
+        const combinedNotes = details
+          .map(d => d.notes)
+          .filter(Boolean)
+          .join('; ') || 'Shipment collected by courier';
+        await yarnPurchaseOrderService.updatePurchaseOrderStatus(
+          orderForPacklist.id,
+          'in transit',
+          user.id,
+          user.email,
+          combinedNotes
+        );
+      }
 
-      // Second API call: Update status to "in transit"
-      await yarnPurchaseOrderService.updatePurchaseOrderStatus(
-        orderForPacklist.id,
-        'in transit',
-        user.id,
-        user.email, // Using email as username, adjust if your API expects different field
-        combinedNotes
-      );
-
-      // Refresh orders list
       await fetchPurchaseOrders();
 
-      toast.success(`Purchase order updated with ${details.length} packlist ${details.length === 1 ? 'entry' : 'entries'} and marked as in transit successfully`);
+      if (shouldSetInTransit) {
+        toast.success(`Purchase order updated with ${details.length} packlist ${details.length === 1 ? 'entry' : 'entries'} and marked as in transit successfully`);
+      } else {
+        toast.success(`Purchase order updated with ${details.length} packlist ${details.length === 1 ? 'entry' : 'entries'} successfully`);
+      }
       setPacklistModalOpen(false);
       setOrderForPacklist(null);
     } catch (error) {
@@ -1141,7 +1174,7 @@ const PurchasePage = () => {
                           >
                             <i className="ri-delete-bin-line text-xs"></i>
                           </button>
-                          {order.status === 'submitted to supplier' && (
+                          {(order.status === 'submitted to supplier' || order.status === 'goods partially received' || order.status === 'in transit') && (
                             <button
                               onClick={() => handleStatusUpdate(order.id, 'in transit')}
                               className="h-7 px-2 text-[9px] font-bold bg-white text-purple-600 border border-purple-200 rounded hover:bg-purple-50 transition-colors uppercase shadow-sm"
@@ -1236,6 +1269,9 @@ const PurchasePage = () => {
               rate: item.rate
             }))
           }}
+          existingPacklistData={(orderForPacklist.status === 'goods partially received' || orderForPacklist.status === 'in transit')
+            ? (orderForPacklist.packListDetailsArray ?? (orderForPacklist.packlistDetails ? [orderForPacklist.packlistDetails] : undefined))
+            : undefined}
           isSubmitting={isUpdatingStatus}
         />
       )}
