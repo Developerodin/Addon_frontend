@@ -506,16 +506,15 @@ const CataloguingPage = () => {
 
   if (!hasPermission) {
     return (
-      <div className="main-content">
-        <div className="text-center py-12">
+      <div className="main-content !p-[10px]">
+        <div className="bg-white shadow-sm border border-gray-100 rounded p-6 text-center">
           <div className="text-gray-400 mb-4">
-            <i className="ri-lock-line text-6xl"></i>
+            <i className="ri-lock-line text-4xl"></i>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
-          <p className="text-gray-500 mb-4">You don't have permission to access Yarn Cataloguing.</p>
-          <Link href="/yarn-management" className="ti-btn ti-btn-primary">
-            <i className="ri-arrow-left-line me-2"></i>
-            Back to Yarn Management
+          <h3 className="text-sm font-bold text-gray-800 mb-2">Access Restricted</h3>
+          <p className="text-[12px] text-gray-500 mb-4">You don&apos;t have permission to access Yarn Cataloguing.</p>
+          <Link href="/yarn-management" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+            <i className="ri-arrow-left-line text-xs"></i> Back to Yarn Management
           </Link>
         </div>
       </div>
@@ -523,309 +522,158 @@ const CataloguingPage = () => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Toaster position="top-right" />
       <Seo title="Yarn Cataloguing" />
-      
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div>
-                <h1 className="box-title text-2xl font-semibold">Yarn Cataloguing</h1>
-                <p className="text-gray-600 mt-1">Manage yarn specifications and catalog</p>
-              </div>
-              <div className="box-tools flex flex-wrap items-center gap-2">
+
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Yarn Cataloguing</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {totalResults}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
                 <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  accept=".xlsx,.xls"
-                  onChange={handleFileUpload}
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 min-w-[120px] placeholder:text-gray-400 transition-all font-medium"
+                  placeholder="Search..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
                 />
-                <button
-                  type="button"
-                  className="ti-btn ti-btn-secondary"
-                  onClick={handleDownloadTemplate}
-                >
-                  <i className="ri-download-line me-2"></i>
-                  Download Template
-                </button>
-                <button
-                  type="button"
-                  className="ti-btn ti-btn-success"
-                  onClick={handleImportClick}
-                  disabled={isImporting}
-                >
-                  {isImporting ? (
-                    <>
-                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                      Importing...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-file-excel-2-line me-2"></i>
-                      Import
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="ti-btn ti-btn-info"
-                  onClick={handleExport}
-                  disabled={isExporting}
-                >
-                  {isExporting ? (
-                    <>
-                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                      Exporting...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-download-2-line me-2"></i>
-                      Export
-                    </>
-                  )}
-                </button>
-                <Link 
-                  href="/yarn-management/cataloguing/add"
-                  className="ti-btn ti-btn-primary"
-                >
-                  <i className="ri-add-line me-1"></i>
-                  Add Yarn
-                </Link>
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
               </div>
-            </div>
-          </div>
-
-          {/* Search and Filters */}
-          <div className="box">
-            <div className="box-body">
-              <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
-                <div className="flex items-center">
-                  <label className="mr-2 text-sm text-gray-600">Rows per page:</label>
-                  <select
-                    className="form-select w-auto text-sm"
-                    value={itemsPerPage}
-                    onChange={(e) => {
-                      setItemsPerPage(Number(e.target.value));
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <option value={10}>10</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </div>
-                <div className="relative w-full max-w-xs">
-                  <input
-                    type="text"
-                    className="form-control py-3 pr-10"
-                    placeholder="Search by yarn name..."
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                  />
-                  <button className="absolute end-0 top-0 px-4 h-full">
-                    <i className="ri-search-line text-lg"></i>
-                  </button>
-                </div>
+              <div className="relative group">
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
+                >
+                  <option value={10}>Show 10</option>
+                  <option value={50}>Show 50</option>
+                  <option value={100}>Show 100</option>
+                </select>
+                <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
               </div>
-            </div>
-          </div>
-
-          {/* Yarn Specifications Table */}
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">Yarn Catalogs ({totalResults})</h3>
-            </div>
-            <div className="box-body">
+              <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} />
+              <button type="button" onClick={handleDownloadTemplate} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm">
+                <i className="ri-file-download-line text-xs"></i> Template
+              </button>
+              <button type="button" onClick={handleImportClick} disabled={isImporting} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm">
+                {isImporting ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-upload-2-line text-xs"></i>} Import
+              </button>
               {importProgress !== null && (
-                <div className="mb-4">
-                  <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div
-                      className="bg-primary h-3 rounded-full transition-all duration-200"
-                      style={{ width: `${importProgress}%` }}
-                    ></div>
-                  </div>
-                  <div className="text-xs text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
+                <div className="w-24 h-2.5 bg-gray-200 rounded-full overflow-hidden flex items-center">
+                  <div className="bg-primary h-full transition-all duration-200" style={{ width: `${importProgress}%` }}></div>
+                  <span className="ml-1.5 text-[10px] text-gray-600 font-medium">{importProgress}%</span>
                 </div>
               )}
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : yarns.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-gray-400 mb-4">
-                    <i className="ri-book-open-line text-4xl"></i>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Yarn Catalogs</h3>
-                  <p className="text-gray-500 mb-4">Start by adding your first yarn catalog.</p>
-                  <Link 
-                    href="/yarn-management/cataloguing/add"
-                    className="ti-btn ti-btn-primary"
-                  >
-                    <i className="ri-add-line me-2"></i>
-                    Add First Yarn
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Yarn Name
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Type
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Subtype
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Count Size
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Blend
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Color Family
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Pantone Name
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            GST
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Min Quantity
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {yarns.map((yarn) => (
-                          <tr key={yarn.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {yarn.yarnName}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {yarn.yarnType?.name || '-'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {yarn.yarnSubtype?.subtype ? String(yarn.yarnSubtype.subtype) : '-'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {yarn.countSize?.name || '-'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {yarn.blend?.name || (yarn.blend as any)?.brandName || '-'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {yarn.colorFamily?.name || '-'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {yarn.pantonName || '-'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {yarn.gst ? `${yarn.gst}%` : '-'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {yarn.minQuantity !== undefined && yarn.minQuantity !== null ? yarn.minQuantity : '-'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              <span className={`badge ${yarn.status === 'active' ? 'bg-success' : yarn.status === 'inactive' ? 'bg-warning' : 'bg-danger'}`}>
-                                {yarn.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <div className="flex space-x-2">
-                                <Link
-                                  href={`/yarn-management/cataloguing/edit/${yarn.id}`}
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
-                                  title="Edit"
-                                >
-                                  <i className="ri-edit-line"></i>
-                                </Link>
-                                <button
-                                  onClick={() => handleDeleteYarn(yarn.id)}
-                                  className="ti-btn ti-btn-danger ti-btn-sm"
-                                  title="Delete"
-                                  disabled={isDeleting && deleteId === yarn.id}
-                                >
-                                  {isDeleting && deleteId === yarn.id ? (
-                                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                                  ) : (
-                                    <i className="ri-delete-bin-line"></i>
-                                  )}
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="flex justify-between items-center mt-4">
-                    <div className="text-sm text-gray-500">
-                      Showing {totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
-                    </div>
-                    <nav aria-label="Page navigation">
-                      <ul className="flex flex-wrap items-center">
-                        <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                          <button
-                            className="page-link py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                            disabled={currentPage === 1}
-                          >
-                            Previous
-                          </button>
-                        </li>
-                        {getPagination(currentPage, totalPages).map((page, idx) =>
-                          page === '...'
-                            ? <li key={"ellipsis-" + idx} className="page-item"><span className="px-3">...</span></li>
-                            : <li key={page} className="page-item">
-                                <button
-                                  className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
-                                    currentPage === page 
-                                    ? 'bg-primary text-white hover:bg-primary-dark' 
-                                    : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                                  }`}
-                                  onClick={() => setCurrentPage(Number(page))}
-                                >
-                                  {page}
-                                </button>
-                              </li>
-                        )}
-                        <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                          <button
-                            className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                            disabled={currentPage === totalPages}
-                          >
-                            Next
-                          </button>
-                        </li>
-                      </ul>
-                    </nav>
-                  </div>
-                </>
-              )}
+              <button type="button" onClick={handleExport} disabled={isExporting} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+                {isExporting ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-download-2-line text-xs"></i>} Export
+              </button>
+              <Link href="/yarn-management/cataloguing/add" className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+                <i className="ri-add-line text-xs"></i> Add Yarn
+              </Link>
             </div>
           </div>
         </div>
+
+        <div className="overflow-x-auto min-h-[300px]">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+            </div>
+          ) : yarns.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-book-open-line text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">DATA EMPTY</h3>
+              <Link href="/yarn-management/cataloguing/add" className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+                <i className="ri-add-line text-xs"></i> Add First Yarn
+              </Link>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th className="pl-[10px] pr-1 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Type</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Subtype</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Count Size</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Blend</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Color Family</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Pantone Name</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">GST</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Min Qty</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {yarns.map((yarn) => (
+                  <tr key={yarn.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <td className="pl-[10px] pr-1 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">{yarn.yarnName}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.yarnType?.name || '—'}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.yarnSubtype?.subtype ? String(yarn.yarnSubtype.subtype) : '—'}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.countSize?.name || '—'}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.blend?.name || (yarn.blend as { brandName?: string })?.brandName || '—'}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.colorFamily?.name || '—'}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.pantonName || '—'}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.gst != null ? `${yarn.gst}%` : '—'}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.minQuantity != null ? yarn.minQuantity : '—'}</td>
+                    <td className="px-1.5 py-2.5 border border-gray-200">
+                      <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${yarn.status === 'active' ? 'bg-green-100 text-green-800' : yarn.status === 'inactive' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+                        {yarn.status}
+                      </span>
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                      <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <Link href={`/yarn-management/cataloguing/edit/${yarn.id}`} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors" title="Edit">
+                          <i className="ri-pencil-line text-xs"></i>
+                        </Link>
+                        <button onClick={() => handleDeleteYarn(yarn.id)} className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors" title="Delete" disabled={isDeleting && deleteId === yarn.id}>
+                          {isDeleting && deleteId === yarn.id ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-delete-bin-line text-xs"></i>}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {!isLoading && (
+          <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
+            <div className="text-[11px] font-medium text-[#495057] tracking-tight">
+              Showing <span>{totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalResults)}</span> of <span>{totalResults}</span> entries <span className="ml-1 opacity-50">→</span>
+            </div>
+            <div className="flex items-center">
+              <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Prev</button>
+              <div className="flex items-center gap-1 mx-2">
+                {getPagination(currentPage, totalPages).map((page, idx) =>
+                  page === '...' ? <span key={`ellipsis-${idx}`} className="text-gray-300 text-[10px]">...</span> : (
+                    <button key={page} onClick={() => setCurrentPage(Number(page))} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded transition-all ${currentPage === page ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>{page}</button>
+                  )
+                )}
+              </div>
+              <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Next</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -104,13 +104,6 @@ const AttributesPage = () => {
     }
   };
 
-  // Calculate pagination
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentAttributes = attributes.slice(startIndex, endIndex);
-  
-  console.log('Current attributes being displayed:', currentAttributes);
-
   const handleExport = async () => {
     try {
       // Fetch all attributes for export
@@ -347,310 +340,204 @@ const AttributesPage = () => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Toaster position="top-right" />
       <Seo title="Attributes"/>
-      
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <h1 className="box-title text-2xl font-semibold">Attributes</h1>
-                <HelpIcon
-                  title="Product Attributes Management"
-                  content={
-                    <div>
-                      <p className="mb-4">
-                        This page allows you to manage product attributes that define the characteristics and properties of your products.
-                      </p>
-                      
-                      <h4 className="font-semibold mb-2">What you can do:</h4>
-                      <ul className="list-disc list-inside mb-4 space-y-1">
-                        <li><strong>View Attributes:</strong> See all product attributes with their types and values</li>
-                        <li><strong>Add New Attribute:</strong> Create new product attributes with custom types and values</li>
-                        <li><strong>Edit Attribute:</strong> Modify existing attribute details, types, and option values</li>
-                        <li><strong>Delete Attribute:</strong> Remove attributes that are no longer needed</li>
-                        <li><strong>Bulk Operations:</strong> Select multiple attributes for bulk deletion</li>
-                        <li><strong>Import/Export:</strong> Import attributes from Excel files or export existing data</li>
-                        <li><strong>Search & Filter:</strong> Find specific attributes using the search functionality</li>
-                        <li><strong>Pagination:</strong> Navigate through large lists of attributes efficiently</li>
-                      </ul>
 
-                      <h4 className="font-semibold mb-2">Attribute Information:</h4>
-                      <ul className="list-disc list-inside mb-4 space-y-1">
-                        <li><strong>Name:</strong> The name of the product attribute (e.g., Color, Size, Material)</li>
-                        <li><strong>Type:</strong> The type of attribute (e.g., select, radio, checkbox, text)</li>
-                        <li><strong>Option Values:</strong> Available options for the attribute (e.g., Red, Blue, Green for Color)</li>
-                        <li><strong>Sort Order:</strong> The order in which attributes should be displayed</li>
-                        <li><strong>Images:</strong> Associated images for attribute values (if applicable)</li>
-                      </ul>
-
-                      <h4 className="font-semibold mb-2">Common Attribute Types:</h4>
-                      <ul className="list-disc list-inside mb-4 space-y-1">
-                        <li><strong>Select:</strong> Dropdown selection with predefined options</li>
-                        <li><strong>Radio:</strong> Single choice from multiple options</li>
-                        <li><strong>Checkbox:</strong> Multiple choice selection</li>
-                        <li><strong>Text:</strong> Free text input</li>
-                        <li><strong>Number:</strong> Numeric input</li>
-                      </ul>
-
-                      <h4 className="font-semibold mb-2">Tips:</h4>
-                      <ul className="list-disc list-inside space-y-1">
-                        <li>Use the import feature to bulk upload attributes from Excel files</li>
-                        <li>Organize attributes by type for better product organization</li>
-                        <li>Use descriptive names for attributes to make them easily identifiable</li>
-                        <li>Set appropriate sort orders to control display sequence</li>
-                        <li>Add images to attribute values for better visual representation</li>
-                      </ul>
-                    </div>
-                  }
-                />
-              </div>
-              <div className="box-tools flex items-center space-x-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  accept=".xlsx,.xls"
-                  onChange={handleFileUpload}
-                />
-                <button 
-                  type="button" 
-                  className="ti-btn ti-btn-success"
-                  onClick={handleImportClick}
-                  disabled={isImporting}
-                >
-                  {isImporting ? (
-                    <>
-                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                      Importing...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-file-excel-2-line me-2"></i> Import
-                    </>
-                  )}
-                </button>
-                <button 
-                  type="button" 
-                  className="ti-btn ti-btn-info"
-                  onClick={handleExport}
-                >
-                  <i className="ri-download-2-line me-2"></i> Export
-                </button>
-                <Link href="/catalog/attributes/add" className="ti-btn ti-btn-primary">
-                  <i className="ri-add-line me-2"></i> Add New Attribute
-                </Link>
-              </div>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Attributes</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {totalResults}
+              </span>
+              <HelpIcon
+                title="Product Attributes Management"
+                content={
+                  <div>
+                    <p className="mb-4">This page allows you to manage product attributes that define the characteristics and properties of your products.</p>
+                    <h4 className="font-semibold mb-2">What you can do:</h4>
+                    <ul className="list-disc list-inside mb-4 space-y-1">
+                      <li><strong>View Attributes:</strong> See all product attributes with their types and values</li>
+                      <li><strong>Add New Attribute:</strong> Create new product attributes with custom types and values</li>
+                      <li><strong>Edit Attribute:</strong> Modify existing attribute details, types, and option values</li>
+                      <li><strong>Delete Attribute:</strong> Remove attributes that are no longer needed</li>
+                      <li><strong>Bulk Operations:</strong> Select multiple attributes for bulk deletion</li>
+                      <li><strong>Import/Export:</strong> Import attributes from Excel files or export existing data</li>
+                      <li><strong>Search & Filter:</strong> Find specific attributes using the search functionality</li>
+                      <li><strong>Pagination:</strong> Navigate through large lists of attributes efficiently</li>
+                    </ul>
+                    <h4 className="font-semibold mb-2">Attribute Information:</h4>
+                    <ul className="list-disc list-inside mb-4 space-y-1">
+                      <li><strong>Name:</strong> The name of the product attribute (e.g., Color, Size, Material)</li>
+                      <li><strong>Type:</strong> The type of attribute (e.g., select, radio, checkbox, text)</li>
+                      <li><strong>Option Values:</strong> Available options for the attribute (e.g., Red, Blue, Green for Color)</li>
+                      <li><strong>Sort Order:</strong> The order in which attributes should be displayed</li>
+                      <li><strong>Images:</strong> Associated images for attribute values (if applicable)</li>
+                    </ul>
+                    <h4 className="font-semibold mb-2">Common Attribute Types:</h4>
+                    <ul className="list-disc list-inside mb-4 space-y-1">
+                      <li><strong>Select:</strong> Dropdown selection with predefined options</li>
+                      <li><strong>Radio:</strong> Single choice from multiple options</li>
+                      <li><strong>Checkbox:</strong> Multiple choice selection</li>
+                      <li><strong>Text:</strong> Free text input</li>
+                      <li><strong>Number:</strong> Numeric input</li>
+                    </ul>
+                    <h4 className="font-semibold mb-2">Tips:</h4>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Use the import feature to bulk upload attributes from Excel files</li>
+                      <li>Organize attributes by type for better product organization</li>
+                      <li>Use descriptive names for attributes to make them easily identifiable</li>
+                      <li>Set appropriate sort orders to control display sequence</li>
+                      <li>Add images to attribute values for better visual representation</li>
+                    </ul>
+                  </div>
+                }
+              />
             </div>
-          </div>
 
-          {/* Content Box */}
-          <div className="box">
-            <div className="box-body">
-              {/* Search Bar */}
-              <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
-                <div className="flex items-center">
-                  <label className="mr-2 text-sm text-gray-600">Rows per page:</label>
-                  <select
-                    className="form-select w-auto text-sm"
-                    value={itemsPerPage}
-                    onChange={e => {
-                      setItemsPerPage(Number(e.target.value));
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <option value={10}>10</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={500}>500</option>
-                    <option value={1000}>1000</option>
-                  </select>
-                </div>
-                <div className="relative w-full max-w-xs">
-                  <input
-                    type="text"
-                    className="form-control py-3 pr-10"
-                    placeholder="Search by attribute name..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <button className="absolute end-0 top-0 px-4 h-full">
-                    <i className="ri-search-line text-lg"></i>
-                  </button>
-                </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 min-w-[120px] placeholder:text-gray-400 transition-all font-medium"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
               </div>
-
+              <div className="relative group">
+                <select
+                  value={itemsPerPage}
+                  onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
+                >
+                  <option value={10}>Show 10</option>
+                  <option value={50}>Show 50</option>
+                  <option value={100}>Show 100</option>
+                  <option value={500}>Show 500</option>
+                  <option value={1000}>Show 1000</option>
+                </select>
+                <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+              </div>
+              <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} />
+              <button type="button" onClick={handleImportClick} disabled={isImporting} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm">
+                {isImporting ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-upload-2-line text-xs"></i>} Import
+              </button>
+              {importProgress !== null && (
+                <div className="w-24 h-2.5 bg-gray-200 rounded-full overflow-hidden flex items-center">
+                  <div className="bg-primary h-full transition-all duration-200" style={{ width: `${importProgress}%` }}></div>
+                  <span className="ml-1.5 text-[10px] text-gray-600 font-medium">{importProgress}%</span>
+                </div>
+              )}
+              <button type="button" onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+                <i className="ri-download-2-line text-xs"></i> Export
+              </button>
               {selectedAttributes.length > 0 && (
-                <button className="ti-btn ti-btn-danger mb-4" onClick={handleBulkDelete} disabled={isBulkDeleting}>
-                  {isBulkDeleting ? 'Deleting...' : `Delete All (${selectedAttributes.length})`}
+                <button type="button" onClick={handleBulkDelete} disabled={isBulkDeleting} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors bg-red-50 text-red-600 border-red-100 hover:bg-red-100 shadow-sm">
+                  <i className="ri-delete-bin-line text-xs"></i> Delete ({selectedAttributes.length})
                 </button>
               )}
-
-              {importProgress !== null && (
-                <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
-                  <div
-                    className="bg-primary h-3 rounded-full transition-all duration-200"
-                    style={{ width: `${importProgress}%` }}
-                  ></div>
-                  <div className="text-xs text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
-                </div>
-              )}
-
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : error ? (
-                <div className="text-center py-8 text-red-500">
-                  <i className="ri-error-warning-line text-3xl mb-2"></i>
-                  <p>{error}</p>
-                </div>
-              ) : attributes.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="flex flex-col items-center justify-center">
-                    <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center mb-4">
-                      <i className="ri-list-check text-4xl text-primary"></i>
-                    </div>
-                    <h3 className="text-xl font-medium mb-2">No Attributes Found</h3>
-                    <p className="text-gray-500 text-center mb-6">Start by adding your first attribute.</p>
-                    <Link href="/catalog/attributes/add" className="ti-btn ti-btn-primary">
-                      <i className="ri-add-line me-2"></i> Add First Attribute
-                    </Link>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="table-responsive">
-                    <table className="table whitespace-nowrap table-bordered min-w-full">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th scope="col" className="!text-start">
-                            <input 
-                              type="checkbox" 
-                              className="form-check-input" 
-                              checked={selectAll}
-                              onChange={handleSelectAll}
-                            />
-                          </th>
-                          <th scope="col" className="text-start">Attribute Name</th>
-                          <th scope="col" className="text-start">Type</th>
-                          <th scope="col" className="text-start w-80 text-base">Values</th>
-                          <th scope="col" className="text-start">Sort Order</th>
-                          <th scope="col" className="text-start">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attributes.map((attribute, index) => (
-                          <tr 
-                            key={attribute.id} 
-                            className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}
-                          >
-                            <td>
-                              <input 
-                                type="checkbox" 
-                                className="form-check-input" 
-                                checked={selectedAttributes.includes(attribute.id)}
-                                onChange={() => handleAttributeSelect(attribute.id)}
-                              />
-                            </td>
-                            <td>{attribute.name}</td>
-                            <td>
-                              <span className="badge bg-light text-default">
-                                {attribute.type}
-                              </span>
-                            </td>
-                            <td className="w-80 truncate align-top text-base">
-                              <div className="flex flex-wrap gap-1">
-                                {attribute.optionValues?.map((value, i) => (
-                                  <span key={i} className="badge bg-gray-100 text-gray-600">
-                                    {value.name}
-                                  </span>
-                                ))}
-                              </div>
-                            </td>
-                            <td>{attribute.sortOrder}</td>
-                            <td>
-                              <div className="flex space-x-2">
-                                <Link 
-                                  href={`/catalog/attributes/edit/${attribute.id}`}
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
-                                >
-                                  <i className="ri-edit-line"></i>
-                                </Link>
-                                <button 
-                                  className="ti-btn ti-btn-danger ti-btn-sm"
-                                  onClick={() => confirmDelete(attribute.id)}
-                                  disabled={isDeleting || isBulkDeleting || (isDeleting && deleteId === attribute.id)}
-                                >
-                                  {isDeleting && deleteId === attribute.id ? (
-                                    <div className="flex items-center">
-                                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                                      <i className="ri-delete-bin-line"></i>
-                                    </div>
-                                  ) : (
-                                    <i className="ri-delete-bin-line"></i>
-                                  )}
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Pagination */}
-                  <div className="flex justify-between items-center mt-4">
-                    <div className="text-sm text-gray-500">
-                      Showing {totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {totalResults === 0 ? 0 : Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
-                    </div>
-                    <nav aria-label="Page navigation" className="">
-                      <ul className="flex flex-wrap items-center">
-                        <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                          <button
-                            className="page-link py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                            disabled={currentPage === 1}
-                          >
-                            Previous
-                          </button>
-                        </li>
-                        {getPagination(currentPage, totalPages).map((page, idx) =>
-                          page === '...'
-                            ? <li key={"ellipsis-" + idx} className="page-item"><span className="px-3">...</span></li>
-                            : <li key={page} className="page-item">
-                                <button
-                                  className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
-                                    currentPage === page 
-                                    ? 'bg-primary text-white hover:bg-primary-dark' 
-                                    : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                                  }`}
-                                  onClick={() => setCurrentPage(Number(page))}
-                                >
-                                  {page}
-                                </button>
-                              </li>
-                        )}
-                        <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                          <button
-                            className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                            disabled={currentPage === totalPages}
-                          >
-                            Next
-                          </button>
-                        </li>
-                      </ul>
-                    </nav>
-                  </div>
-                </>
-              )}
+              <Link href="/catalog/attributes/add" className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+                <i className="ri-add-line text-xs"></i> Add Attribute
+              </Link>
             </div>
           </div>
         </div>
+
+        <div className="overflow-x-auto min-h-[300px]">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-error-warning-line text-xl text-red-400"></i>
+              </div>
+              <p className="text-[12px] font-medium text-red-600">{error}</p>
+            </div>
+          ) : attributes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-list-check text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">DATA EMPTY</h3>
+              <Link href="/catalog/attributes/add" className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+                <i className="ri-add-line text-xs"></i> Add First Attribute
+              </Link>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th className="pl-[10px] pr-1 py-3 text-left w-10 border border-gray-200">
+                    <input type="checkbox" checked={selectAll} onChange={handleSelectAll} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Attribute Name</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Type</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Values</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Sort Order</th>
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attributes.map((attribute) => (
+                  <tr key={attribute.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <td className="pl-[10px] pr-1 py-2.5 border border-gray-200">
+                      <input type="checkbox" checked={selectedAttributes.includes(attribute.id)} onChange={() => handleAttributeSelect(attribute.id)} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">{attribute.name}</td>
+                    <td className="px-1.5 py-2.5 border border-gray-200">
+                      <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight bg-purple-100 text-purple-800">{attribute.type}</span>
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
+                      <div className="flex flex-wrap gap-1">
+                        {attribute.optionValues?.map((value, i) => (
+                          <span key={i} className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-gray-100 text-gray-700">{value.name}</span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{attribute.sortOrder}</td>
+                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                      <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <Link href={`/catalog/attributes/edit/${attribute.id}`} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors" title="Edit">
+                          <i className="ri-pencil-line text-xs"></i>
+                        </Link>
+                        <button className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors" onClick={() => confirmDelete(attribute.id)} title="Delete" disabled={isDeleting && deleteId === attribute.id}>
+                          {isDeleting && deleteId === attribute.id ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-delete-bin-line text-xs"></i>}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {!isLoading && !error && (
+          <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
+            <div className="text-[11px] font-medium text-[#495057] tracking-tight">
+              Showing <span>{totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {totalResults === 0 ? 0 : Math.min(currentPage * itemsPerPage, totalResults)}</span> of <span>{totalResults}</span> entries <span className="ml-1 opacity-50">→</span>
+            </div>
+            <div className="flex items-center">
+              <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Prev</button>
+              <div className="flex items-center gap-1 mx-2">
+                {getPagination(currentPage, totalPages).map((page, idx) =>
+                  page === '...' ? <span key={`ellipsis-${idx}`} className="text-gray-300 text-[10px]">...</span> : (
+                    <button key={page} onClick={() => setCurrentPage(Number(page))} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded transition-all ${currentPage === page ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>{page}</button>
+                  )
+                )}
+              </div>
+              <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Next</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

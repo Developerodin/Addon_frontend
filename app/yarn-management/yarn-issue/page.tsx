@@ -882,12 +882,12 @@ const YarnIssuePage = () => {
 
   const SortIcon = ({ field }: { field: YarnSortField }) => {
     if (sortField !== field) {
-      return <i className="ri-arrow-up-down-line text-gray-400" />;
+      return <i className="ri-arrow-up-down-line text-gray-400 text-sm" />;
     }
     return sortDirection === "asc" ? (
-      <i className="ri-arrow-up-line text-primary" />
+      <i className="ri-arrow-up-line text-purple-600 text-sm" />
     ) : (
-      <i className="ri-arrow-down-line text-primary" />
+      <i className="ri-arrow-down-line text-purple-600 text-sm" />
     );
   };
 
@@ -1136,14 +1136,13 @@ const YarnIssuePage = () => {
     }
   };
 
-  // Show loading state while permissions are being loaded
   if (isLoading || ordersLoading) {
     return (
-      <div className="main-content">
-        <div className="flex justify-center items-center py-12">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading...</p>
+      <div className="main-content !p-[10px]">
+        <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+            <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
           </div>
         </div>
       </div>
@@ -1152,135 +1151,97 @@ const YarnIssuePage = () => {
 
   if (!hasPermission) {
     return (
-      <div className="main-content">
-        <div className="text-center py-12">
-          <div className="text-gray-400 mb-4">
-            <i className="ri-lock-line text-6xl"></i>
+      <div className="main-content !p-[10px]">
+        <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="text-gray-400 mb-4">
+              <i className="ri-lock-line text-5xl"></i>
+            </div>
+            <h3 className="text-xs font-bold text-gray-400 mb-1">Access Restricted</h3>
+            <p className="text-[11px] text-gray-500 mb-4">You don't have permission to access Yarn Issue.</p>
+            <Link href="/yarn-management" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700">
+              <i className="ri-arrow-left-line"></i> Back to Yarn Management
+            </Link>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
-          <p className="text-gray-500 mb-4">You don't have permission to access Yarn Issue.</p>
-          <Link href="/yarn-management" className="ti-btn ti-btn-primary">
-            <i className="ri-arrow-left-line me-2"></i>
-            Back to Yarn Management
-          </Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Yarn Issue" />
 
-      {/* Page Header */}
-      {/* <div className="box !bg-transparent border-0 shadow-none mb-6">
-        <div className="box-header flex justify-between items-center">
-          <div>
-            <h1 className="box-title text-2xl font-semibold">Yarn Issue</h1>
-            <p className="text-gray-600 mt-1">
-              Issue yarn for production orders
-            </p>
-          </div>
-          
-          <button
-            onClick={() => setShowScanIssuePanel(true)}
-            className="relative p-3 hover:bg-gray-100 rounded-lg transition-all duration-200 group"
-            aria-label="Open Scan & Issue"
-          >
-            <i className="ri-barcode-box-line text-2xl text-gray-600 group-hover:text-gray-900 transition-colors"></i>
-            {activeRequirement && (
-              <span className="absolute top-1 right-1 flex items-center justify-center min-w-[20px] h-5 px-1.5 bg-primary text-white text-xs font-bold rounded-full border-2 border-white shadow-lg">
-                <i className="ri-check-line"></i>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px] border-b border-gray-100">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Yarn Issue</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {filteredOrders.length}
               </span>
-            )}
-          </button>
-        </div>
-      </div> */}
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-2">
-        <div className="xl:col-span-1 space-y-4">
-          <div className="box">
-            <div className="box-header flex justify-between items-center">
-              <h2 className="box-title">Production Orders</h2>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500">
-                  {filteredOrders.length} pending
-                </span>
-                <button
-                  onClick={() => setShowActivityLogPanel(true)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-md hover:bg-gray-50 hover:border-gray-400 transition-colors flex items-center gap-2 text-sm font-medium text-gray-700"
-                  title="View Issue Activity Log"
-                >
-                  
-                  <span className="hidden sm:inline">Logs</span>
-                </button>
-              </div>
             </div>
-            <div className="box-body">
-              <div className="relative mb-4">
+            <button
+              type="button"
+              onClick={() => setShowActivityLogPanel(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-[11px] font-bold text-gray-700 rounded hover:bg-gray-50 transition-colors"
+              title="View Issue Activity Log"
+            >
+              <i className="ri-file-list-3-line"></i>
+              Logs
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 p-[10px] pt-0">
+          <div className="xl:col-span-1 flex flex-col border border-gray-200 rounded overflow-hidden bg-gray-50/30">
+            <div className="p-[10px] border-b border-gray-200 bg-white">
+              <h2 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Production Orders</h2>
+            </div>
+            <div className="p-[10px] flex-1 min-h-0">
+              <div className="relative mb-3">
                 <input
                   type="text"
-                  className="form-control ps-10"
-                  placeholder="Search by order, buyer, floor..."
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
+                  placeholder="Search order, buyer, floor..."
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                 />
-                <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
               </div>
 
               {filteredOrders.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <i className="ri-inbox-line text-4xl text-gray-400 mb-2"></i>
-                  <p>No production orders need yarn issuance.</p>
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <i className="ri-inbox-line text-4xl text-gray-300 mb-2"></i>
+                  <p className="text-[11px] text-gray-500">No production orders need yarn issuance.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border border-gray-300">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Order
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Floor
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Date
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
-                          Issued
-                        </th>
+                <div className="overflow-x-auto min-h-[200px]">
+                  <table className="w-full border-collapse border border-gray-200">
+                    <thead>
+                      <tr className="bg-gray-50/30">
+                        <th className="pl-[10px] pr-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order</th>
+                        <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Floor</th>
+                        <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Date</th>
+                        <th className="px-1.5 py-2 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Issued</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
                       {filteredOrders.map((order) => {
-                        const status = getOrderStatus(order, allYarnTransactions);
                         const issuedTotals = getOrderTotals(order, allYarnTransactions);
-
                         return (
                           <tr
                             key={order.id}
                             className={`cursor-pointer transition-colors ${
-                              selectedOrder?.id === order.id
-                                ? "bg-primary/5 hover:bg-primary/10"
-                                : "hover:bg-gray-50"
+                              selectedOrder?.id === order.id ? "bg-purple-50 hover:bg-purple-100/50" : "hover:bg-gray-50/50"
                             }`}
                             onClick={() => setSelectedOrderId(order.id)}
                           >
-                            <td className="px-3 py-2 text-xs font-medium text-gray-900 border-r border-b border-gray-300">
-                              {order.orderNumber}
-                            </td>
-                            <td className="px-3 py-2 text-xs text-gray-600 border-r border-b border-gray-300">
-                              {order.floor}
-                            </td>
-                            <td className="px-3 py-2 text-xs text-gray-600 border-r border-b border-gray-300">
-                              {new Date(order.scheduledDate).toLocaleDateString()}
-                            </td>
-                            <td className="px-3 py-2 text-xs text-gray-600 border-b border-gray-300">
-                              <span className="font-medium">
-                                {issuedTotals.issued.toFixed(2)} / {(issuedTotals.required / 1000).toFixed(2)} kg
-                              </span>
-                            </td>
+                            <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{order.orderNumber}</td>
+                            <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{order.floor}</td>
+                            <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(order.scheduledDate).toLocaleDateString()}</td>
+                            <td className="px-1.5 py-2 text-right pr-[10px] text-[12px] font-medium text-gray-700 border border-gray-200">{issuedTotals.issued.toFixed(2)} / {(issuedTotals.required / 1000).toFixed(2)} kg</td>
                           </tr>
                         );
                       })}
@@ -1291,111 +1252,69 @@ const YarnIssuePage = () => {
             </div>
           </div>
 
-          
-        </div>
-
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-2 space-y-4">
           {!selectedOrder ? (
-            <div className="box">
-              <div className="box-body text-center py-16 text-gray-500">
+            <div className="border border-gray-200 rounded overflow-hidden bg-white p-[10px]">
+              <div className="flex flex-col items-center justify-center py-16 text-center text-gray-500">
                 <i className="ri-archive-line text-5xl text-gray-300 mb-4"></i>
-                <p>Select a production order to view its yarn requirements.</p>
+                <p className="text-[11px]">Select a production order to view its yarn requirements.</p>
               </div>
             </div>
           ) : (
             <>
-              {/* Order Header */}
-              <div className="box">
-                <div className="box-header flex justify-between items-start gap-4">
+              <div className="border border-gray-200 rounded overflow-hidden bg-white">
+                <div className="p-[10px] flex justify-between items-start gap-4 border-b border-gray-100">
                   <div>
-                    <h2 className="box-title text-xl">{selectedOrder.orderNumber}</h2>
-                    <p className="text-sm text-gray-500">
-                      {selectedOrder.buyer} • {selectedOrder.floor}
-                    </p>
+                    <h2 className="text-sm font-bold text-gray-800">{selectedOrder.orderNumber}</h2>
+                    <p className="text-[11px] text-gray-500 mt-0.5">{selectedOrder.buyer} • {selectedOrder.floor}</p>
                   </div>
-                  <div className="text-end text-sm text-gray-500">
-                    <div className="flex items-center gap-2 justify-end">
-                      <i className="ri-calendar-check-line"></i>
-                      Created: {new Date(selectedOrder.scheduledDate).toLocaleDateString()}
-                    </div>
+                  <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
+                    <i className="ri-calendar-check-line"></i>
+                    {new Date(selectedOrder.scheduledDate).toLocaleDateString()}
                   </div>
                 </div>
                 {selectedOrder.notes && (
-                  <div className="box-body border-t border-gray-100 bg-gray-50 text-xs text-gray-600">
-                    <i className="ri-information-line text-primary me-1"></i>
+                  <div className="p-[10px] border-t border-gray-100 bg-gray-50/50 text-[11px] text-gray-600">
+                    <i className="ri-information-line text-purple-600 me-1"></i>
                     {selectedOrder.notes}
                   </div>
                 )}
               </div>
 
-              {/* Articles Selection */}
               {selectedOrder.articles && selectedOrder.articles.length > 0 && (
-                <div className="box">
-                  <div className="box-header flex justify-between items-center">
-                    <h3 className="box-title">Select Article</h3>
-                    <span className="text-xs text-gray-500">
-                      {selectedOrder.articles.length} {selectedOrder.articles.length === 1 ? 'article' : 'articles'}
-                    </span>
+                <div className="border border-gray-200 rounded overflow-hidden bg-white">
+                  <div className="p-[10px] flex justify-between items-center border-b border-gray-100">
+                    <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Select Article</h3>
+                    <span className="text-[10px] text-gray-500">{selectedOrder.articles.length} {selectedOrder.articles.length === 1 ? "article" : "articles"}</span>
                   </div>
-                  <div className="box-body">
-                    <div className="max-h-[280px] overflow-y-auto pr-2">
+                  <div className="p-[10px]">
+                    <div className="max-h-[220px] overflow-y-auto pr-1">
                       <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
-                        {/* All Button */}
                         <button
-                          className={`text-center border rounded-md px-1.5 py-1.5 transition-all ${
-                            selectedArticleId === "all"
-                              ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary/20"
-                              : "border-gray-200 hover:border-primary/60 hover:bg-gray-50"
+                          type="button"
+                          className={`text-center border rounded px-1.5 py-1.5 transition-all ${
+                            selectedArticleId === "all" ? "border-purple-300 bg-purple-50 ring-1 ring-purple-200" : "border-gray-200 hover:border-purple-200 hover:bg-gray-50"
                           }`}
-                          onClick={() => {
-                            setSelectedArticleId("all");
-                            setActiveRequirementId(null);
-                          }}
+                          onClick={() => { setSelectedArticleId("all"); setActiveRequirementId(null); }}
                           title="View all articles"
                         >
-                          <div className="flex flex-col items-center gap-0.5">
-                            <i className={`${selectedArticleId === "all" ? "ri-stack-fill" : "ri-stack-line"} text-base ${selectedArticleId === "all" ? "text-primary" : "text-gray-500"}`}></i>
-                            <div className="flex-1 min-w-0 w-full">
-                              <h4 className="text-[10px] font-semibold text-gray-900 leading-tight">
-                                All
-                              </h4>
-                              <p className="text-[9px] text-gray-500 mt-0.5 leading-tight">
-                                {selectedOrder.articles.reduce((sum, a) => sum + (a.plannedQuantity || 0), 0)}
-                              </p>
-                            </div>
-                          </div>
+                          <i className={`${selectedArticleId === "all" ? "ri-stack-fill" : "ri-stack-line"} text-sm ${selectedArticleId === "all" ? "text-purple-600" : "text-gray-500"}`}></i>
+                          <h4 className="text-[10px] font-bold text-gray-900 leading-tight mt-0.5">All</h4>
+                          <p className="text-[9px] text-gray-500">{selectedOrder.articles.reduce((sum, a) => sum + (a.plannedQuantity || 0), 0)}</p>
                         </button>
-                        
-                        {/* Individual Articles */}
                         {selectedOrder.articles.map((article) => (
                           <button
                             key={article.id}
-                            className={`text-center border rounded-md px-1.5 py-1.5 transition-all ${
-                              selectedArticleId === article.id
-                                ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary/20"
-                                : "border-gray-200 hover:border-primary/60 hover:bg-gray-50"
+                            type="button"
+                            className={`text-center border rounded px-1.5 py-1.5 transition-all ${
+                              selectedArticleId === article.id ? "border-purple-300 bg-purple-50 ring-1 ring-purple-200" : "border-gray-200 hover:border-purple-200 hover:bg-gray-50"
                             }`}
-                            onClick={() => {
-                              setSelectedArticleId(article.id);
-                              setActiveRequirementId(null);
-                            }}
-                            title={`${article.articleNumber} - Qty: ${article.plannedQuantity}${article.remarks ? ` - ${article.remarks}` : ''}`}
+                            onClick={() => { setSelectedArticleId(article.id); setActiveRequirementId(null); }}
+                            title={`${article.articleNumber} - Qty: ${article.plannedQuantity}`}
                           >
-                            <div className="flex flex-col items-center gap-0.5 w-full">
-                              <div className="flex-1 min-w-0 w-full">
-                                <h4 className="text-[10px] font-semibold text-gray-900 truncate leading-tight" title={article.articleNumber}>
-                                  {article.articleNumber}
-                                </h4>
-                                <p className="text-[9px] text-gray-500 mt-0.5 leading-tight">
-                                  {article.plannedQuantity}
-                                </p>
-                                {article.remarks && (
-                                  <p className="text-[8px] text-gray-400 mt-0.5 truncate leading-tight" title={article.remarks}>
-                                    {article.remarks}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
+                            <h4 className="text-[10px] font-bold text-gray-900 truncate leading-tight" title={article.articleNumber}>{article.articleNumber}</h4>
+                            <p className="text-[9px] text-gray-500 mt-0.5">{article.plannedQuantity}</p>
+                            {article.remarks && <p className="text-[8px] text-gray-400 truncate leading-tight" title={article.remarks}>{article.remarks}</p>}
                           </button>
                         ))}
                       </div>
@@ -1404,220 +1323,88 @@ const YarnIssuePage = () => {
                 </div>
               )}
 
-              {/* Article Info & BOM Section - Shown when article is selected */}
               {selectedArticleId && selectedArticleId !== "all" && selectedArticle && (
                 <>
-                  {/* Article Information Card */}
-                  <div className="box bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
-                    <div className="box-body">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-primary/20">
-                            <i className="ri-article-line text-2xl text-primary"></i>
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              {selectedArticle.articleNumber}
-                            </h3>
-                            <div className="flex items-center gap-4 mt-1">
-                              <div className="flex items-center gap-2">
-                                <i className="ri-number-1 text-sm text-gray-500"></i>
-                                <span className="text-sm font-medium text-gray-700">
-                                  Quantity: <span className="text-primary font-bold">{selectedArticle.plannedQuantity}</span>
-                                </span>
-                              </div>
-                              {selectedOrder.styleCode && (
-                                <div className="flex items-center gap-2">
-                                  <i className="ri-barcode-line text-sm text-gray-500"></i>
-                                  <span className="text-sm text-gray-600">
-                                    Style: {selectedOrder.styleCode}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                            {selectedArticle.remarks && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                <i className="ri-file-text-line me-1"></i>
-                                {selectedArticle.remarks}
-                              </p>
-                            )}
-                          </div>
+                  <div className="border border-purple-200 rounded overflow-hidden bg-purple-50/30">
+                    <div className="p-[10px] flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
+                          <i className="ri-article-line text-lg text-purple-600"></i>
                         </div>
-                        <div className="text-right">
-                          <div className="text-xs text-gray-500 mb-1">BOM Items</div>
-                          <div className="text-2xl font-bold text-primary">
-                            {sortedRequirements.length}
-                          </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-900">{selectedArticle.articleNumber}</h3>
+                          <p className="text-[11px] text-gray-600">Qty: <span className="font-bold text-purple-600">{selectedArticle.plannedQuantity}</span>{selectedOrder.styleCode ? ` • Style: ${selectedOrder.styleCode}` : ""}</p>
+                          {selectedArticle.remarks && <p className="text-[10px] text-gray-500 mt-0.5">{selectedArticle.remarks}</p>}
                         </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] text-gray-500">BOM Items</div>
+                        <div className="text-sm font-bold text-purple-600">{sortedRequirements.length}</div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Loading state for product BOM */}
                   {productLoading && (
-                    <div className="box">
-                      <div className="box-body text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                        <p className="text-sm text-gray-600">Loading yarn requirements...</p>
+                    <div className="border border-gray-200 rounded overflow-hidden bg-white p-[10px]">
+                      <div className="flex flex-col items-center justify-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2 opacity-50"></div>
+                        <p className="text-[11px] text-gray-500">Loading yarn requirements...</p>
                       </div>
                     </div>
                   )}
 
-                  {/* BOM Requirements Table */}
                   {!productLoading && (
-                    <div className="box">
-                      <div className="box-header flex justify-between items-center">
-                        <div>
-                          <h3 className="box-title">Bill of Material - Yarn Requirements</h3>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Issue yarns one by one for this article
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {sortedRequirements.length > 0 && (
-                            <div className="text-right">
-                              <div className="text-xs text-gray-500">Total Required</div>
-                              <div className="text-sm font-semibold text-gray-900">
-                                {formatKgDisplay(
-                                  sortedRequirements.reduce((sum, req) => sum + req.requiredQty, 0)
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          <span className="text-xs text-gray-500">
-                            {sortedRequirements.length} {sortedRequirements.length === 1 ? 'yarn' : 'yarns'}
+                    <div className="border border-gray-200 rounded overflow-hidden bg-white">
+                      <div className="p-[10px] flex justify-between items-center border-b border-gray-100">
+                        <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">BOM - Yarn Requirements</h3>
+                        {sortedRequirements.length > 0 && (
+                          <span className="text-[11px] text-gray-500">
+                            Total: {formatKgDisplay(sortedRequirements.reduce((sum, req) => sum + req.requiredQty, 0))} • {sortedRequirements.length} yarn{sortedRequirements.length !== 1 ? "s" : ""}
                           </span>
-                        </div>
+                        )}
                       </div>
-                      <div className="box-body">
+                      <div className="overflow-x-auto min-h-[120px]">
                         {sortedRequirements.length === 0 ? (
-                          <div className="text-center py-12 text-gray-500">
-                            <i className="ri-stack-line text-4xl text-gray-400 mb-2"></i>
-                            <p>No yarn requisition configured in BOM for this article.</p>
+                          <div className="flex flex-col items-center justify-center py-12 text-center">
+                            <i className="ri-stack-line text-4xl text-gray-300 mb-2"></i>
+                            <p className="text-[11px] text-gray-500">No yarn requisition in BOM for this article.</p>
                           </div>
                         ) : (
-                          <div className="overflow-x-auto">
-                      <table className="min-w-full border border-gray-300">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                              Actions
-                            </th>
-                            <th
-                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                              onClick={() => handleSort("yarnName")}
-                            >
-                              <div className="flex items-center gap-2">
-                                Yarn Description
-                                <SortIcon field="yarnName" />
-                              </div>
-                            </th>
-                            <th
-                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                              onClick={() => handleSort("requiredQty")}
-                            >
-                              <div className="flex items-center gap-2">
-                                Required
-                                <SortIcon field="requiredQty" />
-                              </div>
-                            </th>
-                            <th
-                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                              onClick={() => handleSort("issuedQty")}
-                            >
-                              <div className="flex items-center gap-2">
-                                Issued
-                                <SortIcon field="issuedQty" />
-                              </div>
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                              Remaining
-                            </th>
-                            <th
-                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-b border-gray-300"
-                              onClick={() => handleSort("status")}
-                            >
-                              <div className="flex items-center gap-2">
-                                Status
-                                <SortIcon field="status" />
-                              </div>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                          {sortedRequirements.map((requirement) => {
-                            const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder.orderNumber);
-                            const issuedQtyInGrams = issuedQty * 1000; // Convert kg to grams for comparison
-                            const remaining = Math.max(
-                              requirement.requiredQty - issuedQtyInGrams,
-                              0
-                            );
-                            const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder.orderNumber);
-                            const isActive = activeRequirementId === requirement.id;
-
-                            return (
-                              <tr
-                                key={requirement.id}
-                                className={`hover:bg-gray-50 transition-colors ${
-                                  isActive ? "bg-primary/5" : ""
-                                }`}
-                              >
-                                <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
-                                  {status === "Issued" ? (
-                                    <span className="text-xs text-gray-500 italic">
-                                      Fully Issued
-                                    </span>
-                                  ) : (
-                                    <button
-                                      className={`ti-btn w-full md:w-auto whitespace-normal break-words leading-tight px-4 py-2 text-sm ${
-                                        isActive
-                                          ? "ti-btn-primary"
-                                          : "ti-btn-primary ti-btn-outline"
-                                      }`}
-                                      onClick={() => handleStartIssuing(requirement.id)}
-                                    >
-                                      Issue
-                                    </button>
-                                  )}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {requirement.yarnName}
-                                  </div>
-                                  <div className="text-xs text-gray-500">
-                                    {requirement.yarnCode} • {requirement.yarnType}
-                                  </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {formatKgDisplay(requirement.requiredQty)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  <span className="font-medium text-blue-600">
-                                    {formatKgDisplay(issuedQtyInGrams)}
-                                  </span>
-                                  <span className="text-xs text-gray-500">
-                                    {" "}
-                                    / {formatKgDisplay(requirement.requiredQty)}
-                                  </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {formatKgDisplay(remaining)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
-                                  <span
-                                    className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
-                                      status
-                                    )}`}
-                                  >
-                                    {status}
-                                  </span>
-                                </td>
+                          <table className="w-full border-collapse border border-gray-200">
+                            <thead>
+                              <tr className="bg-gray-50/30">
+                                <th className="pl-[10px] pr-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                                <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50" onClick={() => handleSort("yarnName")}><div className="flex items-center gap-1.5">Yarn <SortIcon field="yarnName" /></div></th>
+                                <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50" onClick={() => handleSort("requiredQty")}><div className="flex items-center gap-1.5">Required <SortIcon field="requiredQty" /></div></th>
+                                <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50" onClick={() => handleSort("issuedQty")}><div className="flex items-center gap-1.5">Issued <SortIcon field="issuedQty" /></div></th>
+                                <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Remaining</th>
+                                <th className="px-1.5 py-2 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50" onClick={() => handleSort("status")}><div className="flex items-center gap-1.5 justify-end">Status <SortIcon field="status" /></div></th>
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                          </div>
+                            </thead>
+                            <tbody>
+                              {sortedRequirements.map((requirement) => {
+                                const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder.orderNumber);
+                                const issuedQtyInGrams = issuedQty * 1000;
+                                const remaining = Math.max(requirement.requiredQty - issuedQtyInGrams, 0);
+                                const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder.orderNumber);
+                                const isActive = activeRequirementId === requirement.id;
+                                return (
+                                  <tr key={requirement.id} className={`hover:bg-gray-50/50 transition-colors ${isActive ? "bg-purple-50" : ""}`}>
+                                    <td className="pl-[10px] pr-1.5 py-2 border border-gray-200">
+                                      {status === "Issued" ? <span className="text-[11px] text-gray-500 italic">Fully Issued</span> : (
+                                        <button type="button" className={`inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-bold rounded transition-colors ${isActive ? "bg-purple-600 text-white" : "border border-purple-200 text-purple-700 hover:bg-purple-50"}`} onClick={() => handleStartIssuing(requirement.id)}>Issue</button>
+                                      )}
+                                    </td>
+                                    <td className="px-1.5 py-2 border border-gray-200"><div className="text-[12px] font-bold text-gray-900">{requirement.yarnName}</div><div className="text-[10px] text-gray-500">{requirement.yarnCode} • {requirement.yarnType}</div></td>
+                                    <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{formatKgDisplay(requirement.requiredQty)}</td>
+                                    <td className="px-1.5 py-2 text-[12px] border border-gray-200"><span className="font-semibold text-blue-600">{formatKgDisplay(issuedQtyInGrams)}</span> <span className="text-[10px] text-gray-500">/ {formatKgDisplay(requirement.requiredQty)}</span></td>
+                                    <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{formatKgDisplay(remaining)}</td>
+                                    <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200"><span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${requirementStatusBadge(status)}`}>{status}</span></td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         )}
                       </div>
                     </div>
@@ -1625,177 +1412,74 @@ const YarnIssuePage = () => {
                 </>
               )}
 
-              {/* All Articles View - Shown when "All" is selected */}
               {selectedArticleId === "all" && !productLoading && (
-                <div className="box">
-                  <div className="box-header flex justify-between items-center">
-                    <div>
-                      <h3 className="box-title">Bill of Material - All Articles Combined</h3>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Showing all yarn requirements from all articles in this order
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {sortedRequirements.length > 0 && (
-                        <div className="text-right">
-                          <div className="text-xs text-gray-500">Total Required</div>
-                          <div className="text-sm font-semibold text-gray-900">
-                            {formatKgDisplay(
-                              sortedRequirements.reduce((sum, req) => sum + req.requiredQty, 0)
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      <span className="text-xs text-gray-500">
-                        {sortedRequirements.length} {sortedRequirements.length === 1 ? 'entry' : 'entries'}
+                <div className="border border-gray-200 rounded overflow-hidden bg-white">
+                  <div className="p-[10px] flex justify-between items-center border-b border-gray-100">
+                    <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">BOM - All Articles</h3>
+                    {sortedRequirements.length > 0 && (
+                      <span className="text-[11px] text-gray-500">
+                        Total: {formatKgDisplay(sortedRequirements.reduce((sum, req) => sum + req.requiredQty, 0))} • {sortedRequirements.length} entry{sortedRequirements.length !== 1 ? "ies" : ""}
                       </span>
-                    </div>
+                    )}
                   </div>
-                  <div className="box-body">
+                  <div className="overflow-x-auto min-h-[120px]">
                     {sortedRequirements.length === 0 ? (
-                      <div className="text-center py-12 text-gray-500">
-                        <i className="ri-stack-line text-4xl text-gray-400 mb-2"></i>
-                        <p>No yarn requisition configured in BOM for any article.</p>
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <i className="ri-stack-line text-4xl text-gray-300 mb-2"></i>
+                        <p className="text-[11px] text-gray-500">No yarn requisition in BOM for any article.</p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full border border-gray-300">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                                Actions
-                              </th>
-                              <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                                onClick={() => handleSort("yarnName")}
-                              >
-                                <div className="flex items-center gap-2">
-                                  Yarn Description
-                                  <SortIcon field="yarnName" />
-                                </div>
-                              </th>
-                              <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                                onClick={() => handleSort("requiredQty")}
-                              >
-                                <div className="flex items-center gap-2">
-                                  Required
-                                  <SortIcon field="requiredQty" />
-                                </div>
-                              </th>
-                              <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                                onClick={() => handleSort("issuedQty")}
-                              >
-                                <div className="flex items-center gap-2">
-                                  Issued
-                                  <SortIcon field="issuedQty" />
-                                </div>
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                                Remaining
-                              </th>
-                              <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-b border-gray-300"
-                                onClick={() => handleSort("status")}
-                              >
-                                <div className="flex items-center gap-2">
-                                  Status
-                                  <SortIcon field="status" />
-                                </div>
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white">
-                            {sortedRequirements.map((requirement) => {
-                              const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder.orderNumber);
-                              const issuedQtyInGrams = issuedQty * 1000; // Convert kg to grams for comparison
-                              const remaining = Math.max(
-                                requirement.requiredQty - issuedQtyInGrams,
-                                0
-                              );
-                              const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder.orderNumber);
-                              const isActive = activeRequirementId === requirement.id;
-
-                              return (
-                                <tr
-                                  key={requirement.id}
-                                  className={`hover:bg-gray-50 transition-colors ${
-                                    isActive ? "bg-primary/5" : ""
-                                  }`}
-                                >
-                                  <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
-                                    {status === "Issued" ? (
-                                      <span className="text-xs text-gray-500 italic">
-                                        Fully Issued
-                                      </span>
-                                    ) : (
-                                      <button
-                                        className={`ti-btn w-full md:w-auto whitespace-normal break-words leading-tight px-4 py-2 text-sm ${
-                                          isActive
-                                            ? "ti-btn-primary"
-                                            : "ti-btn-primary ti-btn-outline"
-                                        }`}
-                                        onClick={() => handleStartIssuing(requirement.id)}
-                                      >
-                                        Issue
-                                      </button>
-                                    )}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
-                                    <div className="text-sm font-medium text-gray-900">
-                                      {requirement.yarnName}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                      {requirement.yarnCode} • {requirement.yarnType}
-                                    </div>
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                    {formatKgDisplay(requirement.requiredQty)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                    <span className="font-medium text-blue-600">
-                                      {formatKgDisplay(issuedQtyInGrams)}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                      {" "}
-                                      / {formatKgDisplay(requirement.requiredQty)}
-                                    </span>
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                    {formatKgDisplay(remaining)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
-                                    <span
-                                      className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
-                                        status
-                                      )}`}
-                                    >
-                                      {status}
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+                      <table className="w-full border-collapse border border-gray-200">
+                        <thead>
+                          <tr className="bg-gray-50/30">
+                            <th className="pl-[10px] pr-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50" onClick={() => handleSort("yarnName")}><div className="flex items-center gap-1.5">Yarn <SortIcon field="yarnName" /></div></th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50" onClick={() => handleSort("requiredQty")}><div className="flex items-center gap-1.5">Required <SortIcon field="requiredQty" /></div></th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50" onClick={() => handleSort("issuedQty")}><div className="flex items-center gap-1.5">Issued <SortIcon field="issuedQty" /></div></th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Remaining</th>
+                            <th className="px-1.5 py-2 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50" onClick={() => handleSort("status")}><div className="flex items-center gap-1.5 justify-end">Status <SortIcon field="status" /></div></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedRequirements.map((requirement) => {
+                            const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder.orderNumber);
+                            const issuedQtyInGrams = issuedQty * 1000;
+                            const remaining = Math.max(requirement.requiredQty - issuedQtyInGrams, 0);
+                            const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder.orderNumber);
+                            const isActive = activeRequirementId === requirement.id;
+                            return (
+                              <tr key={requirement.id} className={`hover:bg-gray-50/50 transition-colors ${isActive ? "bg-purple-50" : ""}`}>
+                                <td className="pl-[10px] pr-1.5 py-2 border border-gray-200">
+                                  {status === "Issued" ? <span className="text-[11px] text-gray-500 italic">Fully Issued</span> : (
+                                    <button type="button" className={`inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-bold rounded transition-colors ${isActive ? "bg-purple-600 text-white" : "border border-purple-200 text-purple-700 hover:bg-purple-50"}`} onClick={() => handleStartIssuing(requirement.id)}>Issue</button>
+                                  )}
+                                </td>
+                                <td className="px-1.5 py-2 border border-gray-200"><div className="text-[12px] font-bold text-gray-900">{requirement.yarnName}</div><div className="text-[10px] text-gray-500">{requirement.yarnCode} • {requirement.yarnType}</div></td>
+                                <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{formatKgDisplay(requirement.requiredQty)}</td>
+                                <td className="px-1.5 py-2 text-[12px] border border-gray-200"><span className="font-semibold text-blue-600">{formatKgDisplay(issuedQtyInGrams)}</span> <span className="text-[10px] text-gray-500">/ {formatKgDisplay(requirement.requiredQty)}</span></td>
+                                <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{formatKgDisplay(remaining)}</td>
+                                <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200"><span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${requirementStatusBadge(status)}`}>{status}</span></td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Prompt to select article when none selected */}
               {!selectedArticleId && !productLoading && (
-                <div className="box">
-                  <div className="box-body text-center py-12 text-gray-500">
-                    <i className="ri-article-line text-4xl text-gray-400 mb-2"></i>
-                    <p>Select an article above to view and issue yarn requirements.</p>
+                <div className="border border-gray-200 rounded overflow-hidden bg-white p-[10px]">
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500">
+                    <i className="ri-article-line text-4xl text-gray-300 mb-2"></i>
+                    <p className="text-[11px]">Select an article above to view and issue yarn requirements.</p>
                   </div>
                 </div>
               )}
             </>
           )}
+        </div>
         </div>
       </div>
 

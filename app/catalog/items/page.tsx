@@ -2117,16 +2117,19 @@ const ProductListPage = () => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Products"/>
-      
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <h1 className="box-title text-2xl font-semibold">Products</h1>
+
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Products</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {totalResults}
+              </span>
                 <HelpIcon
                   title="Products Management"
                   content={
@@ -2174,17 +2177,49 @@ const ProductListPage = () => {
                     </div>
                   }
                 />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search */}
+              <div className="relative">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 min-w-[120px] placeholder:text-gray-400 transition-all font-medium"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
               </div>
-              <div className="box-tools flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadTemplate}
-                  className="ti-btn ti-btn-secondary"
-                  disabled={isLoading}
+
+              {/* Items per page */}
+              <div className="relative group">
+                <select
+                  value={itemsPerPage}
+                  onChange={e => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
                 >
-                  <i className="ri-file-download-line me-2"></i>
-                  Download Template
-                </button>
+                  <option value={10}>Show 10</option>
+                  <option value={50}>Show 50</option>
+                  <option value={100}>Show 100</option>
+                  <option value={500}>Show 500</option>
+                  <option value={1000}>Show 1000</option>
+                </select>
+                <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                disabled={isLoading}
+              >
+                <i className="ri-file-download-line text-xs"></i>
+                Template
+              </button>
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -2220,371 +2255,204 @@ const ProductListPage = () => {
                   accept=".xlsx,.xls"
                   onChange={handleImportByStyleCodes}
                 />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm"
+                disabled={isLoading}
+              >
+                <i className="ri-file-excel-2-line text-xs"></i>
+                Import
+              </button>
+              {importProgress !== null && (
+                <div className="w-24 h-2.5 bg-gray-200 rounded-full overflow-hidden flex items-center">
+                  <div className="bg-primary h-full transition-all duration-200" style={{ width: `${importProgress}%` }}></div>
+                  <span className="ml-1.5 text-[10px] text-gray-600 font-medium">{importProgress}%</span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleExport}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                disabled={isLoading}
+              >
+                <i className="ri-download-2-line text-xs"></i>
+                Export
+              </button>
+              {exportProgress !== null && (
+                <div className="w-24 h-2.5 bg-gray-200 rounded-full overflow-hidden flex items-center">
+                  <div className="bg-primary h-full transition-all duration-200" style={{ width: `${exportProgress}%` }}></div>
+                  <span className="ml-1.5 text-[10px] text-gray-600 font-medium">{exportProgress}%</span>
+                </div>
+              )}
+              {selectedProducts.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="ti-btn ti-btn-success"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${"bg-red-50 text-red-600 border-red-100 hover:bg-red-100 shadow-sm"}`}
+                  onClick={handleBulkDelete}
                   disabled={isLoading}
                 >
-                  <i className="ri-file-excel-2-line me-2"></i>
-                  Import
+                  <i className="ri-delete-bin-line text-xs"></i>
+                  Delete ({selectedProducts.length})
                 </button>
-                {importProgress !== null && (
-                  <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
-                    <div
-                      className="bg-primary h-full transition-all duration-200"
-                      style={{ width: `${importProgress}%` }}
-                    ></div>
-                    <span className="ml-2 text-xs text-gray-700">{importProgress}%</span>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleExport}
-                  className="ti-btn ti-btn-primary"
-                  disabled={isLoading}
-                >
-                  <i className="ri-download-2-line me-2"></i>
-                  Export
-                </button>
-                {exportProgress !== null && (
-                  <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
-                    <div
-                      className="bg-primary h-full transition-all duration-200"
-                      style={{ width: `${exportProgress}%` }}
-                    ></div>
-                    <span className="ml-2 text-xs text-gray-700">{exportProgress}%</span>
-                  </div>
-                )}
-                {selectedProducts.length > 0 && (
-                  <button
-                    type="button"
-                    className="ti-btn ti-btn-danger"
-                    onClick={handleBulkDelete}
-                    disabled={isLoading}
-                  >
-                    <i className="ri-delete-bin-line me-2"></i>
-                    Delete Selected ({selectedProducts.length})
+              )}
+              <Link
+                href="/catalog/items/add"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-add-line text-xs"></i>
+                Add Product
+              </Link>
+              <button
+                type="button"
+                onClick={() => setShowMoreExports(!showMoreExports)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors"
+                disabled={isLoading}
+              >
+                <i className="ri-more-line text-xs"></i>
+                {showMoreExports ? 'Less' : 'More'}
+              </button>
+              {showMoreExports && (
+                <div className="flex flex-wrap gap-2 mt-2 w-full">
+                  <button type="button" onClick={handleExportByAttributes} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-600 border border-sky-100 text-[11px] font-bold rounded hover:bg-sky-100" disabled={isLoading}>
+                    <i className="ri-download-2-line text-xs"></i> Export by Attributes
                   </button>
-                )}
-                <Link href="/catalog/items/add" className="ti-btn ti-btn-primary">
-                  <i className="ri-add-line me-2"></i>
-                  Add Product
-                </Link>
-              </div>
-            </div>
-          </div>
-          
-          {/* Show More Button Section - Right Aligned */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="flex justify-end mr-5">
-              <div className="flex flex-col items-end space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setShowMoreExports(!showMoreExports)}
-                  className="ti-btn ti-btn-outline-primary"
-                  disabled={isLoading}
-                >
-                  <i className="ri-more-line me-2"></i>
-                  {showMoreExports ? 'Show Less' : 'Show More'}
-                </button>
-                {showMoreExports && (
-                  <div className="flex flex-wrap gap-2 max-w-4xl justify-end">
-                    {/* Export Buttons - First Row */}
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      <button
-                        type="button"
-                        onClick={handleExportByAttributes}
-                        className="ti-btn ti-btn-info"
-                        disabled={isLoading}
-                      >
-                        <i className="ri-download-2-line me-2"></i>
-                        Export by Attributes
+                  {!isDesign && !isFinal && (
+                    <>
+                      <button type="button" onClick={handleExportByBOM} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-600 border border-sky-100 text-[11px] font-bold rounded hover:bg-sky-100" disabled={isLoading}>
+                        <i className="ri-download-2-line text-xs"></i> Export by BOM
                       </button>
-                      {!isDesign && !isFinal && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={handleExportByBOM}
-                            className="ti-btn ti-btn-info"
-                            disabled={isLoading}
-                          >
-                            <i className="ri-download-2-line me-2"></i>
-                            Export by BOM
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleExportByProcesses}
-                            className="ti-btn ti-btn-info"
-                            disabled={isLoading}
-                          >
-                            <i className="ri-download-2-line me-2"></i>
-                            Export by Processes
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    
-                    {/* Export Progress Indicator */}
-                    {exportProgress !== null && (
-                      <div className="w-full mb-2">
-                        <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden flex items-center">
-                          <div
-                            className="bg-primary h-full transition-all duration-200"
-                            style={{ width: `${exportProgress}%` }}
-                          ></div>
-                          <span className="ml-2 text-xs text-gray-700">{exportProgress}%</span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Import Buttons - Second Row */}
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      <button
-                        type="button"
-                        onClick={() => attributesFileInputRef.current?.click()}
-                        className="ti-btn ti-btn-success"
-                        disabled={isLoading}
-                      >
-                        <i className="ri-file-excel-2-line me-2"></i>
-                        Import by Attributes
+                      <button type="button" onClick={handleExportByProcesses} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-600 border border-sky-100 text-[11px] font-bold rounded hover:bg-sky-100" disabled={isLoading}>
+                        <i className="ri-download-2-line text-xs"></i> Export by Processes
                       </button>
-                      {!isDesign && !isFinal && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => bomFileInputRef.current?.click()}
-                            className="ti-btn ti-btn-success"
-                            disabled={isLoading}
-                          >
-                            <i className="ri-file-excel-2-line me-2"></i>
-                            Import by BOM
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => processesFileInputRef.current?.click()}
-                            className="ti-btn ti-btn-success"
-                            disabled={isLoading}
-                          >
-                            <i className="ri-file-excel-2-line me-2"></i>
-                            Import by Processes
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    
-                    {/* Template Buttons - Third Row */}
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={handleDownloadAttributesTemplate}
-                        className="ti-btn ti-btn-outline-secondary"
-                        disabled={isLoading}
-                      >
-                        <i className="ri-file-download-line me-2"></i>
-                        Attributes Template
-                      </button>
-                      {!isDesign && !isFinal && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={handleDownloadBOMTemplate}
-                            className="ti-btn ti-btn-outline-secondary"
-                            disabled={isLoading}
-                          >
-                            <i className="ri-file-download-line me-2"></i>
-                            BOM Template
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleDownloadProcessesTemplate}
-                            className="ti-btn ti-btn-outline-secondary"
-                            disabled={isLoading}
-                          >
-                            <i className="ri-file-download-line me-2"></i>
-                            Processes Template
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          
-          {/* Content Box */}
-          <div className="box">
-            <div className="box-body">
-              <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
-                <div className="flex items-center">
-                  <label className="mr-2 text-sm text-gray-600">Rows per page:</label>
-                  <select
-                    className="form-select w-auto text-sm"
-                    value={itemsPerPage}
-                    onChange={e => {
-                      setItemsPerPage(Number(e.target.value));
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <option value={10}>10</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={500}>500</option>
-                    <option value={1000}>1000</option>
-                  </select>
-                </div>
-                <div className="relative w-full max-w-xs">
-                  <input
-                    type="text"
-                    className="form-control py-3 pr-10"
-                    placeholder="Search by product name, style code, or category name..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                  />
-                  <button className="absolute end-0 top-0 px-4 h-full">
-                    <i className="ri-search-line text-lg"></i>
-                  </button>
-                </div>
-              </div>
-
-              {isLoading ? (
-                <div className="text-center py-10">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="sr-only">Loading...</span>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="table-responsive">
-                    <table className="table whitespace-nowrap table-bordered">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th>
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              checked={selectAll}
-                              onChange={handleSelectAll}
-                            />
-                          </th>
-                          <th className="text-start">Name</th>
-                          {(!isDesign && !isProduction) || isFinal ? <th className="text-start">Style Codes</th> : null}
-                          {!isDesign && !isProduction && <th className="text-start">Internal Code</th>}
-                          <th className="text-start">Category</th>
-                          <th className="text-start">Factory Code</th>
-                          {isFinal && <th className="text-start">EAN Code</th>}
-                          {isFinal && <th className="text-start">Description</th>}
-                          <th className="text-start">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {products.map((product) => (
-                          <tr key={product.id} className="border-b border-gray-200">
-                            <td>
-                              <input
-                                type="checkbox"
-                                className="form-check-input"
-                                checked={selectedProducts.includes(product.id)}
-                                onChange={() => handleProductSelect(product.id)}
-                              />
-                            </td>
-                            <td>
-                              <Link 
-                                href={`/analytics/product-analysis/${product.id}`}
-                                className="text-primary hover:text-primary/80 transition-colors duration-200"
-                              >
-                                {product.name}
-                              </Link>
-                            </td>
-                            {(!isDesign && !isProduction) || isFinal ? (
-                              <td>
-                                {product.styleCodes && product.styleCodes.length > 0 ? (
-                                  <button
-                                    onClick={() => handleViewStyleCodes(product)}
-                                    className="ti-btn ti-btn-sm ti-btn-outline-primary p-1"
-                                    title={`View ${product.styleCodes.length} Style Code${product.styleCodes.length > 1 ? 's' : ''}`}
-                                  >
-                                    <i className="ri-eye-line"></i>
-                                  </button>
-                                ) : (
-                                  <span className="text-gray-400">-</span>
-                                )}
-                              </td>
-                            ) : null}
-                            {!isDesign && !isProduction && <td>{product.internalCode || ''}</td>}
-                            <td>{getCategoryName(product.category)}</td>
-                            <td>{product.factoryCode || ''}</td>
-                            {isFinal && <td>{product.eanCode || ''}</td>}
-                            {isFinal && <td className="max-w-xs truncate" title={product.description || ''}>{product.description || ''}</td>}
-                            <td>
-                              <div className="flex space-x-2">
-                                <Link href={`/catalog/items/${product.id}/edit`} className="ti-btn ti-btn-primary ti-btn-sm">
-                                  <i className="ri-edit-line"></i>
-                                </Link>
-                                <button
-                                  className="ti-btn ti-btn-danger ti-btn-sm"
-                                  onClick={() => handleDelete(product.id)}
-                                >
-                                  <i className="ri-delete-bin-line"></i>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Pagination */}
-                  {!isLoading && (
-                    <div className="flex justify-between items-center mt-4">
-                      <div className="text-sm text-gray-500">
-                        Showing {totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {totalResults === 0 ? 0 : Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
-                      </div>
-                      <nav aria-label="Page navigation" className="">
-                        <ul className="flex flex-wrap items-center">
-                          <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                            <button
-                              className="page-link py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                              disabled={currentPage === 1}
-                            >
-                              Previous
-                            </button>
-                          </li>
-                          {getPagination(currentPage, totalPages).map((page, idx) =>
-                            page === '...'
-                              ? <li key={"ellipsis-" + idx} className="page-item"><span className="px-3">...</span></li>
-                              : <li key={page} className="page-item">
-                                  <button
-                                    className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
-                                      currentPage === page 
-                                      ? 'bg-primary text-white hover:bg-primary-dark' 
-                                      : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                                    }`}
-                                    onClick={() => setCurrentPage(Number(page))}
-                                  >
-                                    {page}
-                                  </button>
-                                </li>
-                          )}
-                          <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                            <button
-                              className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                              disabled={currentPage === totalPages}
-                            >
-                              Next
-                            </button>
-                          </li>
-                        </ul>
-                      </nav>
-                    </div>
+                    </>
                   )}
-                </>
+                  <button type="button" onClick={() => attributesFileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 text-[11px] font-bold rounded hover:bg-emerald-100" disabled={isLoading}>
+                    <i className="ri-file-excel-2-line text-xs"></i> Import by Attributes
+                  </button>
+                  {!isDesign && !isFinal && (
+                    <>
+                      <button type="button" onClick={() => bomFileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 text-[11px] font-bold rounded hover:bg-emerald-100" disabled={isLoading}>
+                        <i className="ri-file-excel-2-line text-xs"></i> Import by BOM
+                      </button>
+                      <button type="button" onClick={() => processesFileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 text-[11px] font-bold rounded hover:bg-emerald-100" disabled={isLoading}>
+                        <i className="ri-file-excel-2-line text-xs"></i> Import by Processes
+                      </button>
+                    </>
+                  )}
+                  <button type="button" onClick={handleDownloadAttributesTemplate} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-600 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-100" disabled={isLoading}>
+                    <i className="ri-file-download-line text-xs"></i> Attributes Template
+                  </button>
+                  {!isDesign && !isFinal && (
+                    <>
+                      <button type="button" onClick={handleDownloadBOMTemplate} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-600 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-100" disabled={isLoading}>
+                        <i className="ri-file-download-line text-xs"></i> BOM Template
+                      </button>
+                      <button type="button" onClick={handleDownloadProcessesTemplate} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-600 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-100" disabled={isLoading}>
+                        <i className="ri-file-download-line text-xs"></i> Processes Template
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Table Container */}
+        <div className="overflow-x-auto min-h-[300px]">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+            </div>
+          ) : products.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-inbox-line text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">DATA EMPTY</h3>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th className="pl-[10px] pr-1 py-3 text-left w-10 border border-gray-200">
+                    <input type="checkbox" checked={selectAll} onChange={handleSelectAll} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Name</th>
+                  {(!isDesign && !isProduction) || isFinal ? <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Style Codes</th> : null}
+                  {!isDesign && !isProduction && <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Internal Code</th>}
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Category</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Factory Code</th>
+                  {isFinal && <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">EAN Code</th>}
+                  {isFinal && <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Description</th>}
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((product) => (
+                  <tr key={product.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <td className="pl-[10px] pr-1 py-2.5 border border-gray-200">
+                      <input type="checkbox" checked={selectedProducts.includes(product.id)} onChange={() => handleProductSelect(product.id)} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">
+                      <Link href={`/analytics/product-analysis/${product.id}`} className="text-purple-600 hover:text-purple-700 transition-colors">
+                        {product.name}
+                      </Link>
+                    </td>
+                    {(!isDesign && !isProduction) || isFinal ? (
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        {product.styleCodes && product.styleCodes.length > 0 ? (
+                          <button onClick={() => handleViewStyleCodes(product)} className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100 transition-colors" title={`View ${product.styleCodes.length} Style Code${product.styleCodes.length > 1 ? 's' : ''}`}>
+                            <i className="ri-eye-line text-xs"></i>
+                          </button>
+                        ) : (
+                          <span className="text-[12px] text-gray-400">-</span>
+                        )}
+                      </td>
+                    ) : null}
+                    {!isDesign && !isProduction && <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{product.internalCode || ''}</td>}
+                    <td className="px-1.5 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-200">{getCategoryName(product.category)}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{product.factoryCode || ''}</td>
+                    {isFinal && <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{product.eanCode || ''}</td>}
+                    {isFinal && <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 max-w-xs truncate border border-gray-200" title={product.description || ''}>{product.description || ''}</td>}
+                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                      <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <Link href={`/catalog/items/${product.id}/edit`} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors" title="Edit">
+                          <i className="ri-pencil-line text-xs"></i>
+                        </Link>
+                        <button className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors" onClick={() => handleDelete(product.id)} title="Delete">
+                          <i className="ri-delete-bin-line text-xs"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Pagination */}
+        <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
+          <div className="text-[11px] font-medium text-[#495057] tracking-tight">
+            Showing <span>{totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {totalResults === 0 ? 0 : Math.min(currentPage * itemsPerPage, totalResults)}</span> of <span>{totalResults}</span> entries <span className="ml-1 opacity-50">→</span>
+          </div>
+          <div className="flex items-center">
+            <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Prev</button>
+            <div className="flex items-center gap-1 mx-2">
+              {getPagination(currentPage, totalPages).map((page, idx) =>
+                page === '...' ? (
+                  <span key={`ellipsis-${idx}`} className="text-gray-300 text-[10px]">...</span>
+                ) : (
+                  <button key={page} onClick={() => setCurrentPage(Number(page))} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded transition-all ${currentPage === page ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>
+                    {page}
+                  </button>
+                )
+              )}
+            </div>
+            <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Next</button>
           </div>
         </div>
       </div>
@@ -2593,48 +2461,38 @@ const ProductListPage = () => {
       {isStyleCodesModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseStyleCodesModal}>
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold">Style Codes - {selectedProductName}</h2>
-              <button
-                onClick={handleCloseStyleCodesModal}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <i className="ri-close-line text-2xl"></i>
+            <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
+              <h2 className="text-sm font-bold text-gray-800">Style Codes - {selectedProductName}</h2>
+              <button onClick={handleCloseStyleCodesModal} className="text-gray-500 hover:text-gray-700 transition-colors p-1">
+                <i className="ri-close-line text-lg"></i>
               </button>
             </div>
-            <div className="p-4 overflow-auto">
+            <div className="p-[10px] overflow-auto">
               {selectedProductStyleCodes.length > 0 ? (
-                <div className="table-responsive">
-                  <table className="table whitespace-nowrap table-bordered">
-                    <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="text-start p-3">Style Code</th>
-                        <th className="text-start p-3">EAN Code</th>
-                        <th className="text-start p-3">MRP</th>
+                <table className="w-full border-collapse border border-gray-200">
+                  <thead>
+                    <tr className="bg-gray-50/30">
+                      <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Style Code</th>
+                      <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">EAN Code</th>
+                      <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">MRP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedProductStyleCodes.map((styleCodeItem, index) => (
+                      <tr key={index} className="hover:bg-gray-50/50 border border-gray-200">
+                        <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-900 border border-gray-200">{styleCodeItem.styleCode || '-'}</td>
+                        <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-900 border border-gray-200">{styleCodeItem.eanCode || '-'}</td>
+                        <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-900 border border-gray-200">{styleCodeItem.mrp !== undefined ? styleCodeItem.mrp : '-'}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {selectedProductStyleCodes.map((styleCodeItem, index) => (
-                        <tr key={index} className="border-b border-gray-200">
-                          <td className="p-3">{styleCodeItem.styleCode || '-'}</td>
-                          <td className="p-3">{styleCodeItem.eanCode || '-'}</td>
-                          <td className="p-3">{styleCodeItem.mrp !== undefined ? styleCodeItem.mrp : '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  No style codes available for this product.
-                </div>
+                <div className="text-center py-8 text-[12px] text-gray-500">No style codes available for this product.</div>
               )}
             </div>
-            <div className="flex justify-end p-4 border-t border-gray-200">
-              <button
-                onClick={handleCloseStyleCodesModal}
-                className="ti-btn ti-btn-primary"
-              >
+            <div className="flex justify-end p-[10px] border-t border-gray-200">
+              <button onClick={handleCloseStyleCodesModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
                 Close
               </button>
             </div>

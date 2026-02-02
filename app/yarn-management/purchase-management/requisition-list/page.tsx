@@ -142,17 +142,18 @@ const RequisitionListPage = () => {
 
   if (!hasPermission) {
     return (
-      <div className="main-content">
-        <div className="py-12 text-center">
-          <div className="mb-4 text-gray-400">
-            <i className="ri-lock-line text-6xl"></i>
+      <div className="main-content !p-[10px]">
+        <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="text-gray-400 mb-4">
+              <i className="ri-lock-line text-5xl"></i>
+            </div>
+            <h3 className="text-xs font-bold text-gray-400 mb-1">Access Restricted</h3>
+            <p className="text-[11px] text-gray-500 mb-4">You don't have permission to access this screen.</p>
+            <Link href="/yarn-management/purchase-management" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700">
+              <i className="ri-arrow-left-line"></i> Back to Purchase Management
+            </Link>
           </div>
-          <h3 className="mb-2 text-lg font-medium text-gray-900">Access Restricted</h3>
-          <p className="mb-4 text-gray-500">You don't have permission to access this screen.</p>
-          <Link href="/yarn-management/purchase-management" className="ti-btn ti-btn-primary">
-            <i className="ri-arrow-left-line me-2"></i>
-            Back to Purchase Management
-          </Link>
         </div>
       </div>
     );
@@ -160,10 +161,12 @@ const RequisitionListPage = () => {
 
   if (loading) {
     return (
-      <div className="main-content">
-        <div className="py-12 text-center">
-          <div className="inline-block mb-4 animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          <p className="text-gray-600">Loading requisition data...</p>
+      <div className="main-content !p-[10px]">
+        <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+            <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+          </div>
         </div>
       </div>
     );
@@ -171,49 +174,26 @@ const RequisitionListPage = () => {
 
   if (error) {
     return (
-      <div className="main-content">
-        <div className="py-12 text-center">
-          <div className="mb-4 text-red-400">
-            <i className="ri-error-warning-line text-6xl"></i>
+      <div className="main-content !p-[10px]">
+        <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="text-red-400 mb-4">
+              <i className="ri-error-warning-line text-5xl"></i>
+            </div>
+            <h3 className="text-xs font-bold text-gray-400 mb-1">Error Loading Data</h3>
+            <p className="text-[11px] text-gray-500 mb-4">{error}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+            >
+              <i className="ri-refresh-line"></i> Retry
+            </button>
           </div>
-          <h3 className="mb-2 text-lg font-medium text-gray-900">Error Loading Data</h3>
-          <p className="mb-4 text-gray-500">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="ti-btn ti-btn-primary"
-          >
-            <i className="ri-refresh-line me-2"></i>
-            Retry
-          </button>
         </div>
       </div>
     );
   }
-
-  const buttonBaseClasses = "flex items-center gap-2 whitespace-nowrap !h-9 !px-3 text-xs font-semibold";
-
-  const handleSort = (key: keyof YarnInventory) => {
-    setSortConfig((prev) => {
-      if (prev?.key === key) {
-        const nextDirection = prev.direction === "asc" ? "desc" : "asc";
-        return { key, direction: nextDirection };
-      }
-
-      return { key, direction: "asc" };
-    });
-  };
-
-  const SortIcon = ({ field }: { field: keyof YarnInventory }) => {
-    if (sortConfig?.key !== field) {
-      return <i className="ri-arrow-up-down-line text-gray-400" />;
-    }
-
-    return sortConfig.direction === "asc" ? (
-      <i className="ri-arrow-up-line text-primary" />
-    ) : (
-      <i className="ri-arrow-down-line text-primary" />
-    );
-  };
 
   const getStatusBadges = (yarn: YarnInventory) => {
     const badges: { label: string; className: string }[] = [];
@@ -300,197 +280,205 @@ const RequisitionListPage = () => {
     toast.success("Export started.");
   };
 
+  const handleSort = (key: keyof YarnInventory) => {
+    setSortConfig((prev) => {
+      if (prev?.key === key) {
+        const nextDirection = prev.direction === "asc" ? "desc" : "asc";
+        return { key, direction: nextDirection };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  const SortIcon = ({ field }: { field: keyof YarnInventory }) => {
+    if (sortConfig?.key !== field) {
+      return <i className="ri-arrow-up-down-line text-gray-400 text-sm" />;
+    }
+    return sortConfig.direction === "asc" ? (
+      <i className="ri-arrow-up-line text-purple-600 text-sm" />
+    ) : (
+      <i className="ri-arrow-down-line text-purple-600 text-sm" />
+    );
+  };
+
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Critical Yarn Levels" />
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex items-center justify-between">
-              <div>
-                <h1 className="box-title text-lg font-semibold">Critical Yarn Levels</h1>
-                <p className="mt-1 text-sm text-gray-600">
-                  Monitor yarns that have fallen below their minimum levels or are overblocked in production.
-                </p>
-              </div>
-              <div className="box-tools">
-                <Link
-                  href="/yarn-management/purchase-management"
-                  className="ti-btn ti-btn-light !px-3 !py-1 text-sm"
-                >
-                  <i className="ri-arrow-left-line me-1"></i>
-                  Back to Purchase Management
-                </Link>
-              </div>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Requisition list</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {sortedYarns.length}
+              </span>
             </div>
-          </div> */}
-
-          <div className="box mt-2">
-            <div className="box-header flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <h3 className="box-title text-base font-semibold">
-                Tracked Yarns ({sortedYarns.length})
-              </h3>
-              <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:justify-end">
-                <input
-                  type="text"
-                  className="form-control md:h-10 md:w-56"
-                  placeholder="Search by yarn name..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <div className="flex w-full flex-col gap-2 md:flex-row md:items-center">
-                  <input
-                    type="date"
-                    className="form-control md:h-10 md:w-40"
-                    value={dateFilter.from}
-                    onChange={(e) => setDateFilter((prev) => ({ ...prev, from: e.target.value }))}
-                    placeholder="From date"
-                  />
-                  <input
-                    type="date"
-                    className="form-control md:h-10 md:w-40"
-                    value={dateFilter.to}
-                    onChange={(e) => setDateFilter((prev) => ({ ...prev, to: e.target.value }))}
-                    placeholder="To date"
-                  />
-                  <button
-                    type="button"
-                  className={`ti-btn ti-btn-light ${buttonBaseClasses}`}
-                    onClick={() => setDateFilter({ from: "", to: "" })}
-                    disabled={!dateFilter.from && !dateFilter.to}
-                  >
-                    Clear dates
-                  </button>
-                </div>
-                <select
-                  className="form-select md:h-10 md:w-40"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                >
-                  <option value="all">All alerts</option>
-                  <option value="belowMin">Below minimum</option>
-                  <option value="overblocked">Overblocked</option>
-                </select>
-                <button className={`ti-btn ti-btn-primary ${buttonBaseClasses}`} onClick={handleExport}>
-                  <i className="ri-download-line"></i>
-                  Export
-                </button>
-              </div>
-            </div>
-            <div className="box-body">
-              {sortedYarns.length === 0 ? (
-                <div className="py-8 text-center">
-                  <div className="mb-4 text-gray-400">
-                    <i className="ri-check-double-line text-4xl"></i>
-                  </div>
-                  <h3 className="mb-2 text-lg font-medium text-gray-900">All yarns are healthy</h3>
-                  <p className="mb-0 text-gray-500">
-                    No yarn is currently below the minimum or overblocked threshold.
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <div className="max-h-[60vh] overflow-auto rounded-lg border border-gray-200 shadow-sm">
-                    <table className="min-w-full border border-gray-300 bg-white text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th
-                            className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleSort("yarnName")}
-                          >
-                            <div className="flex items-center gap-2">
-                              Yarn Name
-                              <SortIcon field="yarnName" />
-                            </div>
-                          </th>
-                          <th
-                            className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleSort("minimumQty")}
-                          >
-                            <div className="flex items-center gap-2">
-                              Min Qty
-                              <SortIcon field="minimumQty" />
-                            </div>
-                          </th>
-                          <th
-                            className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleSort("availableQty")}
-                          >
-                            <div className="flex items-center gap-2">
-                              Available Qty
-                              <SortIcon field="availableQty" />
-                            </div>
-                          </th>
-                          <th
-                            className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleSort("blockedQty")}
-                          >
-                            <div className="flex items-center gap-2">
-                              Blocked Qty
-                              <SortIcon field="blockedQty" />
-                            </div>
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300">
-                            Alert Status
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-r border-b border-gray-300">
-                            Last Updated
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 border-b border-gray-300">
-                            Action
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white">
-                        {sortedYarns.map((yarn) => (
-                          <tr key={yarn.id} className="transition-colors hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
-                              <span className="text-sm font-medium text-gray-900">{yarn.yarnName}</span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                              {yarn.minimumQty.toLocaleString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                              <span className="text-green-600 font-medium">{yarn.availableQty.toLocaleString()}</span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                              <span className="text-orange-600 font-medium">{yarn.blockedQty.toLocaleString()}</span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
-                              <div className="flex flex-wrap gap-2">
-                                {getStatusBadges(yarn).map((badge) => (
-                                  <span
-                                    key={badge.label}
-                                    className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${badge.className}`}
-                                  >
-                                    {badge.label}
-                                  </span>
-                                ))}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                              {new Date(yarn.lastUpdated).toLocaleString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
-                              <button
-                                type="button"
-                                onClick={() => handleMarkPoSent(yarn.id)}
-                                className={`ti-btn ti-btn-primary ti-btn-outline ${buttonBaseClasses}`}
-                              >
-                                <i className="ri-mail-send-line"></i>
-                                Mark PO Sent
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/yarn-management/purchase-management"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-[11px] font-bold text-gray-700 rounded hover:bg-gray-50 transition-colors"
+              >
+                <i className="ri-arrow-left-line"></i> Back
+              </Link>
+              <button
+                type="button"
+                onClick={handleExport}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-download-line"></i> Export
+              </button>
             </div>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <div className="relative">
+              <input
+                type="text"
+                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 min-w-[120px] placeholder:text-gray-400 font-medium"
+                placeholder="Search by yarn name..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+            </div>
+            <input
+              type="date"
+              className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300 w-36"
+              value={dateFilter.from}
+              onChange={(e) => setDateFilter((prev) => ({ ...prev, from: e.target.value }))}
+            />
+            <input
+              type="date"
+              className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300 w-36"
+              value={dateFilter.to}
+              onChange={(e) => setDateFilter((prev) => ({ ...prev, to: e.target.value }))}
+            />
+            <button
+              type="button"
+              className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-gray-600 hover:bg-gray-100 rounded border border-gray-200 transition-colors disabled:opacity-50"
+              onClick={() => setDateFilter({ from: "", to: "" })}
+              disabled={!dateFilter.from && !dateFilter.to}
+            >
+              <i className="ri-close-line"></i> Clear dates
+            </button>
+            <select
+              className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 w-36"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            >
+              <option value="all">All alerts</option>
+              <option value="belowMin">Below minimum</option>
+              <option value="overblocked">Overblocked</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto min-h-[300px]">
+          {sortedYarns.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="text-gray-400 mb-4">
+                <i className="ri-check-double-line text-5xl"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">All yarns are healthy</h3>
+              <p className="text-[11px] text-gray-500">No yarn is currently below the minimum or overblocked threshold.</p>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th
+                    className="pl-[10px] pr-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
+                    onClick={() => handleSort("yarnName")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Yarn Name
+                      <SortIcon field="yarnName" />
+                    </div>
+                  </th>
+                  <th
+                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
+                    onClick={() => handleSort("minimumQty")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Min Qty
+                      <SortIcon field="minimumQty" />
+                    </div>
+                  </th>
+                  <th
+                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
+                    onClick={() => handleSort("availableQty")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Available Qty
+                      <SortIcon field="availableQty" />
+                    </div>
+                  </th>
+                  <th
+                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
+                    onClick={() => handleSort("blockedQty")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Blocked Qty
+                      <SortIcon field="blockedQty" />
+                    </div>
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Alert Status
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Last Updated
+                  </th>
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedYarns.map((yarn) => (
+                  <tr key={yarn.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="pl-[10px] pr-1.5 py-2.5 border border-gray-200">
+                      <span className="text-[12px] font-bold text-gray-900">{yarn.yarnName}</span>
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] text-gray-900 border border-gray-200">
+                      {yarn.minimumQty.toLocaleString()}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
+                      <span className="text-green-600 font-semibold">{yarn.availableQty.toLocaleString()}</span>
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
+                      <span className="text-orange-600 font-semibold">{yarn.blockedQty.toLocaleString()}</span>
+                    </td>
+                    <td className="px-1.5 py-2.5 border border-gray-200">
+                      <div className="flex flex-wrap gap-1.5">
+                        {getStatusBadges(yarn).map((badge) => (
+                          <span
+                            key={badge.label}
+                            className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${badge.className}`}
+                          >
+                            {badge.label}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] text-gray-600 border border-gray-200">
+                      {new Date(yarn.lastUpdated).toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => handleMarkPoSent(yarn.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors"
+                      >
+                        <i className="ri-mail-send-line text-sm"></i> Mark PO Sent
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>

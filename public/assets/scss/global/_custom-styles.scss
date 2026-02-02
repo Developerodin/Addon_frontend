@@ -1160,3 +1160,27 @@ h6 {
 #marker-image-map{
  @apply dirrtl #{!important};
 }
+
+// Sidebar: reduce menu item text size
+.app-sidebar {
+  .side-menu__item {
+    @apply text-[0.7rem] #{!important};
+  }
+  .side-menu__label {
+    @apply text-[0.75rem] #{!important};
+  }
+  .side-menu__angle {
+    @apply text-[0.75rem] #{!important};
+  }
+  .slide__category {
+    @apply text-[0.55rem] #{!important};
+  }
+  .slide-menu.child1 .side-menu__item,
+  .slide-menu.child2 .side-menu__item,
+  .slide-menu.child3 .side-menu__item {
+    @apply text-[0.7rem] #{!important};
+    .side-menu__label {
+      @apply text-[0.7rem] #{!important};
+    }
+  }
+}

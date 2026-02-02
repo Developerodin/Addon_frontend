@@ -356,257 +356,261 @@ const ColorPage = () => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Toaster position="top-right" />
       <Seo title="Colors" />
-      
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <h1 className="box-title text-2xl font-semibold">Colors</h1>
-              <div className="box-tools flex items-center space-x-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  accept=".xlsx,.xls"
-                  onChange={handleFileUpload}
-                />
-                {selectedColors.length > 0 && (
-                  <button
-                    type="button"
-                    className="ti-btn ti-btn-danger"
-                    onClick={handleDeleteSelected}
-                    disabled={isDeletingSelected}
-                  >
-                    {isDeletingSelected ? (
-                      <>
-                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                        Deleting...
-                      </>
-                    ) : (
-                      <>
-                        <i className="ri-delete-bin-line me-2"></i> Delete Selected ({selectedColors.length})
-                      </>
-                    )}
-                  </button>
-                )}
-                  <button
-                    type="button"
-                    className="ti-btn ti-btn-secondary"
-                    onClick={handleDownloadTemplate}
-                  >
-                    <i className="ri-download-line me-2"></i> Download Template
-                  </button>
+
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Colors</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {totalResults}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".xlsx,.xls"
+                onChange={handleFileUpload}
+              />
+              {selectedColors.length > 0 && (
                 <button
                   type="button"
-                  className="ti-btn ti-btn-success"
-                  onClick={handleImportClick}
-                  disabled={isImporting}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-[11px] font-bold rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                  onClick={handleDeleteSelected}
+                  disabled={isDeletingSelected}
                 >
-                  {isImporting ? (
+                  {isDeletingSelected ? (
                     <>
-                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                      Importing...
+                      <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></div>
+                      Deleting
                     </>
                   ) : (
                     <>
-                      <i className="ri-file-excel-2-line me-2"></i> Import
+                      <i className="ri-delete-bin-line"></i> Delete ({selectedColors.length})
                     </>
                   )}
                 </button>
-                <button type="button" className="ti-btn ti-btn-info" onClick={handleExport}>
-                  <i className="ri-download-2-line me-2"></i> Export
-                </button>
-                <Link href="/yarn-management/yarn-master/color/add" className="ti-btn ti-btn-primary">
-                  <i className="ri-add-line me-2"></i> Add Color
-                </Link>
-              </div>
+              )}
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors"
+                onClick={handleDownloadTemplate}
+              >
+                <i className="ri-download-line"></i> Template
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-[11px] font-bold rounded hover:bg-green-700 transition-colors disabled:opacity-50"
+                onClick={handleImportClick}
+                disabled={isImporting}
+              >
+                {isImporting ? (
+                  <>
+                    <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></div>
+                    Importing
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-file-excel-2-line"></i> Import
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors"
+                onClick={handleExport}
+              >
+                <i className="ri-download-2-line"></i> Export
+              </button>
+              <Link
+                href="/yarn-management/yarn-master/color/add"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-add-line"></i> Add
+              </Link>
             </div>
           </div>
 
-          <div className="box">
-            <div className="box-body">
-              <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
-                <div className="flex items-center">
-                  <label className="mr-2 text-sm text-gray-600">Rows per page:</label>
-                  <select
-                    className="form-select w-auto text-sm"
-                    value={itemsPerPage}
-                    onChange={e => {
-                      setItemsPerPage(Number(e.target.value));
-                      setCurrentPage(1);
-                    }}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] font-medium text-gray-600">Rows:</label>
+              <select
+                className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300"
+                value={itemsPerPage}
+                onChange={e => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+              >
+                <option value={10}>10</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={500}>500</option>
+                <option value={1000}>1000</option>
+              </select>
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 min-w-[120px] placeholder:text-gray-400 font-medium"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+              <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+            </div>
+          </div>
+
+          {importProgress !== null && (
+            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+              <div
+                className="bg-primary h-2.5 rounded-full transition-all duration-200"
+                style={{ width: `${importProgress}%` }}
+              ></div>
+              <div className="text-[10px] text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16 min-h-[300px]">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 opacity-50"></div>
+            </div>
+          ) : colors.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center min-h-[300px]">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-inbox-line text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-2">No Colors</h3>
+              <Link
+                href="/yarn-management/yarn-master/color/add"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+              >
+                <i className="ri-add-line"></i> Add First
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto min-h-[300px]">
+                <table className="w-full border-collapse border border-gray-200">
+                  <thead>
+                    <tr className="bg-gray-50/30">
+                      <th className="pl-[10px] pr-1 py-3 text-left w-10 border border-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={selectAll}
+                          onChange={handleSelectAll}
+                          className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5"
+                        />
+                      </th>
+                      <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Color Family Name</th>
+                      <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Pantone Name</th>
+                      <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Pantone Code</th>
+                      <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Created At</th>
+                      <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                      <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {colors.map((color) => (
+                      <tr key={color.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="pl-[10px] pr-1 py-2.5 border border-gray-200">
+                          <input
+                            type="checkbox"
+                            checked={selectedColors.includes(color.id)}
+                            onChange={() => {
+                              if (selectedColors.includes(color.id)) {
+                                setSelectedColors(selectedColors.filter(id => id !== color.id));
+                              } else {
+                                setSelectedColors([...selectedColors, color.id]);
+                              }
+                            }}
+                            className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5"
+                          />
+                        </td>
+                        <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-800 border border-gray-200">{color.name}</td>
+                        <td className="px-1.5 py-2.5 text-[12px] text-gray-600 border border-gray-200">{color.pantoneName || '-'}</td>
+                        <td className="px-1.5 py-2.5 text-[12px] text-gray-800 border border-gray-200">{color.colorCode}</td>
+                        <td className="px-1.5 py-2.5 text-[12px] text-gray-600 border border-gray-200">{color.createdAt ? new Date(color.createdAt).toLocaleString() : '-'}</td>
+                        <td className="px-1.5 py-2.5 border border-gray-200">
+                          <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase ${color.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {color.status}
+                          </span>
+                        </td>
+                        <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                          <div className="flex items-center justify-end gap-1">
+                            <Link
+                              href={`/yarn-management/yarn-master/color/edit/${color.id}`}
+                              className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-600 border border-blue-100 rounded hover:bg-blue-100 transition-colors"
+                            >
+                              <i className="ri-edit-line text-sm"></i>
+                            </Link>
+                            <button
+                              type="button"
+                              className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-600 border border-red-100 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+                              onClick={() => handleDelete(color.id)}
+                              disabled={isDeleting && deleteId === color.id}
+                            >
+                              {isDeleting && deleteId === color.id ? (
+                                <div className="animate-spin h-3.5 w-3.5 border-2 border-red-600 border-t-transparent rounded-full"></div>
+                              ) : (
+                                <i className="ri-delete-bin-line text-sm"></i>
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
+                <div className="text-[11px] font-medium text-[#495057] tracking-tight">
+                  Showing {totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults}
+                </div>
+                <nav className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
                   >
-                    <option value={10}>10</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={500}>500</option>
-                    <option value={1000}>1000</option>
-                  </select>
-                </div>
-                <div className="relative w-full max-w-xs">
-                  <input
-                    type="text"
-                    className="form-control py-3 pr-10"
-                    placeholder="Search colors..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <button className="absolute end-0 top-0 px-4 h-full">
-                    <i className="ri-search-line text-lg"></i>
+                    Previous
                   </button>
-                </div>
+                  {getPagination(currentPage, totalPages).map((page, idx) =>
+                    page === '...' ? (
+                      <span key={'ellipsis-' + idx} className="px-2 text-[11px] text-gray-400">...</span>
+                    ) : (
+                      <button
+                        key={page}
+                        type="button"
+                        className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded transition-all ${
+                          currentPage === page ? 'bg-purple-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'
+                        }`}
+                        onClick={() => setCurrentPage(Number(page))}
+                      >
+                        {page}
+                      </button>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </button>
+                </nav>
               </div>
-
-              {importProgress !== null && (
-                <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
-                  <div
-                    className="bg-primary h-3 rounded-full transition-all duration-200"
-                    style={{ width: `${importProgress}%` }}
-                  ></div>
-                  <div className="text-xs text-gray-600 mt-1 text-right">Importing... {importProgress}%</div>
-                </div>
-              )}
-
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : colors.length === 0 ? (
-                <div className="text-center py-8">
-                  <h3 className="text-xl font-medium mb-2">No Colors Found</h3>
-                  <p className="text-gray-500 mb-6">Start by adding your first color.</p>
-                  <Link href="/yarn-management/yarn-master/color/add" className="ti-btn ti-btn-primary">
-                    <i className="ri-add-line me-2"></i> Add First Color
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  <div className="table-responsive">
-                    <table className="table whitespace-nowrap table-bordered min-w-full">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th scope="col" className="!text-start">
-                            <input 
-                              type="checkbox" 
-                              className="form-check-input" 
-                              checked={selectAll}
-                              onChange={handleSelectAll}
-                            />
-                          </th>
-                          <th scope="col" className="text-start">Color Family Name</th>
-                          <th scope="col" className="text-start">Pantone Name</th>
-                          <th scope="col" className="text-start">Pantone Code</th>
-                          <th scope="col" className="text-start">Created At</th>
-                          <th scope="col" className="text-start">Status</th>
-                          <th scope="col" className="text-start">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {colors.map((color, index) => (
-                          <tr 
-                            key={color.id} 
-                            className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}
-                          >
-                            <td>
-                              <input 
-                                type="checkbox" 
-                                className="form-check-input" 
-                                checked={selectedColors.includes(color.id)}
-                                onChange={() => {
-                                  if (selectedColors.includes(color.id)) {
-                                    setSelectedColors(selectedColors.filter(id => id !== color.id));
-                                  } else {
-                                    setSelectedColors([...selectedColors, color.id]);
-                                  }
-                                }}
-                              />
-                            </td>
-                            <td>{color.name}</td>
-                            <td>{color.pantoneName || '-'}</td>
-                            <td>{color.colorCode}</td>
-                            <td>{color.createdAt ? new Date(color.createdAt).toLocaleString() : '-'}</td>
-                            <td>
-                              <span className={`badge ${color.status === 'active' ? 'bg-success' : 'bg-danger'}`}>
-                                {color.status}
-                              </span>
-                            </td>
-                            <td>
-                              <div className="flex space-x-2">
-                                <Link 
-                                  href={`/yarn-management/yarn-master/color/edit/${color.id}`}
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
-                                >
-                                  <i className="ri-edit-line"></i>
-                                </Link>
-                                <button 
-                                  className="ti-btn ti-btn-danger ti-btn-sm"
-                                  onClick={() => handleDelete(color.id)}
-                                  disabled={isDeleting && deleteId === color.id}
-                                >
-                                  {isDeleting && deleteId === color.id ? (
-                                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                                  ) : (
-                                    <i className="ri-delete-bin-line"></i>
-                                  )}
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="flex justify-between items-center mt-4">
-                    <div className="text-sm text-gray-500">
-                      Showing {totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
-                    </div>
-                    <nav aria-label="Page navigation">
-                      <ul className="flex flex-wrap items-center">
-                        <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                          <button
-                            className="page-link py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                            disabled={currentPage === 1}
-                          >
-                            Previous
-                          </button>
-                        </li>
-                        {getPagination(currentPage, totalPages).map((page, idx) =>
-                          page === '...'
-                            ? <li key={"ellipsis-" + idx} className="page-item"><span className="px-3">...</span></li>
-                            : <li key={page} className="page-item">
-                                <button
-                                  className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
-                                    currentPage === page 
-                                    ? 'bg-primary text-white hover:bg-primary-dark' 
-                                    : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                                  }`}
-                                  onClick={() => setCurrentPage(Number(page))}
-                                >
-                                  {page}
-                                </button>
-                              </li>
-                        )}
-                        <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                          <button
-                            className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                            disabled={currentPage === totalPages}
-                          >
-                            Next
-                          </button>
-                        </li>
-                      </ul>
-                    </nav>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -640,11 +640,11 @@ const YarnReturnPage = () => {
 
   if (isLoading || ordersLoading) {
     return (
-      <div className="main-content">
-        <div className="flex justify-center items-center py-12">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading...</p>
+      <div className="main-content !p-[10px]">
+        <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+            <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
           </div>
         </div>
       </div>
@@ -653,21 +653,18 @@ const YarnReturnPage = () => {
 
   if (!hasPermission) {
     return (
-      <div className="main-content">
-        <div className="text-center py-12">
-          <div className="text-gray-400 mb-4">
-            <i className="ri-lock-line text-6xl"></i>
+      <div className="main-content !p-[10px]">
+        <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="text-gray-400 mb-4">
+              <i className="ri-lock-line text-5xl"></i>
+            </div>
+            <h3 className="text-xs font-bold text-gray-400 mb-1">Access Restricted</h3>
+            <p className="text-[11px] text-gray-500 mb-4">You don&apos;t have permission to access Yarn Return.</p>
+            <Link href="/yarn-management" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700">
+              <i className="ri-arrow-left-line"></i> Back to Yarn Management
+            </Link>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Access Restricted
-          </h3>
-          <p className="text-gray-500 mb-4">
-            You don&apos;t have permission to access Yarn Return.
-          </p>
-          <Link href="/yarn-management" className="ti-btn ti-btn-primary">
-            <i className="ri-arrow-left-line me-2"></i>
-            Back to Yarn Management
-          </Link>
         </div>
       </div>
     );
@@ -1770,305 +1767,165 @@ const YarnReturnPage = () => {
   };
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Yarn Return" />
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div>
-                <h1 className="box-title text-2xl font-semibold">
-                  Yarn Return
-                </h1>
-                <p className="text-gray-600 mt-1">
-                  Track knitting completion and ensure cones are returned to the
-                  warehouse.
-                </p>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px] border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+            <h1 className="text-sm font-bold text-gray-800">Yarn Return</h1>
+            <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+              {pendingOrders.length}
+            </span>
+          </div>
+        </div>
+
+        <div className="px-[10px] pb-[10px] pt-0">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+            <div className="flex items-center justify-between p-3 rounded border-l-4 border-blue-200 bg-blue-50 border border-gray-100">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">Orders Awaiting</p>
+                <p className="text-sm font-bold text-blue-600 truncate">{pendingOrders.length}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded border-l-4 border-orange-200 bg-orange-50 border border-gray-100">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">Cones Pending</p>
+                <p className="text-sm font-bold text-orange-600 truncate">{totalPendingCones}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded border-l-4 border-purple-200 bg-purple-50 border border-gray-100">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">Cones Returned</p>
+                <p className="text-sm font-bold text-purple-600 truncate">{totalReturnedCones}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded border-l-4 border-green-200 bg-green-50 border border-gray-100">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">Orders Cleared</p>
+                <p className="text-sm font-bold text-green-600 truncate">{totalCompletedOrders}</p>
               </div>
             </div>
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                <div className="box">
-                  <div className="box-body text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {pendingOrders.length}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      Orders Awaiting Cone Return
-                    </div>
-                  </div>
-                </div>
-                <div className="box">
-                  <div className="box-body text-center">
-                    <div className="text-2xl font-bold text-orange-600">
-                      {totalPendingCones}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      Cones Pending Return
-                    </div>
-                  </div>
-                </div>
-                <div className="box">
-                  <div className="box-body text-center">
-                    <div className="text-2xl font-bold text-purple-600">
-                      {totalReturnedCones}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      Cones Returned
-                    </div>
-                  </div>
-                </div>
-                <div className="box">
-                  <div className="box-body text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {totalCompletedOrders}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      Orders Cleared
-                    </div>
-                  </div>
-                </div>
+        <div className="p-[10px] pt-0">
+          <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Pending Cone Returns ({pendingOrders.length})</h3>
+        </div>
+        <div className="overflow-x-auto min-h-[200px]">
+          {pendingOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="text-gray-400 mb-4">
+                <i className="ri-checkbox-circle-line text-5xl"></i>
               </div>
-
-              <div className="box">
-                <div className="box-header">
-                  <h3 className="box-title">
-                    Pending Cone Returns ({pendingOrders.length})
-                  </h3>
-                </div>
-                <div className="box-body">
-                  {pendingOrders.length === 0 ? (
-                    <div className="text-center py-8">
-                      <div className="text-gray-400 mb-4">
-                        <i className="ri-checkbox-circle-line text-4xl"></i>
-                      </div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">
-                        All caught up!
-                      </h3>
-                      <p className="text-gray-500">
-                        There are no knitting-complete orders awaiting cone
-                        return.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full border border-gray-300">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                              Production Order
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                              Floor
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                              Knitting Completed
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                              Supervisor
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                              Cones
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                              Status
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                          {pendingOrders.map((order) => {
-                            // Get return transactions for this order from return history
-                            const orderReturnTransactions = returnTransactions.filter(
-                              (tx) => tx.orderno === order.orderNumber
-                            );
-                            
-                            // Count total cones returned from return transactions (from history)
-                            const totalConesReturnedFromHistory = orderReturnTransactions.reduce(
-                              (sum, tx) => sum + (tx.transactionConeCount || 1),
-                              0
-                            );
-                            
-                            // Total cones in the order
-                            const totalConesInOrder = order.cones.length;
-                            
-                            // Actual pending cones = total cones - cones returned in history
-                            // This ensures we only count cones that haven't been returned yet
-                            const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
-                            
-                            return (
-                              <tr
-                                key={order.id}
-                                className="hover:bg-gray-50 transition-colors"
-                              >
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-b border-gray-300">
-                                  {order.productionOrder}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {order.floor}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {new Date(
-                                    order.knittingCompletedAt
-                                  ).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {order.knittingSupervisor}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                                  {actualPendingCones} pending
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
-                                  <span
-                                    className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusBadgeColor(
-                                      order.status
-                                    )}`}
-                                  >
-                                    {order.status}
-                                  </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium border-b border-gray-300">
-                                  <button
-                                    className="ti-btn ti-btn-primary"
-                                    onClick={() =>
-                                      handleReturnConesClick(order.id)
-                                    }
-                                  >
-                                    <i className="ri-reply-line me-2"></i>
-                                    Return Cones
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-          <div className="box">
-            <div className="box-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <h3 className="box-title">Return History &amp; Tracking</h3>
-              <div className="flex flex-wrap gap-3 md:items-center">
-                <input
-                  type="text"
-                  className="form-control md:w-48"
-                  placeholder="Search order or yarn..."
-                  value={historySearchTerm}
-                  onChange={(event) => setHistorySearchTerm(event.target.value)}
-                />
-                <input
-                  type="date"
-                  className="form-control md:w-40"
-                  value={historyDateRange.from}
-                  onChange={(event) =>
-                    setHistoryDateRange((prev) => ({
-                      ...prev,
-                      from: event.target.value,
-                    }))
-                  }
-                />
-                <input
-                  type="date"
-                  className="form-control md:w-40"
-                  value={historyDateRange.to}
-                  onChange={(event) =>
-                    setHistoryDateRange((prev) => ({
-                      ...prev,
-                      to: event.target.value,
-                    }))
-                  }
-                />
-              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">All caught up!</h3>
+              <p className="text-[11px] text-gray-500">No knitting-complete orders awaiting cone return.</p>
             </div>
-            <div className="box-body">
-              {filteredReturnTransactions.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-gray-400 mb-4">
-                    <i className="ri-time-line text-4xl"></i>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    No Records
-                  </h3>
-                  <p className="text-gray-500">
-                    Adjust your filters or process cone returns to see them
-                    listed here.
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border border-gray-300">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Production Order
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Transaction Date
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Yarn Name
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Net Weight (kg)
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Total Weight (kg)
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Tear Weight (kg)
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                          Cones
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
-                          Created At
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white">
-                      {filteredReturnTransactions.map((transaction) => (
-                        <tr
-                          key={transaction._id}
-                          className="hover:bg-gray-50 transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-b border-gray-300">
-                            {transaction.orderno}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                            {new Date(transaction.transactionDate).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                            {transaction.yarnName}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                            {transaction.transactionNetWeight?.toFixed(2) || "0.00"}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                            {transaction.transactionTotalWeight?.toFixed(2) || "0.00"}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                            {transaction.transactionTearWeight?.toFixed(2) || "0.00"}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                            {transaction.transactionConeCount || 1}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-b border-gray-300">
-                            {new Date(transaction.createdAt).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+          ) : (
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
+                  <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Floor</th>
+                  <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Knitting Completed</th>
+                  <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Supervisor</th>
+                  <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cones</th>
+                  <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                  <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingOrders.map((order) => {
+                  const orderReturnTransactions = returnTransactions.filter((tx) => tx.orderno === order.orderNumber);
+                  const totalConesReturnedFromHistory = orderReturnTransactions.reduce((sum, tx) => sum + (tx.transactionConeCount || 1), 0);
+                  const totalConesInOrder = order.cones.length;
+                  const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
+                  return (
+                    <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{order.productionOrder}</td>
+                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{order.floor}</td>
+                      <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(order.knittingCompletedAt).toLocaleString()}</td>
+                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{order.knittingSupervisor}</td>
+                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{actualPendingCones} pending</td>
+                      <td className="px-1.5 py-2 border border-gray-200">
+                        <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${statusBadgeColor(order.status)}`}>{order.status}</span>
+                      </td>
+                      <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200">
+                        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors" onClick={() => handleReturnConesClick(order.id)}>
+                          <i className="ri-reply-line text-sm"></i> Return Cones
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="border-t border-gray-100">
+          <div className="p-[10px] flex flex-wrap items-center justify-between gap-4">
+            <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Return History &amp; Tracking</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-40 min-w-[100px] placeholder:text-gray-400 font-medium"
+                placeholder="Search order or yarn..."
+                value={historySearchTerm}
+                onChange={(event) => setHistorySearchTerm(event.target.value)}
+              />
+              <input
+                type="date"
+                className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300 w-32"
+                value={historyDateRange.from}
+                onChange={(event) => setHistoryDateRange((prev) => ({ ...prev, from: event.target.value }))}
+              />
+              <input
+                type="date"
+                className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300 w-32"
+                value={historyDateRange.to}
+                onChange={(event) => setHistoryDateRange((prev) => ({ ...prev, to: event.target.value }))}
+              />
             </div>
+          </div>
+          <div className="overflow-x-auto min-h-[200px]">
+            {filteredReturnTransactions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <i className="ri-time-line text-4xl text-gray-300 mb-2"></i>
+                <h3 className="text-xs font-bold text-gray-400 mb-1">No Records</h3>
+                <p className="text-[11px] text-gray-500">Adjust filters or process cone returns to see records here.</p>
+              </div>
+            ) : (
+              <table className="w-full border-collapse border border-gray-200">
+                <thead>
+                  <tr className="bg-gray-50/30">
+                    <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transaction Date</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Net (kg)</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Total (kg)</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tear (kg)</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cones</th>
+                    <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Created At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredReturnTransactions.map((transaction) => (
+                    <tr key={transaction._id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{transaction.orderno}</td>
+                      <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.transactionDate).toLocaleDateString()}</td>
+                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.yarnName}</td>
+                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionNetWeight?.toFixed(2) || "0.00"}</td>
+                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTotalWeight?.toFixed(2) || "0.00"}</td>
+                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTearWeight?.toFixed(2) || "0.00"}</td>
+                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionConeCount || 1}</td>
+                      <td className="px-1.5 py-2 text-right pr-[10px] text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.createdAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>

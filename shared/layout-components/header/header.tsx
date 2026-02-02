@@ -5,8 +5,10 @@ import { ThemeChanger } from "../../redux/action";
 import { connect, useDispatch } from 'react-redux';
 import store from '@/shared/redux/store';
 import Modalsearch from '../modal-search/modalsearch';
-import { basePath } from '@/next.config';
 import { useRouter } from 'next/navigation';
+
+// Public assets base: "" so /assets/... resolves from root (set NEXT_PUBLIC_BASE_PATH if app is under a subpath)
+const assetBase = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 import { authActions } from '@/shared/redux/actions/authActions';
 
 const Header = ({ local_varaiable, ThemeChanger }:any) => {
@@ -389,12 +391,12 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
               <div className="header-element">
                 <div className="horizontal-logo">
                   <Link href="/dashboards/main" className="header-logo">
-                    <img src={`${process.env.NODE_ENV === "production" ? basePath : ""}/assets/images/brand-logos/desktop-logo.png`} alt="logo" className="desktop-logo" />
-                    <img src={`${process.env.NODE_ENV === "production" ? basePath : ""}/assets/images/brand-logos/toggle-logo.png`} alt="logo" className="toggle-logo" />
-                    <img src={`${process.env.NODE_ENV === "production" ? basePath : ""}/assets/images/brand-logos/desktop-dark.png`} alt="logo" className="desktop-dark" />
-                    <img src={`${process.env.NODE_ENV === "production" ? basePath : ""}/assets/images/brand-logos/toggle-dark.png`} alt="logo" className="toggle-dark" />
-                    <img src={`${process.env.NODE_ENV === "production" ? basePath : ""}/assets/images/brand-logos/desktop-white.png`} alt="logo" className="desktop-white" />
-                    <img src={`${process.env.NODE_ENV === "production" ? basePath : ""}/assets/images/brand-logos/toggle-white.png`} alt="logo" className="toggle-white" />
+                    <img src={`${assetBase}/assets/images/brand-logos/desktop-logo.png`} alt="logo" className="desktop-logo" />
+                    <img src={`${assetBase}/assets/images/brand-logos/toggle-logo.png`} alt="logo" className="toggle-logo" />
+                    <img src={`${assetBase}/assets/images/brand-logos/desktop-dark.png`} alt="logo" className="desktop-dark" />
+                    <img src={`${assetBase}/assets/images/brand-logos/toggle-dark.png`} alt="logo" className="toggle-dark" />
+                    <img src={`${assetBase}/assets/images/brand-logos/desktop-white.png`} alt="logo" className="desktop-white" />
+                    <img src={`${assetBase}/assets/images/brand-logos/toggle-white.png`} alt="logo" className="toggle-white" />
                   </Link>
                 </div>
               </div>
@@ -429,7 +431,7 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
 
                 <button id="dropdown-profile" type="button"
                   className="hs-dropdown-toggle ti-dropdown-toggle !gap-2 !p-0 flex-shrink-0 sm:me-2 me-0 !rounded-full !shadow-none text-xs align-middle !border-0 !shadow-transparent ">
-                  <img className="inline-block rounded-full " src={`${process.env.NODE_ENV === "production" ? basePath : ""}/assets/images/faces/9.jpg`} width="32" height="32" alt="Image Description" />
+                  <img className="inline-block rounded-full " src={`${assetBase}/assets/images/faces/9.jpg`} width="32" height="32" alt="Image Description" />
                 </button>
                 <div className="md:block hidden dropdown-profile">
                   <p className="font-semibold mb-0 leading-none text-[#536485] text-[0.813rem] ">{user?.name || user?.username || 'Admin'}</p>

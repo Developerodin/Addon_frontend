@@ -711,14 +711,18 @@ const SalesContent = () => {
   const groupedSales = groupSalesByDate(salesData);
 
   return (
-    <div className="grid grid-cols-12 gap-6">
-      <div className="col-span-12">
+    <>
+    <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+      <div className="p-[10px]">
         {/* Page Header */}
-        <div className="box !bg-transparent border-0 shadow-none">
-          <div className="box-header flex justify-between items-center">
-            <div className="flex items-center space-x-3">
-              <h1 className="box-title text-2xl font-semibold">Sales Records</h1>
-              <HelpIcon
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+            <h1 className="text-sm font-bold text-gray-800">Sales Records</h1>
+            <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+              {totalRecords}
+            </span>
+            <HelpIcon
                 title="Sales Records Management"
                 content={
                   <div className="space-y-4">
@@ -778,432 +782,283 @@ const SalesContent = () => {
                   </div>
                 }
               />
-            </div>
-            <div className="box-tools flex items-center space-x-2">
-              {selectedSales.length > 0 && (
-                <button 
-                  type="button" 
-                  className="ti-btn ti-btn-danger"
-                  onClick={handleBulkDelete}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2"></div>
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-delete-bin-line me-2"></i>
-                      Delete Selected ({selectedSales.length})
-                    </>
-                  )}
-                </button>
-              )}
-              
-              <button 
-                type="button" 
-                className={`ti-btn ${hasActiveFilters ? 'ti-btn-warning' : 'ti-btn-secondary'}`}
-                onClick={() => setShowFilters(true)}
-              >
-                <i className="ri-filter-3-line me-2"></i>
-                Advanced Filters {hasActiveFilters && <span className="bg-white text-warning rounded-full px-2 py-1 text-xs ml-1">●</span>}
-              </button>
-              
-              <button 
-                type="button" 
-                className="ti-btn ti-btn-primary"
-                onClick={handleExport}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedSales.length > 0 && (
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-[11px] font-bold rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                onClick={handleBulkDelete}
                 disabled={loading}
               >
                 {loading ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2"></div>
-                    Exporting...
+                    <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></div>
+                    Deleting
                   </>
                 ) : (
                   <>
-                <i className="ri-file-excel-2-line me-2"></i> Export
+                    <i className="ri-delete-bin-line"></i> Delete ({selectedSales.length})
                   </>
                 )}
               </button>
-              <Link href="/sales/add" className="ti-btn ti-btn-primary">
-                <i className="ri-add-line me-2"></i> Add New Sale
-              </Link>
-            </div>
+            )}
+            <button
+              type="button"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${hasActiveFilters ? 'bg-amber-100 text-amber-800 border-amber-200' : 'border-gray-200 hover:bg-gray-50'}`}
+              onClick={() => setShowFilters(true)}
+            >
+              <i className="ri-filter-3-line"></i> Filters {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors disabled:opacity-50"
+              onClick={handleExport}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></div>
+                  Exporting
+                </>
+              ) : (
+                <>
+                  <i className="ri-file-excel-2-line"></i> Export
+                </>
+              )}
+            </button>
+            <Link href="/sales/add" className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+              <i className="ri-add-line"></i> Add
+            </Link>
           </div>
         </div>
 
-        {/* Content Box */}
-        <div className="box">
-          <div className="box-body">
-            {/* Search and Controls Bar */}
-            <div className="mb-4">
-              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-                {/* Search Bar with Dropdowns */}
-                <div className="flex-1 w-full lg:w-auto">
-                  <form onSubmit={handleSearch} className="flex gap-2">
-                    <div className="relative flex-1 max-w-xs">
-                      <input
-                        type="text"
-                        className="form-control py-2 text-sm"
-                        placeholder="Search by style code..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                      <button type="submit" className="absolute end-0 top-0 px-3 h-full">
-                        <i className="ri-search-line text-sm"></i>
-                      </button>
-                    </div>
-                    
-                    {/* City Dropdown */}
-                    <select
-                      className="form-select py-2 text-sm w-32"
-                      value={selectedCity}
-                      onChange={(e) => {
-                        setSelectedCity(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                    >
-                      <option value="">All Cities</option>
-                      {cities.map(city => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
-                    </select>
-                    
-                    {/* Category Dropdown */}
-                    <select
-                      className="form-select py-2 text-sm w-32"
-                      value={selectedCategory}
-                      onChange={(e) => {
-                        setSelectedCategory(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                    >
-                      {categories.map(category => (
-                        <option key={category} value={category}>{category}</option>
-                      ))}
-                    </select>
-                  </form>
-                </div>
-
-                {/* Sort Options */}
-                <div className="flex items-center space-x-2">
-                  <label className="text-sm text-gray-600">Sort by:</label>
-                  <select
-                    className="form-select form-select-sm w-24"
-                    value={sortBy}
-                    onChange={(e) => handleSort(e.target.value)}
-                  >
-                    <option value="date">Date</option>
-                    <option value="quantity">Qty</option>
-                    <option value="mrp">MRP</option>
-                    <option value="nsv">NSV</option>
-                  </select>
-                  
-                  <label className="text-sm text-gray-600">Order:</label>
-                  <select
-                    className="form-select form-select-sm w-20"
-                    value={sortOrder}
-                    onChange={(e) => {
-                      setSortOrder(e.target.value as 'asc' | 'desc');
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <option value="desc">Desc</option>
-                    <option value="asc">Asc</option>
-                  </select>
-                </div>
-
-                {/* Page Size Selector */}
-                <div className="flex items-center space-x-2">
-                  <label className="text-sm text-gray-600">Show:</label>
-                  <select
-                    className="form-select form-select-sm w-20"
-                    value={pageSize}
-                    onChange={(e) => handlePageSizeChange(parseInt(e.target.value))}
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={250}>250</option>
-                    <option value={500}>500</option>
-                    <option value={1000}>1000</option>
-                  </select>
-                  <span className="text-sm text-gray-600">entries</span>
-                </div>
-              </div>
+        {/* Search and Controls Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <input
+                type="text"
+                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-44 min-w-[120px] placeholder:text-gray-400 font-medium"
+                placeholder="Style code..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
             </div>
+            <select
+              className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 w-28"
+              value={selectedCity}
+              onChange={(e) => { setSelectedCity(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">All Cities</option>
+              {cities.map(city => (
+                <option key={city} value={city}>{city}</option>
+              ))}
+            </select>
+            <select
+              className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 w-28"
+              value={selectedCategory}
+              onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); }}
+            >
+              {categories.map(category => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </form>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-[11px] font-medium text-gray-600">Sort:</label>
+            <select
+              className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 w-20"
+              value={sortBy}
+              onChange={(e) => handleSort(e.target.value)}
+            >
+              <option value="date">Date</option>
+              <option value="quantity">Qty</option>
+              <option value="mrp">MRP</option>
+              <option value="nsv">NSV</option>
+            </select>
+            <select
+              className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 w-16"
+              value={sortOrder}
+              onChange={(e) => { setSortOrder(e.target.value as 'asc' | 'desc'); setCurrentPage(1); }}
+            >
+              <option value="desc">Desc</option>
+              <option value="asc">Asc</option>
+            </select>
+            <label className="text-[11px] font-medium text-gray-600">Rows:</label>
+            <select
+              className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 w-16"
+              value={pageSize}
+              onChange={(e) => handlePageSizeChange(parseInt(e.target.value))}
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={250}>250</option>
+              <option value={500}>500</option>
+              <option value={1000}>1000</option>
+            </select>
+          </div>
+        </div>
 
-            {error && (
-              <div className="alert alert-danger mb-4">
-                <i className="ri-error-warning-line me-2"></i>
-                {error}
-              </div>
-            )}
+        {error && (
+          <div className="mb-4 p-2.5 rounded border border-red-200 bg-red-50 text-red-700 text-[11px] font-medium flex items-center gap-2">
+            <i className="ri-error-warning-line text-sm"></i>{error}
+          </div>
+        )}
+        {success && (
+          <div className="mb-4 p-2.5 rounded border border-green-200 bg-green-50 text-green-700 text-[11px] font-medium flex items-center gap-2">
+            <i className="ri-check-line text-sm"></i>{success}
+          </div>
+        )}
 
-            {success && (
-              <div className="alert alert-success mb-4">
-                <i className="ri-check-line me-2"></i>
-                {success}
-              </div>
-            )}
-
-            {loading ? (
-              <div className="text-center py-8">
-                <i className="ri-loader-4-line animate-spin text-2xl"></i>
-                <p className="mt-2">Loading sales data...</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="table whitespace-nowrap table-bordered min-w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th scope="col" className="!text-start">
-                        <input 
-                          type="checkbox" 
-                          className="form-check-input" 
-                          checked={selectAll}
-                          onChange={handleSelectAll}
-                        />
-                      </th>
-                      <th scope="col" className="text-start">Date</th>
-                      <th scope="col" className="text-start">Plant ID</th>
-                      <th scope="col" className="text-start">Material Code</th>
-                      <th scope="col" className="text-start">Qty</th>
-                      <th scope="col" className="text-start">MRP</th>
-                      <th scope="col" className="text-start">Discount</th>
-                      <th scope="col" className="text-start">GSV</th>
-                      <th scope="col" className="text-start">NSV</th>
-                      <th scope="col" className="text-start">Tax</th>
-                      <th scope="col" className="text-start">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {!salesData || salesData.length === 0 ? (
-                      <tr>
-                        <td colSpan={11} className="text-center py-8 text-gray-500">
-                          No sales records found
+        {loading ? (
+          <div className="flex items-center justify-center py-16 min-h-[300px]">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 opacity-50"></div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto min-h-[300px]">
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th className="pl-[10px] pr-1 py-3 text-left w-10 border border-gray-200">
+                    <input type="checkbox" className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" checked={selectAll} onChange={handleSelectAll} />
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Date</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Plant ID</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Material Code</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Qty</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">MRP</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Discount</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">GSV</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">NSV</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tax</th>
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!salesData || salesData.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="text-center py-12 text-[12px] text-gray-500 border border-gray-200">
+                      No sales records found
+                    </td>
+                  </tr>
+                ) : (
+                  Object.entries(groupedSales).map(([dateKey, salesForDate], groupIndex) => (
+                    <React.Fragment key={dateKey}>
+                      <tr className="bg-gray-100">
+                        <td colSpan={11} className="px-3 py-1.5 text-[11px] font-bold text-gray-700 border border-gray-200">
+                          <i className="ri-calendar-line mr-1.5"></i>
+                          {dateKey} ({salesForDate.length})
                         </td>
                       </tr>
-                    ) : (
-                      Object.entries(groupedSales).map(([dateKey, salesForDate], groupIndex) => (
-                        <React.Fragment key={dateKey}>
-                          {/* Date Group Header */}
-                          <tr className="bg-gray-100 font-semibold">
-                            <td colSpan={11} className="px-4 py-2 text-gray-700">
-                              <i className="ri-calendar-line me-2"></i>
-                              {dateKey} ({salesForDate.length} records)
-                            </td>
-                          </tr>
-                          {/* Sales Records for this date */}
-                          {salesForDate.map((sale, index) => (
-                            <tr 
-                              key={getSaleId(sale) || `sale-${groupIndex}-${index}`}
-                              className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}
-                            >
-                              <td>
-                                {getSaleId(sale) ? (
-                                  <input 
-                                    type="checkbox" 
-                                    className="form-check-input" 
-                                    checked={selectedSales.includes(getSaleId(sale))}
-                                    onChange={() => handleSaleSelect(getSaleId(sale))}
-                                  />
-                                ) : (
-                                  <input 
-                                    type="checkbox" 
-                                    className="form-check-input opacity-50" 
-                                    disabled
-                                    title="No ID available"
-                                  />
-                                )}
-                              </td>
-                              <td>{new Date(sale.date).toLocaleDateString()}</td>
-                              <td>
-                                {(() => {
-                                  try {
-                                    const plantId = getPlantId(sale.plant);
-                                    let displayValue = getPlantDisplay(sale.plant);
-                                    
-                                    // Ensure displayValue is always a string
-                                    if (typeof displayValue !== 'string') {
-                                      displayValue = String(displayValue || '-');
-                                    }
-                                    
-                                    if (plantId) {
-                                      return (
-                                        <Link 
-                                          href={`/analytics/store-analysis/${plantId}`}
-                                          className="text-primary hover:text-primary/80 transition-colors duration-200"
-                                        >
-                                          {displayValue}
-                                        </Link>
-                                      );
-                                    }
-                                    return <span>{displayValue}</span>;
-                                  } catch (error) {
-                                    console.error('Error rendering plant:', error, sale.plant);
-                                    return <span>-</span>;
-                                  }
-                                })()}
-                              </td>
-                              <td>
-                                {(() => {
-                                  try {
-                                    const materialCodeId = getMaterialCodeId(sale.materialCode);
-                                    let displayValue = getMaterialCodeDisplay(sale.materialCode);
-                                    
-                                    // Ensure displayValue is always a string
-                                    if (typeof displayValue !== 'string') {
-                                      displayValue = String(displayValue || '-');
-                                    }
-                                    
-                                    if (materialCodeId) {
-                                      return (
-                                        <Link 
-                                          href={`/analytics/product-analysis/${materialCodeId}`}
-                                          className="text-primary hover:text-primary/80 transition-colors duration-200"
-                                        >
-                                          {displayValue}
-                                        </Link>
-                                      );
-                                    }
-                                    return <span>{displayValue}</span>;
-                                  } catch (error) {
-                                    console.error('Error rendering materialCode:', error, sale.materialCode);
-                                    return <span>-</span>;
-                                  }
-                                })()}
-                              </td>
-                              <td className="text-right">{getNumericValue(sale.quantity, 0)}</td>
-                              <td className="text-right">{getNumericValue(sale.mrp, 0).toFixed(2)}</td>
-                              <td className="text-right">{getNumericValue(sale.discount, 0).toFixed(2)}</td>
-                              <td className="text-right">{getNumericValue(sale.gsv, 0).toFixed(2)}</td>
-                              <td className="text-right">{getNumericValue(sale.nsv, 0).toFixed(2)}</td>
-                              <td className="text-right">{getNumericValue(sale.totalTax, 0).toFixed(2)}</td>
-                              <td>
-                                <div className="flex space-x-2">
-                                  {getSaleId(sale) ? (
-                                    <Link 
-                                      href={`/sales/edit/${getSaleId(sale)}`}
-                                      className="ti-btn ti-btn-primary ti-btn-sm"
-                                    >
-                                      <i className="ri-edit-line"></i>
-                                    </Link>
-                                  ) : (
-                                    <span className="ti-btn ti-btn-primary ti-btn-sm opacity-50 cursor-not-allowed" title="No ID available">
-                                      <i className="ri-edit-line"></i>
-                                    </span>
-                                  )}
-                                  {getSaleId(sale) ? (
-                                    <button 
-                                      className="ti-btn ti-btn-danger ti-btn-sm"
-                                      onClick={() => handleDeleteSale(getSaleId(sale))}
-                                    >
-                                      <i className="ri-delete-bin-line"></i>
-                                    </button>
-                                  ) : (
-                                    <span className="ti-btn ti-btn-danger ti-btn-sm opacity-50 cursor-not-allowed" title="No ID available">
-                                      <i className="ri-delete-bin-line"></i>
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </React.Fragment>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Pagination and Results Info */}
-            <div className="flex flex-col lg:flex-row justify-between items-center mt-4">
-              {/* Results Info */}
-              <div className="text-sm text-gray-500 mb-2 lg:mb-0">
-                {totalRecords > 0 ? (
-                  `Showing ${((currentPage - 1) * pageSize) + 1} to ${Math.min(currentPage * pageSize, totalRecords)} of ${totalRecords} entries`
-                ) : (
-                  'No entries to show'
+                      {salesForDate.map((sale, index) => (
+                        <tr key={getSaleId(sale) || `sale-${groupIndex}-${index}`} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="pl-[10px] pr-1 py-2.5 border border-gray-200">
+                            {getSaleId(sale) ? (
+                              <input type="checkbox" className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" checked={selectedSales.includes(getSaleId(sale))} onChange={() => handleSaleSelect(getSaleId(sale))} />
+                            ) : (
+                              <input type="checkbox" className="rounded border-gray-200 opacity-50 h-3.5 w-3.5" disabled title="No ID" />
+                            )}
+                          </td>
+                          <td className="px-1.5 py-2.5 text-[12px] text-gray-800 border border-gray-200">{new Date(sale.date).toLocaleDateString()}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
+                            {(() => {
+                              try {
+                                const plantId = getPlantId(sale.plant);
+                                let displayValue = getPlantDisplay(sale.plant);
+                                if (typeof displayValue !== 'string') displayValue = String(displayValue || '-');
+                                if (plantId) return <Link href={`/analytics/store-analysis/${plantId}`} className="text-purple-600 hover:text-purple-800 font-medium">{displayValue}</Link>;
+                                return <span>{displayValue}</span>;
+                              } catch { return <span>-</span>; }
+                            })()}
+                          </td>
+                          <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
+                            {(() => {
+                              try {
+                                const materialCodeId = getMaterialCodeId(sale.materialCode);
+                                let displayValue = getMaterialCodeDisplay(sale.materialCode);
+                                if (typeof displayValue !== 'string') displayValue = String(displayValue || '-');
+                                if (materialCodeId) return <Link href={`/analytics/product-analysis/${materialCodeId}`} className="text-purple-600 hover:text-purple-800 font-medium">{displayValue}</Link>;
+                                return <span>{displayValue}</span>;
+                              } catch { return <span>-</span>; }
+                            })()}
+                          </td>
+                          <td className="px-1.5 py-2.5 text-[12px] text-right border border-gray-200">{getNumericValue(sale.quantity, 0)}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] text-right border border-gray-200">{getNumericValue(sale.mrp, 0).toFixed(2)}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] text-right border border-gray-200">{getNumericValue(sale.discount, 0).toFixed(2)}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] text-right border border-gray-200">{getNumericValue(sale.gsv, 0).toFixed(2)}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] text-right border border-gray-200">{getNumericValue(sale.nsv, 0).toFixed(2)}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] text-right border border-gray-200">{getNumericValue(sale.totalTax, 0).toFixed(2)}</td>
+                          <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                            <div className="flex items-center justify-end gap-1">
+                              {getSaleId(sale) ? (
+                                <Link href={`/sales/edit/${getSaleId(sale)}`} className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-600 border border-blue-100 rounded hover:bg-blue-100 transition-colors">
+                                  <i className="ri-edit-line text-sm"></i>
+                                </Link>
+                              ) : (
+                                <span className="w-7 h-7 flex items-center justify-center bg-gray-100 text-gray-400 rounded cursor-not-allowed" title="No ID"><i className="ri-edit-line text-sm"></i></span>
+                              )}
+                              {getSaleId(sale) ? (
+                                <button type="button" className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-600 border border-red-100 rounded hover:bg-red-100 transition-colors" onClick={() => handleDeleteSale(getSaleId(sale))}>
+                                  <i className="ri-delete-bin-line text-sm"></i>
+                                </button>
+                              ) : (
+                                <span className="w-7 h-7 flex items-center justify-center bg-gray-100 text-gray-400 rounded cursor-not-allowed" title="No ID"><i className="ri-delete-bin-line text-sm"></i></span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))
                 )}
-              </div>
-
-              {/* Pagination */}
-              {totalPages > 0 && (
-                <nav aria-label="Page navigation">
-                  <ul className="flex flex-wrap items-center">
-                    <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                      <button
-                        className="page-link py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
-                      >
-                        Previous
-                      </button>
-                    </li>
-                    
-                    {getPaginationRange().map((page, index) => (
-                      <li key={index} className="page-item">
-                        {page === '...' ? (
-                          <span className="page-link py-2 px-3 leading-tight border border-gray-300 bg-white text-gray-500">
-                            ...
-                          </span>
-                        ) : (
-                        <button
-                          className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
-                            currentPage === page 
-                            ? 'bg-primary text-white hover:bg-primary-dark' 
-                            : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                          }`}
-                            onClick={() => setCurrentPage(page as number)}
-                        >
-                          {page}
-                        </button>
-                        )}
-                      </li>
-                    ))}
-                    
-                    <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                      <button
-                        className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                        disabled={currentPage === totalPages}
-                      >
-                        Next
-                      </button>
-                    </li>
-                  </ul>
-                </nav>
-              )}
-            </div>
+              </tbody>
+            </table>
           </div>
+        )}
+
+        <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
+          <div className="text-[11px] font-medium text-[#495057] tracking-tight">
+            {totalRecords > 0 ? `Showing ${((currentPage - 1) * pageSize) + 1} to ${Math.min(currentPage * pageSize, totalRecords)} of ${totalRecords}` : 'No entries'}
+          </div>
+          {totalPages > 0 && (
+            <nav className="flex items-center gap-1">
+              <button type="button" className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</button>
+              {getPaginationRange().map((page, index) =>
+                page === '...' ? (
+                  <span key={index} className="px-2 text-[11px] text-gray-400">...</span>
+                ) : (
+                  <button key={index} type="button" className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded transition-all ${currentPage === page ? 'bg-purple-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => setCurrentPage(page as number)}>{page}</button>
+                )
+              )}
+              <button type="button" className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</button>
+            </nav>
+          )}
         </div>
       </div>
-
-      {/* Filter Modal */}
-      <FilterModal
-        isOpen={showFilters}
-        onClose={() => setShowFilters(false)}
-        filters={activeFilters}
-        onApplyFilters={handleApplyFilters}
-      />
     </div>
+
+    <FilterModal
+      isOpen={showFilters}
+      onClose={() => setShowFilters(false)}
+      filters={activeFilters}
+      onApplyFilters={handleApplyFilters}
+    />
+    </>
   );
 };
 
 // Main component with Suspense boundary
 const SalesPage = () => {
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Sales Records"/>
       <Suspense fallback={
-        <div className="text-center py-8">
-          <i className="ri-loader-4-line animate-spin text-2xl"></i>
-          <p className="mt-2">Loading...</p>
+        <div className="flex items-center justify-center py-16 min-h-[200px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 opacity-50"></div>
         </div>
       }>
         <SalesContent />

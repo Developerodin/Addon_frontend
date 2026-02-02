@@ -65,11 +65,11 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field)
-      return <i className="ri-arrow-up-down-line text-gray-400" />;
+      return <i className="ri-arrow-up-down-line text-gray-400 text-sm" />;
     return sortDirection === "asc" ? (
-      <i className="ri-arrow-up-line text-primary" />
+      <i className="ri-arrow-up-line text-purple-600 text-sm" />
     ) : (
-      <i className="ri-arrow-down-line text-primary" />
+      <i className="ri-arrow-down-line text-purple-600 text-sm" />
     );
   };
 
@@ -87,132 +87,98 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
   };
 
   return (
-    <div className="box">
-      <div className="box-header flex justify-between items-center">
-        <h3 className="box-title">Live Inventory ({filteredAndSorted.length})</h3>
-        <button
-          onClick={() => router.push("/yarn-management/dashboard/full-inventory")}
-          className="ti-btn ti-btn-primary ti-btn-outline"
-        >
-          <i className="ri-eye-line me-1"></i>
-          View Full Inventory
-        </button>
-      </div>
-      <div className="box-body">
-        {/* Search and Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="form-label">Search</label>
-            <div className="relative">
-              <input
-                type="text"
-                className="form-control ps-10"
-                placeholder="Search by yarn name, supplier, lot..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-            </div>
+    <div className="border-t border-gray-100">
+      <div className="p-[10px] flex flex-wrap items-center justify-between gap-4">
+        <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+          Live Inventory ({filteredAndSorted.length})
+        </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 min-w-[120px] placeholder:text-gray-400 font-medium"
+              placeholder="Search yarn, supplier, lot..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
           </div>
-          <div>
-            <label className="form-label">Status Filter</label>
-            <select
-              className="form-select"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="all">All Status</option>
-              <option value="In Stock">In Stock</option>
-              <option value="Low Stock">Low Stock</option>
-              <option value="Out of Stock">Out of Stock</option>
-            </select>
-          </div>
+          <select
+            className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 w-28"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All Status</option>
+            <option value="In Stock">In Stock</option>
+            <option value="Low Stock">Low Stock</option>
+            <option value="Out of Stock">Out of Stock</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => router.push("/yarn-management/dashboard/full-inventory")}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors"
+          >
+            <i className="ri-eye-line"></i> Full Inventory
+          </button>
         </div>
+      </div>
 
-        {/* Table */}
+      <div className="overflow-x-auto min-h-[200px]">
         {filteredAndSorted.length === 0 ? (
-          <div className="text-center py-8">
-            <i className="ri-inbox-line text-4xl text-gray-400 mb-2"></i>
-            <p className="text-gray-500">No inventory items found</p>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <i className="ri-inbox-line text-4xl text-gray-300 mb-2"></i>
+            <p className="text-[11px] text-gray-500">No inventory items found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border border-gray-300">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                    onClick={() => handleSort("yarnName")}
-                  >
-                    <div className="flex items-center gap-2">
-                      Yarn Name
-                      <SortIcon field="yarnName" />
-                    </div>
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                    Available in Long Term (kg)
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                    Available in Short Term (kg)
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                    Cones (Short-term)
-                  </th>
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-b border-gray-300"
-                    onClick={() => handleSort("availableQty")}
-                  >
-                    <div className="flex items-center gap-2">
-                      Total Available Qty
-                      <SortIcon field="availableQty" />
-                    </div>
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
-                    Status
-                  </th>
+          <table className="w-full border-collapse border border-gray-200">
+            <thead>
+              <tr className="bg-gray-50/30">
+                <th
+                  className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
+                  onClick={() => handleSort("yarnName")}
+                >
+                  <div className="flex items-center gap-1.5">
+                    Yarn Name
+                    <SortIcon field="yarnName" />
+                  </div>
+                </th>
+                <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">LTS (kg)</th>
+                <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">STS (kg)</th>
+                <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cones</th>
+                <th
+                  className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
+                  onClick={() => handleSort("availableQty")}
+                >
+                  <div className="flex items-center gap-1.5">
+                    Available Qty
+                    <SortIcon field="availableQty" />
+                  </div>
+                </th>
+                <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAndSorted.map((item) => (
+                <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="pl-[10px] pr-1.5 py-2 border border-gray-200">
+                    <div className="text-[12px] font-bold text-gray-900">{item.yarnName}</div>
+                    {item.lotNo && <div className="text-[10px] text-gray-500">Lot: {item.lotNo}</div>}
+                  </td>
+                  <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{item.longTermWeight.toLocaleString()} kg</td>
+                  <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{item.shortTermWeight.toLocaleString()} kg</td>
+                  <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{item.conesShortTerm}</td>
+                  <td className="px-1.5 py-2 text-[12px] border border-gray-200">
+                    <span className="text-green-600 font-semibold">{item.availableQty.toLocaleString()} kg</span>
+                  </td>
+                  <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200">
+                    <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${getStatusColor(item.status)}`}>
+                      {item.status}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="bg-white">
-                {filteredAndSorted.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap border-r border-b border-gray-300">
-                      <div className="text-sm font-medium text-gray-900">
-                        {item.yarnName}
-                      </div>
-                      {item.lotNo && (
-                        <div className="text-xs text-gray-500">
-                          Lot: {item.lotNo}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                      {item.longTermWeight.toLocaleString()} kg
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                      {item.shortTermWeight.toLocaleString()} kg
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                      {item.conesShortTerm}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                      <span className="text-green-600 font-medium">
-                        {item.availableQty.toLocaleString()} kg
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap border-b border-gray-300">
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
-                          item.status
-                        )}`}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>

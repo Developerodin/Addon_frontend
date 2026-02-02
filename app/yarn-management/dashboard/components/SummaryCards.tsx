@@ -51,24 +51,18 @@ const SummaryCards: React.FC<SummaryCardsProps> = ({ summary }) => {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
       {cards.map((card, index) => (
         <div
           key={index}
-          className={`box border-l-4 ${card.borderColor} ${card.bgColor} hover:shadow-md transition-shadow`}
+          className={`flex items-center justify-between p-3 rounded border-l-4 ${card.borderColor} ${card.bgColor} border border-gray-100 hover:shadow-sm transition-shadow`}
         >
-          <div className="box-body">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <p className="text-sm text-gray-600 mb-1">{card.title}</p>
-                <h3 className={`text-2xl font-bold ${card.color}`}>
-                  {card.value}
-                </h3>
-              </div>
-              <div className={`${card.color} text-3xl opacity-20`}>
-                <i className={card.icon}></i>
-              </div>
-            </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">{card.title}</p>
+            <p className={`text-sm font-bold truncate ${card.color}`}>{card.value}</p>
+          </div>
+          <div className={`${card.color} text-xl opacity-30 flex-shrink-0 ml-2`}>
+            <i className={card.icon}></i>
           </div>
         </div>
       ))}

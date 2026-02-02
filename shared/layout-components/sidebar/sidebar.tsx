@@ -3,7 +3,6 @@ import React, { Fragment, useState, useEffect } from "react";
 import { connect } from "react-redux";
 import { ThemeChanger } from "../../redux/action";
 import Link from "next/link";
-import { basePath } from "@/next.config";
 import store from "@/shared/redux/store";
 import SimpleBar from 'simplebar-react';
 import Menuloop from "./menuloop";

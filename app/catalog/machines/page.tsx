@@ -501,332 +501,214 @@ const MachinesPage = () => {
     return pages;
   }
 
-  const getStatusBadge = (status: string) => {
-    const statusClasses = {
-      'Active': 'bg-success/10 text-success',
-      'Under Maintenance': 'bg-warning/10 text-warning',
-      'Idle': 'bg-gray-100 text-gray-500'
+  const getStatusBadgeClass = (status: string) => {
+    const map: Record<string, string> = {
+      'Active': 'bg-green-100 text-green-800',
+      'Under Maintenance': 'bg-amber-100 text-amber-800',
+      'Idle': 'bg-gray-100 text-gray-600'
     };
-    return statusClasses[status as keyof typeof statusClasses] || 'bg-gray-100 text-gray-500';
+    return map[status] || 'bg-gray-100 text-gray-600';
   };
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Toaster position="top-right" />
       <Seo title="Machines"/>
-      
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <h1 className="box-title text-2xl font-semibold">Machines</h1>
-                <HelpIcon
-                  title="Machines Management"
-                  content={
-                    <div className="space-y-4">
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
-                        <p className="text-gray-700">
-                          This is the Machines Management page where you can view, manage, and organize all your production machines and equipment in the system.
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li><strong>View Machines:</strong> Browse all machines with pagination and search functionality</li>
-                          <li><strong>Add New Machine:</strong> Click "Add New Machine" to create a new machine entry</li>
-                          <li><strong>Edit Machines:</strong> Click the edit icon next to any machine to modify its details</li>
-                          <li><strong>Delete Machines:</strong> Remove individual machines or bulk delete selected ones</li>
-                          <li><strong>Search & Filter:</strong> Use the search bar to find specific machines by name, code, type, manufacturer, or location</li>
-                          <li><strong>Export Data:</strong> Export all machines to Excel format</li>
-                          <li><strong>Import Data:</strong> Import machines from Excel files</li>
-                          <li><strong>Bulk Operations:</strong> Select multiple machines for bulk deletion</li>
-                        </ul>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">Machine Information:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li><strong>Machine Details:</strong> Code, number, model, floor, and needle size</li>
-                          <li><strong>Status Tracking:</strong> Active, Under Maintenance, or Idle status</li>
-                          <li><strong>Supervisor Assignment:</strong> Track assigned supervisors for each machine</li>
-                          <li><strong>Maintenance Schedule:</strong> Track last and next maintenance dates</li>
-                          <li><strong>Installation Information:</strong> Record installation dates and maintenance requirements</li>
-                        </ul>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">Data Fields:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li><strong>Machine:</strong> Shows machine code, number, and model in one column</li>
-                          <li><strong>Floor:</strong> Floor location of the machine (required)</li>
-                          <li><strong>Needle Size:</strong> Needle size specification (required)</li>
-                          <li><strong>Status:</strong> Current operational status (Active, Under Maintenance, Idle)</li>
-                          <li><strong>Supervisor:</strong> Supervisor responsible for the machine</li>
-                          <li><strong>Installation Date:</strong> Date when machine was installed</li>
-                          <li><strong>Maintenance Requirement:</strong> Maintenance frequency requirement</li>
-                        </ul>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">Tips:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li>Use descriptive machine codes for easy identification</li>
-                          <li>Keep machine codes and numbers unique and consistent</li>
-                          <li>Update maintenance dates regularly for proper scheduling</li>
-                          <li>Set appropriate status to reflect current machine condition</li>
-                          <li>Assign supervisors to machines for better management</li>
-                          <li>Export machines before making bulk changes</li>
-                        </ul>
-                      </div>
+
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Machines</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {totalResults}
+              </span>
+              <HelpIcon
+                title="Machines Management"
+                content={
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                      <p className="text-gray-700">This is the Machines Management page where you can view, manage, and organize all your production machines and equipment in the system.</p>
                     </div>
-                  }
-                />
-              </div>
-              <div className="box-tools flex items-center space-x-2">
-                {selectedMachines.length > 0 && (
-                  <button 
-                    type="button" 
-                    className="ti-btn ti-btn-danger"
-                    onClick={handleDeleteSelected}
-                  >
-                    <i className="ri-delete-bin-line me-2"></i> 
-                    Delete Selected ({selectedMachines.length})
-                  </button>
-                )}
-                {/* Import/Export Buttons */}
-                <div className="relative group">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
-                    accept=".xlsx,.xls"
-                    onChange={handleImport}
-                  />
-                  <button
-                    type="button"
-                    className="ti-btn ti-btn-success"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <i className="ri-upload-2-line me-2"></i> Import
-                  </button>
-                </div>
-                {importProgress !== null && (
-                  <div className="w-40 h-3 bg-gray-200 rounded-full overflow-hidden flex items-center ml-2">
-                    <div
-                      className="bg-primary h-full transition-all duration-200"
-                      style={{ width: `${importProgress}%` }}
-                    ></div>
-                    <span className="ml-2 text-xs text-gray-700">{importProgress}%</span>
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <li><strong>View Machines:</strong> Browse all machines with pagination and search functionality</li>
+                        <li><strong>Add New Machine:</strong> Click &quot;Add New Machine&quot; to create a new machine entry</li>
+                        <li><strong>Edit Machines:</strong> Click the edit icon next to any machine to modify its details</li>
+                        <li><strong>Delete Machines:</strong> Remove individual machines or bulk delete selected ones</li>
+                        <li><strong>Search &amp; Filter:</strong> Use the search bar to find specific machines</li>
+                        <li><strong>Export Data:</strong> Export all machines to Excel format</li>
+                        <li><strong>Import Data:</strong> Import machines from Excel files</li>
+                        <li><strong>Bulk Operations:</strong> Select multiple machines for bulk deletion</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">Machine Information:</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <li><strong>Machine Details:</strong> Code, number, model, floor, and needle size</li>
+                        <li><strong>Status Tracking:</strong> Active, Under Maintenance, or Idle status</li>
+                        <li><strong>Supervisor Assignment:</strong> Track assigned supervisors for each machine</li>
+                        <li><strong>Maintenance Schedule:</strong> Track last and next maintenance dates</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">Tips:</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Use descriptive machine codes for easy identification</li>
+                        <li>Keep machine codes and numbers unique and consistent</li>
+                        <li>Update maintenance dates regularly for proper scheduling</li>
+                        <li>Export machines before making bulk changes</li>
+                      </ul>
+                    </div>
                   </div>
-                )}
-                <button
-                  type="button"
-                  className="ti-btn ti-btn-primary"
-                  onClick={handleExport}
-                >
-                  <i className="ri-download-2-line me-2"></i> Export
-                </button>
-                <Link href="/catalog/machines/add" className="ti-btn ti-btn-primary">
-                  <i className="ri-add-line me-2"></i> Add New Machine
-                </Link>
-              </div>
+                }
+              />
             </div>
-          </div>
 
-          {/* Content Box */}
-          <div className="box">
-            <div className="box-body">
-              {/* Search Bar */}
-              <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
-                <div className="flex items-center">
-                  <label className="mr-2 text-sm text-gray-600">Rows per page:</label>
-                  <select
-                    className="form-select w-auto text-sm"
-                    value={itemsPerPage}
-                    onChange={e => {
-                      setItemsPerPage(Number(e.target.value));
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <option value={10}>10</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={500}>500</option>
-                    <option value={1000}>1000</option>
-                  </select>
-                </div>
-                <div className="relative w-full max-w-xs">
-                  <input
-                    type="text"
-                    className="form-control py-3 pr-10"
-                    placeholder="Search by machine code, number, model, floor, or needle size..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <button className="absolute end-0 top-0 px-4 h-full">
-                    <i className="ri-search-line text-lg"></i>
-                  </button>
-                </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 min-w-[120px] placeholder:text-gray-400 transition-all font-medium"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
               </div>
-
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : error ? (
-                <div className="text-center py-8 text-red-500">
-                  <i className="ri-error-warning-line text-3xl mb-2"></i>
-                  <p>{error}</p>
-                </div>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table whitespace-nowrap table-bordered min-w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th scope="col" className="!text-start">
-                          <input 
-                            type="checkbox" 
-                            className="form-check-input" 
-                            checked={selectAll}
-                            onChange={handleSelectAll}
-                          />
-                        </th>
-                        <th scope="col" className="text-start">Machine</th>
-                        <th scope="col" className="text-start">Floor</th>
-                        <th scope="col" className="text-start">Needle Size</th>
-                        <th scope="col" className="text-start">Status</th>
-                        <th scope="col" className="text-start">Supervisor</th>
-                        <th scope="col" className="text-start">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {machines.length > 0 ? (
-                        machines.map((machine: Machine, index: number) => (
-                          <tr 
-                            key={getMachineId(machine)} 
-                            className={`border-b border-gray-200 ${index % 2 === 0 ? 'bg-gray-50' : ''}`}
-                          >
-                            <td>
-                              <input 
-                                type="checkbox" 
-                                className="form-check-input" 
-                                checked={selectedMachines.includes(getMachineId(machine))}
-                                onChange={() => handleMachineSelect(getMachineId(machine))}
-                              />
-                            </td>
-                            <td>
-                              <div className="space-y-1">
-                                <div className="font-medium text-gray-900">
-                                  <span className="text-gray-500">Code:</span> {machine.machineCode}
-                                </div>
-                                <div className="text-sm text-gray-600">
-                                  <span className="text-gray-500">Number:</span> {machine.machineNumber}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  <span className="text-gray-500">Model:</span> {machine.model}
-                                </div>
-                              </div>
-                            </td>
-                            <td>{machine.floor}</td>
-                            <td>{machine.needleSize}</td>
-                            <td>
-                              <span className={`badge ${getStatusBadge(machine.status)}`}>
-                                {machine.status}
-                              </span>
-                            </td>
-                            <td>{machine.assignedSupervisor?.name || 'Not Assigned'}</td>
-                            <td>
-                              <div className="flex space-x-2">
-                                <Link 
-                                  href={`/catalog/machines/edit/${getMachineId(machine)}`}
-                                  className="ti-btn ti-btn-primary ti-btn-sm"
-                                >
-                                  <i className="ri-edit-line"></i>
-                                </Link>
-                                <button 
-                                  className="ti-btn ti-btn-danger ti-btn-sm"
-                                  onClick={() => handleDelete(getMachineId(machine))}
-                                >
-                                  <i className="ri-delete-bin-line"></i>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={9} className="text-center py-8">
-                            <div className="flex flex-col items-center justify-center">
-                              <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center mb-4">
-                                <i className="ri-settings-3-line text-4xl text-primary"></i>
-                              </div>
-                              <h3 className="text-xl font-medium mb-2">No Machines Found</h3>
-                              <p className="text-gray-500 text-center mb-6">Start by adding your first machine.</p>
-                              <Link href="/catalog/machines/add" className="ti-btn ti-btn-primary">
-                                <i className="ri-add-line me-2"></i> Add First Machine
-                              </Link>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+              <div className="relative group">
+                <select
+                  value={itemsPerPage}
+                  onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
+                >
+                  <option value={10}>Show 10</option>
+                  <option value={50}>Show 50</option>
+                  <option value={100}>Show 100</option>
+                  <option value={500}>Show 500</option>
+                  <option value={1000}>Show 1000</option>
+                </select>
+                <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+              </div>
+              <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleImport} />
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm">
+                <i className="ri-upload-2-line text-xs"></i> Import
+              </button>
+              {importProgress !== null && (
+                <div className="w-24 h-2.5 bg-gray-200 rounded-full overflow-hidden flex items-center">
+                  <div className="bg-primary h-full transition-all duration-200" style={{ width: `${importProgress}%` }}></div>
+                  <span className="ml-1.5 text-[10px] text-gray-600 font-medium">{importProgress}%</span>
                 </div>
               )}
-
-              {/* Pagination */}
-              {!isLoading && !error && (
-                <div className="flex justify-between items-center mt-4">
-                  <div className="text-sm text-gray-500">
-                    Showing {totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {totalResults === 0 ? 0 : Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
-                  </div>
-                  <nav aria-label="Page navigation" className="">
-                    <ul className="flex flex-wrap items-center">
-                      <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                        <button
-                          className="page-link py-2 px-3 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                          disabled={currentPage === 1}
-                        >
-                          Previous
-                        </button>
-                      </li>
-                      {getPagination(currentPage, totalPages).map((page, idx) =>
-                        page === '...'
-                          ? <li key={"ellipsis-" + idx} className="page-item"><span className="px-3">...</span></li>
-                          : <li key={page} className="page-item">
-                              <button
-                                className={`page-link py-2 px-3 leading-tight border border-gray-300 ${
-                                  currentPage === page 
-                                  ? 'bg-primary text-white hover:bg-primary-dark' 
-                                  : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                                }`}
-                                onClick={() => setCurrentPage(Number(page))}
-                              >
-                                {page}
-                              </button>
-                            </li>
-                      )}
-                      <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                        <button
-                          className="page-link py-2 px-3 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                          disabled={currentPage === totalPages}
-                        >
-                          Next
-                        </button>
-                      </li>
-                    </ul>
-                  </nav>
-                </div>
+              <button type="button" onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+                <i className="ri-download-2-line text-xs"></i> Export
+              </button>
+              {selectedMachines.length > 0 && (
+                <button type="button" onClick={handleDeleteSelected} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors bg-red-50 text-red-600 border-red-100 hover:bg-red-100 shadow-sm">
+                  <i className="ri-delete-bin-line text-xs"></i> Delete ({selectedMachines.length})
+                </button>
               )}
+              <Link href="/catalog/machines/add" className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+                <i className="ri-add-line text-xs"></i> Add Machine
+              </Link>
             </div>
           </div>
         </div>
+
+        <div className="overflow-x-auto min-h-[300px]">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-error-warning-line text-xl text-red-400"></i>
+              </div>
+              <p className="text-[12px] font-medium text-red-600">{error}</p>
+            </div>
+          ) : machines.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-settings-3-line text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">DATA EMPTY</h3>
+              <Link href="/catalog/machines/add" className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
+                <i className="ri-add-line text-xs"></i> Add First Machine
+              </Link>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th className="pl-[10px] pr-1 py-3 text-left w-10 border border-gray-200">
+                    <input type="checkbox" checked={selectAll} onChange={handleSelectAll} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Machine</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Floor</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Needle Size</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Supervisor</th>
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {machines.map((machine: Machine) => (
+                  <tr key={getMachineId(machine)} className="hover:bg-gray-50/50 transition-colors group">
+                    <td className="pl-[10px] pr-1 py-2.5 border border-gray-200">
+                      <input type="checkbox" checked={selectedMachines.includes(getMachineId(machine))} onChange={() => handleMachineSelect(getMachineId(machine))} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                    </td>
+                    <td className="px-1.5 py-2.5 border border-gray-200">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[12px] font-bold text-gray-900">{machine.machineCode}</span>
+                        <span className="text-[10px] font-medium text-gray-500">{machine.machineNumber} · {machine.model}</span>
+                      </div>
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{machine.floor}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{machine.needleSize}</td>
+                    <td className="px-1.5 py-2.5 border border-gray-200">
+                      <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${getStatusBadgeClass(machine.status)}`}>{machine.status}</span>
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{machine.assignedSupervisor?.name || '—'}</td>
+                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                      <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <Link href={`/catalog/machines/edit/${getMachineId(machine)}`} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors" title="Edit">
+                          <i className="ri-pencil-line text-xs"></i>
+                        </Link>
+                        <button className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors" onClick={() => handleDelete(getMachineId(machine))} title="Delete">
+                          <i className="ri-delete-bin-line text-xs"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {!isLoading && !error && (
+          <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
+            <div className="text-[11px] font-medium text-[#495057] tracking-tight">
+              Showing <span>{totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {totalResults === 0 ? 0 : Math.min(currentPage * itemsPerPage, totalResults)}</span> of <span>{totalResults}</span> entries <span className="ml-1 opacity-50">→</span>
+            </div>
+            <div className="flex items-center">
+              <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Prev</button>
+              <div className="flex items-center gap-1 mx-2">
+                {getPagination(currentPage, totalPages).map((page, idx) =>
+                  page === '...' ? <span key={`ellipsis-${idx}`} className="text-gray-300 text-[10px]">...</span> : (
+                    <button key={page} onClick={() => setCurrentPage(Number(page))} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded transition-all ${currentPage === page ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>{page}</button>
+                  )
+                )}
+              </div>
+              <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Next</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
