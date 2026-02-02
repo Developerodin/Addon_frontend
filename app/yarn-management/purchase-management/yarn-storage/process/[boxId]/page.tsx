@@ -10,6 +10,7 @@ import yarnConeService, {
   GenerateConesResponse,
   YarnCone,
 } from "@/shared/services/yarnConeService";
+import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
 import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
 import { printCones } from "@/shared/utils/qzTray";
 
@@ -130,6 +131,57 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       setIsLoading(false);
     }
   }, [buildConeInputs, router, storageKey]);
+
+  // Auto-fill tear weight from PO tearweight API when poNumber + yarn name available
+  useEffect(() => {
+    const box = result?.box;
+    const poNumber = box?.poNumber?.trim();
+    if (!poNumber || !cones.length) return;
+
+    const toFetch = cones.filter(
+      (c) => c.yarnName?.trim() && !(coneInputs[c._id]?.tearWeight?.trim())
+    );
+    if (!toFetch.length) return;
+
+    let cancelled = false;
+    Promise.all(
+      toFetch.map(async (cone) => {
+        const res = await yarnPurchaseOrderService.getTearWeight(
+          poNumber,
+          cone.yarnName ?? ""
+        );
+        return { coneId: cone._id, tearweight: res };
+      })
+    )
+      .then((results) => {
+        if (cancelled) return;
+        setConeInputs((prev) => {
+          const next = { ...prev };
+          results.forEach(({ coneId, tearweight }) => {
+            if (tearweight != null && Number.isFinite(tearweight)) {
+              if (!next[coneId])
+                next[coneId] = {
+                  coneWeight: "",
+                  tearWeight: "",
+                  coneStorageId: "",
+                };
+              next[coneId] = {
+                ...next[coneId],
+                tearWeight: String(tearweight),
+              };
+            }
+          });
+          return next;
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) console.error("Tear weight auto-fill failed:", err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [result?.box?.poNumber, cones, coneInputs]);
 
   const box = result?.box;
   const message = result?.message;
@@ -648,7 +700,16 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                             />
                           ) : (
                             <span className="text-xs text-gray-900">
-                              {formatWeight(cone.tearWeight)}
+                              {formatWeight(
+                                (() => {
+                                  const twStr = coneInputs[cone._id]?.tearWeight?.trim();
+                                  if (twStr !== undefined && twStr !== "") {
+                                    const n = parseFloat(twStr);
+                                    if (Number.isFinite(n)) return n;
+                                  }
+                                  return cone.tearWeight;
+                                })()
+                              )}
                             </span>
                           )}
                         </td>

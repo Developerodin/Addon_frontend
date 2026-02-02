@@ -249,6 +249,28 @@ class YarnPurchaseOrderService {
     return this.makeRequest<PurchaseOrder>(`/${orderId}`);
   }
 
+  /**
+   * Fetches tear weight for a yarn on a PO (for auto-fill on cone process page).
+   * GET /tearweight?poNumber=...&yarnName=...
+   * Response: { poNumber, supplierId, yarnName, tearweight, notFound }
+   */
+  async getTearWeight(poNumber: string, yarnName: string): Promise<number | undefined> {
+    if (!poNumber?.trim() || !yarnName?.trim()) return undefined;
+    const query = new URLSearchParams({
+      poNumber: poNumber.trim(),
+      yarnName: yarnName.trim(),
+    }).toString();
+    const res = await this.makeRequest<{
+      poNumber: string;
+      supplierId: string;
+      yarnName: string;
+      tearweight: number;
+      notFound: boolean;
+    }>(`/tearweight?${query}`);
+    if (res?.notFound) return undefined;
+    return res?.tearweight;
+  }
+
   async updatePurchaseOrderWithPacklist(
     orderId: string,
     packlistDetails: PacklistDetails[],

@@ -224,6 +224,28 @@ class SupplierService {
     return this.makeRequest<Supplier>(`/${supplierId}`);
   }
 
+  /**
+   * Fetches tear weight for a yarn from a supplier (for auto-fill on cone process page).
+   * GET /suppliers/:supplierId/yarn-tearweight?yarnName=...
+   * Response: { supplierId, yarnTearweights: [{ yarnName, tearweight }], notFound: [] }
+   */
+  async getYarnTearWeight(
+    supplierId: string,
+    yarnName: string
+  ): Promise<number | undefined> {
+    if (!supplierId || !yarnName?.trim()) {
+      return undefined;
+    }
+    const query = new URLSearchParams({ yarnName: yarnName.trim() }).toString();
+    const res = await this.makeRequest<{
+      supplierId: string;
+      yarnTearweights: Array<{ yarnName: string; tearweight: number }>;
+      notFound: string[];
+    }>(`/${supplierId}/yarn-tearweight?${query}`);
+    // Single yarnName query returns one entry in yarnTearweights
+    return res?.yarnTearweights?.[0]?.tearweight;
+  }
+
   async createSupplier(payload: CreateSupplierRequest): Promise<Supplier> {
     return this.makeRequest<Supplier>('', {
       method: 'POST',
