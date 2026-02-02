@@ -35,94 +35,25 @@ export const AnalyticsKPIs: React.FC<AnalyticsKPIsProps> = ({ summaryKPIs }) => 
   };
 
   const kpiCards = [
-    {
-      title: 'Total Quantity',
-      value: safeNumberFormat(summaryKPIs?.totalQuantity),
-      icon: 'ri-shopping-bag-3-line',
-      gradient: 'from-blue-500 to-blue-600',
-      bgColor: 'bg-blue-50',
-      iconColor: 'text-blue-600',
-      trend: '+12.5%',
-      trendColor: 'text-green-600'
-    },
-    {
-      title: 'Total NSV',
-      value: safeNumberFormat(summaryKPIs?.totalNSV, '₹'),
-      icon: 'ri-money-dollar-circle-line',
-      gradient: 'from-green-500 to-green-600',
-      bgColor: 'bg-green-50',
-      iconColor: 'text-green-600',
-      trend: '+8.2%',
-      trendColor: 'text-green-600'
-    },
-    {
-      title: 'Avg Discount',
-      value: safePercentageFormat(summaryKPIs?.avgDiscountPercentage),
-      icon: 'ri-percent-line',
-      gradient: 'from-amber-500 to-amber-600',
-      bgColor: 'bg-amber-50',
-      iconColor: 'text-amber-600',
-      trend: '-2.1%',
-      trendColor: 'text-red-600'
-    },
-    {
-      title: 'Top SKU',
-      value: summaryKPIs?.topSellingSKU?.productName || 'N/A',
-      icon: 'ri-award-line',
-      gradient: 'from-purple-500 to-purple-600',
-      bgColor: 'bg-purple-50',
-      iconColor: 'text-purple-600',
-      trend: '+15.3%',
-      trendColor: 'text-green-600'
-    },
-    {
-      title: 'Total Tax',
-      value: safeNumberFormat(summaryKPIs?.totalTax, '₹'),
-      icon: 'ri-bank-card-line',
-      gradient: 'from-red-500 to-red-600',
-      bgColor: 'bg-red-50',
-      iconColor: 'text-red-600',
-      trend: '+5.7%',
-      trendColor: 'text-green-600'
-    },
-    {
-      title: 'Records',
-      value: safeNumberFormat(summaryKPIs?.recordCount),
-      icon: 'ri-file-list-3-line',
-      gradient: 'from-indigo-500 to-indigo-600',
-      bgColor: 'bg-indigo-50',
-      iconColor: 'text-indigo-600',
-      trend: '+3.4%',
-      trendColor: 'text-green-600'
-    }
+    { title: 'Total Quantity', value: safeNumberFormat(summaryKPIs?.totalQuantity), icon: 'ri-shopping-bag-3-line', bgColor: 'bg-blue-50', iconColor: 'text-blue-600', borderLeft: 'border-blue-200', trend: '+12.5%', trendColor: 'text-green-600' },
+    { title: 'Total NSV', value: safeNumberFormat(summaryKPIs?.totalNSV, '₹'), icon: 'ri-money-dollar-circle-line', bgColor: 'bg-green-50', iconColor: 'text-green-600', borderLeft: 'border-green-200', trend: '+8.2%', trendColor: 'text-green-600' },
+    { title: 'Avg Discount', value: safePercentageFormat(summaryKPIs?.avgDiscountPercentage), icon: 'ri-percent-line', bgColor: 'bg-amber-50', iconColor: 'text-amber-600', borderLeft: 'border-amber-200', trend: '-2.1%', trendColor: 'text-red-600' },
+    { title: 'Top SKU', value: summaryKPIs?.topSellingSKU?.productName || 'N/A', icon: 'ri-award-line', bgColor: 'bg-purple-50', iconColor: 'text-purple-600', borderLeft: 'border-purple-200', trend: '+15.3%', trendColor: 'text-green-600' },
+    { title: 'Total Tax', value: safeNumberFormat(summaryKPIs?.totalTax, '₹'), icon: 'ri-bank-card-line', bgColor: 'bg-red-50', iconColor: 'text-red-600', borderLeft: 'border-red-200', trend: '+5.7%', trendColor: 'text-green-600' },
+    { title: 'Records', value: safeNumberFormat(summaryKPIs?.recordCount), icon: 'ri-file-list-3-line', bgColor: 'bg-indigo-50', iconColor: 'text-indigo-600', borderLeft: 'border-indigo-200', trend: '+3.4%', trendColor: 'text-green-600' }
   ];
 
   return (
-    <div className="grid grid-cols-12 gap-6 mb-8">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
       {kpiCards.map((kpi, index) => (
-        <div key={index} className="xl:col-span-2 lg:col-span-3 md:col-span-6 col-span-12">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all duration-300 group">
-            <div className="flex items-start justify-between mb-4">
-              <div className={`w-12 h-12 rounded-xl ${kpi.bgColor} flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
-                <i className={`${kpi.icon} text-xl ${kpi.iconColor}`}></i>
-              </div>
-              <div className="text-right">
-                <span className={`text-xs font-medium ${kpi.trendColor}`}>
-                  {kpi.trend}
-                </span>
-                <div className="text-xs text-gray-500 mt-1">vs last month</div>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-gray-600">{kpi.title}</h3>
-              <p className={`text-2xl font-bold ${kpi.title === 'Top SKU' ? 'text-sm truncate' : ''}`}>
-                {kpi.value}
-              </p>
-            </div>
-
-            {/* Gradient accent line */}
-            <div className={`h-1 bg-gradient-to-r ${kpi.gradient} rounded-full mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300`}></div>
+        <div key={index} className={`flex items-center justify-between p-3 rounded border-l-4 border border-gray-100 ${kpi.borderLeft} ${kpi.bgColor}`}>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">{kpi.title}</p>
+            <p className={`text-sm font-bold truncate ${kpi.iconColor}`}>{kpi.value}</p>
+            <p className={`text-[10px] font-medium ${kpi.trendColor}`}>{kpi.trend} vs last month</p>
+          </div>
+          <div className={`w-9 h-9 rounded flex items-center justify-center flex-shrink-0 ${kpi.bgColor} ${kpi.iconColor}`}>
+            <i className={`${kpi.icon} text-lg`}></i>
           </div>
         </div>
       ))}

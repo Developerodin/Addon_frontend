@@ -2,11 +2,9 @@
 
 import React from 'react';
 import Seo from '@/shared/layout-components/seo/seo';
-import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import { useAnalytics } from '@/shared/hooks/useAnalytics';
 import { AnalyticsKPIs, AnalyticsCharts, AnalyticsTables } from '@/shared/components/analytics';
 import { useGlobalErrorHandler } from '@/shared/utils/errorBoundary';
-import Link from 'next/link';
 import HelpIcon from '@/shared/components/HelpIcon';
 
 // Error boundary for the entire analytics page
@@ -62,21 +60,22 @@ const AnalyticsErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ child
     return (
       <>
         <Seo title="Analytics" />
-        <Pageheader currentpage="Analytics" activepage="Dashboards" mainpage="Analytics" />
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center max-w-md mx-auto">
-            <div className="bg-red-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <i className="ri-error-warning-line text-2xl text-red-500"></i>
+        <div className="main-content !p-[10px]">
+          <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="text-red-400 mb-4">
+                <i className="ri-error-warning-line text-5xl"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">Analytics Error</h3>
+              <p className="text-[11px] text-gray-500 mb-4">{errorInfo}</p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+              >
+                <i className="ri-refresh-line"></i> Reload Page
+              </button>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Analytics Error</h3>
-            <p className="text-gray-600 mb-4">{errorInfo}</p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200"
-            >
-              <i className="ri-refresh-line mr-2"></i>
-              Reload Page
-            </button>
           </div>
         </div>
       </>
@@ -117,18 +116,6 @@ export default function AnalyticsPage() {
   // Validate and sanitize data before passing to components
   const sanitizedData = React.useMemo(() => {
     if (!data) return data;
-    
-    // Debug logging for brand performance data
-    console.log('=== ANALYTICS PAGE BRAND PERFORMANCE DEBUG ===');
-    console.log('Raw brand performance data:', data.brandPerformance);
-    console.log('Brand performance type:', typeof data.brandPerformance);
-    console.log('Brand performance is array:', Array.isArray(data.brandPerformance));
-    console.log('Brand performance length:', data.brandPerformance?.length);
-    if (data.brandPerformance && Array.isArray(data.brandPerformance) && data.brandPerformance.length > 0) {
-      console.log('First brand performance item:', data.brandPerformance[0]);
-    }
-    console.log('=== END ANALYTICS PAGE BRAND PERFORMANCE DEBUG ===');
-    
     return {
       ...data,
       timeBasedTrends: Array.isArray(data.timeBasedTrends) ? data.timeBasedTrends : [],
@@ -145,68 +132,44 @@ export default function AnalyticsPage() {
     };
   }, [data]);
 
-  // Loading component with modern skeleton
+  // Loading: compact skeleton
   if (loading) {
     return (
       <>
         <Seo title="Analytics" />
-        <Pageheader currentpage="Analytics" activepage="Dashboards" mainpage="Analytics" />
-        
-        {/* Skeleton Loading */}
-        <div className="space-y-6">
-          {/* KPI Skeleton */}
-          <div className="grid grid-cols-12 gap-6">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="xl:col-span-2 lg:col-span-3 md:col-span-6 col-span-12">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                  <div className="animate-pulse">
-                    <div className="h-8 w-8 bg-gray-200 rounded-lg mb-4"></div>
-                    <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                    <div className="h-6 bg-gray-200 rounded w-3/4"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Chart Skeletons */}
-          <div className="grid grid-cols-12 gap-6">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="xl:col-span-6 col-span-12">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                  <div className="animate-pulse">
-                    <div className="h-5 bg-gray-200 rounded mb-4 w-1/2"></div>
-                    <div className="h-64 bg-gray-200 rounded"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
+        <div className="main-content !p-[10px]">
+          <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Analytics</p>
+            </div>
           </div>
         </div>
       </>
     );
   }
 
-  // Error component with modern design
+  // Error: compact card
   if (error) {
     return (
       <>
         <Seo title="Analytics" />
-        <Pageheader currentpage="Analytics" activepage="Dashboards" mainpage="Analytics" />
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center max-w-md mx-auto">
-            <div className="bg-red-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <i className="ri-error-warning-line text-2xl text-red-500"></i>
+        <div className="main-content !p-[10px]">
+          <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="text-red-400 mb-4">
+                <i className="ri-error-warning-line text-5xl"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">Unable to Load Analytics</h3>
+              <p className="text-[11px] text-gray-500 mb-4">{error}</p>
+              <button
+                type="button"
+                onClick={loadAnalyticsData}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+              >
+                <i className="ri-refresh-line"></i> Try Again
+              </button>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Analytics</h3>
-            <p className="text-gray-600 mb-6">{error}</p>
-            <button 
-              onClick={loadAnalyticsData}
-              className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200"
-            >
-              <i className="ri-refresh-line mr-2"></i>
-              Try Again
-            </button>
           </div>
         </div>
       </>
@@ -216,126 +179,79 @@ export default function AnalyticsPage() {
   return (
     <AnalyticsErrorBoundary>
       <Seo title="Analytics" />
-      
-      {/* Custom Page Header with Date Filters */}
-      <div className="mb-8">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-                {loading && (
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent"></div>
-                    <span className="text-sm text-primary font-medium">Loading...</span>
+      <div className="main-content !p-[10px]">
+        <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+          {/* Compact header */}
+          <div className="p-[10px] border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Analytics</h1>
+              <HelpIcon
+                title="Analytics Dashboard"
+                content={
+                  <div>
+                    <p className="mb-4">
+                      This page provides comprehensive analytics and insights into your business performance, sales trends, and key metrics.
+                    </p>
+                    <h4 className="font-semibold mb-2">What you can do:</h4>
+                    <ul className="list-disc list-inside mb-4 space-y-1">
+                      <li><strong>View KPIs:</strong> Monitor key performance indicators</li>
+                      <li><strong>Analyze Trends:</strong> Time-based trends and patterns</li>
+                      <li><strong>Product / Store / Brand:</strong> Performance analysis</li>
+                      <li><strong>Discount & Tax:</strong> Impact and MRP analysis</li>
+                      <li><strong>Date Filtering:</strong> Filter by date range</li>
+                    </ul>
+                    <h4 className="font-semibold mb-2">Tips:</h4>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Use date filters for specific time periods</li>
+                      <li>Use refresh to get the latest data</li>
+                    </ul>
                   </div>
-                )}
-              </div>
-              <p className="text-gray-600 mt-1">Comprehensive sales and performance insights</p>
+                }
+              />
             </div>
-            <HelpIcon
-              title="Analytics Dashboard"
-              content={
-                <div>
-                  <p className="mb-4">
-                    This page provides comprehensive analytics and insights into your business performance, sales trends, and key metrics.
-                  </p>
-                  
-                  <h4 className="font-semibold mb-2">What you can do:</h4>
-                  <ul className="list-disc list-inside mb-4 space-y-1">
-                    <li><strong>View KPIs:</strong> Monitor key performance indicators like total sales, revenue, and growth metrics</li>
-                    <li><strong>Analyze Trends:</strong> View time-based trends and patterns in your sales data</li>
-                    <li><strong>Product Performance:</strong> Track how individual products are performing</li>
-                    <li><strong>Store Performance:</strong> Compare performance across different stores</li>
-                    <li><strong>Brand Analysis:</strong> Analyze performance by brand categories</li>
-                    <li><strong>Discount Impact:</strong> Understand the impact of discounts on sales</li>
-                    <li><strong>Tax & MRP Analysis:</strong> View tax distribution and MRP analysis</li>
-                    <li><strong>Date Filtering:</strong> Filter data by specific date ranges</li>
-                    <li><strong>Export Data:</strong> Export analytics data for further analysis</li>
-                  </ul>
-
-                  <h4 className="font-semibold mb-2">Available Metrics:</h4>
-                  <ul className="list-disc list-inside mb-4 space-y-1">
-                    <li><strong>Sales KPIs:</strong> Total sales, revenue, growth percentage</li>
-                    <li><strong>Product Metrics:</strong> Top-performing products, sales by category</li>
-                    <li><strong>Store Metrics:</strong> Store-wise performance, location analysis</li>
-                    <li><strong>Brand Metrics:</strong> Brand performance, market share</li>
-                    <li><strong>Financial Metrics:</strong> Tax analysis, MRP distribution, profit margins</li>
-                    <li><strong>Trend Analysis:</strong> Time-based trends, seasonal patterns</li>
-                  </ul>
-
-                  <h4 className="font-semibold mb-2">Tips:</h4>
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>Use date filters to analyze specific time periods</li>
-                    <li>Click on charts for detailed information</li>
-                    <li>Export data for external analysis</li>
-                    <li>Compare different time periods to identify trends</li>
-                    <li>Use the refresh button to get the latest data</li>
-                  </ul>
-                </div>
-              }
-            />
-          </div>
-          
-          {/* Date Range Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 items-center">
-            <div className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <input
-                  type="date"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
-                  value={dateRange.dateFrom}
-                  onChange={(e) => handleDateRangeChange('dateFrom', e.target.value)}
-                />
-                <i className="ri-calendar-line absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-              </div>
-            </div>
-            <div className="flex items-center justify-center px-2">
-              <span className="text-sm font-medium text-gray-600">To</span>
-            </div>
-            <div className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <input
-                  type="date"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
-                  value={dateRange.dateTo}
-                  onChange={(e) => handleDateRangeChange('dateTo', e.target.value)}
-                />
-                <i className="ri-calendar-line absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-              </div>
-            </div>
-            
-            <div className="flex items-end gap-3">
-              <button 
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">From</span>
+              <input
+                type="date"
+                className="px-2.5 py-1.5 border border-gray-200 rounded text-[11px] focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                value={dateRange.dateFrom}
+                onChange={(e) => handleDateRangeChange('dateFrom', e.target.value)}
+              />
+              <span className="text-[11px] font-medium text-gray-600">To</span>
+              <input
+                type="date"
+                className="px-2.5 py-1.5 border border-gray-200 rounded text-[11px] focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                value={dateRange.dateTo}
+                onChange={(e) => handleDateRangeChange('dateTo', e.target.value)}
+              />
+              <button
+                type="button"
                 onClick={loadAnalyticsData}
-                className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200 shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors"
               >
-                <i className="ri-refresh-line mr-2"></i>
-                Refresh
+                <i className="ri-refresh-line text-sm"></i> Refresh
               </button>
             </div>
           </div>
+
+          <div className="p-[10px] pt-0">
+            <AnalyticsKPIs summaryKPIs={sanitizedData?.summaryKPIs} />
+            <AnalyticsCharts
+              timeBasedTrends={sanitizedData?.timeBasedTrends || []}
+              productPerformance={sanitizedData?.productPerformance || []}
+              storePerformance={sanitizedData?.storePerformance || []}
+              brandPerformance={sanitizedData?.brandPerformance || []}
+              discountImpact={sanitizedData?.discountImpact || []}
+              taxMRPData={sanitizedData?.taxMRPData}
+            />
+            <AnalyticsTables
+              productPerformance={sanitizedData?.productPerformance || []}
+              storePerformance={sanitizedData?.storePerformance || []}
+            />
+          </div>
         </div>
       </div>
-
-      {/* Summary KPIs */}
-      <AnalyticsKPIs summaryKPIs={sanitizedData?.summaryKPIs} />
-
-      {/* Charts Grid */}
-      <AnalyticsCharts
-        timeBasedTrends={sanitizedData?.timeBasedTrends || []}
-        productPerformance={sanitizedData?.productPerformance || []}
-        storePerformance={sanitizedData?.storePerformance || []}
-        brandPerformance={sanitizedData?.brandPerformance || []}
-        discountImpact={sanitizedData?.discountImpact || []}
-        taxMRPData={sanitizedData?.taxMRPData}
-      />
-
-      {/* Data Tables */}
-      <AnalyticsTables
-        productPerformance={sanitizedData?.productPerformance || []}
-        storePerformance={sanitizedData?.storePerformance || []}
-      />
     </AnalyticsErrorBoundary>
   );
 } 

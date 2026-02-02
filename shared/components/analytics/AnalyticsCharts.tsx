@@ -344,40 +344,30 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-12 gap-6 mb-8">
+    <div className="grid grid-cols-12 gap-4 mb-4">
       {charts.map((chart, index) => {
         const colorClasses = getColorClasses(chart.color);
         const chartOptions = getSafeChartConfig(chart);
         
         return (
           <div key={index} className={chart.span}>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
-              {/* Chart Header */}
-              <div className="p-6 border-b border-gray-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg ${colorClasses.bg} flex items-center justify-center`}>
-                      <i className={`${chart.icon} text-lg ${colorClasses.icon}`}></i>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{chart.title}</h3>
-                      <p className="text-sm text-gray-500">{chart.subtitle}</p>
-                    </div>
+            <div className="bg-white rounded border border-gray-100 overflow-hidden shadow-sm">
+              <div className="p-[10px] border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded flex items-center justify-center ${colorClasses.bg} ${colorClasses.icon}`}>
+                    <i className={`${chart.icon} text-sm`}></i>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={chart.exploreLink}
-                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors duration-200"
-                    >
-                      <i className="ri-external-link-line mr-1"></i>
-                      Explore
-                    </Link>
-                  </div>
+                  <h3 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">{chart.title}</h3>
                 </div>
+                <Link
+                  href={chart.exploreLink}
+                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                >
+                  <i className="ri-external-link-line text-sm"></i> Explore
+                </Link>
               </div>
 
-              {/* Chart Content */}
-              <div className="p-6">
+              <div className="p-[10px]">
                 <ChartErrorBoundary chartTitle={chart.title}>
                   <SafeChart
                     options={chartOptions.options}

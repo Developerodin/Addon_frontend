@@ -78,51 +78,40 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
   const hasRealStoreData = storePerformance.length > 0;
 
   return (
-    <div className="grid grid-cols-12 gap-6">
-      {/* Product Performance Table */}
+    <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
-          {/* Table Header */}
-          <div className="p-6 border-b border-gray-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center">
-                  <i className="ri-shopping-bag-line text-lg text-purple-600"></i>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Top Products</h3>
-                  <p className="text-sm text-gray-500">Best performing products by sales</p>
-                </div>
+        <div className="bg-white rounded border border-gray-100 overflow-hidden shadow-sm">
+          <div className="p-[10px] border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded flex items-center justify-center bg-purple-50 text-purple-600">
+                <i className="ri-shopping-bag-line text-sm"></i>
               </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  href="/analytics/product-performance"
-                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors duration-200"
-                >
-                  <i className="ri-external-link-line mr-1"></i>
-                  Explore
-                </Link>
-              </div>
+              <h3 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Top Products</h3>
             </div>
+            <Link
+              href="/analytics/product-performance"
+              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-purple-600 hover:bg-purple-50 rounded transition-colors"
+            >
+              <i className="ri-external-link-line text-sm"></i> Explore
+            </Link>
           </div>
 
-          {/* Table Content */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto min-h-[200px]">
+            <table className="w-full border-collapse border border-gray-200">
+              <thead className="bg-gray-50/30">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">NSV</th>
+                  <th className="pl-[10px] pr-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Product</th>
+                  <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Category</th>
+                  <th className="px-1.5 py-2 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Quantity</th>
+                  <th className="pr-[10px] pl-1.5 py-2 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">NSV</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
                 {displayProductData.slice(0, 5).map((product, index) => (
-                  <tr key={product._id} className={`hover:bg-gray-50 transition-colors duration-200 ${!hasRealProductData ? 'text-gray-400' : ''}`}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium ${
+                  <tr key={product._id} className={`hover:bg-gray-50/50 transition-colors ${!hasRealProductData ? 'text-gray-400' : ''}`}>
+                    <td className="pl-[10px] pr-1.5 py-2 whitespace-nowrap border border-gray-200">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold ${
                           !hasRealProductData 
                             ? 'bg-gray-100 text-gray-400' 
                             : index === 0 
@@ -135,8 +124,8 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                         }`}>
                           {index + 1}
                         </div>
-                        <div className="ml-3">
-                          <div className={`text-sm font-medium ${!hasRealProductData ? 'text-gray-400' : 'text-gray-900'}`}>
+                        <div className="min-w-0">
+                          <div className={`text-[12px] font-medium truncate ${!hasRealProductData ? 'text-gray-400' : 'text-gray-900'}`}>
                             {!hasRealProductData ? (
                               product.productName
                             ) : (
@@ -151,13 +140,13 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${!hasRealProductData ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <td className={`px-1.5 py-2 whitespace-nowrap text-[12px] border border-gray-200 ${!hasRealProductData ? 'text-gray-400' : 'text-gray-500'}`}>
                       {product.categoryName}
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${!hasRealProductData ? 'text-gray-400' : 'text-gray-900'}`}>
+                    <td className={`px-1.5 py-2 whitespace-nowrap text-[12px] text-right font-medium border border-gray-200 ${!hasRealProductData ? 'text-gray-400' : 'text-gray-900'}`}>
                       {formatNumber(product.totalQuantity)}
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${!hasRealProductData ? 'text-gray-400' : 'text-green-600'}`}>
+                    <td className={`pr-[10px] pl-1.5 py-2 whitespace-nowrap text-[12px] text-right font-medium border border-gray-200 ${!hasRealProductData ? 'text-gray-400' : 'text-green-600'}`}>
                       {formatCurrency(product.totalNSV)}
                     </td>
                   </tr>
@@ -168,71 +157,47 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
         </div>
       </div>
 
-      {/* Store Performance Table */}
       <div className="col-span-12">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
-          {/* Table Header */}
-          <div className="p-6 border-b border-gray-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-                  <i className="ri-store-line text-lg text-emerald-600"></i>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Store Performance</h3>
-                  <p className="text-sm text-gray-500">Top performing retail locations</p>
-                </div>
+        <div className="bg-white rounded border border-gray-100 overflow-hidden shadow-sm">
+          <div className="p-[10px] border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded flex items-center justify-center bg-emerald-50 text-emerald-600">
+                <i className="ri-store-line text-sm"></i>
               </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  href="/analytics/store-performance"
-                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors duration-200"
-                >
-                  <i className="ri-external-link-line mr-1"></i>
-                  Explore
-                </Link>
-              </div>
+              <h3 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Store Performance</h3>
             </div>
+            <Link
+              href="/analytics/store-performance"
+              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-purple-600 hover:bg-purple-50 rounded transition-colors"
+            >
+              <i className="ri-external-link-line text-sm"></i> Explore
+            </Link>
           </div>
 
-          {/* Table Content */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto min-h-[200px]">
+            <table className="w-full border-collapse border border-gray-200">
+              <thead className="bg-gray-50/30">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">NSV</th>
+                  <th className="pl-[10px] pr-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Store</th>
+                  <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Location</th>
+                  <th className="px-1.5 py-2 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Quantity</th>
+                  <th className="pr-[10px] pl-1.5 py-2 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">NSV</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
+              <tbody className="bg-white">
                 {displayStoreData.slice(0, 5).map((store, index) => (
-                  <tr key={store._id} className={`hover:bg-gray-50 transition-colors duration-200 ${!hasRealStoreData ? 'text-gray-400' : ''}`}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium ${
-                          !hasRealStoreData 
-                            ? 'bg-gray-100 text-gray-400' 
-                            : index === 0 
-                              ? 'bg-yellow-100 text-yellow-700' 
-                              : index === 1 
-                                ? 'bg-gray-100 text-gray-600' 
-                                : index === 2 
-                                  ? 'bg-amber-100 text-amber-700' 
-                                  : 'bg-blue-100 text-blue-700'
+                  <tr key={store._id} className={`hover:bg-gray-50/50 transition-colors ${!hasRealStoreData ? 'text-gray-400' : ''}`}>
+                    <td className="pl-[10px] pr-1.5 py-2 whitespace-nowrap border border-gray-200">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold ${
+                          !hasRealStoreData ? 'bg-gray-100 text-gray-400' : index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-100 text-gray-600' : index === 2 ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
                         }`}>
                           {index + 1}
                         </div>
-                        <div className="ml-3">
-                          <div className={`text-sm font-medium ${!hasRealStoreData ? 'text-gray-400' : 'text-gray-900'}`}>
-                            {!hasRealStoreData ? (
-                              store.storeName
-                            ) : (
-                              <Link 
-                                href={`/analytics/store-analysis/${store._id}`}
-                                className="text-primary hover:text-primary/80 transition-colors duration-200"
-                              >
+                        <div className="min-w-0">
+                          <div className={`text-[12px] font-medium truncate ${!hasRealStoreData ? 'text-gray-400' : 'text-gray-900'}`}>
+                            {!hasRealStoreData ? store.storeName : (
+                              <Link href={`/analytics/store-analysis/${store._id}`} className="text-purple-600 hover:text-purple-700">
                                 {store.storeName}
                               </Link>
                             )}
@@ -240,13 +205,13 @@ export const AnalyticsTables: React.FC<AnalyticsTablesProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${!hasRealStoreData ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <td className={`px-1.5 py-2 whitespace-nowrap text-[12px] border border-gray-200 ${!hasRealStoreData ? 'text-gray-400' : 'text-gray-500'}`}>
                       {store.city}, {store.state}
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${!hasRealStoreData ? 'text-gray-400' : 'text-gray-900'}`}>
+                    <td className={`px-1.5 py-2 whitespace-nowrap text-[12px] text-right font-medium border border-gray-200 ${!hasRealStoreData ? 'text-gray-400' : 'text-gray-900'}`}>
                       {formatNumber(store.totalQuantity)}
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${!hasRealStoreData ? 'text-gray-400' : 'text-green-600'}`}>
+                    <td className={`pr-[10px] pl-1.5 py-2 whitespace-nowrap text-[12px] text-right font-medium border border-gray-200 ${!hasRealStoreData ? 'text-gray-400' : 'text-green-600'}`}>
                       {formatCurrency(store.totalNSV)}
                     </td>
                   </tr>
