@@ -5,6 +5,11 @@ import supplierService, { Supplier, SupplierYarnDetail } from "@/shared/services
 import yarnTypeService, { YarnType } from "@/shared/services/yarnTypeService";
 import yarnCountSizeService, { CountSize } from "@/shared/services/yarnCountSizeService";
 import yarnCatalogService, { YarnCatalog, YarnCatalogQueryParams } from "@/shared/services/yarnCatalogService";
+import {
+  downloadYarnItemsTemplate,
+  parseYarnItemsExcelFile,
+  type ParsedYarnRow,
+} from "../utils/purchaseYarnExcel";
 
 export type PurchaseOrderStatus = 
   | 'submitted to supplier' 
@@ -36,6 +41,8 @@ export interface YarnPurchaseItem {
   subTotal: number;
   selectedYarnDetail?: SupplierYarnDetail; // Store the full yarn detail for count sizes
   selectedCatalog?: YarnCatalog;
+  /** Set when item was imported from Excel but yarn name is not in supplier data. */
+  notInSupplierData?: boolean;
 }
 
 export interface PurchaseOrderData {
@@ -138,6 +145,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   });
 
   const supplierAutocompleteRef = useRef<HTMLDivElement | null>(null);
+  const excelFileInputRef = useRef<HTMLInputElement>(null);
+  const [isImportingExcel, setIsImportingExcel] = useState(false);
 
   useEffect(() => {
     supplierYarnDetailsRef.current = supplierYarnDetails;
@@ -157,34 +166,52 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     return undefined;
   }, []);
 
-  const extractCountSizeOptionsFromDetail = useCallback((detail: SupplierYarnDetail): Array<{ id: string; name: string }> => {
-    const subtype = detail?.yarnsubtype;
-    if (typeof subtype === "object" && subtype !== null) {
-      const countSizeArray = (subtype as any)?.countSize;
-      if (Array.isArray(countSizeArray)) {
-        return countSizeArray
-          .map((entry: unknown) => {
-            if (!entry) return null;
-            const id = extractIdFromValue(entry);
-            if (!id) return null;
-            if (typeof entry === "string") {
-              return { id, name: entry };
-            }
-            if (typeof entry === "object") {
-              const entryObj = entry as Record<string, unknown>;
-              const name =
-                typeof entryObj.name === "string" ? entryObj.name :
-                typeof entryObj.label === "string" ? entryObj.label :
-                undefined;
-              return { id, name: name || id };
-            }
-            return null;
-          })
-          .filter((value): value is { id: string; name: string } => Boolean(value));
+  /** Normalize a single countSize array (from yarnsubtype.countSize or detail.countSize) to { id, name }[]. */
+  const normalizeCountSizeArray = useCallback(
+    (countSizeArray: unknown[]): Array<{ id: string; name: string }> => {
+      if (!Array.isArray(countSizeArray)) return [];
+      return countSizeArray
+        .map((entry: unknown) => {
+          if (!entry) return null;
+          const id = extractIdFromValue(entry);
+          if (!id) return null;
+          if (typeof entry === "string") return { id, name: entry };
+          if (typeof entry === "object") {
+            const entryObj = entry as Record<string, unknown>;
+            const name =
+              typeof entryObj.name === "string"
+                ? entryObj.name
+                : typeof entryObj.label === "string"
+                  ? entryObj.label
+                  : undefined;
+            return { id, name: name || id };
+          }
+          return null;
+        })
+        .filter((value): value is { id: string; name: string } => Boolean(value));
+    },
+    [extractIdFromValue]
+  );
+
+  const extractCountSizeOptionsFromDetail = useCallback(
+    (detail: SupplierYarnDetail): Array<{ id: string; name: string }> => {
+      const subtype = detail?.yarnsubtype;
+      // Prefer yarnsubtype.countSize (standard location)
+      if (typeof subtype === "object" && subtype !== null) {
+        const fromSubtype = (subtype as any)?.countSize;
+        if (Array.isArray(fromSubtype) && fromSubtype.length > 0) {
+          return normalizeCountSizeArray(fromSubtype);
+        }
       }
-    }
-    return [];
-  }, [extractIdFromValue]);
+      // Fallback: some APIs send countSize at detail root
+      const fromRoot = (detail as any)?.countSize;
+      if (Array.isArray(fromRoot) && fromRoot.length > 0) {
+        return normalizeCountSizeArray(fromRoot);
+      }
+      return [];
+    },
+    [normalizeCountSizeArray]
+  );
 
   // Build supplier yarn options from supplier yarn details
   const buildSupplierYarnOptions = useCallback((): SupplierYarnOption[] => {
@@ -255,6 +282,19 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
     return options;
   }, [extractIdFromValue]);
+
+  /** True if the given yarn name exactly matches one of the current supplier's yarn details (case-insensitive). */
+  const isYarnInSupplierData = useCallback(
+    (yarnName: string): boolean => {
+      if (!yarnName || !yarnName.trim()) return false;
+      const options = buildSupplierYarnOptions();
+      const search = yarnName.trim().toLowerCase();
+      return options.some(
+        (o) => o.displayName.trim().toLowerCase() === search
+      );
+    },
+    [buildSupplierYarnOptions]
+  );
 
   // Filter supplier yarn options based on query
   const filterSupplierYarnOptions = useCallback((query: string): SupplierYarnOption[] => {
@@ -725,6 +765,152 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     setAutocompleteStates(newStates);
   };
 
+  const handleDownloadYarnTemplate = () => {
+    try {
+      downloadYarnItemsTemplate();
+      toast.success("Template downloaded");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to download template");
+    }
+  };
+
+  const addItemsFromParsedRows = useCallback(
+    async (rows: ParsedYarnRow[]) => {
+      const options = buildSupplierYarnOptions();
+      const newItems: YarnPurchaseItem[] = [];
+
+      for (const r of rows) {
+        const baseAmount = r.rate * r.quantity;
+        const gstAmount = (baseAmount * r.gst) / 100;
+        const searchName = r.yarnName.trim().toLowerCase();
+        const match = options.find(
+          (o) => o.displayName.trim().toLowerCase() === searchName
+        );
+        let shadeCode = "";
+        let sizeCount = "";
+        let sizeCountName = "";
+        let yarnId = "";
+        let selectedYarnDetail: SupplierYarnDetail | undefined;
+        let selectedCatalog: YarnCatalog | undefined;
+        let notInSupplierData = true;
+
+        if (match) {
+          notInSupplierData = false;
+          shadeCode =
+            match.shadeCode ?? match.supplierDetail?.shadeNumber ?? "";
+          selectedYarnDetail = match.supplierDetail;
+          yarnId =
+            match.supplierDetail?.yarnCatalogId ||
+            extractIdFromValue(match.supplierDetail?.yarnCatalog) ||
+            "";
+
+          const countSizes = extractCountSizeOptionsFromDetail(
+            match.supplierDetail
+          );
+          if (countSizes.length > 0) {
+            sizeCount = countSizes[0].id;
+            sizeCountName = countSizes[0].name || countSizes[0].id;
+          } else {
+            // Same as selectYarnSuggestion: get count size from catalog when supplier detail has none
+            try {
+              const catalogResponse =
+                await yarnCatalogService.getYarnCatalogs({
+                  yarnName: r.yarnName.trim(),
+                  status: "active",
+                  limit: 20,
+                  page: 1,
+                });
+              const exactMatch = catalogResponse.results?.find(
+                (c) =>
+                  c.yarnName?.trim().toLowerCase() === r.yarnName.trim().toLowerCase()
+              );
+              if (exactMatch) {
+                selectedCatalog = exactMatch;
+                const catalogSizeId = extractIdFromValue(exactMatch.countSize);
+                if (catalogSizeId) {
+                  sizeCount = catalogSizeId;
+                  sizeCountName =
+                    (exactMatch.countSize as any)?.name ||
+                    (exactMatch.countSize as any)?.label ||
+                    catalogSizeId;
+                }
+              }
+            } catch {
+              // ignore catalog fetch errors
+            }
+          }
+        }
+
+        newItems.push({
+          id: `excel-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          yarnName: r.yarnName,
+          yarnId,
+          sizeCount,
+          sizeCountName,
+          shadeCode,
+          rate: r.rate,
+          qty: r.quantity,
+          estimatedDeliveryDate: r.estimatedDeliveryDate,
+          gst: r.gst,
+          subTotal: baseAmount + gstAmount,
+          selectedYarnDetail,
+          selectedCatalog,
+          notInSupplierData,
+        });
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        items: [...prev.items, ...newItems],
+      }));
+      setAutocompleteStates((prev) => {
+        const next = { ...prev };
+        newItems.forEach((item) => {
+          next[item.id] = {
+            query: item.yarnName,
+            suggestions: [],
+            showSuggestions: false,
+          };
+        });
+        return next;
+      });
+    },
+    [
+      buildSupplierYarnOptions,
+      extractCountSizeOptionsFromDetail,
+      extractIdFromValue,
+    ]
+  );
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!formData.supplierId) {
+      toast.error("Please select a supplier first");
+      return;
+    }
+    setIsImportingExcel(true);
+    try {
+      const { rows, errors } = await parseYarnItemsExcelFile(file);
+      if (errors.length) {
+        errors.forEach((msg) => toast.error(msg));
+      }
+      if (rows.length) {
+        await addItemsFromParsedRows(rows);
+        toast.success(`${rows.length} item(s) added from Excel`);
+      } else if (errors.length === 0) {
+        toast.error("No valid rows found in the file");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to import Excel");
+    } finally {
+      setIsImportingExcel(false);
+    }
+  };
+
   const updateItem = useCallback((itemId: string, updates: Partial<YarnPurchaseItem>) => {
     setFormData(prev => ({
       ...prev,
@@ -869,6 +1055,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       shadeCode: option.shadeCode || "",
       selectedYarnDetail: supplierDetail,
       selectedCatalog: matchedCatalog, // Store matched catalog for reference
+      notInSupplierData: false,
     };
 
     console.log("[PurchaseForm] selectYarnSuggestion resolved fields", {
@@ -1185,17 +1372,52 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
       {/* Purchase Items Table Section */}
       <div className="border-t pt-4">
-        <div className="flex justify-between items-center mb-3">
+        <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
           <h4 className="text-xs font-bold text-gray-800">Yarn Items</h4>
-          <button
-            type="button"
-            onClick={addItem}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
-            disabled={!formData.supplierId}
-          >
-            <i className="ri-add-line text-xs"></i>
-            Add Item
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleDownloadYarnTemplate}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              <i className="ri-file-excel-2-line text-xs text-green-600"></i>
+              Download Template
+            </button>
+            <button
+              type="button"
+              onClick={() => excelFileInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+              disabled={!formData.supplierId || isImportingExcel}
+            >
+              {isImportingExcel ? (
+                <>
+                  <span className="animate-spin inline-block h-3 w-3 border-2 border-gray-400 border-t-transparent rounded-full"></span>
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <i className="ri-file-upload-line text-xs"></i>
+                  Import Excel
+                </>
+              )}
+            </button>
+            <input
+              ref={excelFileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleExcelImport}
+            />
+            <button
+              type="button"
+              onClick={addItem}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              disabled={!formData.supplierId}
+            >
+              <i className="ri-add-line text-xs"></i>
+              Add Item
+            </button>
+          </div>
         </div>
 
         {!formData.supplierId && (
@@ -1214,15 +1436,37 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             </div>
             <h3 className="text-xs font-medium text-gray-900 mb-1">No Items Added</h3>
             <p className="text-[10px] text-gray-500 mb-3">Add yarn items to create a purchase order.</p>
-            <button
-              type="button"
-              onClick={addItem}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm mx-auto"
-              disabled={!formData.supplierId}
-            >
-              <i className="ri-add-line text-xs"></i>
-              Add First Item
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadYarnTemplate}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50"
+              >
+                <i className="ri-file-excel-2-line text-green-600"></i>
+                Download Template
+              </button>
+              <button
+                type="button"
+                onClick={() => excelFileInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                disabled={!formData.supplierId || isImportingExcel}
+              >
+                {isImportingExcel ? (
+                  <><span className="animate-spin inline-block h-3 w-3 border-2 border-gray-400 border-t-transparent rounded-full"></span> Importing...</>
+                ) : (
+                  <><i className="ri-file-upload-line"></i> Import Excel</>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={addItem}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+                disabled={!formData.supplierId}
+              >
+                <i className="ri-add-line text-xs"></i>
+                Add First Item
+              </button>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto" style={{ position: 'relative', overflow: 'visible' }}>
@@ -1266,12 +1510,23 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                     showSuggestions: false 
                   };
                   const availableCountSizes = getAvailableCountSizes(item);
+                  // Show "not in supplier data" when supplier is selected, item has yarn name, but it's not in supplier's yarn list
+                  const showNotInSupplierError =
+                    Boolean(formData.supplierId) &&
+                    Boolean((item.yarnName || "").trim()) &&
+                    !isYarnInSupplierData(item.yarnName || "");
 
                   return (
-                    <tr key={item.id} className="hover:bg-gray-50">
+                    <tr
+                      key={item.id}
+                      className={`hover:bg-gray-50 ${showNotInSupplierError ? "border-2 border-red-400 bg-red-50/50" : ""}`}
+                    >
                       {/* Yarn Name with Autocomplete */}
                       <td className="border border-gray-300 px-2 py-1.5" style={{ position: 'relative', overflow: 'visible' }}>
                         <div className="relative" ref={el => { autocompleteRefs.current[item.id] = el; }} style={{ position: 'relative', zIndex: 1 }}>
+                          {showNotInSupplierError && (
+                            <p className="text-[10px] text-red-600 font-medium mb-1">Not in supplier data</p>
+                          )}
                           <input
                             type="text"
                             value={autocompleteState.query !== undefined ? autocompleteState.query : (item.yarnName || "")}
