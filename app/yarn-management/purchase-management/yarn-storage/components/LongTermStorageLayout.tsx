@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "react-hot-toast";
+import * as XLSX from "xlsx";
 import JsBarcode from "jsbarcode";
 import BarcodeScanner from "./BarcodeScanner";
 import RackDetailsModal from "./RackDetailsModal";
@@ -729,6 +730,34 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     setShowPrintSettingsModal(true);
   };
 
+  // Export rack data to Excel (Code of Shelf, Shelf Number, Floor)
+  const handleDownloadRackExcel = () => {
+    if (racks.length === 0) {
+      toast.error("No rack data to export");
+      return;
+    }
+    try {
+      const rows = racks.map((r) => ({
+        "Code of Shelf": r.rackCode,
+        "Shelf Number": r.shelf ?? r.row,
+        Floor: r.column,
+        Barcode: r.barcode || "",
+        Status: r.status,
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Rack Data");
+      XLSX.writeFile(
+        wb,
+        `long_term_storage_racks_${new Date().toISOString().split("T")[0]}.xlsx`
+      );
+      toast.success("Rack data downloaded");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to download Excel");
+    }
+  };
+
   // Execute print with settings
   const executePrintWithSettings = async () => {
     setShowPrintSettingsModal(false);
@@ -823,6 +852,15 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                 <span>Maintenance</span>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={handleDownloadRackExcel}
+              className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+              title="Download rack data as Excel"
+            >
+              <i className="ri-file-excel-2-line me-1 text-green-600"></i>
+              Download Excel
+            </button>
             <button
               type="button"
               onClick={() => setShowPrintBarcodeModal(true)}

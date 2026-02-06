@@ -43,6 +43,12 @@ export interface YarnPurchaseItem {
   selectedCatalog?: YarnCatalog;
   /** Set when item was imported from Excel but yarn name is not in supplier data. */
   notInSupplierData?: boolean;
+  /** Raw input string for rate (allows typing "10." without losing decimal). */
+  displayRate?: string;
+  /** Raw input string for qty (allows typing decimals). */
+  displayQty?: string;
+  /** Raw input string for gst (allows typing decimals). */
+  displayGst?: string;
 }
 
 export interface PurchaseOrderData {
@@ -1653,25 +1659,25 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                         />
                       </td>
 
-                      {/* Rate */}
+                      {/* Rate - decimal allowed */}
                       <td className="border border-gray-300 px-2 py-1.5">
                         <input
                           type="text"
-                          value={item.rate || ""}
+                          value={item.displayRate !== undefined ? item.displayRate : (item.rate === 0 ? "" : String(item.rate))}
                           onChange={(e) => {
                             const value = e.target.value;
-                            // Allow only numbers and decimal point
                             if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                              const numValue = value === "" ? "" : parseFloat(value);
-                              updateItem(item.id, { rate: numValue === "" ? 0 : (isNaN(numValue) ? 0 : numValue) });
+                              const keepRate = value === "" || value === "." || value.endsWith(".");
+                              updateItem(item.id, {
+                                displayRate: value,
+                                rate: keepRate ? item.rate : (parseFloat(value) || 0),
+                              });
                             }
                           }}
-                          onBlur={(e) => {
-                            // Ensure valid number on blur
-                            const value = e.target.value;
-                            if (value && isNaN(parseFloat(value))) {
-                              updateItem(item.id, { rate: 0 });
-                            }
+                          onBlur={() => {
+                            const raw = item.displayRate ?? String(item.rate);
+                            const num = parseFloat(raw);
+                            updateItem(item.id, { rate: isNaN(num) ? 0 : num, displayRate: undefined });
                           }}
                           className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
                           placeholder="0.00"
@@ -1679,25 +1685,25 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                         />
                       </td>
 
-                      {/* Quantity */}
+                      {/* Quantity - decimal allowed */}
                       <td className="border border-gray-300 px-2 py-1.5">
                         <input
                           type="text"
-                          value={item.qty || ""}
+                          value={item.displayQty !== undefined ? item.displayQty : (item.qty === 0 ? "" : String(item.qty))}
                           onChange={(e) => {
                             const value = e.target.value;
-                            // Allow only numbers and decimal point
                             if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                              const numValue = value === "" ? "" : parseFloat(value);
-                              updateItem(item.id, { qty: numValue === "" ? 0 : (isNaN(numValue) ? 0 : numValue) });
+                              const keepQty = value === "" || value === "." || value.endsWith(".");
+                              updateItem(item.id, {
+                                displayQty: value,
+                                qty: keepQty ? item.qty : (parseFloat(value) || 0),
+                              });
                             }
                           }}
-                          onBlur={(e) => {
-                            // Ensure valid number on blur
-                            const value = e.target.value;
-                            if (value && isNaN(parseFloat(value))) {
-                              updateItem(item.id, { qty: 0 });
-                            }
+                          onBlur={() => {
+                            const raw = item.displayQty ?? String(item.qty);
+                            const num = parseFloat(raw);
+                            updateItem(item.id, { qty: isNaN(num) ? 0 : num, displayQty: undefined });
                           }}
                           className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
                           placeholder="0.00"
@@ -1716,31 +1722,32 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                         />
                       </td>
 
-                      {/* GST */}
+                      {/* GST - decimal allowed (0–100) */}
                       <td className="border border-gray-300 px-2 py-1.5">
                         <input
                           type="text"
-                          value={item.gst || ""}
+                          value={item.displayGst !== undefined ? item.displayGst : (item.gst === 0 ? "" : String(item.gst))}
                           onChange={(e) => {
                             const value = e.target.value;
-                            // Allow only numbers and decimal point
                             if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                              const numValue = value === "" ? "" : parseFloat(value);
-                              // Validate max 100 for GST
-                              if (numValue === "" || (!isNaN(numValue) && numValue >= 0 && numValue <= 100)) {
-                                updateItem(item.id, { gst: numValue === "" ? 0 : (isNaN(numValue) ? 0 : numValue) });
+                              const numValue = parseFloat(value);
+                              const inRange = value === "" || value === "." || value.endsWith(".") || (!isNaN(numValue) && numValue >= 0 && numValue <= 100);
+                              if (inRange) {
+                                const keepGst = value === "" || value === "." || value.endsWith(".");
+                                updateItem(item.id, {
+                                  displayGst: value,
+                                  gst: keepGst ? item.gst : (isNaN(numValue) ? 0 : numValue),
+                                });
                               }
                             }
                           }}
-                          onBlur={(e) => {
-                            // Ensure valid number on blur and enforce max 100
-                            const value = e.target.value;
-                            const numValue = parseFloat(value);
-                            if (value && isNaN(numValue)) {
-                              updateItem(item.id, { gst: 0 });
-                            } else if (!isNaN(numValue) && numValue > 100) {
-                              updateItem(item.id, { gst: 100 });
-                            }
+                          onBlur={() => {
+                            const raw = item.displayGst ?? String(item.gst);
+                            const num = parseFloat(raw);
+                            let gst = isNaN(num) ? 0 : num;
+                            if (gst > 100) gst = 100;
+                            if (gst < 0) gst = 0;
+                            updateItem(item.id, { gst, displayGst: undefined });
                           }}
                           className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
                           placeholder="0.00"
