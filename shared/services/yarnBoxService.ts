@@ -19,7 +19,9 @@ export interface YarnBox {
   shadeCode?: string;
   /** Supplier id for tear-weight lookup (from backend generate-by-box response). */
   supplierId?: string;
-  supplier?: { _id?: string; id?: string; brandName?: string };
+  /** Display name (from API or supplier.brandName). */
+  supplierName?: string;
+  supplier?: { _id?: string; id?: string; brandName?: string; name?: string };
   orderQty?: number;
   lotNumber?: string;
   boxWeight?: number;

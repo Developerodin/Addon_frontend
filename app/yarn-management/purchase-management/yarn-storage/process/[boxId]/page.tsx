@@ -398,6 +398,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         conesToPrint.map(cone => ({
           barcode: cone.barcode,
           yarnName: box.yarnName,
+          supplierName: box.supplierName ?? box.supplier?.brandName ?? box.supplier?.name ?? undefined,
           poNumber: box.poNumber,
           lotNumber: box.lotNumber,
           shadeCode: box.shadeCode,

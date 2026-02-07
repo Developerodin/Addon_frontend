@@ -716,6 +716,7 @@ export const generateZPLCone = (
   barcodeValue: string,
   options: {
     yarnName?: string;
+    supplierName?: string;
     poNumber?: string;
     lotNumber?: string;
     shadeCode?: string;
@@ -731,6 +732,7 @@ export const generateZPLCone = (
 ): string => {
   const { 
     yarnName, 
+    supplierName,
     poNumber, 
     lotNumber, 
     shadeCode, 
@@ -792,6 +794,15 @@ export const generateZPLCone = (
     for (const line of nameLines) {
       zpl += `^FO${xPos},${yPos}^A0N,${yarnNameFontH},${yarnNameFontH}^FD${line}^FS\n`;
       yPos += lineHeight;
+    }
+  }
+
+  // Supplier (one line; wrap if very long)
+  if (supplierName) {
+    const supplierLines = wrapText(`Supplier: ${supplierName}`, maxYarnCharsPerLine);
+    for (const line of supplierLines) {
+      zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FD${line}^FS\n`;
+      yPos += lineHeight - 1;
     }
   }
 
@@ -1346,6 +1357,7 @@ export const printCones = async (
   cones: Array<{
     barcode: string;
     yarnName?: string;
+    supplierName?: string;
     poNumber?: string;
     lotNumber?: string;
     shadeCode?: string;
@@ -1419,6 +1431,7 @@ export const printCones = async (
           // Generate cone ZPL with offset and dimensions
           const coneZpl = generateZPLCone(cone.barcode, {
             yarnName: cone.yarnName,
+            supplierName: cone.supplierName,
             poNumber: cone.poNumber,
             lotNumber: cone.lotNumber,
             shadeCode: cone.shadeCode,
@@ -1461,6 +1474,7 @@ export const printCones = async (
       const labels = cones.map(cone =>
         generateZPLCone(cone.barcode, {
           yarnName: cone.yarnName,
+          supplierName: cone.supplierName,
           poNumber: cone.poNumber,
           lotNumber: cone.lotNumber,
           shadeCode: cone.shadeCode,
