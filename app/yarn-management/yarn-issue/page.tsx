@@ -291,10 +291,15 @@ const getAccessToken = (): string | null => {
   }
 };
 
+const ORDERS_PAGE_SIZE = 10;
+
 const YarnIssuePage = () => {
   const { hasSubPermission, isLoading } = useNavigation();
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersTotalPages, setOrdersTotalPages] = useState(1);
+  const [ordersTotalResults, setOrdersTotalResults] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
@@ -401,14 +406,14 @@ const YarnIssuePage = () => {
     fetchTransactions();
   }, [hasPermission, showActivityLogPanel, startDate, endDate]);
 
-  // Fetch production orders
+  // Fetch production orders (paginated)
   useEffect(() => {
     const fetchOrders = async () => {
       setOrdersLoading(true);
       try {
         const token = getAccessToken();
         const response = await fetch(
-          `${API_BASE_URL}/production/orders?page=1&limit=10&sortBy=createdAt&populate=articles`,
+          `${API_BASE_URL}/production/orders?page=${ordersPage}&limit=${ORDERS_PAGE_SIZE}&sortBy=createdAt&populate=articles`,
           {
             headers: {
               "Content-Type": "application/json",
@@ -423,14 +428,17 @@ const YarnIssuePage = () => {
 
         const data = await response.json();
         const apiOrders: ApiProductionOrder[] = data.results || [];
+        const total = data.totalResults ?? data.total ?? apiOrders.length;
+        setOrdersTotalResults(total);
+        setOrdersTotalPages(
+          data.totalPages ?? Math.max(1, Math.ceil(total / ORDERS_PAGE_SIZE))
+        );
 
         // Transform API orders to match our interface
         // Preserve existing BOM data if orders are being refetched
         setOrders((prevOrders) => {
           const transformedOrders: ProductionOrder[] = apiOrders.map((order) => {
-            // Find existing order to preserve BOM and styleCode
             const existingOrder = prevOrders.find((o) => o.id === order.id);
-            
             return {
               id: order.id,
               orderNumber: order.orderNumber,
@@ -439,11 +447,10 @@ const YarnIssuePage = () => {
               styleCode: existingOrder?.styleCode || "",
               scheduledDate: order.createdAt || new Date().toISOString(),
               notes: order.orderNote,
-              bom: existingOrder?.bom || [], // Preserve existing BOM
+              bom: existingOrder?.bom || [],
               articles: order.articles || [],
             };
           });
-          
           return transformedOrders;
         });
       } catch (error) {
@@ -457,7 +464,7 @@ const YarnIssuePage = () => {
     if (hasPermission) {
       fetchOrders();
     }
-  }, [hasPermission]);
+  }, [hasPermission, ordersPage]);
 
   // Fetch product details for a single article
   const fetchArticleBOM = async (
@@ -1247,6 +1254,63 @@ const YarnIssuePage = () => {
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+              {ordersTotalPages > 1 && (
+                <div className="flex items-center justify-between gap-2 mt-2 px-1">
+                  <p className="text-[10px] text-gray-500">
+                    {ordersTotalResults > 0
+                      ? `Showing ${(ordersPage - 1) * ORDERS_PAGE_SIZE + 1}–${Math.min(ordersPage * ORDERS_PAGE_SIZE, ordersTotalResults)} of ${ordersTotalResults}`
+                      : "No orders"}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOrderId(null);
+                        setOrdersPage((p) => Math.max(1, p - 1));
+                      }}
+                      disabled={ordersPage <= 1}
+                      className="px-2 py-1 text-[11px] font-bold text-gray-600 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 rounded hover:bg-gray-50 disabled:hover:bg-transparent transition-colors"
+                    >
+                      Prev
+                    </button>
+                    {Array.from({ length: Math.min(5, ordersTotalPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (ordersTotalPages <= 5) pageNum = i + 1;
+                      else if (ordersPage <= 3) pageNum = i + 1;
+                      else if (ordersPage >= ordersTotalPages - 2) pageNum = ordersTotalPages - 4 + i;
+                      else pageNum = ordersPage - 2 + i;
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => {
+                            setSelectedOrderId(null);
+                            setOrdersPage(pageNum);
+                          }}
+                          className={`min-w-[28px] px-2 py-1 text-[11px] font-bold rounded border transition-colors ${
+                            ordersPage === pageNum
+                              ? "bg-purple-600 text-white border-purple-600"
+                              : "text-gray-600 border-gray-200 hover:bg-gray-100"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOrderId(null);
+                        setOrdersPage((p) => Math.min(ordersTotalPages, p + 1));
+                      }}
+                      disabled={ordersPage >= ordersTotalPages}
+                      className="px-2 py-1 text-[11px] font-bold text-gray-600 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 rounded hover:bg-gray-50 disabled:hover:bg-transparent transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
