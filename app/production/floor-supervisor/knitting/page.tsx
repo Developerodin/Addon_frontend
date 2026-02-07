@@ -134,16 +134,15 @@ const KnittingFloorSupervisorPage = () => {
   const handleUpdateOrder = (order: ProductionOrder) => {
     setSelectedOrder(order);
     setActiveUpdateTabIndex(0);
-    // Initialize update data with current values
+    // Initialize update data with current values; M4 input starts empty (user enters increment)
     const initialData: {[key: string]: {completedQuantity: number, remarks: string, m4Quantity: number}} = {};
     order.articles.forEach(article => {
       const articleId = article.id || article._id;
       if (articleId) {
-        // Initialize with 0 for completed quantity
         initialData[articleId] = {
           completedQuantity: 0,
           remarks: article.remarks || '',
-          m4Quantity: article.floorQuantities?.knitting?.m4Quantity || 0
+          m4Quantity: 0  // input empty; we send previous + this value to backend
         };
       }
     });
@@ -283,17 +282,16 @@ const KnittingFloorSupervisorPage = () => {
         if (!articleId) return null;
         
         const update = updateData[articleId];
-        const knittingCompletedQuantity = article.floorQuantities?.knitting?.completed || 0;
-        const knittingTransferredQuantity = article.floorQuantities?.knitting?.transferred || 0;
-        const currentRemarks = article.remarks || '';
+        if (!update) return null;
         const currentM4Quantity = article.floorQuantities?.knitting?.m4Quantity || 0;
-        
-      
-          const progressData = {
-            completedQuantity: update.completedQuantity,
-            remarks: update.remarks,
-            m4Quantity: update.m4Quantity
-          };
+        // Send previous M4 + new input combined to backend
+        const m4QuantityToSend = currentM4Quantity + (update.m4Quantity ?? 0);
+
+        const progressData = {
+          completedQuantity: update.completedQuantity,
+          remarks: update.remarks,
+          m4Quantity: m4QuantityToSend
+        };
           
           try {
             const response = await productionService.updateArticleProgress(
@@ -902,7 +900,8 @@ const KnittingFloorSupervisorPage = () => {
                       <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Transferred</th>
                       <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Remaining</th>
                       <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-yellow-50">Knitting Completed *</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-red-50">M4 Defects</th>
+                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-red-50">M4 Defect (Current)</th>
+                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-red-50">M4 Defects (Add)</th>
                       <th className="px-2 py-1.5 text-center font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
                     </tr>
                   </thead>
@@ -914,8 +913,9 @@ const KnittingFloorSupervisorPage = () => {
                       const currentUpdateData = updateData[articleId] || { 
                         completedQuantity: 0, 
                         remarks: article.remarks || '',
-                        m4Quantity: article.floorQuantities?.knitting?.m4Quantity || 0
+                        m4Quantity: 0
                       };
+                      const currentM4FromArticle = article.floorQuantities?.knitting?.m4Quantity || 0;
                       
                       const plannedQty = article.plannedQuantity || 0;
                       const receivedQty = article.floorQuantities?.knitting?.received || 0;
@@ -947,11 +947,15 @@ const KnittingFloorSupervisorPage = () => {
                               )}
                             </div>
                           </td>
+                          <td className="px-2 py-1.5 text-center border-r border-gray-300 bg-red-50 text-red-700 font-medium">
+                            {currentM4FromArticle.toLocaleString()}
+                          </td>
                           <td className="px-2 py-1.5 border-r border-gray-300 bg-red-50">
                             <NumericInput
                               className="py-1 text-xs h-7 border-red-300 focus:border-red-500"
                               value={currentUpdateData.m4Quantity}
                               onChange={(value) => handleM4QuantityChange(articleId, value)}
+                              placeholder="0"
                             />
                           </td>
                           <td className="px-2 py-1.5">
