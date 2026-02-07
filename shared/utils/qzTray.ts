@@ -746,6 +746,27 @@ export const generateZPLCone = (
   
   const labelMargin = 20;
   const contentWidth = labelWidth - (labelMargin * 2);
+  const yarnNameFontH = detailsFontSize + 2;
+  const lineHeight = yarnNameFontH + 3;
+
+  /** Wrap long yarn name into lines (break at space when possible). Max ~26 chars per line for small labels. */
+  const wrapText = (text: string, maxCharsPerLine: number): string[] => {
+    if (!text || text.length <= maxCharsPerLine) return text ? [text] : [];
+    const lines: string[] = [];
+    let remaining = text.trim();
+    while (remaining.length > 0) {
+      if (remaining.length <= maxCharsPerLine) {
+        lines.push(remaining);
+        break;
+      }
+      const chunk = remaining.substring(0, maxCharsPerLine);
+      const lastSpace = chunk.lastIndexOf(' ');
+      const breakAt = lastSpace > 0 ? lastSpace : maxCharsPerLine;
+      lines.push(remaining.substring(0, breakAt).trim());
+      remaining = remaining.substring(breakAt).trim();
+    }
+    return lines;
+  };
 
   // For standalone printing, include ^XA/^XZ
   // For batched printing, these will be excluded
@@ -760,14 +781,18 @@ export const generateZPLCone = (
     zpl += `^CI28\n`;
   }
 
-  let yPos = 15 + yOffset;
+  // Tighter top: less space above content and before QR
+  let yPos = 5 + yOffset;
   const xPos = labelMargin + xOffset;
 
-  // Yarn Name
+  // Yarn Name (full name, multi-line wrap). ~26 chars fits most label widths.
+  const maxYarnCharsPerLine = labelWidth < 300 ? 22 : labelWidth < 450 ? 26 : 32;
   if (yarnName) {
-    const wrappedYarn = yarnName.length > 30 ? yarnName.substring(0, 27) + '..' : yarnName;
-    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize + 2},${detailsFontSize + 2}^FD${wrappedYarn}^FS\n`;
-    yPos += detailsFontSize + 7;
+    const nameLines = wrapText(yarnName, maxYarnCharsPerLine);
+    for (const line of nameLines) {
+      zpl += `^FO${xPos},${yPos}^A0N,${yarnNameFontH},${yarnNameFontH}^FD${line}^FS\n`;
+      yPos += lineHeight;
+    }
   }
 
   // Details
@@ -775,14 +800,14 @@ export const generateZPLCone = (
   yPos += detailsFontSize + 2;
   
   zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FDLot: ${lotNumber || '-'} | Shade: ${shadeCode || '-'}^FS\n`;
-  yPos += detailsFontSize + 5;
+  yPos += detailsFontSize + 3;
 
-  // Add spacing before barcode text
-  yPos += 8;
+  // Minimal spacing before barcode text
+  yPos += 4;
 
   // Barcode Text ABOVE QR Code (to prevent overlap)
   zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FD${barcodeValue}^FS\n`;
-  yPos += detailsFontSize + 8;
+  yPos += detailsFontSize + 4;
 
   // QR Code below the barcode text
   const qrWidth = qrCodeSize * 30;
