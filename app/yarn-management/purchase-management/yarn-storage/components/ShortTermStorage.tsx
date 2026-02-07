@@ -566,7 +566,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     const rowsPerPage = Math.ceil(printSettings.labelsPerPage / printSettings.columnsPerRow);
     const labelsPerSheet = rowsPerPage * printSettings.columnsPerRow;
     const pageCount = Math.ceil(racksReadyToPrint.length / labelsPerSheet);
-    const layoutInfo = printSettings.columnsPerRow === 2 ? `${rowsPerPage} rows × 2 columns` : `${printSettings.labelsPerPage} rows × 1 column`;
+    const layoutInfo = `${rowsPerPage} rows × ${printSettings.columnsPerRow} column(s)`;
     const toastId = toast.loading(`Printing ${racksReadyToPrint.length} rack(s) on ${pageCount} page(s) (${layoutInfo})...`);
 
     try {
@@ -1483,6 +1483,8 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                     >
                       <option value={1}>1 Column (Full Width)</option>
                       <option value={2}>2 Columns (Side by Side)</option>
+                      <option value={3}>3 Columns</option>
+                      <option value={4}>4 Columns</option>
                     </select>
                   </div>
 
@@ -1501,6 +1503,8 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                       <option value={4}>4 Labels (Recommended)</option>
                       <option value={6}>6 Labels</option>
                       <option value={8}>8 Labels</option>
+                      <option value={10}>10 Labels</option>
+                      <option value={12}>12 Labels</option>
                     </select>
                   </div>
                 </div>

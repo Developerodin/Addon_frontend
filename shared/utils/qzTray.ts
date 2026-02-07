@@ -1281,10 +1281,9 @@ export const printRacks = async (
             zpl += `^FO0,${y}^GB${paperWidth},1,1^FS\n`;
           }
           
-          // Vertical cut line (between columns, only if 2 columns)
-          if (columnsPerRow === 2) {
-            const x = labelWidth;
-            // Draw dashed line down the page
+          // Vertical cut lines (between columns)
+          for (let col = 1; col < columnsPerRow; col++) {
+            const x = col * labelWidth;
             zpl += `^FO${x},0^GB1,${paperHeight},1^FS\n`;
           }
         }
@@ -1419,9 +1418,9 @@ export const printCones = async (
             zpl += `^FO0,${y}^GB${paperWidth},1,1^FS\n`;
           }
           
-          // Vertical cut line (between columns, only if 2 columns)
-          if (columnsPerRow === 2) {
-            const x = labelWidth;
+          // Vertical cut lines (between columns)
+          for (let col = 1; col < columnsPerRow; col++) {
+            const x = col * labelWidth;
             zpl += `^FO${x},0^GB1,${paperHeight},1^FS\n`;
           }
         }
