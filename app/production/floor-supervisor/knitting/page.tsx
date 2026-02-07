@@ -939,6 +939,7 @@ const KnittingFloorSupervisorPage = () => {
                                 className="py-1 text-xs h-7"
                                 value={currentUpdateData.completedQuantity}
                                 onChange={(value) => handleQuantityChange(articleId, value)}
+                                allowDecimals
                               />
                               {isOverproduction && (
                                 <div className="text-orange-600 text-xs font-medium">
@@ -956,6 +957,7 @@ const KnittingFloorSupervisorPage = () => {
                               value={currentUpdateData.m4Quantity}
                               onChange={(value) => handleM4QuantityChange(articleId, value)}
                               placeholder="0"
+                              allowDecimals
                             />
                           </td>
                           <td className="px-2 py-1.5">

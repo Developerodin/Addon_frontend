@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 /**
  * Numeric input component that only allows numbers
@@ -19,16 +19,26 @@ export const NumericInput: React.FC<NumericInputProps> = ({
   className = '',
   ...props
 }) => {
+  // When typing decimals, keep incomplete input (e.g. "1." or ".") so the dot doesn't disappear
+  const [incomplete, setIncomplete] = useState<string | null>(null);
+
+  // Sync from parent when value changes externally (e.g. reset)
+  useEffect(() => {
+    if (incomplete !== null && value !== undefined) {
+      const fromParent = value === 0 ? '' : value.toString();
+      if (fromParent !== incomplete) setIncomplete(null);
+    }
+  }, [value]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
-    
-    // Allow empty string
+
     if (inputValue === '') {
+      setIncomplete(null);
       onChange(0);
       return;
     }
-    
-    // Create regex pattern based on allowed characters
+
     let pattern = '^[0-9]+';
     if (allowDecimals) {
       pattern = '^[0-9]*\\.?[0-9]*';
@@ -36,15 +46,29 @@ export const NumericInput: React.FC<NumericInputProps> = ({
     if (allowNegative) {
       pattern = '^-?' + pattern.substring(1);
     }
-    
     const regex = new RegExp(pattern);
-    
-    if (regex.test(inputValue)) {
-      const numericValue = parseFloat(inputValue);
-      if (!isNaN(numericValue)) {
-        onChange(numericValue);
-      }
+
+    if (!regex.test(inputValue)) return;
+
+    if (allowDecimals && (inputValue.endsWith('.') || inputValue === '.')) {
+      setIncomplete(inputValue);
+      const n = parseFloat(inputValue);
+      onChange(isNaN(n) ? 0 : n);
+      return;
     }
+
+    setIncomplete(null);
+    const numericValue = parseFloat(inputValue);
+    if (!isNaN(numericValue)) onChange(numericValue);
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (incomplete !== null) {
+      const n = parseFloat(incomplete);
+      if (!isNaN(n)) onChange(n);
+      setIncomplete(null);
+    }
+    props.onBlur?.(e);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -60,8 +84,8 @@ export const NumericInput: React.FC<NumericInputProps> = ({
     
     // Ensure that it is a number and stop the keypress
     if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
-      // Allow decimal point if decimals are allowed
-      if (allowDecimals && e.keyCode === 190 && !e.target.value.includes('.')) {
+      // Allow decimal point if decimals are allowed (190 = period, 110 = numpad decimal)
+      if (allowDecimals && (e.keyCode === 190 || e.keyCode === 110) && !e.target.value.includes('.')) {
         return;
       }
       // Allow negative sign if negative numbers are allowed
@@ -72,15 +96,20 @@ export const NumericInput: React.FC<NumericInputProps> = ({
     }
   };
 
+  const displayValue = incomplete !== null
+    ? incomplete
+    : (value === undefined || value === 0 ? '' : value.toString());
+
   return (
     <input
       {...props}
       type="text"
       className={`form-control ${className}`}
-      value={value === undefined || value === 0 ? '' : value.toString()}
+      value={displayValue}
       onChange={handleChange}
       onKeyDown={handleKeyDown}
-      inputMode="numeric"
+      onBlur={handleBlur}
+      inputMode={allowDecimals ? 'decimal' : 'numeric'}
       pattern="[0-9]*"
     />
   );

@@ -894,6 +894,7 @@ const BoardingFloorSupervisorPage = () => {
                                 }}
                                 placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${remainingQty}`}
                                 disabled={isFullyTransferred}
+                                allowDecimals
                               />
                               {isFullyTransferred ? (
                                 <div className="text-green-600 text-xs font-medium">✓ All transferred</div>

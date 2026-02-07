@@ -888,6 +888,7 @@ const EditOrderContent = () => {
                                 value={article.plannedQuantity}
                                 onChange={(value) => handleArticleChange(index, 'plannedQuantity', value)}
                                 placeholder="0"
+                                allowDecimals
                               />
                               {errors[`article_${index}_quantity`] && (
                                 <div className="text-danger text-xs mt-1 truncate">{errors[`article_${index}_quantity`]}</div>

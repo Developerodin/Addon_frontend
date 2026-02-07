@@ -933,6 +933,7 @@ const WarehouseFloorSupervisorPage = () => {
                                 }}
                                 placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${receivedQty}`}
                                 disabled={isFullyTransferred}
+                                allowDecimals
                               />
                               {isFullyTransferred ? (
                                 <div className="text-green-600 text-xs font-medium">✓ All transferred</div>

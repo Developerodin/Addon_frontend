@@ -1258,6 +1258,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                                 }}
                                 placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${remaining}`}
                                 disabled={isFullyTransferred}
+                                allowDecimals
                               />
                               {isFullyTransferred ? (
                                 <div className="text-xs text-green-600 mt-1 font-medium">
@@ -1304,6 +1305,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                             className="border-yellow-300 focus:border-yellow-500"
                             value={currentUpdateData.m2Quantity}
                             onChange={(value) => handleM2QuantityChange(articleId, value)}
+                            allowDecimals
                           />
                           <small className="text-yellow-600">To be reviewed</small>
                           
@@ -1368,6 +1370,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                             className="border-orange-300 focus:border-orange-500"
                             value={currentUpdateData.m3Quantity}
                             onChange={(value) => handleM3QuantityChange(articleId, value)}
+                            allowDecimals
                           />
                           <small className="text-orange-600">Can be fixed</small>
                         </div>
@@ -1378,6 +1381,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                             className="border-red-300 focus:border-red-500"
                             value={currentUpdateData.m4Quantity}
                             onChange={(value) => handleM4QuantityChange(articleId, value)}
+                            allowDecimals
                           />
                           <small className="text-red-600">Needs significant repair</small>
                         </div>
@@ -1401,6 +1405,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                                   max={currentUpdateData.m2Quantity}
                                   value={shiftInputs[articleId]?.m2ToM1 || 0}
                                   onChange={(value) => handleShiftInputChange(articleId, 'm2ToM1', value)}
+                                  allowDecimals
                                 />
                                 <button
                                   type="button"
@@ -1438,6 +1443,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                                   max={currentUpdateData.m2Quantity}
                                   value={shiftInputs[articleId]?.m2ToM3 || 0}
                                   onChange={(value) => handleShiftInputChange(articleId, 'm2ToM3', value)}
+                                  allowDecimals
                                 />
                                 <button
                                   type="button"
@@ -1475,6 +1481,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                                   max={currentUpdateData.m2Quantity}
                                   value={shiftInputs[articleId]?.m2ToM4 || 0}
                                   onChange={(value) => handleShiftInputChange(articleId, 'm2ToM4', value)}
+                                  allowDecimals
                                 />
                                 <button
                                   type="button"
@@ -1515,6 +1522,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                                   max={currentUpdateData.m3Quantity}
                                   value={shiftInputs[articleId]?.m3ToM2 || 0}
                                   onChange={(value) => handleShiftInputChange(articleId, 'm3ToM2', value)}
+                                  allowDecimals
                                 />
                                 <button
                                   type="button"
@@ -1560,6 +1568,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                                   max={currentUpdateData.m4Quantity}
                                   value={shiftInputs[articleId]?.m4ToM3 || 0}
                                   onChange={(value) => handleShiftInputChange(articleId, 'm4ToM3', value)}
+                                  allowDecimals
                                 />
                                 <button
                                   type="button"
