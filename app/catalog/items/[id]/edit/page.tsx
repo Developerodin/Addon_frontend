@@ -12,6 +12,8 @@ interface StyleCodeItem {
   styleCode: string;
   eanCode: string;
   mrp: number;
+  brand?: string;
+  pack?: string;
 }
 
 interface Product {
@@ -124,7 +126,7 @@ const EditProductPage = () => {
     knittingCode: '',
     vendorCode: '',
     factoryCode: '',
-    styleCodes: [{ styleCode: '', eanCode: '', mrp: 0 }],
+    styleCodes: [{ styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }],
     description: '',
     category: { id: '', name: '' },
     attributes: {},
@@ -174,18 +176,22 @@ const EditProductPage = () => {
           product.styleCodes = product.styleCodes.map((sc: any) => ({
             styleCode: sc.styleCode || '',
             eanCode: sc.eanCode || '',
-            mrp: sc.mrp || 0
+            mrp: sc.mrp || 0,
+            brand: sc.brand || '',
+            pack: sc.pack || ''
           }));
         } else if (product.styleCode || product.eanCode) {
           // Old format: convert to array
           product.styleCodes = [{
             styleCode: product.styleCode || '',
             eanCode: product.eanCode || '',
-            mrp: 0 // Default MRP for old entries
+            mrp: 0,
+            brand: '',
+            pack: ''
           }];
         } else {
           // No style codes: initialize with empty entry
-          product.styleCodes = [{ styleCode: '', eanCode: '', mrp: 0 }];
+          product.styleCodes = [{ styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }];
         }
         
         // Defensive: ensure attributes, bom, processes are arrays/objects
@@ -461,9 +467,9 @@ const EditProductPage = () => {
     });
   };
 
-  const handleStyleCodeChange = (index: number, field: 'styleCode' | 'eanCode' | 'mrp', value: string | number) => {
+  const handleStyleCodeChange = (index: number, field: 'styleCode' | 'eanCode' | 'mrp' | 'brand' | 'pack', value: string | number) => {
     setFormData(prev => {
-      const newStyleCodes = [...(prev.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0 }])];
+      const newStyleCodes = [...(prev.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }])];
       newStyleCodes[index] = {
         ...newStyleCodes[index],
         [field]: field === 'mrp' ? (typeof value === 'string' ? parseFloat(value) || 0 : value) : value
@@ -475,7 +481,7 @@ const EditProductPage = () => {
   const addStyleCode = () => {
     setFormData(prev => ({
       ...prev,
-      styleCodes: [...(prev.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0 }]), { styleCode: '', eanCode: '', mrp: 0 }]
+      styleCodes: [...(prev.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }]), { styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }]
     }));
   };
 
@@ -653,7 +659,9 @@ const EditProductPage = () => {
         .map(sc => ({
           styleCode: sc.styleCode ? sc.styleCode.trim() : '',
           eanCode: sc.eanCode ? sc.eanCode.trim() : '',
-          mrp: sc.mrp !== null && sc.mrp !== undefined && !isNaN(sc.mrp) ? Number(sc.mrp) : 0
+          mrp: sc.mrp !== null && sc.mrp !== undefined && !isNaN(sc.mrp) ? Number(sc.mrp) : 0,
+          brand: sc.brand ? sc.brand.trim() : undefined,
+          pack: sc.pack ? sc.pack.trim() : undefined
         }))
         .filter(sc => sc.styleCode !== '' && sc.eanCode !== '' && sc.mrp >= 0);
 
@@ -729,7 +737,10 @@ const EditProductPage = () => {
         allowedAttributes = formData.attributes;
       }
       
-      productData.attributes = allowedAttributes;
+      // Strip Brand and Pack from product-level attributes (they live in style codes now)
+      productData.attributes = Object.fromEntries(
+        Object.entries(allowedAttributes).filter(([key]) => !['brand', 'pack'].includes(key.toLowerCase()))
+      );
 
       // BOM and Processes for production users and non-design/non-final/non-production users
       if (isProduction || (!isDesign && !isFinal && !isProduction)) {
@@ -854,7 +865,10 @@ const EditProductPage = () => {
                             </button>
                           </div>
                           <div className="space-y-4">
-                            {(formData.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0 }]).map((styleCodeItem, index) => (
+                            {(formData.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }]).map((styleCodeItem, index) => {
+                              const brandOptions = attributeCategories.find(c => c.name.toLowerCase() === 'brand')?.optionValues ?? [];
+                              const packOptions = attributeCategories.find(c => c.name.toLowerCase() === 'pack')?.optionValues ?? [];
+                              return (
                               <div key={index} className="border border-gray-200 rounded-lg p-4">
                                 <div className="flex justify-between items-center mb-3">
                                   <h4 className="font-medium text-sm">Style Code Entry {index + 1}</h4>
@@ -868,7 +882,7 @@ const EditProductPage = () => {
                                     </button>
                                   )}
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                   <div>
                                     <label className="form-label">Style Code *</label>
                                     <input
@@ -901,9 +915,35 @@ const EditProductPage = () => {
                                       required
                                     />
                                   </div>
+                                  <div>
+                                    <label className="form-label">Brand</label>
+                                    <select
+                                      className="form-control"
+                                      value={styleCodeItem.brand ?? ''}
+                                      onChange={(e) => handleStyleCodeChange(index, 'brand', e.target.value)}
+                                    >
+                                      <option value="">Select Brand</option>
+                                      {brandOptions.map((opt) => (
+                                        <option key={opt._id} value={opt.name}>{opt.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="form-label">Pack</label>
+                                    <select
+                                      className="form-control"
+                                      value={styleCodeItem.pack ?? ''}
+                                      onChange={(e) => handleStyleCodeChange(index, 'pack', e.target.value)}
+                                    >
+                                      <option value="">Select Pack</option>
+                                      {packOptions.map((opt) => (
+                                        <option key={opt._id} value={opt.name}>{opt.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
                                 </div>
                               </div>
-                            ))}
+                            );})}
                           </div>
                         </div>
                         <div className="md:col-span-2">
@@ -1017,7 +1057,10 @@ const EditProductPage = () => {
                                 </button>
                               </div>
                               <div className="space-y-4">
-                                {(formData.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0 }]).map((styleCodeItem, index) => (
+                                {(formData.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }]).map((styleCodeItem, index) => {
+                                  const brandOptions = attributeCategories.find(c => c.name.toLowerCase() === 'brand')?.optionValues ?? [];
+                                  const packOptions = attributeCategories.find(c => c.name.toLowerCase() === 'pack')?.optionValues ?? [];
+                                  return (
                                   <div key={index} className="border border-gray-200 rounded-lg p-4">
                                     <div className="flex justify-between items-center mb-3">
                                       <h4 className="font-medium text-sm">Style Code Entry {index + 1}</h4>
@@ -1031,7 +1074,7 @@ const EditProductPage = () => {
                                         </button>
                                       )}
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                       <div>
                                         <label className="form-label">Style Code *</label>
                                         <input
@@ -1064,9 +1107,35 @@ const EditProductPage = () => {
                                           required
                                         />
                                       </div>
+                                      <div>
+                                        <label className="form-label">Brand</label>
+                                        <select
+                                          className="form-control"
+                                          value={styleCodeItem.brand ?? ''}
+                                          onChange={(e) => handleStyleCodeChange(index, 'brand', e.target.value)}
+                                        >
+                                          <option value="">Select Brand</option>
+                                          {brandOptions.map((opt) => (
+                                            <option key={opt._id} value={opt.name}>{opt.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="form-label">Pack</label>
+                                        <select
+                                          className="form-control"
+                                          value={styleCodeItem.pack ?? ''}
+                                          onChange={(e) => handleStyleCodeChange(index, 'pack', e.target.value)}
+                                        >
+                                          <option value="">Select Pack</option>
+                                          {packOptions.map((opt) => (
+                                            <option key={opt._id} value={opt.name}>{opt.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
                                     </div>
                                   </div>
-                                ))}
+                                );})}
                               </div>
                             </div>
                             <div className="md:col-span-2">
@@ -1210,19 +1279,18 @@ const EditProductPage = () => {
                     ) : (
                       attributeCategories
                         .filter((category) => {
+                          // Brand and Pack are in Style Code section, not in Attributes form
+                          const nameLower = category.name.toLowerCase();
+                          if (nameLower === 'brand' || nameLower === 'pack') return false;
                           if (isProduction) {
-                            // Production user: Only show "needles" attribute
-                            return category.name.toLowerCase() === 'needles';
+                            return nameLower === 'needles';
                           }
                           if (isFinal) {
-                            // Final user: Only show Brand, Age group, MRP
                             return shouldShowAttributeForFinal(category.name, isFinal);
                           }
-                          // Design user: Show allowed attributes
                           if (isDesign) {
                             return shouldShowAttribute(category.name, isDesign);
                           }
-                          // Other users: Show all attributes
                           return true;
                         })
                         .map((category) => {

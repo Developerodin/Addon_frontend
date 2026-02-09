@@ -133,10 +133,12 @@ const AddProductPage = () => {
     styleCode: string;
     eanCode: string;
     mrp: number;
+    brand?: string;
+    pack?: string;
   }
 
   const [styleCodes, setStyleCodes] = useState<StyleCodeItem[]>([
-    { styleCode: '', eanCode: '', mrp: 0 }
+    { styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }
   ]);
 
   // Add image state
@@ -377,10 +379,9 @@ const AddProductPage = () => {
   };
 
   // Handle style code changes
-  const handleStyleCodeChange = (index: number, field: 'styleCode' | 'eanCode' | 'mrp', value: string | number) => {
+  const handleStyleCodeChange = (index: number, field: 'styleCode' | 'eanCode' | 'mrp' | 'brand' | 'pack', value: string | number) => {
     const newStyleCodes = [...styleCodes];
     if (field === 'mrp') {
-      // Handle MRP: convert string to number, but keep as 0 if empty/invalid
       const numValue = typeof value === 'string' 
         ? (value.trim() === '' ? 0 : parseFloat(value)) 
         : value;
@@ -389,7 +390,6 @@ const AddProductPage = () => {
         mrp: isNaN(numValue) ? 0 : numValue
       };
     } else {
-      // Handle styleCode and eanCode: keep as string
       newStyleCodes[index] = {
         ...newStyleCodes[index],
         [field]: value
@@ -399,7 +399,7 @@ const AddProductPage = () => {
   };
 
   const handleAddStyleCode = () => {
-    setStyleCodes([...styleCodes, { styleCode: '', eanCode: '', mrp: 0 }]);
+    setStyleCodes([...styleCodes, { styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }]);
   };
 
   const handleRemoveStyleCode = (index: number) => {
@@ -515,7 +515,9 @@ const AddProductPage = () => {
         .map(sc => ({
           styleCode: sc.styleCode ? sc.styleCode.trim() : '',
           eanCode: sc.eanCode ? sc.eanCode.trim() : '',
-          mrp: sc.mrp !== null && sc.mrp !== undefined && !isNaN(sc.mrp) ? Number(sc.mrp) : 0
+          mrp: sc.mrp !== null && sc.mrp !== undefined && !isNaN(sc.mrp) ? Number(sc.mrp) : 0,
+          brand: sc.brand ? sc.brand.trim() : undefined,
+          pack: sc.pack ? sc.pack.trim() : undefined
         }))
         .filter(sc => sc.styleCode !== '' && sc.eanCode !== '' && sc.mrp >= 0);
 
@@ -575,7 +577,11 @@ const AddProductPage = () => {
         // Other users: All attributes
         allowedAttributes = attributeDefinitions;
       }
-      
+      // Brand and Pack are in style codes, not product-level attributes
+      allowedAttributes = allowedAttributes.filter(
+        attr => !['brand', 'pack'].includes(attr.name.toLowerCase())
+      );
+
       productData.attributes = Object.fromEntries(
         allowedAttributes
           .map(attr => [attr.name, formData[attr.name.toLowerCase()]])
@@ -802,7 +808,10 @@ const AddProductPage = () => {
                               </button>
                             </div>
                             <div className="space-y-4">
-                              {styleCodes.map((styleCodeItem, index) => (
+                              {styleCodes.map((styleCodeItem, index) => {
+                                const brandOptions = attributeDefinitions.find(a => a.name.toLowerCase() === 'brand')?.optionValues ?? [];
+                                const packOptions = attributeDefinitions.find(a => a.name.toLowerCase() === 'pack')?.optionValues ?? [];
+                                return (
                                 <div key={index} className="border border-gray-200 rounded-lg p-4">
                                   <div className="flex justify-between items-center mb-3">
                                     <h4 className="font-medium text-sm">Style Code Entry {index + 1}</h4>
@@ -816,7 +825,7 @@ const AddProductPage = () => {
                                       </button>
                                     )}
                                   </div>
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                     <div>
                                       <label className="form-label">Style Code *</label>
                                       <input
@@ -849,9 +858,35 @@ const AddProductPage = () => {
                                         required
                                       />
                                     </div>
+                                    <div>
+                                      <label className="form-label">Brand</label>
+                                      <select
+                                        className="form-control"
+                                        value={styleCodeItem.brand ?? ''}
+                                        onChange={(e) => handleStyleCodeChange(index, 'brand', e.target.value)}
+                                      >
+                                        <option value="">Select Brand</option>
+                                        {brandOptions.map((opt) => (
+                                          <option key={opt._id} value={opt.name}>{opt.name}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="form-label">Pack</label>
+                                      <select
+                                        className="form-control"
+                                        value={styleCodeItem.pack ?? ''}
+                                        onChange={(e) => handleStyleCodeChange(index, 'pack', e.target.value)}
+                                      >
+                                        <option value="">Select Pack</option>
+                                        {packOptions.map((opt) => (
+                                          <option key={opt._id} value={opt.name}>{opt.name}</option>
+                                        ))}
+                                      </select>
+                                    </div>
                                   </div>
                                 </div>
-                              ))}
+                              );})}
                             </div>
                           </div>
                           <div>
@@ -942,7 +977,10 @@ const AddProductPage = () => {
                                     </button>
                                   </div>
                                   <div className="space-y-4">
-                                    {styleCodes.map((styleCodeItem, index) => (
+                                    {styleCodes.map((styleCodeItem, index) => {
+                                      const brandOptions = attributeDefinitions.find(a => a.name.toLowerCase() === 'brand')?.optionValues ?? [];
+                                      const packOptions = attributeDefinitions.find(a => a.name.toLowerCase() === 'pack')?.optionValues ?? [];
+                                      return (
                                       <div key={index} className="border border-gray-200 rounded-lg p-4">
                                         <div className="flex justify-between items-center mb-3">
                                           <h4 className="font-medium text-sm">Style Code Entry {index + 1}</h4>
@@ -956,7 +994,7 @@ const AddProductPage = () => {
                                             </button>
                                           )}
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                           <div>
                                             <label className="form-label">Style Code *</label>
                                             <input
@@ -989,9 +1027,35 @@ const AddProductPage = () => {
                                               required
                                             />
                                           </div>
+                                          <div>
+                                            <label className="form-label">Brand</label>
+                                            <select
+                                              className="form-control"
+                                              value={styleCodeItem.brand ?? ''}
+                                              onChange={(e) => handleStyleCodeChange(index, 'brand', e.target.value)}
+                                            >
+                                              <option value="">Select Brand</option>
+                                              {brandOptions.map((opt) => (
+                                                <option key={opt._id} value={opt.name}>{opt.name}</option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                          <div>
+                                            <label className="form-label">Pack</label>
+                                            <select
+                                              className="form-control"
+                                              value={styleCodeItem.pack ?? ''}
+                                              onChange={(e) => handleStyleCodeChange(index, 'pack', e.target.value)}
+                                            >
+                                              <option value="">Select Pack</option>
+                                              {packOptions.map((opt) => (
+                                                <option key={opt._id} value={opt.name}>{opt.name}</option>
+                                              ))}
+                                            </select>
+                                          </div>
                                         </div>
                                       </div>
-                                    ))}
+                                    );})}
                                   </div>
                                 </div>
                                 <div>
@@ -1152,19 +1216,18 @@ const AddProductPage = () => {
                       <div className="grid grid-cols-2 gap-6">
                         {attributeDefinitions
                           .filter((attrDef) => {
+                            // Brand and Pack are in Style Code section, not in Attributes form
+                            const nameLower = attrDef.name.toLowerCase();
+                            if (nameLower === 'brand' || nameLower === 'pack') return false;
                             if (isProduction) {
-                              // Production user: Only show "needles" attribute
-                              return attrDef.name.toLowerCase() === 'needles';
+                              return nameLower === 'needles';
                             }
                             if (isFinal) {
-                              // Final user: Only show Brand, Age group, MRP
                               return shouldShowAttributeForFinal(attrDef.name, isFinal);
                             }
-                            // Design user: Show allowed attributes
                             if (isDesign) {
                               return shouldShowAttribute(attrDef.name, isDesign);
                             }
-                            // Other users: Show all attributes
                             return true;
                           })
                           .map((attrDef) => (
