@@ -2,6 +2,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
+import * as XLSX from "xlsx";
 import JsBarcode from "jsbarcode";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 import yarnConeService from "@/shared/services/yarnConeService";
@@ -533,6 +534,34 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     setShowPrintSettingsModal(true);
   };
 
+  // Export rack data to Excel (Code of Shelf, Shelf Number, Floor) - same as long-term
+  const handleDownloadRackExcel = () => {
+    if (racks.length === 0) {
+      toast.error("No rack data to export");
+      return;
+    }
+    try {
+      const rows = racks.map((r) => ({
+        "Code of Shelf": r.rackCode,
+        "Shelf Number": r.shelf ?? r.row,
+        Floor: r.column,
+        Barcode: r.barcode || "",
+        Status: r.status,
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Rack Data");
+      XLSX.writeFile(
+        wb,
+        `short_term_storage_racks_${new Date().toISOString().split("T")[0]}.xlsx`
+      );
+      toast.success("Rack data downloaded");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to download Excel");
+    }
+  };
+
   // Handle print all racks barcode
   const handlePrintAllRacks = () => {
     const racksToPrint = racks.filter((rack) => rack.barcode);
@@ -1050,6 +1079,15 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                 <span>Maintenance</span>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={handleDownloadRackExcel}
+              className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+              title="Download rack data as Excel"
+            >
+              <i className="ri-file-excel-2-line me-1 text-green-600"></i>
+              Download Excel
+            </button>
             <button
               type="button"
               onClick={() => setShowPrintBarcodeModal(true)}
