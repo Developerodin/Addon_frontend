@@ -25,6 +25,10 @@ export interface PackedBox {
   rackLocation?: RackLocation;
   storedDate?: string;
   status: 'QC_Pending' | 'QC_Approved' | 'Stored' | 'Issued';
+  /** PO number from yarn-box API (e.g. PO-2026-415) */
+  poNumber?: string;
+  /** Supplier name from yarn-box API (for barcode print) */
+  supplierName?: string;
 }
 
 export interface Cone {

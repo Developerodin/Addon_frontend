@@ -85,6 +85,8 @@ const BarcodePrintView: React.FC<BarcodePrintViewProps> = ({
                 <div class="barcode-code">${cone.coneBarcode}</div>
                 <div class="barcode-info">
                   ${box.yarnName}<br>
+                  ${box.poNumber ? `PO: ${box.poNumber}<br>` : ""}
+                  ${box.supplierName ? `Supplier: ${box.supplierName}<br>` : ""}
                   Weight: ${cone.weight.toFixed(2)} kg<br>
                   Box: ${box.boxBarcode}
                 </div>
@@ -132,6 +134,18 @@ const BarcodePrintView: React.FC<BarcodePrintViewProps> = ({
                 <span className="font-medium text-blue-900">Yarn:</span>{" "}
                 <span className="text-blue-700">{box.yarnName}</span>
               </div>
+              {box.poNumber && (
+                <div>
+                  <span className="font-medium text-blue-900">PO:</span>{" "}
+                  <span className="text-blue-700">{box.poNumber}</span>
+                </div>
+              )}
+              {box.supplierName && (
+                <div>
+                  <span className="font-medium text-blue-900">Supplier:</span>{" "}
+                  <span className="text-blue-700">{box.supplierName}</span>
+                </div>
+              )}
               <div>
                 <span className="font-medium text-blue-900">Total Cones:</span>{" "}
                 <span className="text-blue-700">{cones.length}</span>
@@ -161,6 +175,10 @@ const BarcodePrintView: React.FC<BarcodePrintViewProps> = ({
                     </div>
                     <div className="text-xs text-gray-600 space-y-1">
                       <div>{box.yarnName}</div>
+                      {box.poNumber && <div>PO: {box.poNumber}</div>}
+                      {box.supplierName && (
+                        <div>Supplier: {box.supplierName}</div>
+                      )}
                       <div>Weight: {cone.weight.toFixed(2)} kg</div>
                       <div className="text-gray-400">Box: {box.boxBarcode}</div>
                     </div>

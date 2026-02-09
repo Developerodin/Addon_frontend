@@ -617,6 +617,12 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
 
   const mapYarnBoxToPackedBox = useCallback((box: YarnBox): PackedBox => {
     const qcApproved = box.qcData?.status === "qc_approved";
+    const apiBox = box as YarnBox & { purchaseOrder?: { supplierName?: string } };
+    const supplierName =
+      box.supplier?.brandName ??
+      box.supplierName ??
+      apiBox.purchaseOrder?.supplierName ??
+      "";
 
     return {
       id: box._id || box.id || box.boxId || box.barcode,
@@ -631,6 +637,8 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
       rackLocation: undefined,
       storedDate: box.receivedDate,
       status: qcApproved ? "Stored" : "QC_Pending",
+      poNumber: box.poNumber,
+      supplierName: supplierName || undefined,
     };
   }, []);
 

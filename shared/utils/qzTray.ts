@@ -797,7 +797,10 @@ export const generateZPLCone = (
     }
   }
 
-  // Supplier (one line; wrap if very long)
+  // PO Number then Supplier (below PO)
+  zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FDPO: ${poNumber || '-'}^FS\n`;
+  yPos += detailsFontSize + 2;
+
   if (supplierName) {
     const supplierLines = wrapText(`Supplier: ${supplierName}`, maxYarnCharsPerLine);
     for (const line of supplierLines) {
@@ -806,10 +809,7 @@ export const generateZPLCone = (
     }
   }
 
-  // Details
-  zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FDPO: ${poNumber || '-'}^FS\n`;
-  yPos += detailsFontSize + 2;
-  
+  // Lot and Shade
   zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FDLot: ${lotNumber || '-'} | Shade: ${shadeCode || '-'}^FS\n`;
   yPos += detailsFontSize + 3;
 

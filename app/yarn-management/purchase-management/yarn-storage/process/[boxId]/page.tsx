@@ -11,6 +11,7 @@ import yarnConeService, {
   YarnCone,
 } from "@/shared/services/yarnConeService";
 import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
+import yarnBoxService from "@/shared/services/yarnBoxService";
 import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
 import { printCones } from "@/shared/utils/qzTray";
 
@@ -56,6 +57,12 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   // Cone selection state
   const [selectedCones, setSelectedCones] = useState<Set<string>>(new Set());
   const [showPrintSelectionModal, setShowPrintSelectionModal] = useState(false);
+
+  // Enriched box details (supplier/PO from yarn-boxes API when not in generate-cones response)
+  const [boxEnrichment, setBoxEnrichment] = useState<{
+    supplierName?: string;
+    poNumber?: string;
+  } | null>(null);
 
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
@@ -132,6 +139,46 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     }
   }, [buildConeInputs, router, storageKey]);
 
+  // Enrich box with supplier/PO from yarn-boxes API when not present (e.g. generate-cones API omits them)
+  useEffect(() => {
+    const box = result?.box;
+    if (!box) return;
+    const hasSupplier =
+      (box.supplierName ?? box.supplier?.brandName ?? box.supplier?.name)?.trim();
+    if (hasSupplier && box.poNumber?.trim()) return; // already have both
+
+    const barcode = box.barcode?.trim();
+    const boxId = boxIdParam?.trim();
+    if (!barcode && !boxId) return;
+
+    let cancelled = false;
+    const fetchEnrichment = async () => {
+      try {
+        const apiBox = barcode
+          ? await yarnBoxService.getYarnBoxByBarcode(barcode)
+          : await yarnBoxService.getYarnBoxById(boxId!);
+        if (cancelled) return;
+        const supplierName =
+          apiBox.supplier?.brandName ??
+          (apiBox as { supplierName?: string; purchaseOrder?: { supplierName?: string } })
+            .supplierName ??
+          (apiBox as { purchaseOrder?: { supplierName?: string } }).purchaseOrder
+            ?.supplierName ??
+          "";
+        setBoxEnrichment({
+          supplierName: supplierName || undefined,
+          poNumber: apiBox.poNumber || undefined,
+        });
+      } catch (err) {
+        if (!cancelled) console.error("Failed to enrich box details:", err);
+      }
+    };
+    void fetchEnrichment();
+    return () => {
+      cancelled = true;
+    };
+  }, [result?.box, boxIdParam]);
+
   // Auto-fill tear weight from PO tearweight API when poNumber + yarn name available
   useEffect(() => {
     const box = result?.box;
@@ -185,6 +232,13 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
 
   const box = result?.box;
   const message = result?.message;
+  const effectiveSupplier =
+    box?.supplierName ??
+    box?.supplier?.brandName ??
+    box?.supplier?.name ??
+    boxEnrichment?.supplierName;
+  const effectivePoNumber = box?.poNumber ?? boxEnrichment?.poNumber;
+
   const handleConeBarcodeScan = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
 
@@ -398,8 +452,8 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         conesToPrint.map(cone => ({
           barcode: cone.barcode,
           yarnName: box.yarnName,
-          supplierName: box.supplierName ?? box.supplier?.brandName ?? box.supplier?.name ?? undefined,
-          poNumber: box.poNumber,
+          supplierName: effectiveSupplier ?? undefined,
+          poNumber: effectivePoNumber ?? box.poNumber,
           lotNumber: box.lotNumber,
           shadeCode: box.shadeCode,
           weight: cone.coneWeight
@@ -509,7 +563,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
             <DetailItem label="Box ID" value={box.boxId} isMono />
             <DetailItem label="Barcode" value={box.barcode} isMono />
-            <DetailItem label="PO Number" value={box.poNumber} />
+            <DetailItem label="PO Number" value={effectivePoNumber || "-"} />
+            {effectiveSupplier ? (
+              <DetailItem label="Supplier" value={effectiveSupplier} />
+            ) : null}
             <DetailItem label="Yarn Name" value={box.yarnName || "-"} />
             <DetailItem label="Shade Code" value={box.shadeCode || "-"} />
             <DetailItem label="Lot Number" value={box.lotNumber || "-"} />
