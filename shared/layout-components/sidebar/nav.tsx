@@ -8,6 +8,7 @@ const CategoriesIcon = <i className="bx bx-category side-menu__icon"></i>;
 const MaterialIcon = <i className="bx bx-layer side-menu__icon"></i>;
 const ProcessIcon = <i className="bx bx-cog side-menu__icon"></i>;
 const AttributeIcon = <i className="bx bx-list-ul side-menu__icon"></i>;
+const StyleCodeIcon = <i className="bx bx-purchase-tag side-menu__icon"></i>;
 const MachinesIcon = <i className="bx bx-cog side-menu__icon"></i>;
 const SalesIcon = <i className="bx bx-cart side-menu__icon"></i>;
 const StoresIcon = <i className="bx bx-store side-menu__icon"></i>;
@@ -105,6 +106,14 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Attributes",
+      },
+      {
+        icon: StyleCodeIcon,
+        path: "/catalog/style-codes",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Style Codes",
       },
       {
         icon: MachinesIcon,

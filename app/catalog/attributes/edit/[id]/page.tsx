@@ -17,6 +17,7 @@ interface Attribute {
   id: number;
   name: string;
   type: string;
+  attributeType?: string; // 'Manufacturing' | 'Warehouse'
   sortOrder: number;
   optionValues: AttributeValue[];
 }
@@ -29,6 +30,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
   const [formData, setFormData] = useState({
     name: '',
     type: 'select',
+    attributeType: 'Manufacturing' as string,
     sortOrder: 0,
     optionValues: [] as { name: string; image: File | null; sortOrder: number }[]
   });
@@ -57,9 +59,11 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
         setAttribute(data);
         
         // Initialize form data with existing values
+        const validAttrTypes = ['Manufacturing', 'Warehouse'];
         setFormData({
           name: data.name,
           type: data.type,
+          attributeType: validAttrTypes.includes(data.attributeType) ? data.attributeType : 'Manufacturing',
           sortOrder: data.sortOrder,
           optionValues: data.optionValues.map((value: AttributeValue) => ({
             name: value.name,
@@ -129,6 +133,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
       const updateData = {
         name: formData.name,
         type: formData.type,
+        attributeType: formData.attributeType || 'Manufacturing',
         sortOrder: formData.sortOrder,
         optionValues: formData.optionValues.map(option => ({
           name: option.name,
@@ -232,6 +237,20 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
                     <option value="select">Select</option>
                     <option value="radio">Radio</option>
                     <option value="checkbox">Checkbox</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="form-label">Attribute Type</label>
+                  <select
+                    name="attributeType"
+                    className="form-control"
+                    value={formData.attributeType}
+                    onChange={handleInputChange}
+                    disabled={isSaving}
+                  >
+                    <option value="Manufacturing">Manufacturing</option>
+                    <option value="Warehouse">Warehouse</option>
                   </select>
                 </div>
 

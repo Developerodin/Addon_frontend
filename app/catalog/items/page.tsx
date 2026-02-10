@@ -11,6 +11,7 @@ import HelpIcon from '@/shared/components/HelpIcon';
 import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
+import { styleCodeService } from '@/shared/services/styleCodeService';
 
 interface StyleCode {
   styleCode: string;
@@ -88,6 +89,7 @@ const ProductListPage = () => {
   const [selectedProductStyleCodes, setSelectedProductStyleCodes] = useState<StyleCode[]>([]);
   const [isStyleCodesModalOpen, setIsStyleCodesModalOpen] = useState(false);
   const [selectedProductName, setSelectedProductName] = useState('');
+  const [styleCodeLookup, setStyleCodeLookup] = useState<Array<{ id: string; styleCode: string; eanCode: string; mrp: number }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attributesFileInputRef = useRef<HTMLInputElement>(null);
   const bomFileInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +100,19 @@ const ProductListPage = () => {
     fetchProducts();
     fetchCategories();
   }, [currentPage, itemsPerPage, searchQuery]);
+
+  // Fetch style codes once for resolving IDs in modal/export
+  useEffect(() => {
+    styleCodeService.list({ limit: 5000, sortBy: 'styleCode:asc' }).then((res: any) => {
+      const list = res?.results ?? res ?? [];
+      setStyleCodeLookup(Array.isArray(list) ? list.map((sc: any) => ({
+        id: sc.id ?? sc._id ?? '',
+        styleCode: sc.styleCode ?? '',
+        eanCode: sc.eanCode ?? '',
+        mrp: sc.mrp ?? 0
+      })) : []);
+    }).catch(() => setStyleCodeLookup([]));
+  }, []);
 
   const fetchProducts = async () => {
     setIsLoading(true);
@@ -170,7 +185,20 @@ const ProductListPage = () => {
   };
 
   const handleViewStyleCodes = (product: Product) => {
-    setSelectedProductStyleCodes(product.styleCodes || []);
+    const raw = product.styleCodes || [];
+    const resolved: StyleCode[] = raw.map((item: any) => {
+      if (typeof item === 'string') {
+        const found = styleCodeLookup.find((sc) => sc.id === item);
+        return found ? { styleCode: found.styleCode, eanCode: found.eanCode, mrp: found.mrp } : { styleCode: '', eanCode: '', mrp: 0 };
+      }
+      if (item && typeof item === 'object' && (item.styleCode != null || item.eanCode != null)) {
+        return { styleCode: item.styleCode ?? '', eanCode: item.eanCode ?? '', mrp: item.mrp ?? 0 };
+      }
+      const id = item?.styleCodeId ?? item?.id ?? item?._id ?? '';
+      const found = styleCodeLookup.find((sc) => sc.id === id);
+      return found ? { styleCode: found.styleCode, eanCode: found.eanCode, mrp: found.mrp } : { styleCode: id ? `(ID: ${id})` : '', eanCode: '', mrp: 0 };
+    });
+    setSelectedProductStyleCodes(resolved);
     setSelectedProductName(product.name);
     setIsStyleCodesModalOpen(true);
   };

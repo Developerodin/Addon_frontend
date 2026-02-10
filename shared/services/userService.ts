@@ -2,6 +2,71 @@ import { API_BASE_URL } from '@/shared/data/utilities/api';
 import Cookies from 'js-cookie';
 
 // User interface based on the provided schema
+export interface NavigationPermissions {
+  // Main Sidebar
+  Dashboard: boolean;
+  Catalog: {
+    Items: boolean;
+    Categories: boolean;
+    'Raw Material': boolean;
+    Processes: boolean;
+    Attributes: boolean;
+    'Style Codes': boolean;
+    Machines: boolean;
+  };
+  Sales: {
+    'All Sales': boolean;
+    'Master Sales': boolean;
+  };
+  Stores: boolean;
+  Analytics: boolean;
+  'Replenishment Agent': boolean;
+  'File Manager': boolean;
+  Users: boolean;
+  'Production Planning': {
+    'Production Orders': boolean;
+    'Knitting Floor': boolean;
+    'Linking Floor': boolean;
+    'Checking Floor': boolean;
+    'Washing Floor': boolean;
+    'Boarding Floor': boolean;
+    'Silicon Floor': boolean;
+    'Secondary Checking Floor': boolean;
+    'Branding Floor': boolean;
+    'Final Checking Floor': boolean;
+    'Machine Floor': boolean;
+    'Warehouse Floor': boolean;
+  };
+  'Yarn Management': {
+    Dashboard: boolean;
+    Inventory: boolean;
+    Cataloguing: boolean;
+    'Purchase Management': {
+      'Requisition list': boolean;
+      'Purchase Order': boolean;
+      'Purchase Order Recevied': boolean;
+      'Yarn QC': boolean;
+      'Yarn Storage': boolean;
+    };
+    'Yarn Issue': boolean;
+    'Yarn Return': boolean;
+    'Yarn Master': {
+      Brand: boolean;
+      'Yarn Type': boolean;
+      'Count/Size': boolean;
+      Color: boolean;
+      Blend: boolean;
+    };
+  };
+  'Warehouse Management': {
+    Orders: boolean;
+    'Pick&Pack': boolean;
+    Layout: boolean;
+    Stock: boolean;
+    Reports: boolean;
+  };
+}
+
 export interface User {
   id: string;
   name: string;
@@ -14,51 +79,7 @@ export interface User {
   country?: string;
   timezone: string;
   role: 'admin' | 'user' | 'super_admin';
-  navigation: {
-    // Main Sidebar
-    Dashboard: boolean;
-    Catalog: {
-      Items: boolean;
-      Categories: boolean;
-      'Raw Material': boolean;
-      Processes: boolean;
-      Attributes: boolean;
-      Machines: boolean;
-    };
-    Sales: {
-      'All Sales': boolean;
-      'Master Sales': boolean;
-    };
-    Stores: boolean;
-    Analytics: boolean;
-    'Replenishment Agent': boolean;
-    'File Manager': boolean;
-    Users: boolean;
-    'Production Planning': {
-      'Production Orders': boolean;
-      'Knitting Floor': boolean;
-      'Linking Floor': boolean;
-      'Checking Floor': boolean;
-      'Washing Floor': boolean;
-      'Boarding Floor': boolean;
-      'Final Checking Floor': boolean;
-      'Branding Floor': boolean;
-      'Warehouse Floor': boolean;
-    };
-    'Yarn Management': {
-      'Cataloguing': boolean;
-      'Purchase': boolean;
-      'Inventory': boolean;
-      'Yarn Issue': boolean;
-    };
-    'Warehouse Management': {
-      'Orders': boolean;
-      'Pick&Pack': boolean;
-      'Layout': boolean;
-      'Stock': boolean;
-      'Reports': boolean;
-    };
-  };
+  navigation: NavigationPermissions;
   createdAt: string;
   updatedAt: string;
 }
@@ -93,7 +114,7 @@ export interface UpdateUserRequest {
 
 // Update navigation request interface
 export interface UpdateNavigationRequest {
-  navigation: Partial<User['navigation']>;
+  navigation: Partial<NavigationPermissions>;
 }
 
 // Pagination response interface
