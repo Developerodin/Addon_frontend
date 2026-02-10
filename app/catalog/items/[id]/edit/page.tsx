@@ -673,8 +673,8 @@ const EditProductPage = () => {
 
     // Validate required fields based on user type
     if (isProduction) {
-      // Production user: Only Factory Code required
-      if (!formData.factoryCode || formData.factoryCode.trim() === '') {
+      // Production user: Factory Code required only when not outsourced
+      if (formData.productionType !== 'outsourced' && (!formData.factoryCode || formData.factoryCode.trim() === '')) {
         alert('Please fill in all required fields');
         return;
       }
@@ -705,7 +705,7 @@ const EditProductPage = () => {
       const outsourced = formData.productionType === 'outsourced';
       const needCodeFields = !outsourced;
       if (!formData.name || formData.name.trim() === '' || !formData.category ||
-          !formData.factoryCode || formData.factoryCode.trim() === '' ||
+          (needCodeFields && (!formData.factoryCode || formData.factoryCode.trim() === '')) ||
           !hasValidStyleCodes || !formData.description || formData.description.trim() === '') {
         alert('Please fill in all required fields. At least one style code is required.');
         return;
@@ -927,14 +927,14 @@ const EditProductPage = () => {
                           </select>
                         </div>
                         <div>
-                          <label className="form-label">Factory Code *</label>
+                          <label className="form-label">Factory Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                           <input
                             type="text"
                             name="factoryCode"
                             className="form-control"
                             value={formData.factoryCode}
                             onChange={handleInputChange}
-                            required
+                            required={formData.productionType !== 'outsourced'}
                           />
                         </div>
                       </>
@@ -955,14 +955,14 @@ const EditProductPage = () => {
                           </select>
                         </div>
                         <div>
-                          <label className="form-label">Factory Code *</label>
+                          <label className="form-label">Factory Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                           <input
                             type="text"
                             name="factoryCode"
                             className="form-control"
                             value={formData.factoryCode}
                             onChange={handleInputChange}
-                            required
+                            required={formData.productionType !== 'outsourced'}
                           />
                         </div>
                         <div className="md:col-span-2">
@@ -1155,14 +1155,14 @@ const EditProductPage = () => {
                               </select>
                             </div>
                             <div>
-                              <label className="form-label">Factory Code *</label>
+                              <label className="form-label">Factory Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="factoryCode"
                                 className="form-control"
                                 value={formData.factoryCode}
                                 onChange={handleInputChange}
-                                required
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div className="md:col-span-2">
@@ -1374,14 +1374,14 @@ const EditProductPage = () => {
                               </select>
                             </div>
                             <div>
-                              <label className="form-label">Factory Code *</label>
+                              <label className="form-label">Factory Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="factoryCode"
                                 className="form-control"
                                 value={formData.factoryCode}
                                 onChange={handleInputChange}
-                                required
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div className="md:col-span-2">

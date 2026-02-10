@@ -491,8 +491,8 @@ const AddProductPage = () => {
 
     // Validate required fields based on user type
     if (isProduction) {
-      // Production user: Only Factory Code required
-      if (!generalForm.factoryCode || generalForm.factoryCode.trim() === '') {
+      // Production user: Factory Code required only when not outsourced
+      if (generalForm.productionType !== 'outsourced' && (!generalForm.factoryCode || generalForm.factoryCode.trim() === '')) {
         alert('Please fill in all required fields');
         return;
       }
@@ -521,7 +521,7 @@ const AddProductPage = () => {
       const hasValidStyleCodes = validateStyleCodes(styleCodes);
       const outsourced = generalForm.productionType === 'outsourced';
       if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category ||
-          !generalForm.factoryCode || generalForm.factoryCode.trim() === '' ||
+          (!outsourced && (!generalForm.factoryCode || generalForm.factoryCode.trim() === '')) ||
           !hasValidStyleCodes || !generalForm.description || generalForm.description.trim() === '') {
         alert('Please fill in all required fields. At least one style code is required.');
         return;
@@ -826,13 +826,13 @@ const AddProductPage = () => {
                           </select>
                         </div>
                         <div>
-                          <label className="form-label">Factory Code *</label>
+                          <label className="form-label">Factory Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
                           <input
                             type="text"
                             className="form-control"
                             value={generalForm.factoryCode}
                             onChange={(e) => handleGeneralChange('factoryCode', e.target.value)}
-                            required
+                            required={generalForm.productionType !== 'outsourced'}
                           />
                         </div>
                       </div>
@@ -854,13 +854,13 @@ const AddProductPage = () => {
                               </select>
                             </div>
                             <div>
-                              <label className="form-label">Factory Code *</label>
+                              <label className="form-label">Factory Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 className="form-control"
                                 value={generalForm.factoryCode}
                                 onChange={(e) => handleGeneralChange('factoryCode', e.target.value)}
-                                required
+                                required={generalForm.productionType !== 'outsourced'}
                               />
                             </div>
                           </div>
@@ -1031,13 +1031,13 @@ const AddProductPage = () => {
                                   </select>
                                 </div>
                                 <div>
-                                  <label className="form-label">Factory Code *</label>
+                                  <label className="form-label">Factory Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
                                   <input
                                     type="text"
                                     className="form-control"
                                     value={generalForm.factoryCode}
                                     onChange={(e) => handleGeneralChange('factoryCode', e.target.value)}
-                                    required
+                                    required={generalForm.productionType !== 'outsourced'}
                                   />
                                 </div>
                                 <div className="col-span-12">
