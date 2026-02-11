@@ -758,7 +758,7 @@ export const generateZPLRack = (
 
     // 3. Details
     if (shelf !== undefined || floor !== undefined) {
-      zpl += `^FO${currentX},${startY}^A0R,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
+      zpl += `^FO${currentX},${startY}^A0R,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} | Floor: ${floor || '-'}^FS\n`;
       currentX += detailsFontSize + 40;
     }
 
@@ -786,7 +786,7 @@ export const generateZPLRack = (
 
     // 3. Details
     if (shelf !== undefined || floor !== undefined) {
-      zpl += `^FO${startX},${currentY}^A0N,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
+      zpl += `^FO${startX},${currentY}^A0N,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} | Floor: ${floor || '-'}^FS\n`;
       currentY += detailsFontSize + 20;
     }
 
