@@ -64,31 +64,25 @@
       padding: 6px;
     }
 
-    /* Bottom area: no dividing borders between left declaration area and right signatures */
+    /* Bottom area: stack left (notes) and right (signatures) vertically */
     .bottom-wrap {
       width: 100%;
-      display: flex;
-      gap: 10px;
       margin-top: 10px;
+      border-top: 2px solid #000;
     }
 
     .bottom-left {
-      flex: 1 1 60%;
+      width: 100%;
       padding: 6px 8px;
       box-sizing: border-box;
-      border-top: 2px solid #000;
-      /* top border to separate from above */
     }
 
     .bottom-right {
-      flex: 1 1 40%;
-      padding: 6px 8px;
+      width: 100%;
+      padding: 10px 8px 20px 8px;
       box-sizing: border-box;
-      border-top: 2px solid #000;
-      /* top border only */
       display: flex;
-      align-items: flex-end;
-      justify-content: flex-end;
+      justify-content: center;
     }
 
     .declaration-title {
@@ -109,15 +103,16 @@
 
     .sign-boxes {
       display: flex;
-      gap: 6px;
-      align-items: flex-end;
+      gap: 20px;
+      width: 100%;
+      justify-content: space-between;
     }
 
     .sign-box {
       border: 2px solid #000;
       padding: 6px 10px;
-      width: 140px;
-      height: 58px;
+      width: 32%;
+      height: 60px;
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
