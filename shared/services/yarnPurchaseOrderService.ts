@@ -250,6 +250,18 @@ class YarnPurchaseOrderService {
   }
 
   /**
+   * Fetches purchase order by PO number (e.g. PO-2026-257).
+   * GET /by-number/:poNumber
+   */
+  async getPurchaseOrderByNumber(poNumber: string): Promise<any> {
+    if (!poNumber?.trim()) {
+      throw new Error('PO Number is required');
+    }
+    const encoded = encodeURIComponent(poNumber.trim());
+    return this.makeRequest<any>(`/by-number/${encoded}`);
+  }
+
+  /**
    * Fetches tear weight for a yarn on a PO (for auto-fill on cone process page).
    * GET /tearweight?poNumber=...&yarnName=...
    * Response: { poNumber, supplierId, yarnName, tearweight, notFound }
