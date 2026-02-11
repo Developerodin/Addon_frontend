@@ -435,10 +435,28 @@ export const getAvailablePrinters = async (): Promise<PrinterInfo[]> => {
 };
 
 /**
- * Helper to create the optimized QZ Tray configuration for 70mm x 50mm thermal labels
+ * Resolve effective paper dimensions for ZPL/config from orientation.
+ * Horizontal = use label in landscape (swap when height > width so 50x70 becomes 70x50).
+ */
+const effectivePaperSize = (
+  paperWidth: number,
+  paperHeight: number,
+  orientation?: 'horizontal' | 'vertical'
+): { width: number; height: number } => {
+  const w = paperWidth;
+  const h = paperHeight;
+  if (orientation === 'horizontal' && h > w) {
+    return { width: h, height: w };
+  }
+  return { width: w, height: h };
+};
+
+/**
+ * Helper to create the optimized QZ Tray configuration for thermal labels.
+ * Respects orientation: horizontal swaps width/height so 50x70 prints as 70x50.
  */
 const getQZConfig = async (
-  customSettings?: { paperWidth?: number; paperHeight?: number },
+  customSettings?: { paperWidth?: number; paperHeight?: number; orientation?: 'horizontal' | 'vertical' },
   printerName?: string
 ) => {
   if (typeof window === 'undefined' || typeof window.qz === 'undefined') return null;
@@ -464,9 +482,12 @@ const getQZConfig = async (
     let width = 101.6; // 4 inches
     let height = 152.4; // 6 inches
 
-    if (customSettings?.paperWidth && customSettings?.paperHeight) {
-      width = customSettings.paperWidth * 0.125;
-      height = customSettings.paperHeight * 0.125;
+    if (customSettings?.paperWidth != null && customSettings?.paperHeight != null) {
+      const pw = customSettings.paperWidth;
+      const ph = customSettings.paperHeight;
+      const effective = effectivePaperSize(pw, ph, customSettings.orientation);
+      width = effective.width * 0.125;
+      height = effective.height * 0.125;
     }
 
     return window.qz.configs.create(printer, {
@@ -1268,6 +1289,7 @@ export const printRacks = async (
     customSettings?: {
       paperWidth?: number;
       paperHeight?: number;
+      orientation?: 'horizontal' | 'vertical';
       labelsPerPage?: number;
       columnsPerRow?: number;
       firstLabelTopMargin?: number;
@@ -1288,8 +1310,9 @@ export const printRacks = async (
 
     if (options.customSettings) {
       const labels: string[] = [];
-      const paperWidth = options.customSettings.paperWidth || 812;
-      const paperHeight = options.customSettings.paperHeight || 1218;
+      const rawW = options.customSettings.paperWidth || 812;
+      const rawH = options.customSettings.paperHeight || 1218;
+      const { width: paperWidth, height: paperHeight } = effectivePaperSize(rawW, rawH, options.customSettings.orientation);
       const firstLabelTopMargin = options.customSettings.firstLabelTopMargin || 0;
       const labelsPerPage = options.customSettings.labelsPerPage || 1;
       const columnsPerRow = options.customSettings.columnsPerRow || 1;
@@ -1396,6 +1419,7 @@ export const printCones = async (
     customSettings?: {
       paperWidth?: number;
       paperHeight?: number;
+      orientation?: 'horizontal' | 'vertical';
       labelsPerPage?: number;
       columnsPerRow?: number;
       firstLabelTopMargin?: number;
@@ -1415,8 +1439,9 @@ export const printCones = async (
 
     if (options.customSettings) {
       const labels: string[] = [];
-      const paperWidth = options.customSettings.paperWidth || 812;
-      const paperHeight = options.customSettings.paperHeight || 1218;
+      const rawW = options.customSettings.paperWidth || 812;
+      const rawH = options.customSettings.paperHeight || 1218;
+      const { width: paperWidth, height: paperHeight } = effectivePaperSize(rawW, rawH, options.customSettings.orientation);
       const firstLabelTopMargin = options.customSettings.firstLabelTopMargin || 0;
       const labelsPerPage = options.customSettings.labelsPerPage || 1;
       const columnsPerRow = options.customSettings.columnsPerRow || 1;
