@@ -71,7 +71,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75' | '70mm * 50mm' | '50mm * 25mm',
+    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75' | '70mm * 50mm' | '50mm * 25mm' | '50mm * 70mm',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -485,7 +485,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     }
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75' | '70mm * 50mm' | '50mm * 25mm') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75' | '70mm * 50mm' | '50mm * 25mm' | '50mm * 70mm') => {
     if (size === '4x6') {
       setPrintSettings({
         ...printSettings,
@@ -502,12 +502,14 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         paperHeight: 812,
         orientation: 'horizontal',
       });
-    } else if (size === '1.96x2.75') {
+    } else if (size === '1.96x2.75' || size === '50mm * 70mm') {
       setPrintSettings({
         ...printSettings,
-        paperSize: '1.96x2.75',
+        paperSize: size,
         paperWidth: 398,  // 1.96 inches × 203 DPI
         paperHeight: 558, // 2.75 inches × 203 DPI
+        labelsPerPage: 1,
+        columnsPerRow: 1,
         orientation: 'horizontal',
       });
     } else if (size === '70mm * 50mm') {
@@ -559,7 +561,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     if (isSmall) { paperW = 50; paperH = 25; }
     else if (isMedium) { paperW = 70; paperH = 50; }
     else if (printSettings.paperSize === '6x4') { paperW = 152.4; paperH = 101.6; }
-    else if (printSettings.paperSize === '1.96x2.75') { paperW = 50; paperH = 70; }
+    else if (printSettings.paperSize === '1.96x2.75' || printSettings.paperSize === '50mm * 70mm') { paperW = 50; paperH = 70; }
 
     const labelW = paperW / printSettings.columnsPerRow;
     const labelH = paperH / (printSettings.labelsPerPage / printSettings.columnsPerRow);
@@ -1613,7 +1615,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">Paper Size</label>
                     <div className="flex flex-wrap gap-2.5">
-                      {['4x6', '6x4', '1.96x2.75', '70mm * 50mm', '50mm * 25mm'].map((size) => (
+                      {['4x6', '6x4', '1.96x2.75', '50mm * 70mm', '70mm * 50mm', '50mm * 25mm'].map((size) => (
                         <label key={size} className="flex items-center cursor-pointer bg-gray-50 px-2 py-1 rounded border border-gray-200 hover:border-purple-300 transition-colors">
                           <input
                             type="radio"
