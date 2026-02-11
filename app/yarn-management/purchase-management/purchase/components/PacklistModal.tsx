@@ -613,57 +613,14 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                           Total Weight (kg) <span className="text-red-500">*</span>
                         </label>
                         <input
-                          type="text"
+                          type="number"
                           name="totalWeight"
+                          step="0.01"
+                          min="0"
                           value={entry.totalWeight || ""}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            // Allow empty string
-                            if (value === "") {
-                              handleInputChange(entryIndex, e);
-                              return;
-                            }
-                            // Allow valid decimal numbers: digits, single decimal point, no leading zeros except for decimals
-                            // Pattern: allows numbers like 1, 12, 1.5, 0.5, 12.34, etc.
-                            if (/^[1-9]\d*(\.\d*)?$/.test(value) || /^0\.\d*$/.test(value) || /^\d+\.$/.test(value)) {
-                              handleInputChange(entryIndex, e);
-                            }
-                          }}
-                          onBlur={(e) => {
-                            // Ensure valid number on blur
-                            const value = e.target.value;
-                            const numValue = parseFloat(value);
-                            if (!value || isNaN(numValue) || numValue <= 0) {
-                              const currentValue = entry.totalWeight || 0;
-                              e.target.value = currentValue > 0 ? currentValue.toString() : "";
-                              if (currentValue > 0) {
-                                handleInputChange(entryIndex, e);
-                              }
-                            } else {
-                              // Format to remove trailing decimal point if no decimals
-                              if (value.endsWith('.')) {
-                                e.target.value = numValue.toString();
-                                handleInputChange(entryIndex, e);
-                              }
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            const input = e.currentTarget;
-                            const value = input.value;
-                            // Allow decimal point only if not already present
-                            if (e.key === '.' && value.includes('.')) {
-                              e.preventDefault();
-                              return;
-                            }
-                            // Prevent non-numeric keys except backspace, delete, tab, arrow keys, and decimal point
-                            if (!/[0-9.]/.test(e.key) && 
-                                !['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) &&
-                                !(e.ctrlKey && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase()))) {
-                              e.preventDefault();
-                            }
-                          }}
+                          onChange={(e) => handleInputChange(entryIndex, e)}
                           className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                          placeholder="Enter weight in kg"
+                          placeholder="Enter weight in kg (e.g. 12.5)"
                           required
                         />
                       </div>
