@@ -736,27 +736,53 @@ export const generateZPLRack = (
     zpl += `^CI28\n`;
   }
 
-  let yPos = 20 + yOffset;
-  const xPos = labelMargin + xOffset;
-
-  // Zone Identifier
   const zoneLabel = zone === 'LT' ? 'LONG TERM STORAGE' : zone === 'ST' ? 'SHORT TERM STORAGE' : 'YARN STORAGE';
-  zpl += `^FO${xPos},${yPos}^A0${rotation},${zoneFontSize},${zoneFontSize}^FD${zoneLabel}^FS\n`;
-  yPos += isVertical ? (zoneFontSize + 50) : (zoneFontSize + 10);
+  const startX = labelMargin + xOffset;
+  const startY = 20 + yOffset;
 
-  // Large Rack Code
-  zpl += `^FO${xPos},${yPos}^A0${rotation},${rackCodeFontSize},${rackCodeFontSize}^FD${rackCode}^FS\n`;
-  yPos += isVertical ? (rackCodeFontSize + 80) : (rackCodeFontSize + 10);
+  if (isVertical) {
+    // ROTATED VERTICAL STACKING: Elements are rows stacked top-to-bottom (X increases)
+    let currentX = startX;
 
-  // Details
-  if (shelf !== undefined || floor !== undefined) {
-    zpl += `^FO${xPos},${yPos}^A0${rotation},${detailsFontSize},${detailsFontSize}^FDShelf: ${shelf || '-'} --- Floor: ${floor || '-'}^FS\n`;
-    yPos += isVertical ? (detailsFontSize + 40) : (detailsFontSize + 10);
+    // 1. Zone Label
+    zpl += `^FO${currentX},${startY}^A0R,${zoneFontSize},${zoneFontSize}^FD${zoneLabel}^FS\n`;
+    currentX += zoneFontSize + 30;
+
+    // 2. Large Rack Code
+    zpl += `^FO${currentX},${startY}^A0R,${rackCodeFontSize},${rackCodeFontSize}^FD${rackCode}^FS\n`;
+    currentX += rackCodeFontSize + 40;
+
+    // 3. Details
+    if (shelf !== undefined || floor !== undefined) {
+      zpl += `^FO${currentX},${startY}^A0R,${detailsFontSize},${detailsFontSize}^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
+      currentX += detailsFontSize + 30;
+    }
+
+    // 4. Barcode
+    zpl += `^BY2,2,${barcodeHeight}\n`;
+    zpl += `^FO${currentX},${startY}^BCR,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
+  } else {
+    // STANDARD HORIZONTAL STACKING: Elements are rows stacked top-to-bottom (Y increases)
+    let currentY = startY;
+
+    // 1. Zone Label
+    zpl += `^FO${startX},${currentY}^A0N,${zoneFontSize},${zoneFontSize}^FD${zoneLabel}^FS\n`;
+    currentY += zoneFontSize + 10;
+
+    // 2. Large Rack Code
+    zpl += `^FO${startX},${currentY}^A0N,${rackCodeFontSize},${rackCodeFontSize}^FD${rackCode}^FS\n`;
+    currentY += rackCodeFontSize + 10;
+
+    // 3. Details
+    if (shelf !== undefined || floor !== undefined) {
+      zpl += `^FO${startX},${currentY}^A0N,${detailsFontSize},${detailsFontSize}^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
+      currentY += detailsFontSize + 10;
+    }
+
+    // 4. Barcode
+    zpl += `^BY2,2,${barcodeHeight}\n`;
+    zpl += `^FO${startX},${currentY}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
   }
-
-  // Barcode (CODE128)
-  zpl += `^BY2,2,${barcodeHeight}\n`;
-  zpl += `^FO${xPos},${yPos}^BC${rotation},${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
 
   if (isStandalone) {
     zpl += `^XZ\n`;
