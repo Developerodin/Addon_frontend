@@ -151,19 +151,21 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     return mappedRacks;
   }, [storageSlots, boxes]);
 
+  // Short-term storage: fixed 3-column layout (no longer 4)
+  const SHORT_TERM_COLUMNS = 3;
+
   // Calculate grid dimensions
   const gridDimensions = useMemo(() => {
     if (storageSlots.length > 0) {
       const maxShelf = Math.max(...storageSlots.map((s) => s.shelfNumber), 0);
-      const maxFloor = Math.max(...storageSlots.map((s) => s.floorNumber), 0);
       return {
         rows: Math.max(maxShelf, preferences.gridRows),
-        columns: Math.max(maxFloor, preferences.gridColumns),
+        columns: SHORT_TERM_COLUMNS,
       };
     }
     return {
       rows: preferences.gridRows,
-      columns: preferences.gridColumns,
+      columns: SHORT_TERM_COLUMNS,
     };
   }, [storageSlots, preferences]);
 

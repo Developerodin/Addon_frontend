@@ -133,13 +133,14 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         status = "Maintenance";
       }
 
-      // Use shelfNumber as row and floorNumber as column
+      // Use shelfNumber as row and floorNumber as column; sectionCode for multi-section grid
       return {
         id: slot._id,
         rackCode: slot.label,
         row: slot.shelfNumber,
         column: slot.floorNumber,
         shelf: slot.shelfNumber,
+        sectionCode: slot.sectionCode,
         barcode: slot.barcode,
         capacity: 1, // Each slot can hold one box
         currentBoxes: storedBox ? 1 : 0,
@@ -150,8 +151,35 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     return mappedRacks;
   }, [storageSlots, boxes, propsRacks]);
 
-  // Calculate grid dimensions
+  // Row index -> (sectionCode, shelfNumber) so multiple sections get separate rows (fixes 48 vs 192)
+  const rowToSectionShelf = useMemo(() => {
+    if (storageSlots.length === 0) return [];
+    const bySection = new Map<string, number>();
+    storageSlots.forEach((s) => {
+      const section = s.sectionCode ?? "";
+      const max = bySection.get(section) ?? 0;
+      if (s.shelfNumber > max) bySection.set(section, s.shelfNumber);
+    });
+    const sections = Array.from(bySection.keys()).sort();
+    const out: { sectionCode: string; shelfNumber: number }[] = [];
+    sections.forEach((sectionCode) => {
+      const maxShelf = bySection.get(sectionCode) ?? 0;
+      for (let shelf = 1; shelf <= maxShelf; shelf++) {
+        out.push({ sectionCode, shelfNumber: shelf });
+      }
+    });
+    return out;
+  }, [storageSlots]);
+
+  // Grid dimensions: one row per (section, shelf), columns = floors (4)
   const gridDimensions = useMemo(() => {
+    if (storageSlots.length > 0 && rowToSectionShelf.length > 0) {
+      const maxFloor = Math.max(...storageSlots.map((s) => s.floorNumber), 0);
+      return {
+        rows: Math.max(rowToSectionShelf.length, preferences.gridRows),
+        columns: Math.max(maxFloor, preferences.gridColumns),
+      };
+    }
     if (storageSlots.length > 0) {
       const maxShelf = Math.max(...storageSlots.map((s) => s.shelfNumber), 0);
       const maxFloor = Math.max(...storageSlots.map((s) => s.floorNumber), 0);
@@ -164,9 +192,9 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       rows: preferences.gridRows,
       columns: preferences.gridColumns,
     };
-  }, [storageSlots, preferences]);
+  }, [storageSlots, preferences, rowToSectionShelf]);
 
-  // Organize racks into grid based on shelfNumber (row) and floorNumber (column)
+  // Organize racks into grid: row = (section, shelf), col = floor (so all 192 slots show)
   const rackGrid = useMemo(() => {
     if (isLoadingSlots) {
       return [];
@@ -175,15 +203,22 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     const grid: (RackLocation | null)[][] = [];
     for (let row = 0; row < gridDimensions.rows; row++) {
       grid[row] = [];
+      const sectionShelf = rowToSectionShelf[row];
       for (let col = 0; col < gridDimensions.columns; col++) {
-        const rack = racks.find(
-          (r) => r.row === row + 1 && r.column === col + 1
-        );
-        grid[row][col] = rack || null;
+        const floor = col + 1;
+        const rack = sectionShelf
+          ? racks.find(
+              (r) =>
+                (r.sectionCode ?? "") === (sectionShelf.sectionCode ?? "") &&
+                r.row === sectionShelf.shelfNumber &&
+                r.column === floor
+            )
+          : null;
+        grid[row][col] = rack ?? null;
       }
     }
     return grid;
-  }, [racks, gridDimensions, isLoadingSlots]);
+  }, [racks, gridDimensions, isLoadingSlots, rowToSectionShelf]);
 
   // Fetch slot details for all racks (including available ones that might have data)
   useEffect(() => {
