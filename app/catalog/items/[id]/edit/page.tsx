@@ -5,10 +5,14 @@ import axios from 'axios';
 import Seo from '@/shared/layout-components/seo/seo';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
+import { styleCodeService } from '@/shared/services/styleCodeService';
+import { RawMaterialBomTable, RawMaterialBomItem } from '@/app/catalog/items/components/RawMaterialBomTable';
+import { rawMaterialService } from '@/shared/services/rawMaterialService';
 import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
 interface StyleCodeItem {
+  styleCodeId?: string;
   styleCode: string;
   eanCode: string;
   mrp: number;
@@ -24,6 +28,7 @@ interface Product {
   knittingCode?: string;
   vendorCode: string;
   factoryCode: string;
+  productionType?: string;
   styleCodes?: StyleCodeItem[];
   styleCode?: string; // Keep for backward compatibility
   eanCode?: string; // Keep for backward compatibility
@@ -38,6 +43,7 @@ interface Product {
     yarnName: string;
     quantity: number;
   }>;
+  rawMaterials?: Array<{ rawMaterialId: string; rawMaterialName?: string; quantity: number }>;
   processes: Array<{
     processId: string;
   }>;
@@ -65,6 +71,7 @@ interface AttributeCategory {
   id: string;
   name: string;
   type?: string;
+  attributeType?: string; // 'Manufacturing' | 'Warehouse', default 'Manufacturing'
   sortOrder?: number;
   options?: AttributeOption[];
   optionValues: AttributeOptionValue[];
@@ -126,13 +133,17 @@ const EditProductPage = () => {
     knittingCode: '',
     vendorCode: '',
     factoryCode: '',
-    styleCodes: [{ styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }],
+    productionType: 'internal',
+    styleCodes: [{ styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }],
     description: '',
     category: { id: '', name: '' },
     attributes: {},
     bom: [],
+    rawMaterials: [],
     processes: []
   });
+
+  const [styleCodeOptions, setStyleCodeOptions] = useState<StyleCodeItem[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -141,17 +152,31 @@ const EditProductPage = () => {
           productResponse,
           categoriesResponse,
           attributesResponse,
-          processesResponse
+          processesResponse,
+          styleCodesRes,
+          rawMaterialsList
         ] = await Promise.all([
           axios.get(`${API_ENDPOINTS.products}/${productId}`),
           axios.get(API_ENDPOINTS.categories),
           axios.get(API_ENDPOINTS.attributes),
-          axios.get(API_ENDPOINTS.processes)
+          axios.get(API_ENDPOINTS.processes),
+          styleCodeService.list({ limit: 500, sortBy: 'styleCode:asc' }),
+          rawMaterialService.list().catch(() => [])
         ]);
 
         // Normalize categories
         const categories = categoriesResponse.data.results || [];
         setCategories(categories);
+        const styleCodesResponse = (styleCodesRes as any)?.results || [];
+        const styleOptions = styleCodesResponse.map((sc: any) => ({
+          styleCodeId: sc.id,
+          styleCode: sc.styleCode,
+          eanCode: sc.eanCode,
+          mrp: sc.mrp,
+          brand: sc.brand,
+          pack: sc.pack,
+        }));
+        setStyleCodeOptions(styleOptions);
 
         // Normalize product data
         let product = productResponse.data;
@@ -170,19 +195,23 @@ const EditProductPage = () => {
           }
         }
 
-        // Normalize styleCodes - handle both old (styleCode/eanCode) and new (styleCodes array) formats
+        // Normalize styleCodes - backend may send array of IDs only, or array of objects
         if (product.styleCodes && Array.isArray(product.styleCodes)) {
-          // New format: already an array
-          product.styleCodes = product.styleCodes.map((sc: any) => ({
-            styleCode: sc.styleCode || '',
-            eanCode: sc.eanCode || '',
-            mrp: sc.mrp || 0,
-            brand: sc.brand || '',
-            pack: sc.pack || ''
-          }));
+          product.styleCodes = product.styleCodes.map((sc: any) => {
+            const id = typeof sc === 'string' ? sc : (sc.styleCodeId ?? sc._id ?? sc.id ?? '');
+            const match = styleOptions.find((opt: any) => (opt.styleCodeId || opt.id) === id);
+            return {
+              styleCodeId: id,
+              styleCode: match?.styleCode ?? (typeof sc === 'object' ? sc.styleCode : '') ?? '',
+              eanCode: match?.eanCode ?? (typeof sc === 'object' ? sc.eanCode : '') ?? '',
+              mrp: match?.mrp ?? (typeof sc === 'object' && (sc.mrp != null) ? sc.mrp : 0) ?? 0,
+              brand: match?.brand ?? (typeof sc === 'object' ? sc.brand : '') ?? '',
+              pack: match?.pack ?? (typeof sc === 'object' ? sc.pack : '') ?? ''
+            };
+          });
         } else if (product.styleCode || product.eanCode) {
-          // Old format: convert to array
           product.styleCodes = [{
+            styleCodeId: '',
             styleCode: product.styleCode || '',
             eanCode: product.eanCode || '',
             mrp: 0,
@@ -190,10 +219,11 @@ const EditProductPage = () => {
             pack: ''
           }];
         } else {
-          // No style codes: initialize with empty entry
-          product.styleCodes = [{ styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }];
+          product.styleCodes = [{ styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }];
         }
         
+        product.productionType = product.productionType || 'internal';
+
         // Defensive: ensure attributes, bom, processes are arrays/objects
         product.attributes = product.attributes || {};
         
@@ -235,13 +265,35 @@ const EditProductPage = () => {
             }))
           : [];
 
+        // Normalize rawMaterials to array of { rawMaterialId, rawMaterialName?, quantity }; resolve name from list if backend sent only id
+        const rawMaterialsLookup = Array.isArray(rawMaterialsList) ? rawMaterialsList : [];
+        const rawMaterialRows: RawMaterialBomItem[] = Array.isArray(product.rawMaterials)
+          ? product.rawMaterials.map((rm: any) => {
+              const id =
+                typeof rm === 'object' && rm !== null
+                  ? rm.rawMaterialId?.id ?? rm.rawMaterialId?._id ?? rm.rawMaterialId ?? rm.id ?? rm._id ?? ''
+                  : String(rm);
+              let name =
+                typeof rm === 'object' && rm !== null
+                  ? rm.rawMaterialId?.name ?? rm.rawMaterialName ?? rm.name ?? ''
+                  : '';
+              if (!name && id) {
+                const found = rawMaterialsLookup.find((m: any) => (m.id || m._id) === id);
+                name = found?.name ?? '';
+              }
+              const qty = typeof rm?.quantity === 'number' ? rm.quantity : Number(rm?.quantity) || 0;
+              return { rawMaterialId: id, rawMaterialName: name || undefined, quantity: qty };
+            })
+          : [];
+
         console.log('Normalized processes:', product.processes);
         
         // Set the product data with normalized attributes
         setFormData({
           ...product,
           attributes: normalizedAttributes,
-          processes: product.processes
+          processes: product.processes,
+          rawMaterials: rawMaterialRows
         });
         console.log('Product data loaded:', product);
         console.log('Product attributes:', product.attributes);
@@ -279,7 +331,8 @@ const EditProductPage = () => {
           return {
             ...cat,
             optionValues: optionValues,
-            options: cat.options || [] // Keep for backward compatibility
+            options: cat.options || [], // Keep for backward compatibility
+            attributeType: (cat.attributeType === 'Warehouse' ? 'Warehouse' : 'Manufacturing') as string
           };
         });
         
@@ -435,6 +488,10 @@ const EditProductPage = () => {
     });
   };
 
+  const handleRawMaterialsChange = (items: RawMaterialBomItem[]) => {
+    setFormData(prev => ({ ...prev, rawMaterials: items }));
+  };
+
   const handleBomItemChange = (index: number, field: 'yarnCatalogId' | 'quantity', value: string | number) => {
     setFormData(prev => {
       const newBom = [...prev.bom];
@@ -469,7 +526,7 @@ const EditProductPage = () => {
 
   const handleStyleCodeChange = (index: number, field: 'styleCode' | 'eanCode' | 'mrp' | 'brand' | 'pack', value: string | number) => {
     setFormData(prev => {
-      const newStyleCodes = [...(prev.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }])];
+      const newStyleCodes = [...(prev.styleCodes || [{ styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }])];
       newStyleCodes[index] = {
         ...newStyleCodes[index],
         [field]: field === 'mrp' ? (typeof value === 'string' ? parseFloat(value) || 0 : value) : value
@@ -478,10 +535,49 @@ const EditProductPage = () => {
     });
   };
 
+  const handleStyleCodeSelect = (index: number, styleCodeId: string) => {
+    const option = styleCodeOptions.find((sc) => sc.styleCodeId === styleCodeId);
+    if (!option) return;
+    setFormData(prev => {
+      const newStyleCodes = [...(prev.styleCodes || [{ styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }])];
+      newStyleCodes[index] = {
+        styleCodeId: option.styleCodeId,
+        styleCode: option.styleCode,
+        eanCode: option.eanCode,
+        mrp: option.mrp,
+        brand: option.brand,
+        pack: option.pack,
+      };
+      return { ...prev, styleCodes: newStyleCodes };
+    });
+  };
+
+  const handleStyleCodeInput = (index: number, value: string) => {
+    const match = styleCodeOptions.find(
+      (sc) => sc.styleCode.toLowerCase() === value.trim().toLowerCase()
+    );
+    if (match) {
+      handleStyleCodeSelect(index, match.styleCodeId || '');
+      return;
+    }
+    setFormData(prev => {
+      const newStyleCodes = [...(prev.styleCodes || [{ styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }])];
+      newStyleCodes[index] = {
+        styleCodeId: '',
+        styleCode: value,
+        eanCode: '',
+        mrp: 0,
+        brand: '',
+        pack: '',
+      };
+      return { ...prev, styleCodes: newStyleCodes };
+    });
+  };
+
   const addStyleCode = () => {
     setFormData(prev => ({
       ...prev,
-      styleCodes: [...(prev.styleCodes || [{ styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }]), { styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }]
+      styleCodes: [...(prev.styleCodes || [{ styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }]), { styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }]
     }));
   };
 
@@ -569,42 +665,16 @@ const EditProductPage = () => {
     console.log('Form Data:', formData);
     console.log('User Type - isDesign:', isDesign, 'isProduction:', isProduction, 'isFinal:', isFinal);
 
-    // Helper function to validate style codes
+      // Helper: at least one style code selected (has styleCodeId)
     const validateStyleCodes = (codes: typeof formData.styleCodes) => {
       if (!codes || codes.length === 0) return false;
-      const validationResults = codes.map((sc, index) => {
-        const styleCodeValid = sc.styleCode && sc.styleCode.trim() !== '';
-        const eanCodeValid = sc.eanCode && sc.eanCode.trim() !== '';
-        // MRP should be a valid number >= 0 (0 is allowed per schema)
-        const mrpValue = typeof sc.mrp === 'string' ? parseFloat(sc.mrp) : sc.mrp;
-        const mrpValid = mrpValue !== null && mrpValue !== undefined && !isNaN(mrpValue) && mrpValue >= 0;
-        const isValid = styleCodeValid && eanCodeValid && mrpValid;
-        
-        return {
-          index,
-          styleCode: sc.styleCode,
-          styleCodeValid,
-          eanCode: sc.eanCode,
-          eanCodeValid,
-          mrp: sc.mrp,
-          mrpValue,
-          mrpValid,
-          isValid
-        };
-      });
-      
-      console.log('=== STYLE CODE VALIDATION DETAILS ===');
-      validationResults.forEach(result => {
-        console.log(`Entry ${result.index + 1}:`, result);
-      });
-      
-      return validationResults.some(r => r.isValid);
+      return codes.some(sc => sc.styleCodeId && String(sc.styleCodeId).trim());
     };
 
     // Validate required fields based on user type
     if (isProduction) {
-      // Production user: Only Factory Code required
-      if (!formData.factoryCode || formData.factoryCode.trim() === '') {
+      // Production user: Factory Code required only when not outsourced
+      if (formData.productionType !== 'outsourced' && (!formData.factoryCode || formData.factoryCode.trim() === '')) {
         alert('Please fill in all required fields');
         return;
       }
@@ -617,32 +687,51 @@ const EditProductPage = () => {
         return;
       }
     } else if (isDesign) {
-      if (!formData.name || formData.name.trim() === '' || !formData.category || 
-          !formData.internalCode || formData.internalCode.trim() === '' || 
+      const outsourced = formData.productionType === 'outsourced';
+      const needCodes = !outsourced;
+      if (!formData.name || formData.name.trim() === '' || !formData.category) {
+        alert('Please fill in all required fields');
+        return;
+      }
+      if (needCodes && (
+          !formData.internalCode || formData.internalCode.trim() === '' ||
           !formData.knittingCode || formData.knittingCode.trim() === '' ||
-          !formData.vendorCode || formData.vendorCode.trim() === '') {
+          !formData.vendorCode || formData.vendorCode.trim() === '')) {
         alert('Please fill in all required fields');
         return;
       }
     } else {
       const hasValidStyleCodes = validateStyleCodes(formData.styleCodes);
-      console.log('Other User Validation - hasValidStyleCodes:', hasValidStyleCodes);
-      console.log('Other fields:', {
-        name: formData.name,
-        category: formData.category,
-        internalCode: formData.internalCode,
-        vendorCode: formData.vendorCode,
-        factoryCode: formData.factoryCode,
-        description: formData.description
-      });
-      if (!formData.name || formData.name.trim() === '' || !formData.category || 
-          !formData.internalCode || formData.internalCode.trim() === '' || 
-          !formData.knittingCode || formData.knittingCode.trim() === '' ||
-          !formData.vendorCode || formData.vendorCode.trim() === '' || 
-          !formData.factoryCode || formData.factoryCode.trim() === '' || 
+      const outsourced = formData.productionType === 'outsourced';
+      const needCodeFields = !outsourced;
+      if (!formData.name || formData.name.trim() === '' || !formData.category ||
+          (needCodeFields && (!formData.factoryCode || formData.factoryCode.trim() === '')) ||
           !hasValidStyleCodes || !formData.description || formData.description.trim() === '') {
-        alert('Please fill in all required fields. At least one style code entry with styleCode, eanCode, and mrp is required.');
+        alert('Please fill in all required fields. At least one style code is required.');
         return;
+      }
+      if (needCodeFields && (
+          !formData.internalCode || formData.internalCode.trim() === '' ||
+          !formData.knittingCode || formData.knittingCode.trim() === '' ||
+          !formData.vendorCode || formData.vendorCode.trim() === '')) {
+        alert('Please fill in all required fields.');
+        return;
+      }
+    }
+
+    // Needles attribute is required when it is shown on the form
+    const needlesCategory = attributeCategories.find(c => c.name.toLowerCase() === 'needles');
+    if (needlesCategory) {
+      const showNeedles = isProduction
+        || (isFinal && shouldShowAttributeForFinal(needlesCategory.name, isFinal))
+        || (isDesign && shouldShowAttribute(needlesCategory.name, isDesign))
+        || (!isDesign && !isFinal && !isProduction);
+      if (showNeedles) {
+        const needlesValue = (formData.attributes[needlesCategory.name] || formData.attributes[needlesCategory.id] || '').toString().trim();
+        if (!needlesValue) {
+          alert('Needles is a required field. Please select a value before saving.');
+          return;
+        }
       }
     }
 
@@ -653,47 +742,42 @@ const EditProductPage = () => {
       
       // Prepare the base product data
       const productData: any = {};
+    productData.productionType = formData.productionType || 'internal';
 
-      // Filter and prepare style codes - trim strings and ensure valid values
-      const filteredStyleCodes = (formData.styleCodes || [])
-        .map(sc => ({
-          styleCode: sc.styleCode ? sc.styleCode.trim() : '',
-          eanCode: sc.eanCode ? sc.eanCode.trim() : '',
-          mrp: sc.mrp !== null && sc.mrp !== undefined && !isNaN(sc.mrp) ? Number(sc.mrp) : 0,
-          brand: sc.brand ? sc.brand.trim() : undefined,
-          pack: sc.pack ? sc.pack.trim() : undefined
-        }))
-        .filter(sc => sc.styleCode !== '' && sc.eanCode !== '' && sc.mrp >= 0);
+      // Style codes: send only IDs (entries with valid styleCodeId)
+      const styleCodeIds = (formData.styleCodes || [])
+        .filter(sc => sc.styleCodeId && String(sc.styleCodeId).trim())
+        .map(sc => sc.styleCodeId);
 
-      console.log('=== FILTERED STYLE CODES ===');
+      console.log('=== STYLE CODES (IDs only) ===');
       console.log('Original styleCodes:', formData.styleCodes);
-      console.log('Filtered styleCodes:', filteredStyleCodes);
+      console.log('styleCodeIds:', styleCodeIds);
 
       if (isProduction) {
         // Production user: Only Factory Code
         productData.factoryCode = formData.factoryCode.trim();
       } else if (isFinal) {
-        // Final user: Style Codes array and Description
-        productData.styleCodes = filteredStyleCodes;
+        // Final user: Style Codes (IDs only) and Description
+        productData.styleCodes = styleCodeIds;
         productData.description = formData.description.trim();
       } else if (isDesign) {
-        // Design user: Basic fields
+        // Design user: Basic fields (optional when outsourced)
         productData.name = formData.name.trim();
-        productData.softwareCode = formData.softwareCode;
-        productData.internalCode = formData.internalCode.trim();
-        productData.knittingCode = formData.knittingCode?.trim() || '';
-        productData.vendorCode = formData.vendorCode.trim();
+        productData.softwareCode = formData.softwareCode?.trim() ?? '';
+        productData.internalCode = formData.internalCode?.trim() ?? '';
+        productData.knittingCode = formData.knittingCode?.trim() ?? '';
+        productData.vendorCode = formData.vendorCode?.trim() ?? '';
         productData.category = formData.category?.id || '';
       } else {
-        // Other users: All fields
+        // Other users: All fields (Software/Internal/Knitting/Vendor optional when outsourced)
         productData.name = formData.name.trim();
-        productData.softwareCode = formData.softwareCode;
-        productData.internalCode = formData.internalCode.trim();
+        productData.softwareCode = formData.softwareCode?.trim() ?? '';
+        productData.internalCode = formData.internalCode?.trim() ?? '';
         productData.knittingCode = (formData.knittingCode || '').trim();
-        productData.vendorCode = formData.vendorCode.trim();
+        productData.vendorCode = formData.vendorCode?.trim() ?? '';
         productData.category = formData.category?.id || '';
         productData.factoryCode = formData.factoryCode.trim();
-        productData.styleCodes = filteredStyleCodes;
+        productData.styleCodes = styleCodeIds;
         productData.description = formData.description.trim();
       }
 
@@ -742,13 +826,18 @@ const EditProductPage = () => {
         Object.entries(allowedAttributes).filter(([key]) => !['brand', 'pack'].includes(key.toLowerCase()))
       );
 
-      // BOM and Processes for production users and non-design/non-final/non-production users
+      // BOM, rawMaterials and Processes for production users and non-design/non-final/non-production users
       if (isProduction || (!isDesign && !isFinal && !isProduction)) {
         productData.bom = formData.bom.filter(item => item.yarnCatalogId && item.quantity > 0).map(item => ({
           yarnCatalogId: item.yarnCatalogId,
           yarnName: item.yarnName,
           quantity: Number(item.quantity)
         }));
+        if (Array.isArray(formData.rawMaterials) && formData.rawMaterials.length > 0) {
+          productData.rawMaterials = formData.rawMaterials
+            .filter(rm => rm.rawMaterialId && (rm.quantity ?? 0) >= 0)
+            .map(rm => ({ rawMaterialId: rm.rawMaterialId, quantity: Number(rm.quantity) }));
+        }
         productData.processes = formData.processes.filter(proc => proc.processId).map(proc => ({
           processId: proc.processId
         }));
@@ -838,21 +927,60 @@ const EditProductPage = () => {
                 {activeTab === 'general' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {isProduction ? (
-                      // Production user: Only Factory Code
-                      <div>
-                        <label className="form-label">Factory Code *</label>
-                        <input
-                          type="text"
-                          name="factoryCode"
-                          className="form-control"
-                          value={formData.factoryCode}
-                          onChange={handleInputChange}
-                          required
-                        />
-                      </div>
-                    ) : isFinal ? (
-                      // Final user: Style Codes array and Description
+                      // Production user: only Production Type + Factory Code
                       <>
+                        <div>
+                          <label className="form-label">Production Type *</label>
+                          <select
+                            name="productionType"
+                            className="form-control"
+                            value={formData.productionType ?? 'internal'}
+                            onChange={(e) => handleInputChange({ target: { name: 'productionType', value: e.target.value } } as any)}
+                            required
+                          >
+                            <option value="internal">Internal</option>
+                            <option value="outsourced">Outsourced</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="form-label">Factory Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
+                          <input
+                            type="text"
+                            name="factoryCode"
+                            className="form-control"
+                            value={formData.factoryCode}
+                            onChange={handleInputChange}
+                            required={formData.productionType !== 'outsourced'}
+                          />
+                        </div>
+                      </>
+                    ) : isFinal ? (
+                      // Final user: Production Type + Factory Code above Style Codes, then Style Codes + Description
+                      <>
+                        <div>
+                          <label className="form-label">Production Type *</label>
+                          <select
+                            name="productionType"
+                            className="form-control"
+                            value={formData.productionType ?? 'internal'}
+                            onChange={(e) => handleInputChange({ target: { name: 'productionType', value: e.target.value } } as any)}
+                            required
+                          >
+                            <option value="internal">Internal</option>
+                            <option value="outsourced">Outsourced</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="form-label">Factory Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
+                          <input
+                            type="text"
+                            name="factoryCode"
+                            className="form-control"
+                            value={formData.factoryCode}
+                            onChange={handleInputChange}
+                            required={formData.productionType !== 'outsourced'}
+                          />
+                        </div>
                         <div className="md:col-span-2">
                           <div className="flex justify-between items-center mb-4">
                             <label className="form-label">Style Codes *</label>
@@ -885,22 +1013,26 @@ const EditProductPage = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                   <div>
                                     <label className="form-label">Style Code *</label>
-                                    <input
-                                      type="text"
+                                    <select
                                       className="form-control"
-                                      value={styleCodeItem.styleCode}
-                                      onChange={(e) => handleStyleCodeChange(index, 'styleCode', e.target.value)}
-                                      required
-                                    />
+                                      value={styleCodeItem.styleCodeId || ''}
+                                      onChange={(e) => handleStyleCodeSelect(index, e.target.value)}
+                                    >
+                                      <option value="">Select Style Code</option>
+                                      {styleCodeOptions.map((opt) => (
+                                        <option key={opt.styleCodeId} value={opt.styleCodeId}>
+                                          {opt.styleCode}
+                                        </option>
+                                      ))}
+                                    </select>
                                   </div>
                                   <div>
                                     <label className="form-label">EAN Code *</label>
                                     <input
                                       type="text"
-                                      className="form-control"
+                                      className="form-control bg-gray-50"
                                       value={styleCodeItem.eanCode}
-                                      onChange={(e) => handleStyleCodeChange(index, 'eanCode', e.target.value)}
-                                      required
+                                      readOnly
                                     />
                                   </div>
                                   <div>
@@ -909,37 +1041,28 @@ const EditProductPage = () => {
                                       type="number"
                                       step="0.01"
                                       min="0"
-                                      className="form-control"
+                                      className="form-control bg-gray-50"
                                       value={styleCodeItem.mrp}
-                                      onChange={(e) => handleStyleCodeChange(index, 'mrp', e.target.value)}
-                                      required
+                                      readOnly
                                     />
                                   </div>
                                   <div>
                                     <label className="form-label">Brand</label>
-                                    <select
-                                      className="form-control"
+                                    <input
+                                      type="text"
+                                      className="form-control bg-gray-50"
                                       value={styleCodeItem.brand ?? ''}
-                                      onChange={(e) => handleStyleCodeChange(index, 'brand', e.target.value)}
-                                    >
-                                      <option value="">Select Brand</option>
-                                      {brandOptions.map((opt) => (
-                                        <option key={opt._id} value={opt.name}>{opt.name}</option>
-                                      ))}
-                                    </select>
+                                      readOnly
+                                    />
                                   </div>
                                   <div>
                                     <label className="form-label">Pack</label>
-                                    <select
-                                      className="form-control"
+                                    <input
+                                      type="text"
+                                      className="form-control bg-gray-50"
                                       value={styleCodeItem.pack ?? ''}
-                                      onChange={(e) => handleStyleCodeChange(index, 'pack', e.target.value)}
-                                    >
-                                      <option value="">Select Pack</option>
-                                      {packOptions.map((opt) => (
-                                        <option key={opt._id} value={opt.name}>{opt.name}</option>
-                                      ))}
-                                    </select>
+                                      readOnly
+                                    />
                                   </div>
                                 </div>
                               </div>
@@ -991,58 +1114,71 @@ const EditProductPage = () => {
                               </select>
                             </div>
                             <div>
-                              <label className="form-label">Software Code *</label>
+                              <label className="form-label">Software Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="softwareCode"
                                 className="form-control"
                                 value={formData.softwareCode}
                                 onChange={handleInputChange}
-                                required
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div>
-                              <label className="form-label">Internal Code / Design Code *</label>
+                              <label className="form-label">Internal Code / Design Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="internalCode"
                                 className="form-control"
                                 value={formData.internalCode}
                                 onChange={handleInputChange}
-                                required
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div>
-                              <label className="form-label">Knitting Code *</label>
+                              <label className="form-label">Knitting Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="knittingCode"
                                 className="form-control"
                                 value={formData.knittingCode || ''}
                                 onChange={handleInputChange}
-                                required
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div>
-                              <label className="form-label">Vendor Code *</label>
+                              <label className="form-label">Vendor Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="vendorCode"
                                 className="form-control"
                                 value={formData.vendorCode}
                                 onChange={handleInputChange}
-                                required
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div>
-                              <label className="form-label">Factory Code *</label>
+                              <label className="form-label">Production Type *</label>
+                              <select
+                                name="productionType"
+                                className="form-control"
+                                value={formData.productionType ?? 'internal'}
+                                onChange={(e) => handleInputChange({ target: { name: 'productionType', value: e.target.value } } as any)}
+                                required
+                              >
+                                <option value="internal">Internal</option>
+                                <option value="outsourced">Outsourced</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label">Factory Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="factoryCode"
                                 className="form-control"
                                 value={formData.factoryCode}
                                 onChange={handleInputChange}
-                                required
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div className="md:col-span-2">
@@ -1078,21 +1214,27 @@ const EditProductPage = () => {
                                       <div>
                                         <label className="form-label">Style Code *</label>
                                         <input
-                                          type="text"
+                                          list={`styleCodeList-edit-${index}`}
                                           className="form-control"
                                           value={styleCodeItem.styleCode}
-                                          onChange={(e) => handleStyleCodeChange(index, 'styleCode', e.target.value)}
-                                          required
+                                          onChange={(e) => handleStyleCodeInput(index, e.target.value)}
+                                          placeholder="Type to search..."
                                         />
+                                        <datalist id={`styleCodeList-edit-${index}`}>
+                                          {styleCodeOptions.map((opt) => (
+                                            <option key={opt.styleCodeId} value={opt.styleCode}>
+                                              {opt.styleCode}
+                                            </option>
+                                          ))}
+                                        </datalist>
                                       </div>
                                       <div>
                                         <label className="form-label">EAN Code *</label>
                                         <input
                                           type="text"
-                                          className="form-control"
+                                          className="form-control bg-gray-50"
                                           value={styleCodeItem.eanCode}
-                                          onChange={(e) => handleStyleCodeChange(index, 'eanCode', e.target.value)}
-                                          required
+                                          readOnly
                                         />
                                       </div>
                                       <div>
@@ -1101,37 +1243,28 @@ const EditProductPage = () => {
                                           type="number"
                                           step="0.01"
                                           min="0"
-                                          className="form-control"
+                                          className="form-control bg-gray-50"
                                           value={styleCodeItem.mrp}
-                                          onChange={(e) => handleStyleCodeChange(index, 'mrp', e.target.value)}
-                                          required
+                                          readOnly
                                         />
                                       </div>
                                       <div>
                                         <label className="form-label">Brand</label>
-                                        <select
-                                          className="form-control"
+                                        <input
+                                          type="text"
+                                          className="form-control bg-gray-50"
                                           value={styleCodeItem.brand ?? ''}
-                                          onChange={(e) => handleStyleCodeChange(index, 'brand', e.target.value)}
-                                        >
-                                          <option value="">Select Brand</option>
-                                          {brandOptions.map((opt) => (
-                                            <option key={opt._id} value={opt.name}>{opt.name}</option>
-                                          ))}
-                                        </select>
+                                          readOnly
+                                        />
                                       </div>
                                       <div>
                                         <label className="form-label">Pack</label>
-                                        <select
-                                          className="form-control"
+                                        <input
+                                          type="text"
+                                          className="form-control bg-gray-50"
                                           value={styleCodeItem.pack ?? ''}
-                                          onChange={(e) => handleStyleCodeChange(index, 'pack', e.target.value)}
-                                        >
-                                          <option value="">Select Pack</option>
-                                          {packOptions.map((opt) => (
-                                            <option key={opt._id} value={opt.name}>{opt.name}</option>
-                                          ))}
-                                        </select>
+                                          readOnly
+                                        />
                                       </div>
                                     </div>
                                   </div>
@@ -1200,47 +1333,71 @@ const EditProductPage = () => {
                               </select>
                             </div>
                             <div>
-                              <label className="form-label">Software Code *</label>
+                              <label className="form-label">Software Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="softwareCode"
                                 className="form-control"
                                 value={formData.softwareCode}
                                 onChange={handleInputChange}
-                                required
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div>
-                              <label className="form-label">Internal Code / Design Code</label>
+                              <label className="form-label">Internal Code / Design Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="internalCode"
                                 className="form-control"
                                 value={formData.internalCode}
                                 onChange={handleInputChange}
-                                required
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div>
-                              <label className="form-label">Knitting Code *</label>
+                              <label className="form-label">Knitting Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="knittingCode"
                                 className="form-control"
                                 value={formData.knittingCode || ''}
                                 onChange={handleInputChange}
-                                required
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div>
-                              <label className="form-label">Vendor Code *</label>
+                              <label className="form-label">Vendor Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
                               <input
                                 type="text"
                                 name="vendorCode"
                                 className="form-control"
                                 value={formData.vendorCode}
                                 onChange={handleInputChange}
+                                required={formData.productionType !== 'outsourced'}
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label">Production Type *</label>
+                              <select
+                                name="productionType"
+                                className="form-control"
+                                value={formData.productionType ?? 'internal'}
+                                onChange={(e) => handleInputChange({ target: { name: 'productionType', value: e.target.value } } as any)}
                                 required
+                              >
+                                <option value="internal">Internal</option>
+                                <option value="outsourced">Outsourced</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label">Factory Code{formData.productionType !== 'outsourced' ? ' *' : ''}</label>
+                              <input
+                                type="text"
+                                name="factoryCode"
+                                className="form-control"
+                                value={formData.factoryCode}
+                                onChange={handleInputChange}
+                                required={formData.productionType !== 'outsourced'}
                               />
                             </div>
                             <div className="md:col-span-2">
@@ -1268,65 +1425,86 @@ const EditProductPage = () => {
                   </div>
                 )}
 
-                {/* Attributes Tab */}
-                {activeTab === 'attributes' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Debug information */}
-                    {attributeCategories.length === 0 ? (
-                      <div className="col-span-2 text-center py-4">
-                        <p>No attribute categories found.</p>
+                {/* Attributes Tab - split by Manufacturing / Warehouse */}
+                {activeTab === 'attributes' && (() => {
+                  const baseFilter = (category: AttributeCategory) => {
+                    const nameLower = category.name.toLowerCase();
+                    if (nameLower === 'brand' || nameLower === 'pack') return false;
+                    if (isProduction) return nameLower === 'needles';
+                    if (isFinal) return shouldShowAttributeForFinal(category.name, isFinal);
+                    if (isDesign) return shouldShowAttribute(category.name, isDesign);
+                    return true;
+                  };
+                  const filtered = attributeCategories.filter(baseFilter);
+                  const manufacturingAttrs = filtered.filter((c) => (c.attributeType ?? 'Manufacturing') === 'Manufacturing');
+                  const warehouseAttrs = filtered.filter((c) => c.attributeType === 'Warehouse');
+
+                  const renderAttributeField = (category: AttributeCategory) => {
+                    const valueById = formData.attributes[category.id] || '';
+                    const valueByName = formData.attributes[category.name] || '';
+                    const currentValue = valueById || valueByName;
+                    const isNeedlesRequired = category.name.toLowerCase() === 'needles' && (
+                      isProduction || (isFinal && shouldShowAttributeForFinal(category.name, isFinal)) ||
+                      (isDesign && shouldShowAttribute(category.name, isDesign)) || (!isDesign && !isFinal && !isProduction)
+                    );
+                    return (
+                      <div key={category.id} className="space-y-2">
+                        <label className="form-label">{category.name}{isNeedlesRequired ? ' *' : ''}</label>
+                        <select
+                          className="form-control"
+                          value={currentValue}
+                          onChange={(e) => handleAttributeChange(category.name, e.target.value)}
+                        >
+                          <option value="">Select {category.name}</option>
+                          {category.optionValues?.length ? (
+                            category.optionValues.map((option) => (
+                              <option key={option._id} value={option._id}>{option.name}</option>
+                            ))
+                          ) : (
+                            <option value="" disabled>No options available</option>
+                          )}
+                        </select>
                       </div>
-                    ) : (
-                      attributeCategories
-                        .filter((category) => {
-                          // Brand and Pack are in Style Code section, not in Attributes form
-                          const nameLower = category.name.toLowerCase();
-                          if (nameLower === 'brand' || nameLower === 'pack') return false;
-                          if (isProduction) {
-                            return nameLower === 'needles';
-                          }
-                          if (isFinal) {
-                            return shouldShowAttributeForFinal(category.name, isFinal);
-                          }
-                          if (isDesign) {
-                            return shouldShowAttribute(category.name, isDesign);
-                          }
-                          return true;
-                        })
-                        .map((category) => {
-                          // Get the current attribute value - try both by ID and by name
-                          const valueById = formData.attributes[category.id] || '';
-                          const valueByName = formData.attributes[category.name] || '';
-                          const currentValue = valueById || valueByName;
-                          
-                          return (
-                            <div key={category.id} className="space-y-2">
-                              <label className="form-label">{category.name}</label>
-                              <select
-                                className="form-control"
-                                value={currentValue}
-                                onChange={(e) => handleAttributeChange(category.name, e.target.value)}
-                              >
-                                <option value="">Select {category.name}</option>
-                                {category.optionValues && category.optionValues.length > 0 ? (
-                                  category.optionValues.map((option) => (
-                                    <option 
-                                      key={option._id} 
-                                      value={option._id}
-                                    >
-                                      {option.name}
-                                    </option>
-                                  ))
-                                ) : (
-                                  <option value="" disabled>No options available</option>
-                                )}
-                              </select>
+                    );
+                  };
+
+                  return (
+                    <div className="space-y-8">
+                      {attributeCategories.length === 0 ? (
+                        <div className="text-center py-4">
+                          <p>No attribute categories found.</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <h4 className="text-base font-semibold text-gray-800 mb-3 pb-2 border-b border-gray-200">
+                              Manufacturing Attributes
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {manufacturingAttrs.length === 0 ? (
+                                <p className="text-gray-500 text-sm col-span-2">No manufacturing attributes.</p>
+                              ) : (
+                                manufacturingAttrs.map(renderAttributeField)
+                              )}
                             </div>
-                          );
-                        })
-                    )}
-                  </div>
-                )}
+                          </div>
+                          <div>
+                            <h4 className="text-base font-semibold text-gray-800 mb-3 pb-2 border-b border-gray-200">
+                              Warehouse Attributes
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {warehouseAttrs.length === 0 ? (
+                                <p className="text-gray-500 text-sm col-span-2">No warehouse attributes.</p>
+                              ) : (
+                                warehouseAttrs.map(renderAttributeField)
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* BOM Tab */}
                 {!isDesign && !isFinal && activeTab === 'bom' && (
@@ -1392,6 +1570,12 @@ const EditProductPage = () => {
                         </tbody>
                       </table>
                     </div>
+
+                    <RawMaterialBomTable
+                      items={formData.rawMaterials ?? []}
+                      onChange={handleRawMaterialsChange}
+                      disabled={isLoading}
+                    />
 
                     {/* Yarn Catalog Selection Modal */}
                     {isYarnModalOpen && (

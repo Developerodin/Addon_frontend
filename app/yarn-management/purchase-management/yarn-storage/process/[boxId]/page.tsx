@@ -53,7 +53,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   const [barcodeScanValue, setBarcodeScanValue] = useState("");
   const [isUpdatingConeId, setIsUpdatingConeId] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
-  
+
   // Cone selection state
   const [selectedCones, setSelectedCones] = useState<Set<string>>(new Set());
   const [showPrintSelectionModal, setShowPrintSelectionModal] = useState(false);
@@ -67,7 +67,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4',
+    paperSize: '4x6' as '4x6' | '6x4' | '25*50mm',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -76,7 +76,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     showCutLines: true,
     qrCodeSize: 5,
     titleFontSize: 25,
-    detailsFontSize: 20,
+    detailsFontSize: 18,
   });
 
   const boxIdParam = useMemo(() => decodeURIComponent(params.boxId), [params]);
@@ -362,20 +362,35 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     }
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '25*50mm') => {
     if (size === '4x6') {
       setPrintSettings({
         ...printSettings,
         paperSize: '4x6',
         paperWidth: 812,
         paperHeight: 1218,
+        labelsPerPage: 4,
+        columnsPerRow: 2,
       });
-    } else {
+    } else if (size === '6x4') {
       setPrintSettings({
         ...printSettings,
         paperSize: '6x4',
         paperWidth: 1218,
         paperHeight: 812,
+        labelsPerPage: 4,
+        columnsPerRow: 2,
+      });
+    } else if (size === '25*50mm') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '25*50mm',
+        paperWidth: 406,  // 2 inches landscape
+        paperHeight: 203, // 1 inch landscape
+        labelsPerPage: 1,
+        columnsPerRow: 1,
+        qrCodeSize: 4,
+        detailsFontSize: 16,
       });
     }
   };
@@ -431,7 +446,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     }
 
     // Determine which cones to print
-    const conesToPrint = selectedCones.size > 0 
+    const conesToPrint = selectedCones.size > 0
       ? cones.filter(cone => selectedCones.has(cone._id))
       : cones;
 
@@ -699,8 +714,8 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                       <tr
                         key={cone._id}
                         className={`hover:bg-gray-50/50 transition-colors ${activeConeId === cone._id
-                            ? "bg-blue-50 border-2 border-blue-400"
-                            : ""
+                          ? "bg-blue-50 border-2 border-blue-400"
+                          : ""
                           }`}
                       >
                         <td className="px-1.5 py-2 border border-gray-200">
@@ -881,11 +896,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                 {cones.map((cone) => (
                   <div
                     key={cone._id}
-                    className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${
-                      selectedCones.has(cone._id)
-                        ? 'bg-purple-50 border-purple-300'
-                        : 'bg-white border-gray-200 hover:bg-gray-50'
-                    }`}
+                    className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${selectedCones.has(cone._id)
+                      ? 'bg-purple-50 border-purple-300'
+                      : 'bg-white border-gray-200 hover:bg-gray-50'
+                      }`}
                     onClick={() => toggleConeSelection(cone._id)}
                   >
                     <input
@@ -965,16 +979,71 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
             </div>
 
             <div className="p-6 space-y-6">
+              {/* Label Preview */}
+              <div className="p-4 bg-gray-100 rounded-lg flex flex-col items-center">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-3 self-start">Live Preview (Approximate)</h4>
+
+                {printSettings.paperSize === '25*50mm' ? (
+                  /* 25x50mm Side-by-Side Preview */
+                  <div className="bg-white border border-gray-400 shadow-sm flex overflow-hidden" style={{ width: '250px', height: '125px' }}>
+                    <div className="flex-1 p-2 flex flex-col justify-center gap-0.5 font-mono">
+                      <div className="text-[10px] font-bold border-b border-gray-100 pb-0.5 truncate uppercase">
+                        {box.yarnName || 'Yarn Name'}
+                      </div>
+                      <div className="text-[8px] text-gray-700">PO: {effectivePoNumber || '-'}</div>
+                      <div className="text-[8px] text-gray-700">Lot: {box.lotNumber || '-'}</div>
+                      <div className="text-[8px] text-gray-700">Shade: {box.shadeCode || '-'}</div>
+                      <div className="text-[7px] text-gray-500 mt-1 truncate">{cones[0]?.barcode || 'CONE-PREVIEW'}</div>
+                    </div>
+                    <div className="w-[35%] bg-white border-l border-gray-50 flex items-center justify-center p-2">
+                      <div className="aspect-square w-full border-2 border-black flex items-center justify-center relative">
+                        <div className="w-full h-full p-1 flex flex-wrap gap-0.5">
+                          {[...Array(9)].map((_, i) => (
+                            <div key={i} className={`w-[25%] h-[25%] ${i % 3 === 0 ? 'bg-black' : 'bg-gray-200'}`}></div>
+                          ))}
+                        </div>
+                        <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold bg-white/80">QR</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Standard Vertical Preview */
+                  <div className="bg-white border border-gray-400 shadow-sm flex flex-col items-center overflow-hidden"
+                    style={{
+                      width: printSettings.paperSize === '6x4' ? '250px' : '180px',
+                      height: printSettings.paperSize === '6x4' ? '180px' : '250px'
+                    }}>
+                    <div className="w-full p-3 flex flex-col gap-1 font-mono text-center">
+                      <div className="text-[10px] font-bold border-b border-gray-200 pb-1 uppercase truncate">{box.yarnName || 'Yarn Name'}</div>
+                      <div className="text-[8px]">PO: {effectivePoNumber || '-'}</div>
+                      <div className="text-[8px]">Lot: {box.lotNumber || '-'} | Shade: {box.shadeCode || '-'}</div>
+                      <div className="text-[9px] font-bold mt-2">{cones[0]?.barcode || 'CONE-PREVIEW'}</div>
+                    </div>
+                    <div className="flex-1 flex items-center justify-center p-4">
+                      <div className="w-16 h-16 border-2 border-black flex items-center justify-center relative">
+                        <div className="w-full h-full p-1 flex flex-wrap gap-1">
+                          {[...Array(16)].map((_, i) => (
+                            <div key={i} className={`w-[20%] h-[20%] ${i % 3 === 0 ? 'bg-black' : 'bg-gray-100'}`}></div>
+                          ))}
+                        </div>
+                        <span className="absolute inset-0 flex items-center justify-center text-xs font-bold bg-white/80">QR</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <p className="text-[10px] text-gray-500 mt-2 italic">Actual print layout will be optimized for thermal printing.</p>
+              </div>
+
               {/* Paper Settings */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Paper Size
                     </label>
-                    <div className="flex gap-4">
+                    <div className="flex flex-wrap gap-4">
                       <label className="flex items-center cursor-pointer">
                         <input
                           type="radio"
@@ -996,6 +1065,17 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                           className="w-4 h-4 text-purple-600 focus:ring-purple-500"
                         />
                         <span className="ml-2 text-sm text-gray-700">6" × 4"</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="25*50mm"
+                          checked={printSettings.paperSize === '25*50mm'}
+                          onChange={() => handlePaperSizeChange('25*50mm')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">25*50mm</span>
                       </label>
                     </div>
                   </div>
@@ -1019,7 +1099,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               {/* Layout Settings */}
               <div className="space-y-4 pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Layout Settings</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1074,7 +1154,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               {/* QR Code & Font Settings */}
               <div className="space-y-4 pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">QR Code & Font Settings</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -71,7 +71,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75',
+    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75' | '25*50mm',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -246,11 +246,11 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   const getRackSlotBoxes = (rack: RackLocation): BoxInSlot[] => {
     const details = rackSlotDetails.get(rack.id);
     if (!details) return [];
-    
+
     if (details.type === "boxes") {
       return details.data as BoxInSlot[];
     }
-    
+
     // If it's cones, convert to box-like format for display
     if (details.type === "cones") {
       const cones = details.data as ConeInSlot[];
@@ -263,7 +263,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         boxWeight: number;
         numberOfCones: number;
       }>();
-      
+
       cones.forEach((cone) => {
         const key = `${cone.boxId}-${cone.yarnName}`;
         if (!boxMap.has(key)) {
@@ -280,7 +280,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         box.boxWeight += cone.coneWeight || 0;
         box.numberOfCones += 1;
       });
-      
+
       // Convert to BoxInSlot-like format
       return Array.from(boxMap.values()).map((box) => ({
         _id: box.boxId,
@@ -302,7 +302,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         shadeCode: "",
       } as BoxInSlot));
     }
-    
+
     return [];
   };
 
@@ -336,7 +336,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
           isLoading: false,
         };
       }
-      
+
       // If details exist but no boxes/cones yet, show loading
       return {
         boxes: [],
@@ -399,7 +399,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     // Refresh only affected racks after transfer
     try {
       const racksToRefresh: string[] = [];
-      
+
       // Add source and destination racks if provided
       if (sourceRackBarcode) {
         racksToRefresh.push(sourceRackBarcode);
@@ -444,12 +444,12 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         });
         await Promise.all(refreshPromises);
       }
-      
+
       // Call parent refresh callback if provided
       if (onRefresh) {
         onRefresh();
       }
-      
+
       toast.success("Transfer completed and data refreshed successfully");
     } catch (error) {
       console.error("Failed to refresh data:", error);
@@ -484,7 +484,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     }
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75' | '25*50mm') => {
     if (size === '4x6') {
       setPrintSettings({
         ...printSettings,
@@ -505,6 +505,16 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         paperSize: '1.96x2.75',
         paperWidth: 398,  // 1.96 inches × 203 DPI
         paperHeight: 558, // 2.75 inches × 203 DPI
+      });
+    } else if (size === '25*50mm') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '25*50mm',
+        paperWidth: 406,
+        paperHeight: 203,
+        labelsPerPage: 1,
+        columnsPerRow: 1,
+        barcodeHeight: 50,
       });
     }
   };
@@ -1454,7 +1464,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
               {/* Paper Settings */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Paper Size
@@ -1493,6 +1503,17 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                       />
                       <span className="ml-2 text-sm text-gray-700">1.96" × 2.75"</span>
                     </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="paperSize"
+                        value="25*50mm"
+                        checked={printSettings.paperSize === '25*50mm'}
+                        onChange={() => handlePaperSizeChange('25*50mm')}
+                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">25*50mm</span>
+                    </label>
                   </div>
                 </div>
 
@@ -1516,7 +1537,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
               {/* Layout Settings */}
               <div className="space-y-4 pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Layout Settings</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1571,7 +1592,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
               {/* Font & Size Settings */}
               <div className="space-y-4 pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Font & Size Settings</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

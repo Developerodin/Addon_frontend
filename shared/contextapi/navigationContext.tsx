@@ -12,6 +12,7 @@ interface NavigationPermissions {
     'Raw Material': boolean;
     Processes: boolean;
     Attributes: boolean;
+    'Style Codes': boolean;
     Machines: boolean;
   };
   Sales: {
@@ -87,6 +88,7 @@ const defaultPermissions: NavigationPermissions = {
     'Raw Material': false,
     Processes: false,
     Attributes: false,
+    'Style Codes': false,
     Machines: false,
   },
   Sales: {

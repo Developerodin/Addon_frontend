@@ -18,6 +18,7 @@ interface Attribute {
   id: number;
   name: string;
   type: string;
+  attributeType?: string; // 'Manufacturing' | 'Warehouse', default 'Manufacturing'
   sortOrder: number;
   optionValues: AttributeValue[];
 }
@@ -33,6 +34,7 @@ interface ApiResponse {
 interface ExcelAttribute {
   'Attribute Name': string;
   'Type': string;
+  'Attribute Type'?: string;
   'Values': string;
   'Sort Order': number;
 }
@@ -118,6 +120,7 @@ const AttributesPage = () => {
         'ID': attr.id,
         'Attribute Name': attr.name,
         'Type': attr.type,
+        'Attribute Type': attr.attributeType ?? 'Manufacturing',
         'Values': attr.optionValues.map(v => v.name).join(', '),
         'Sort Order': attr.sortOrder
       }));
@@ -126,6 +129,7 @@ const AttributesPage = () => {
         { wch: 10 },
         { wch: 20 },
         { wch: 15 },
+        { wch: 14 },
         { wch: 40 },
         { wch: 10 },
       ];
@@ -205,9 +209,13 @@ const AttributesPage = () => {
             if (!validTypes.includes(type)) {
               throw new Error(`Invalid type: ${row['Type']} for attribute: ${row['Attribute Name']}`);
             }
+            const attrType = (row['Attribute Type'] ?? 'Manufacturing').trim();
+            const validAttrTypes = ['Manufacturing', 'Warehouse'];
+            const attributeType = validAttrTypes.includes(attrType) ? attrType : 'Manufacturing';
             const attributeData = {
               name: row['Attribute Name'],
               type: type,
+              attributeType,
               sortOrder: Number(row['Sort Order']) || 0,
               optionValues: (row['Values'] || '')
                 .split(',')
@@ -480,6 +488,7 @@ const AttributesPage = () => {
                   </th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Attribute Name</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Type</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Attribute Type</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Values</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Sort Order</th>
                   <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
@@ -494,6 +503,9 @@ const AttributesPage = () => {
                     <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">{attribute.name}</td>
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight bg-purple-100 text-purple-800">{attribute.type}</span>
+                    </td>
+                    <td className="px-1.5 py-2.5 border border-gray-200">
+                      <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded tracking-tight bg-gray-100 text-gray-700">{attribute.attributeType ?? 'Manufacturing'}</span>
                     </td>
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
                       <div className="flex flex-wrap gap-1">

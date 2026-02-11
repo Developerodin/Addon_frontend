@@ -24,6 +24,7 @@ interface ApiOptionValue {
 interface AttributePayload {
   name: string;
   type: string;
+  attributeType?: string; // 'Manufacturing' | 'Warehouse'
   sortOrder: number;
   optionValues: ApiOptionValue[];
 }
@@ -63,6 +64,7 @@ const AddAttributePage = () => {
   const [formData, setFormData] = useState({
     name: '',
     type: 'select', // Default type
+    attributeType: 'Manufacturing' as 'Manufacturing' | 'Warehouse',
     description: '',
     sortOrder: '',
     values: [
@@ -151,6 +153,7 @@ const AddAttributePage = () => {
       const payload: AttributePayload = {
         name: formData.name.trim(),
         type: formData.type,
+        attributeType: formData.attributeType,
         sortOrder: parseInt(formData.sortOrder),
         optionValues: formData.values.map(value => {
           const optionValue: ApiOptionValue = {
@@ -177,6 +180,7 @@ const AddAttributePage = () => {
       setFormData({
         name: '',
         type: 'select',
+        attributeType: 'Manufacturing',
         description: '',
         sortOrder: '',
         values: [
@@ -258,6 +262,23 @@ const AddAttributePage = () => {
                           <option value="select">Select</option>
                           <option value="radio">Radio</option>
                           <option value="checkbox">Checkbox</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="col-span-12 md:col-span-4">
+                      <div className="form-group">
+                        <label htmlFor="attributeType" className="form-label">Attribute Type</label>
+                        <select
+                          id="attributeType"
+                          name="attributeType"
+                          className="form-select"
+                          value={formData.attributeType}
+                          onChange={(e) => setFormData(prev => ({ ...prev, attributeType: e.target.value as 'Manufacturing' | 'Warehouse' }))}
+                          disabled={isSubmitting}
+                        >
+                          <option value="Manufacturing">Manufacturing</option>
+                          <option value="Warehouse">Warehouse</option>
                         </select>
                       </div>
                     </div>

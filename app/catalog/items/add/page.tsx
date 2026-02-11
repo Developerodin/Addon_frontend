@@ -6,6 +6,8 @@ import axios from 'axios';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import HelpIcon from '@/shared/components/HelpIcon';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
+import { styleCodeService } from '@/shared/services/styleCodeService';
+import { RawMaterialBomTable, RawMaterialBomItem } from '@/app/catalog/items/components/RawMaterialBomTable';
 import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
@@ -124,12 +126,14 @@ const AddProductPage = () => {
     knittingCode: '',
     vendorCode: '',
     factoryCode: '',
+    productionType: 'internal',
     description: '',
     category: '',
   });
 
   // Style codes array state
   interface StyleCodeItem {
+    styleCodeId?: string;
     styleCode: string;
     eanCode: string;
     mrp: number;
@@ -138,8 +142,9 @@ const AddProductPage = () => {
   }
 
   const [styleCodes, setStyleCodes] = useState<StyleCodeItem[]>([
-    { styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }
+    { styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }
   ]);
+  const [styleCodeOptions, setStyleCodeOptions] = useState<StyleCodeItem[]>([]);
 
   // Add image state
   const [productImage, setProductImage] = useState<File | null>(null);
@@ -160,6 +165,7 @@ const AddProductPage = () => {
   const [modalTotalYarnPages, setModalTotalYarnPages] = useState(1);
   const [modalTotalYarnResults, setModalTotalYarnResults] = useState(0);
   const [isModalLoading, setIsModalLoading] = useState(false);
+  const [rawMaterialRows, setRawMaterialRows] = useState<RawMaterialBomItem[]>([]);
 
   useEffect(() => {
     // Generate software code on component mount
@@ -170,10 +176,11 @@ const AddProductPage = () => {
       setIsLoading(true);
       try {
         // Fetch all data in parallel
-        const [attributesRes, processesRes, categoriesRes] = await Promise.all([
+        const [attributesRes, processesRes, categoriesRes, styleCodesRes] = await Promise.all([
           axios.get(API_ENDPOINTS.attributes),
           axios.get(API_ENDPOINTS.processes),
-          axios.get(API_ENDPOINTS.categories)
+          axios.get(API_ENDPOINTS.categories),
+          styleCodeService.list({ limit: 500, sortBy: 'styleCode:asc' })
         ]);
 
         console.log('Product Attributes Response:', attributesRes.data);
@@ -201,6 +208,18 @@ const AddProductPage = () => {
         // Set categories
         const categoriesResponse = categoriesRes.data;
         setCategories(categoriesResponse.results || []);
+
+        // Style code options for lookup (read-only in UI)
+        const styleCodesResponse = (styleCodesRes as any)?.results || [];
+        const options = styleCodesResponse.map((sc: any) => ({
+          styleCodeId: sc.id,
+          styleCode: sc.styleCode,
+          eanCode: sc.eanCode,
+          mrp: sc.mrp,
+          brand: sc.brand,
+          pack: sc.pack,
+        }));
+        setStyleCodeOptions(options);
 
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -398,6 +417,42 @@ const AddProductPage = () => {
     setStyleCodes(newStyleCodes);
   };
 
+  const handleStyleCodeSelect = (index: number, styleCodeId: string) => {
+    const option = styleCodeOptions.find((sc) => sc.styleCodeId === styleCodeId);
+    if (!option) return;
+    const newStyleCodes = [...styleCodes];
+    newStyleCodes[index] = {
+      styleCodeId: option.styleCodeId,
+      styleCode: option.styleCode,
+      eanCode: option.eanCode,
+      mrp: option.mrp,
+      brand: option.brand,
+      pack: option.pack,
+    };
+    setStyleCodes(newStyleCodes);
+  };
+
+  const handleStyleCodeInput = (index: number, value: string) => {
+    const match = styleCodeOptions.find(
+      (sc) => sc.styleCode.toLowerCase() === value.trim().toLowerCase()
+    );
+    if (match) {
+      handleStyleCodeSelect(index, match.styleCodeId || '');
+      return;
+    }
+    // No match: keep typed value, clear details
+    const newStyleCodes = [...styleCodes];
+    newStyleCodes[index] = {
+      styleCodeId: '',
+      styleCode: value,
+      eanCode: '',
+      mrp: 0,
+      brand: '',
+      pack: '',
+    };
+    setStyleCodes(newStyleCodes);
+  };
+
   const handleAddStyleCode = () => {
     setStyleCodes([...styleCodes, { styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }]);
   };
@@ -428,41 +483,16 @@ const AddProductPage = () => {
     console.log('Attributes:', formData);
     console.log('User Type - isDesign:', isDesign, 'isProduction:', isProduction, 'isFinal:', isFinal);
 
-    // Helper function to validate style codes
+    // Helper: at least one style code selected (has styleCodeId)
     const validateStyleCodes = (codes: typeof styleCodes) => {
-      const validationResults = codes.map((sc, index) => {
-        const styleCodeValid = sc.styleCode && sc.styleCode.trim() !== '';
-        const eanCodeValid = sc.eanCode && sc.eanCode.trim() !== '';
-        // MRP should be a valid number >= 0 (0 is allowed per schema)
-        const mrpValue = typeof sc.mrp === 'string' ? parseFloat(sc.mrp) : sc.mrp;
-        const mrpValid = mrpValue !== null && mrpValue !== undefined && !isNaN(mrpValue) && mrpValue >= 0;
-        const isValid = styleCodeValid && eanCodeValid && mrpValid;
-        
-        return {
-          index,
-          styleCode: sc.styleCode,
-          styleCodeValid,
-          eanCode: sc.eanCode,
-          eanCodeValid,
-          mrp: sc.mrp,
-          mrpValue,
-          mrpValid,
-          isValid
-        };
-      });
-      
-      console.log('=== STYLE CODE VALIDATION DETAILS ===');
-      validationResults.forEach(result => {
-        console.log(`Entry ${result.index + 1}:`, result);
-      });
-      
-      return validationResults.some(r => r.isValid);
+      if (!codes || codes.length === 0) return false;
+      return codes.some(sc => (sc as { styleCodeId?: string }).styleCodeId && String((sc as { styleCodeId?: string }).styleCodeId).trim());
     };
 
     // Validate required fields based on user type
     if (isProduction) {
-      // Production user: Only Factory Code required
-      if (!generalForm.factoryCode || generalForm.factoryCode.trim() === '') {
+      // Production user: Factory Code required only when not outsourced
+      if (generalForm.productionType !== 'outsourced' && (!generalForm.factoryCode || generalForm.factoryCode.trim() === '')) {
         alert('Please fill in all required fields');
         return;
       }
@@ -475,32 +505,49 @@ const AddProductPage = () => {
         return;
       }
     } else if (isDesign) {
-      if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category || 
-          !generalForm.internalCode || generalForm.internalCode.trim() === '' || 
+      const outsourced = generalForm.productionType === 'outsourced';
+      if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category) {
+        alert('Please fill in all required fields');
+        return;
+      }
+      if (!outsourced && (
+          !generalForm.internalCode || generalForm.internalCode.trim() === '' ||
           !generalForm.knittingCode || generalForm.knittingCode.trim() === '' ||
-          !generalForm.vendorCode || generalForm.vendorCode.trim() === '') {
+          !generalForm.vendorCode || generalForm.vendorCode.trim() === '')) {
         alert('Please fill in all required fields');
         return;
       }
     } else {
       const hasValidStyleCodes = validateStyleCodes(styleCodes);
-      console.log('Other User Validation - hasValidStyleCodes:', hasValidStyleCodes);
-      console.log('Other fields:', {
-        name: generalForm.name,
-        category: generalForm.category,
-        internalCode: generalForm.internalCode,
-        vendorCode: generalForm.vendorCode,
-        factoryCode: generalForm.factoryCode,
-        description: generalForm.description
-      });
-      if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category || 
-          !generalForm.internalCode || generalForm.internalCode.trim() === '' || 
-          !generalForm.knittingCode || generalForm.knittingCode.trim() === '' ||
-          !generalForm.vendorCode || generalForm.vendorCode.trim() === '' || 
-          !generalForm.factoryCode || generalForm.factoryCode.trim() === '' || 
+      const outsourced = generalForm.productionType === 'outsourced';
+      if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category ||
+          (!outsourced && (!generalForm.factoryCode || generalForm.factoryCode.trim() === '')) ||
           !hasValidStyleCodes || !generalForm.description || generalForm.description.trim() === '') {
-        alert('Please fill in all required fields. At least one style code entry with styleCode, eanCode, and mrp is required.');
+        alert('Please fill in all required fields. At least one style code is required.');
         return;
+      }
+      if (!outsourced && (
+          !generalForm.internalCode || generalForm.internalCode.trim() === '' ||
+          !generalForm.knittingCode || generalForm.knittingCode.trim() === '' ||
+          !generalForm.vendorCode || generalForm.vendorCode.trim() === '')) {
+        alert('Please fill in all required fields.');
+        return;
+      }
+    }
+
+    // Needles attribute is required when it is shown on the form
+    const needlesAttr = attributeDefinitions.find(a => a.name.toLowerCase() === 'needles');
+    if (needlesAttr) {
+      const showNeedles = isProduction
+        || (isFinal && shouldShowAttributeForFinal(needlesAttr.name, isFinal))
+        || (isDesign && shouldShowAttribute(needlesAttr.name, isDesign))
+        || (!isDesign && !isFinal && !isProduction);
+      if (showNeedles) {
+        const needlesValue = (formData['needles'] || '').toString().trim();
+        if (!needlesValue) {
+          alert('Needles is a required field. Please select a value before saving.');
+          return;
+        }
       }
     }
 
@@ -510,46 +557,41 @@ const AddProductPage = () => {
       // Prepare the product data
       const productData: any = {};
 
-      // Filter and prepare style codes - trim strings and ensure valid values
-      const filteredStyleCodes = styleCodes
-        .map(sc => ({
-          styleCode: sc.styleCode ? sc.styleCode.trim() : '',
-          eanCode: sc.eanCode ? sc.eanCode.trim() : '',
-          mrp: sc.mrp !== null && sc.mrp !== undefined && !isNaN(sc.mrp) ? Number(sc.mrp) : 0,
-          brand: sc.brand ? sc.brand.trim() : undefined,
-          pack: sc.pack ? sc.pack.trim() : undefined
-        }))
-        .filter(sc => sc.styleCode !== '' && sc.eanCode !== '' && sc.mrp >= 0);
+      productData.productionType = generalForm.productionType || 'internal';
 
-      console.log('=== FILTERED STYLE CODES ===');
-      console.log('Original styleCodes:', styleCodes);
-      console.log('Filtered styleCodes:', filteredStyleCodes);
+      // Style codes: send only IDs
+      const styleCodeIds = styleCodes
+        .filter(sc => (sc as { styleCodeId?: string }).styleCodeId && String((sc as { styleCodeId?: string }).styleCodeId).trim())
+        .map(sc => (sc as { styleCodeId: string }).styleCodeId);
+
+      console.log('=== STYLE CODES (IDs only) ===');
+      console.log('styleCodeIds:', styleCodeIds);
 
       if (isProduction) {
         // Production user: Only Factory Code
         productData.factoryCode = generalForm.factoryCode.trim();
       } else if (isFinal) {
-        // Final user: Style Codes array and Description
-        productData.styleCodes = filteredStyleCodes;
+        // Final user: Style Codes (IDs only) and Description
+        productData.styleCodes = styleCodeIds;
         productData.description = generalForm.description.trim();
       } else if (isDesign) {
-        // Design user: Basic fields
+        // Design user: Basic fields (optional when outsourced)
         productData.name = generalForm.name.trim();
-        productData.softwareCode = softwareCode;
-        productData.internalCode = generalForm.internalCode.trim();
-        productData.knittingCode = generalForm.knittingCode.trim();
-        productData.vendorCode = generalForm.vendorCode.trim();
+        productData.softwareCode = generalForm.productionType === 'outsourced' ? (softwareCode || '') : softwareCode;
+        productData.internalCode = generalForm.internalCode?.trim() ?? '';
+        productData.knittingCode = generalForm.knittingCode?.trim() ?? '';
+        productData.vendorCode = generalForm.vendorCode?.trim() ?? '';
         productData.category = generalForm.category;
       } else {
-        // Other users: All fields
+        // Other users: All fields (Software/Internal/Knitting/Vendor optional when outsourced)
         productData.name = generalForm.name.trim();
-        productData.softwareCode = softwareCode;
-        productData.internalCode = generalForm.internalCode.trim();
-        productData.knittingCode = generalForm.knittingCode.trim();
-        productData.vendorCode = generalForm.vendorCode.trim();
+        productData.softwareCode = softwareCode || '';
+        productData.internalCode = generalForm.internalCode?.trim() ?? '';
+        productData.knittingCode = generalForm.knittingCode?.trim() ?? '';
+        productData.vendorCode = generalForm.vendorCode?.trim() ?? '';
         productData.category = generalForm.category;
         productData.factoryCode = generalForm.factoryCode.trim();
-        productData.styleCodes = filteredStyleCodes;
+        productData.styleCodes = styleCodeIds;
         productData.description = generalForm.description.trim();
       }
 
@@ -588,7 +630,7 @@ const AddProductPage = () => {
           .filter(([_, value]) => value)
       );
 
-      // BOM and Processes for production users and non-design/non-final/non-production users
+      // BOM, rawMaterials and Processes for production users and non-design/non-final/non-production users
       if (isProduction || (!isDesign && !isFinal && !isProduction)) {
         productData.bom = bomItems
           .filter(item => item.yarnCatalogId && item.quantity > 0)
@@ -597,6 +639,12 @@ const AddProductPage = () => {
             yarnName: item.yarnName,
             quantity: item.quantity
           }));
+
+        if (rawMaterialRows.length > 0) {
+          productData.rawMaterials = rawMaterialRows
+            .filter(rm => rm.rawMaterialId && (rm.quantity ?? 0) >= 0)
+            .map(rm => ({ rawMaterialId: rm.rawMaterialId, quantity: Number(rm.quantity) }));
+        }
 
         productData.processes = processItems
           .filter(item => item.processId)
@@ -779,23 +827,59 @@ const AddProductPage = () => {
                 {activeTab === 'general' && (
                   <div className="grid grid-cols-12 gap-6">
                     {isProduction ? (
-                      // Production user: Only Factory Code
-                      <div className="col-span-12">
+                      // Production user: only Production Type + Factory Code
+                      <div className="col-span-12 grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="form-label">Factory Code *</label>
-                          <input 
-                            type="text" 
+                          <label className="form-label">Production Type *</label>
+                          <select
+                            className="form-control"
+                            value={generalForm.productionType}
+                            onChange={(e) => handleGeneralChange('productionType', e.target.value)}
+                            required
+                          >
+                            <option value="internal">Internal</option>
+                            <option value="outsourced">Outsourced</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="form-label">Factory Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
+                          <input
+                            type="text"
                             className="form-control"
                             value={generalForm.factoryCode}
                             onChange={(e) => handleGeneralChange('factoryCode', e.target.value)}
-                            required
+                            required={generalForm.productionType !== 'outsourced'}
                           />
                         </div>
                       </div>
                     ) : isFinal ? (
-                      // Final user: Style Codes array and Description
+                      // Final user: Production Type + Factory Code above Style Codes, then Style Codes + Description
                       <div className="col-span-12">
                         <div className="space-y-6">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="form-label">Production Type *</label>
+                              <select
+                                className="form-control"
+                                value={generalForm.productionType}
+                                onChange={(e) => handleGeneralChange('productionType', e.target.value)}
+                                required
+                              >
+                                <option value="internal">Internal</option>
+                                <option value="outsourced">Outsourced</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label">Factory Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                value={generalForm.factoryCode}
+                                onChange={(e) => handleGeneralChange('factoryCode', e.target.value)}
+                                required={generalForm.productionType !== 'outsourced'}
+                              />
+                            </div>
+                          </div>
                           <div>
                             <div className="flex justify-between items-center mb-4">
                               <label className="form-label">Style Codes *</label>
@@ -829,60 +913,57 @@ const AddProductPage = () => {
                                     <div>
                                       <label className="form-label">Style Code *</label>
                                       <input
-                                        type="text"
+                                        list={`styleCodeList-${index}`}
                                         className="form-control"
                                         value={styleCodeItem.styleCode}
-                                        onChange={(e) => handleStyleCodeChange(index, 'styleCode', e.target.value)}
-                                        required
+                                        onChange={(e) => handleStyleCodeInput(index, e.target.value)}
+                                        placeholder="Type to search..."
                                       />
+                                      <datalist id={`styleCodeList-${index}`}>
+                                        {styleCodeOptions.map((opt) => (
+                                          <option key={opt.styleCodeId} value={opt.styleCode}>
+                                            {opt.styleCode}
+                                          </option>
+                                        ))}
+                                      </datalist>
                                     </div>
                                     <div>
-                                      <label className="form-label">EAN Code *</label>
+                                      <label className="form-label">EAN Code</label>
                                       <input
                                         type="text"
-                                        className="form-control"
+                                        className="form-control bg-gray-50"
                                         value={styleCodeItem.eanCode}
-                                        onChange={(e) => handleStyleCodeChange(index, 'eanCode', e.target.value)}
-                                        required
+                                        readOnly
                                       />
                                     </div>
                                     <div>
-                                      <label className="form-label">MRP *</label>
+                                      <label className="form-label">MRP</label>
                                       <input
                                         type="number"
                                         step="0.01"
                                         min="0"
-                                        className="form-control"
+                                        className="form-control bg-gray-50"
                                         value={styleCodeItem.mrp}
-                                        onChange={(e) => handleStyleCodeChange(index, 'mrp', e.target.value)}
-                                        required
+                                        readOnly
                                       />
                                     </div>
                                     <div>
                                       <label className="form-label">Brand</label>
-                                      <select
-                                        className="form-control"
+                                      <input
+                                        type="text"
+                                        className="form-control bg-gray-50"
                                         value={styleCodeItem.brand ?? ''}
-                                        onChange={(e) => handleStyleCodeChange(index, 'brand', e.target.value)}
-                                      >
-                                        <option value="">Select Brand</option>
-                                        {brandOptions.map((opt) => (
-                                          <option key={opt._id} value={opt.name}>{opt.name}</option>
-                                        ))}
-                                      </select>
+                                        readOnly
+                                      />
                                     </div>
                                     <div>
                                       <label className="form-label">Pack</label>
-                                      <select
-                                        className="form-control"
+                                      <input
+                                        type="text"
+                                        className="form-control bg-gray-50"
                                         value={styleCodeItem.pack ?? ''}
-                                        onChange={(e) => handleStyleCodeChange(index, 'pack', e.target.value)}
-                                      >
-                                        <option value="">Select Pack</option>
-                                        {packOptions.map((opt) => (
-                                          <option key={opt._id} value={opt.name}>{opt.name}</option>
-                                        ))}
-                                      </select>
+                                        readOnly
+                                      />
                                     </div>
                                   </div>
                                 </div>
@@ -923,49 +1004,59 @@ const AddProductPage = () => {
                                     <input type="text" className="form-control" value={softwareCode} readOnly />
                                   </div>
                                   <div>
-                                    <label className="form-label">Internal Code / Design Code *</label>
+                                    <label className="form-label">Internal Code / Design Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
                                     <input 
                                       type="text" 
                                       className="form-control"
                                       value={generalForm.internalCode}
                                       onChange={(e) => handleGeneralChange('internalCode', e.target.value)}
-                                      required
+                                      required={generalForm.productionType !== 'outsourced'}
                                     />
                                   </div>
                                 </div>
                                 <div>
-                                  <label className="form-label">Knitting Code *</label>
+                                  <label className="form-label">Knitting Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
                                   <input 
                                     type="text" 
                                     className="form-control"
                                     value={generalForm.knittingCode}
                                     onChange={(e) => handleGeneralChange('knittingCode', e.target.value)}
-                                    required
+                                    required={generalForm.productionType !== 'outsourced'}
                                   />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="form-label">Vendor Code *</label>
-                                    <input 
-                                      type="text" 
-                                      className="form-control"
-                                      value={generalForm.vendorCode}
-                                      onChange={(e) => handleGeneralChange('vendorCode', e.target.value)}
-                                      required
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="form-label">Factory Code *</label>
-                                    <input 
-                                      type="text" 
-                                      className="form-control"
-                                      value={generalForm.factoryCode}
-                                      onChange={(e) => handleGeneralChange('factoryCode', e.target.value)}
-                                      required
-                                    />
-                                  </div>
+                                <div>
+                                  <label className="form-label">Vendor Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
+                                  <input 
+                                    type="text" 
+                                    className="form-control"
+                                    value={generalForm.vendorCode}
+                                    onChange={(e) => handleGeneralChange('vendorCode', e.target.value)}
+                                    required={generalForm.productionType !== 'outsourced'}
+                                  />
                                 </div>
                                 <div>
+                                  <label className="form-label">Production Type *</label>
+                                  <select
+                                    className="form-control"
+                                    value={generalForm.productionType}
+                                    onChange={(e) => handleGeneralChange('productionType', e.target.value)}
+                                    required
+                                  >
+                                    <option value="internal">Internal</option>
+                                    <option value="outsourced">Outsourced</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="form-label">Factory Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    value={generalForm.factoryCode}
+                                    onChange={(e) => handleGeneralChange('factoryCode', e.target.value)}
+                                    required={generalForm.productionType !== 'outsourced'}
+                                  />
+                                </div>
+                                <div className="col-span-12">
                                   <div className="flex justify-between items-center mb-4">
                                     <label className="form-label">Style Codes *</label>
                                     <button
@@ -1088,34 +1179,34 @@ const AddProductPage = () => {
                                     <input type="text" className="form-control" value={softwareCode} readOnly />
                                   </div>
                                   <div>
-                                    <label className="form-label">Internal Code / Design Code *</label>
+                                    <label className="form-label">Internal Code / Design Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
                                     <input 
                                       type="text" 
                                       className="form-control"
                                       value={generalForm.internalCode}
                                       onChange={(e) => handleGeneralChange('internalCode', e.target.value)}
-                                      required
+                                      required={generalForm.productionType !== 'outsourced'}
                                     />
                                   </div>
                                 </div>
                                 <div>
-                                  <label className="form-label">Knitting Code *</label>
+                                  <label className="form-label">Knitting Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
                                   <input 
                                     type="text" 
                                     className="form-control"
                                     value={generalForm.knittingCode}
                                     onChange={(e) => handleGeneralChange('knittingCode', e.target.value)}
-                                    required
+                                    required={generalForm.productionType !== 'outsourced'}
                                   />
                                 </div>
                                 <div>
-                                  <label className="form-label">Vendor Code *</label>
+                                  <label className="form-label">Vendor Code{generalForm.productionType !== 'outsourced' ? ' *' : ''}</label>
                                   <input 
                                     type="text" 
                                     className="form-control"
                                     value={generalForm.vendorCode}
                                     onChange={(e) => handleGeneralChange('vendorCode', e.target.value)}
-                                    required
+                                    required={generalForm.productionType !== 'outsourced'}
                                   />
                                 </div>
                               </>
@@ -1230,9 +1321,14 @@ const AddProductPage = () => {
                             }
                             return true;
                           })
-                          .map((attrDef) => (
+                          .map((attrDef) => {
+                            const isNeedlesRequired = attrDef.name.toLowerCase() === 'needles' && (
+                              isProduction || (isFinal && shouldShowAttributeForFinal(attrDef.name, isFinal)) ||
+                              (isDesign && shouldShowAttribute(attrDef.name, isDesign)) || (!isDesign && !isFinal && !isProduction)
+                            );
+                            return (
                             <div key={attrDef.id} className="space-y-2">
-                              <label className="form-label">{attrDef.name}</label>
+                              <label className="form-label">{attrDef.name}{isNeedlesRequired ? ' *' : ''}</label>
                               <select 
                                 className="form-select" 
                                 disabled={isLoading}
@@ -1247,7 +1343,7 @@ const AddProductPage = () => {
                                 ))}
                               </select>
                             </div>
-                          ))}
+                          );})}
                       </div>
                     </div>
                   </div>
@@ -1317,6 +1413,12 @@ const AddProductPage = () => {
                         </tbody>
                       </table>
                     </div>
+
+                    <RawMaterialBomTable
+                      items={rawMaterialRows}
+                      onChange={setRawMaterialRows}
+                      disabled={isLoading}
+                    />
 
                     {/* Yarn Catalog Selection Modal */}
                     {isYarnModalOpen && (

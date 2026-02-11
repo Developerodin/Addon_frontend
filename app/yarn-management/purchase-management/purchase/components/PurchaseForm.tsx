@@ -1527,9 +1527,16 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       key={item.id}
                       className={`hover:bg-gray-50 ${showNotInSupplierError ? "border-2 border-red-400 bg-red-50/50" : ""}`}
                     >
-                      {/* Yarn Name with Autocomplete */}
-                      <td className="border border-gray-300 px-2 py-1.5" style={{ position: 'relative', overflow: 'visible' }}>
-                        <div className="relative" ref={el => { autocompleteRefs.current[item.id] = el; }} style={{ position: 'relative', zIndex: 1 }}>
+                      {/* Yarn Name with Autocomplete - td z-index when dropdown open so list stacks above following rows */}
+                      <td
+                        className="border border-gray-300 px-2 py-1.5"
+                        style={{
+                          position: 'relative',
+                          overflow: 'visible',
+                          zIndex: autocompleteState.showSuggestions && autocompleteState.suggestions.length > 0 ? 50 : undefined,
+                        }}
+                      >
+                        <div className="relative" ref={el => { autocompleteRefs.current[item.id] = el; }}>
                           {showNotInSupplierError && (
                             <p className="text-[10px] text-red-600 font-medium mb-1">Not in supplier data</p>
                           )}
@@ -1584,13 +1591,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                           />
                           {autocompleteState.showSuggestions && autocompleteState.suggestions.length > 0 && (
                             <div 
-                              className="autocomplete-dropdown absolute z-[9999] w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl max-h-60 overflow-auto"
+                              className="autocomplete-dropdown absolute z-[100] w-full mt-1 rounded-lg shadow-xl max-h-60 overflow-auto border border-gray-200 bg-white"
                               style={{ 
                                 position: 'absolute', 
                                 top: '100%', 
                                 left: 0, 
                                 right: 0,
-                                zIndex: 9999
+                                marginTop: 4,
+                                boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
                               }}
                               onMouseDown={(e) => {
                                 // Prevent click outside handler from closing when clicking on dropdown
