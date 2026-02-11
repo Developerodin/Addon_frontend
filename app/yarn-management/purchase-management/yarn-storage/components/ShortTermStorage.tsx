@@ -78,10 +78,11 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     columnsPerRow: 2,
     firstLabelTopMargin: 0,
     showCutLines: true,
-    zoneFontSize: 20,
-    rackCodeFontSize: 50,
-    detailsFontSize: 20,
-    barcodeHeight: 70,
+    zoneFontSize: 30,
+    rackCodeFontSize: 80,
+    detailsFontSize: 40,
+    barcodeHeight: 80,
+    barcodeWidth: 2,
     orientation: 'horizontal' as 'horizontal' | 'vertical',
   });
   const [racksReadyToPrint, setRacksReadyToPrint] = useState<Array<{
@@ -520,20 +521,24 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         paperHeight: 398,
         labelsPerPage: 1,
         columnsPerRow: 1,
-        rackCodeFontSize: 40,
-        detailsFontSize: 16,
+        rackCodeFontSize: 60,
+        detailsFontSize: 30,
         barcodeHeight: 50,
+        barcodeWidth: 2,
         orientation: 'horizontal',
       });
     } else if (size === '50mm * 25mm') {
       setPrintSettings({
         ...printSettings,
         paperSize: '50mm * 25mm',
-        paperWidth: 406,
-        paperHeight: 203,
+        paperWidth: 406,  // 2 inches
+        paperHeight: 203, // 1 inch
         labelsPerPage: 1,
         columnsPerRow: 1,
-        barcodeHeight: 50,
+        rackCodeFontSize: 40,
+        detailsFontSize: 20,
+        barcodeHeight: 40,
+        barcodeWidth: 2,
         orientation: 'horizontal',
       });
     }
@@ -608,11 +613,11 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                 height: ${labelW}mm;
               ` : ''}
             }
-            .zone { font-size: ${isSmall ? '5pt' : '8pt'}; color: #666; margin-bottom: 0.5mm; white-space: nowrap; }
-            .code { font-weight: bold; font-size: ${isSmall ? '10pt' : '18pt'}; margin-bottom: 0.5mm; line-height: 1; }
-            .details { font-size: ${isSmall ? '5pt' : '8pt'}; margin-bottom: 1.5mm; white-space: nowrap; }
-            .barcode { width: 95%; max-height: 40%; display: flex; justify-content: center; }
-            svg { width: 100%; height: auto; max-height: 100%; }
+            .zone { font-size: ${isSmall ? '8pt' : '12pt'}; color: #666; margin-bottom: 1mm; white-space: nowrap; }
+            .code { font-weight: bold; font-size: ${isSmall ? '16pt' : '26pt'}; margin-bottom: 1mm; line-height: 1; }
+            .details { font-size: ${isSmall ? '10pt' : '18pt'}; margin-bottom: 2mm; white-space: nowrap; font-weight: 500; }
+            .barcode { width: 100%; max-height: 45%; display: flex; justify-content: center; align-items: center; }
+            svg { width: 90%; height: auto; max-height: 100%; }
           </style>
         </head>
         <body>
@@ -629,7 +634,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
             <div class="content">
               <div class="zone">${zoneLabel}</div>
               <div class="code">${rack.rackCode}</div>
-              <div class="details">Shelf: ${rack.shelf || '-'} ---- Floor: ${rack.floor || '-'}</div>
+              <div class="details">Shelf: ${rack.shelf || '-'} | Floor: ${rack.floor || '-'}</div>
               <div class="barcode"><svg id="bc-${i + j}"></svg></div>
             </div>
           </div>
@@ -1701,13 +1706,13 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
 
               <div className="space-y-3 pt-3 border-t border-gray-100">
                 <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Font & Barcode Sizes</h4>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-700 mb-1">Zone Size</label>
                     <input
                       type="number"
                       value={printSettings.zoneFontSize}
-                      onChange={(e) => setPrintSettings({ ...printSettings, zoneFontSize: parseInt(e.target.value) || 20 })}
+                      onChange={(e) => setPrintSettings({ ...printSettings, zoneFontSize: parseInt(e.target.value) || 30 })}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
@@ -1716,7 +1721,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                     <input
                       type="number"
                       value={printSettings.rackCodeFontSize}
-                      onChange={(e) => setPrintSettings({ ...printSettings, rackCodeFontSize: parseInt(e.target.value) || 50 })}
+                      onChange={(e) => setPrintSettings({ ...printSettings, rackCodeFontSize: parseInt(e.target.value) || 80 })}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
@@ -1725,67 +1730,80 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                     <input
                       type="number"
                       value={printSettings.detailsFontSize}
-                      onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 20 })}
+                      onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 40 })}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Barcode Height</label>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Barcode HT</label>
                     <input
                       type="number"
                       value={printSettings.barcodeHeight}
-                      onChange={(e) => setPrintSettings({ ...printSettings, barcodeHeight: parseInt(e.target.value) || 70 })}
+                      onChange={(e) => setPrintSettings({ ...printSettings, barcodeHeight: parseInt(e.target.value) || 80 })}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Barcode WD</label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      max="5"
+                      value={printSettings.barcodeWidth}
+                      onChange={(e) => setPrintSettings({ ...printSettings, barcodeWidth: parseInt(e.target.value) || 2 })}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
                 </div>
+
+                <div className="pt-2 border-t border-gray-100">
+                  <button
+                    onClick={() => setPrintSettings({
+                      paperSize: '4x6',
+                      paperWidth: 812,
+                      paperHeight: 1218,
+                      labelsPerPage: 4,
+                      columnsPerRow: 2,
+                      firstLabelTopMargin: 0,
+                      showCutLines: true,
+                      zoneFontSize: 30,
+                      rackCodeFontSize: 80,
+                      detailsFontSize: 40,
+                      barcodeHeight: 80,
+                      barcodeWidth: 2,
+                      orientation: 'horizontal',
+                    })}
+                    className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                  >
+                    <i className="ri-restart-line mr-1.5"></i>
+                    Reset Defaults
+                  </button>
+                </div>
               </div>
 
-              <div className="pt-2 border-t border-gray-100">
+              <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-end gap-3 z-10">
                 <button
-                  onClick={() => setPrintSettings({
-                    paperSize: '4x6',
-                    paperWidth: 812,
-                    paperHeight: 1218,
-                    labelsPerPage: 4,
-                    columnsPerRow: 2,
-                    firstLabelTopMargin: 0,
-                    showCutLines: true,
-                    zoneFontSize: 20,
-                    rackCodeFontSize: 50,
-                    detailsFontSize: 20,
-                    barcodeHeight: 70,
-                    orientation: 'horizontal',
-                  })}
-                  className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                  onClick={executeBrowserPrint}
+                  className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded transition-colors mr-auto"
                 >
-                  <i className="ri-restart-line mr-1.5"></i>
-                  Reset Defaults
+                  <i className="ri-window-line mr-1.5"></i>
+                  Test Print (Browser)
+                </button>
+                <button
+                  onClick={() => setShowPrintSettingsModal(false)}
+                  className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={executePrintWithSettings}
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded transition-colors"
+                >
+                  <i className="ri-printer-line mr-1.5"></i>
+                  Print Rack Barcodes
                 </button>
               </div>
-            </div>
-
-            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-end gap-3 z-10">
-              <button
-                onClick={executeBrowserPrint}
-                className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded transition-colors mr-auto"
-              >
-                <i className="ri-window-line mr-1.5"></i>
-                Test Print (Browser)
-              </button>
-              <button
-                onClick={() => setShowPrintSettingsModal(false)}
-                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={executePrintWithSettings}
-                className="px-3 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded transition-colors"
-              >
-                <i className="ri-printer-line mr-1.5"></i>
-                Print Rack Barcodes
-              </button>
             </div>
           </div>
         </div>

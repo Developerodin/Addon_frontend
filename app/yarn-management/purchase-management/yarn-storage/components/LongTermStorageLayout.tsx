@@ -711,8 +711,6 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         paperHeight: 203, // 1 inch
         labelsPerPage: 1,
         columnsPerRow: 1,
-        rackCodeFontSize: 40,
-        detailsFontSize: 20,
         barcodeHeight: 40,
         barcodeWidth: 2,
         orientation: 'horizontal',
@@ -1536,13 +1534,13 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
               <div className="space-y-3 pt-3 border-t border-gray-100">
                 <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Font & Barcode Sizes</h4>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-700 mb-1">Zone Size</label>
                     <input
                       type="number"
                       value={printSettings.zoneFontSize}
-                      onChange={(e) => setPrintSettings({ ...printSettings, zoneFontSize: parseInt(e.target.value) || 20 })}
+                      onChange={(e) => setPrintSettings({ ...printSettings, zoneFontSize: parseInt(e.target.value) || 30 })}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
@@ -1551,7 +1549,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     <input
                       type="number"
                       value={printSettings.rackCodeFontSize}
-                      onChange={(e) => setPrintSettings({ ...printSettings, rackCodeFontSize: parseInt(e.target.value) || 50 })}
+                      onChange={(e) => setPrintSettings({ ...printSettings, rackCodeFontSize: parseInt(e.target.value) || 80 })}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
@@ -1560,16 +1558,28 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     <input
                       type="number"
                       value={printSettings.detailsFontSize}
-                      onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 20 })}
+                      onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 40 })}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Barcode Height</label>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Barcode HT</label>
                     <input
                       type="number"
                       value={printSettings.barcodeHeight}
-                      onChange={(e) => setPrintSettings({ ...printSettings, barcodeHeight: parseInt(e.target.value) || 70 })}
+                      onChange={(e) => setPrintSettings({ ...printSettings, barcodeHeight: parseInt(e.target.value) || 80 })}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Barcode WD</label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      max="5"
+                      value={printSettings.barcodeWidth}
+                      onChange={(e) => setPrintSettings({ ...printSettings, barcodeWidth: parseInt(e.target.value) || 2 })}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
