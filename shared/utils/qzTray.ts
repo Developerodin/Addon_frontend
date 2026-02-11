@@ -812,95 +812,75 @@ export const generateZPLCone = (
   }
 
   if (isSmallSideBySide) {
-    // SIDE-BY-SIDE LAYOUT (e.g. 50x25mm)
-    // Left side: Data (approx 60% width)
-    // Right side: QR Code (approx 40% width)
-
+    // SIDE-BY-SIDE LAYOUT (e.g. 50x25mm) - same field order as browser test print
     const dataWidth = Math.floor(labelWidth * 0.65) - labelMargin;
     const qrSectionX = xOffset + dataWidth + labelMargin;
-    const qrWidth = qrCodeSize * 30; // Approx width of QR code
-
+    const qrWidth = qrCodeSize * 30;
     let yPos = 15 + yOffset;
     const xPos = labelMargin + xOffset;
-    const detailsFont = Math.min(detailsFontSize, 18); // Force smaller font for tight height
+    const detailsFont = Math.min(detailsFontSize, 18);
     const lineHeight = detailsFont + 4;
-
-    // Yarn Name (Left Column)
     const maxYarnChars = Math.floor(dataWidth / (detailsFont * 0.55));
+
+    // 1. Yarn Name (title)
     if (yarnName) {
       const nameLines = wrapText(yarnName, maxYarnChars);
-      nameLines.slice(0, 4).forEach((line) => { // Allow up to 4 lines
+      nameLines.slice(0, 4).forEach((line) => {
         zpl += `^FO${xPos},${yPos}^A0N,${detailsFont + 1},${detailsFont + 1}^FD${line}^FS\n`;
         yPos += lineHeight - 1;
       });
     }
-
-    // Supplier Info
-    if (supplierName) {
-      zpl += `^FO${xPos},${yPos}^A0N,${detailsFont - 1},${detailsFont - 1}^FD${supplierName.substring(0, maxYarnChars)}^FS\n`;
-      yPos += lineHeight - 1;
-    }
-
-    // PO Number (Left Column)
+    // 2. Supplier  3. PO  4. Lot  5. Shade (same order as browser)
+    zpl += `^FO${xPos},${yPos}^A0N,${detailsFont - 1},${detailsFont - 1}^FDSupplier: ${(supplierName || '-').substring(0, maxYarnChars)}^FS\n`;
+    yPos += lineHeight - 1;
     zpl += `^FO${xPos},${yPos}^A0N,${detailsFont - 1},${detailsFont - 1}^FDPO: ${poNumber || '-'}^FS\n`;
     yPos += lineHeight - 1;
-
-    // Lot (Left Column)
     zpl += `^FO${xPos},${yPos}^A0N,${detailsFont},${detailsFont}^FDLot: ${lotNumber || '-'}^FS\n`;
     yPos += lineHeight;
-
-    // Shade (Left Column)
     zpl += `^FO${xPos},${yPos}^A0N,${detailsFont},${detailsFont}^FDShade: ${shadeCode || '-'}^FS\n`;
     yPos += lineHeight;
-
-    // Removed barcode text below data as per user request
-
-    // QR Code (Right Column) - Vertically Centered in labelHeight
     const qrYPos = yOffset + Math.max(10, Math.floor((labelHeight - qrWidth) / 2));
     zpl += `^FO${qrSectionX},${qrYPos}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
-
   } else {
-    // ORIGINAL VERTICAL LAYOUT
-    const contentWidth = labelWidth - (labelMargin * 2);
+    // LAYOUT MATCHING BROWSER TEST PRINT: data left (~65%), QR right (~33%)
+    const dataWidth = Math.floor(labelWidth * 0.65) - labelMargin;
+    const qrSectionX = xOffset + dataWidth + labelMargin;
+    const qrWidth = qrCodeSize * 30;
     const yarnNameFontH = detailsFontSize + 2;
     const lineHeight = yarnNameFontH + 3;
+    const maxYarnCharsPerLine = labelWidth < 300 ? 22 : labelWidth < 450 ? 26 : 32;
 
     let yPos = 5 + yOffset;
     const xPos = labelMargin + xOffset;
 
-    // Yarn Name
-    const maxYarnCharsPerLine = labelWidth < 300 ? 22 : labelWidth < 450 ? 26 : 32;
+    // 1. Yarn Name (title) - same as browser .title
     if (yarnName) {
       const nameLines = wrapText(yarnName, maxYarnCharsPerLine);
       for (const line of nameLines) {
-        zpl += `^FO${xPos},${yPos}^A0N,${yarnNameFontH},${yarnNameFontH}^FD${line}^FS\n`;
+        zpl += `^FO${xPos},${yPos}^A0N,${titleFontSize},${titleFontSize}^FD${line}^FS\n`;
         yPos += lineHeight;
       }
     }
 
-    // PO Number then Supplier
-    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FDPO: ${poNumber || '-'}^FS\n`;
-    yPos += detailsFontSize + 2;
+    // 2. Supplier - same order as browser
+    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FDSupplier: ${(supplierName || '-').substring(0, maxYarnCharsPerLine)}^FS\n`;
+    yPos += lineHeight;
 
-    if (supplierName) {
-      const supplierLines = wrapText(`Supplier: ${supplierName}`, maxYarnCharsPerLine);
-      for (const line of supplierLines) {
-        zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FD${line}^FS\n`;
-        yPos += lineHeight - 1;
-      }
-    }
+    // 3. PO
+    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FDPO: ${poNumber || '-'}^FS\n`;
+    yPos += lineHeight;
 
-    // Lot and Shade
-    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FDLot: ${lotNumber || '-'} | Shade: ${shadeCode || '-'}^FS\n`;
-    yPos += detailsFontSize + 3;
+    // 4. Lot
+    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FDLot: ${lotNumber || '-'}^FS\n`;
+    yPos += lineHeight;
 
-    // Removed barcode text above QR as per user request
-    yPos += 4;
+    // 5. Shade
+    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FDShade: ${shadeCode || '-'}^FS\n`;
+    yPos += lineHeight;
 
-    // QR Code
-    const qrWidth = qrCodeSize * 30;
-    const qrX = xPos + Math.floor((contentWidth - qrWidth) / 2);
-    zpl += `^FO${qrX},${yPos}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
+    // 6. QR Code on the right (browser .qr width 33%)
+    const qrYPos = yOffset + Math.max(10, Math.floor((labelHeight - qrWidth) / 2));
+    zpl += `^FO${qrSectionX},${qrYPos}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
   }
 
   if (isStandalone) {
