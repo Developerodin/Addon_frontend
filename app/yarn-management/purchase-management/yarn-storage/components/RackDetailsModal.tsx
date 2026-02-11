@@ -137,9 +137,8 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
         </head>
         <body>
           <div class="label">
-            <div class="zone">${zoneType === 'LT' ? 'LONG TERM' : 'SHORT TERM'} STORAGE</div>
             <div class="code">${slot.label}</div>
-            <div class="details">Shelf: ${slot.shelfNumber} | Floor: ${slot.floorNumber}</div>
+            <div class="details">Shelf: ${slot.shelfNumber} ---- Floor: ${slot.floorNumber}</div>
             <div class="barcode"><svg id="barcode"></svg></div>
           </div>
           <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>

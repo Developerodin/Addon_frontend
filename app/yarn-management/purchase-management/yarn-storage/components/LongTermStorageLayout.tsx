@@ -828,13 +828,11 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       html += `<div class="page">`;
       for (let j = 0; j < labelsPerPage && (i + j) < racksReadyToPrint.length; j++) {
         const rack = racksReadyToPrint[i + j];
-        const zoneLabel = rack.zone === 'LT' ? 'LONG TERM' : rack.zone === 'ST' ? 'SHORT TERM' : 'YARN STORAGE';
         html += `
           <div class="label">
             <div class="content">
-              <div class="zone">${zoneLabel}</div>
               <div class="code">${rack.rackCode}</div>
-              <div class="details">Shelf: ${rack.shelf || '-'} | Floor: ${rack.floor || '-'}</div>
+              <div class="details">Shelf: ${rack.shelf || '-'} ---- Floor: ${rack.floor || '-'}</div>
               <div class="barcode"><svg id="bc-${i + j}"></svg></div>
             </div>
           </div>
