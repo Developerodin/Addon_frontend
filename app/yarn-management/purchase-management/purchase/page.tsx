@@ -9,6 +9,7 @@ import { toast } from "react-hot-toast";
 import { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import PacklistModal, { PacklistDetails } from "./components/PacklistModal";
 import UpdatePacklistModal from "./components/UpdatePacklistModal";
+import ExcelProcessModal from "./components/ExcelProcessModal";
 import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
 import { formatFileSize, getFileIcon } from "@/shared/services/fileUploadService";
 
@@ -294,6 +295,7 @@ const PurchasePage = () => {
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [excelProcessModalOpen, setExcelProcessModalOpen] = useState(false);
 
   // Check permission
   const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
@@ -947,6 +949,15 @@ const PurchasePage = () => {
                 New Order
               </Link>
 
+              {/* Excel Process button */}
+              <button
+                onClick={() => setExcelProcessModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm"
+              >
+                <i className="ri-file-excel-2-line text-xs"></i>
+                Excel Process
+              </button>
+
               {/* Delete button */}
               <button
                 onClick={handleBulkDelete}
@@ -1275,6 +1286,13 @@ const PurchasePage = () => {
           isSubmitting={isUpdatingStatus}
         />
       )}
+
+      <ExcelProcessModal
+        isOpen={excelProcessModalOpen}
+        onClose={() => setExcelProcessModalOpen(false)}
+        onSuccess={fetchPurchaseOrders}
+        poOptions={orders.map((o) => ({ orderNumber: o.orderNumber, id: o.id }))}
+      />
 
       {orderForUpdatePacklist && (
         <UpdatePacklistModal

@@ -26,27 +26,14 @@ const AddColorPage = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleColorCodeChange = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      setFormData(prev => ({ ...prev, colorCode: '' }));
-      return;
-    }
-    let normalized = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
-    normalized = normalized.slice(0, 7).toUpperCase();
-    setFormData(prev => ({ ...prev, colorCode: normalized }));
-  };
-
-  const isValidHex = (value: string) => /^#([0-9A-F]{6})$/i.test(value);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) {
       toast.error('Color family name is required');
       return;
     }
-    if (!isValidHex(formData.colorCode)) {
-      toast.error('Please select a valid color');
+    if (!formData.colorCode.trim()) {
+      toast.error('Pantone/color code is required');
       return;
     }
 
@@ -54,7 +41,7 @@ const AddColorPage = () => {
     try {
       await yarnColorService.createColor({
         name: formData.name.trim(),
-        colorCode: formData.colorCode.toUpperCase(),
+        colorCode: formData.colorCode.trim(),
         pantoneName: formData.pantoneName.trim() || undefined,
         status: formData.status,
       });
@@ -95,16 +82,9 @@ const AddColorPage = () => {
                       type="text"
                       name="colorCode"
                       value={formData.colorCode}
-                      onChange={(e) => handleColorCodeChange(e.target.value)}
-                      onBlur={(e) => {
-                        const value = e.target.value.trim();
-                        if (value && !value.startsWith('#')) {
-                          handleColorCodeChange(`#${value}`);
-                        }
-                      }}
-                      className="form-control uppercase"
-                      placeholder="#FFFFFF"
-                      maxLength={7}
+                      onChange={handleInputChange}
+                      className="form-control"
+                      placeholder="Enter pantone or color code"
                       required
                     />
                   </div>
