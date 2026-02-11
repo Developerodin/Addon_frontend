@@ -113,6 +113,9 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     fetchStorageSlots();
   }, []);
 
+  // Short-term storage: fixed 3-column layout (no longer 4)
+  const SHORT_TERM_COLUMNS = 3;
+
   // Map storage slots to RackLocation format
   const racks = useMemo(() => {
     if (storageSlots.length === 0) {
@@ -120,39 +123,41 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     }
 
     // Convert to RackLocation format
-    const mappedRacks: RackLocation[] = storageSlots.map((slot) => {
-      // Find if any box is stored in this slot
-      const storedBox = boxes.find(
-        (box) => box.rackLocation?.id === slot._id
-      );
+    // Filter out slots that are beyond the configured column count (e.g. Floor 4 when we only have 3)
+    const mappedRacks: RackLocation[] = storageSlots
+      .filter((slot) => slot.floorNumber <= SHORT_TERM_COLUMNS)
+      .map((slot) => {
+        // Find if any box is stored in this slot
+        const storedBox = boxes.find(
+          (box) => box.rackLocation?.id === slot._id
+        );
 
-      // Determine status
-      let status: RackLocation["status"] = "Available";
-      if (storedBox) {
-        status = "Occupied";
-      } else if (!slot.isActive) {
-        status = "Maintenance";
-      }
+        // Determine status
+        let status: RackLocation["status"] = "Available";
+        if (storedBox) {
+          status = "Occupied";
+        } else if (!slot.isActive) {
+          status = "Maintenance";
+        }
 
-      // Use shelfNumber as row and floorNumber as column
-      return {
-        id: slot._id,
-        rackCode: slot.label,
-        row: slot.shelfNumber,
-        column: slot.floorNumber,
-        shelf: slot.shelfNumber,
-        barcode: slot.barcode,
-        capacity: 1, // Each slot can hold one box
-        currentBoxes: storedBox ? 1 : 0,
-        status,
-      };
-    });
+        // Use shelfNumber as row and floorNumber as column
+        return {
+          id: slot._id,
+          rackCode: slot.label,
+          row: slot.shelfNumber,
+          column: slot.floorNumber,
+          shelf: slot.shelfNumber,
+          barcode: slot.barcode,
+          capacity: 1, // Each slot can hold one box
+          currentBoxes: storedBox ? 1 : 0,
+          status,
+        };
+      });
 
     return mappedRacks;
   }, [storageSlots, boxes]);
 
-  // Short-term storage: fixed 3-column layout (no longer 4)
-  const SHORT_TERM_COLUMNS = 3;
+
 
   // Calculate grid dimensions
   const gridDimensions = useMemo(() => {
