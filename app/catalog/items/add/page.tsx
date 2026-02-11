@@ -535,6 +535,22 @@ const AddProductPage = () => {
       }
     }
 
+    // Needles attribute is required when it is shown on the form
+    const needlesAttr = attributeDefinitions.find(a => a.name.toLowerCase() === 'needles');
+    if (needlesAttr) {
+      const showNeedles = isProduction
+        || (isFinal && shouldShowAttributeForFinal(needlesAttr.name, isFinal))
+        || (isDesign && shouldShowAttribute(needlesAttr.name, isDesign))
+        || (!isDesign && !isFinal && !isProduction);
+      if (showNeedles) {
+        const needlesValue = (formData['needles'] || '').toString().trim();
+        if (!needlesValue) {
+          alert('Needles is a required field. Please select a value before saving.');
+          return;
+        }
+      }
+    }
+
     setIsLoading(true);
 
     try {
@@ -1305,9 +1321,14 @@ const AddProductPage = () => {
                             }
                             return true;
                           })
-                          .map((attrDef) => (
+                          .map((attrDef) => {
+                            const isNeedlesRequired = attrDef.name.toLowerCase() === 'needles' && (
+                              isProduction || (isFinal && shouldShowAttributeForFinal(attrDef.name, isFinal)) ||
+                              (isDesign && shouldShowAttribute(attrDef.name, isDesign)) || (!isDesign && !isFinal && !isProduction)
+                            );
+                            return (
                             <div key={attrDef.id} className="space-y-2">
-                              <label className="form-label">{attrDef.name}</label>
+                              <label className="form-label">{attrDef.name}{isNeedlesRequired ? ' *' : ''}</label>
                               <select 
                                 className="form-select" 
                                 disabled={isLoading}
@@ -1322,7 +1343,7 @@ const AddProductPage = () => {
                                 ))}
                               </select>
                             </div>
-                          ))}
+                          );})}
                       </div>
                     </div>
                   </div>

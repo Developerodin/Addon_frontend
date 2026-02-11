@@ -719,6 +719,22 @@ const EditProductPage = () => {
       }
     }
 
+    // Needles attribute is required when it is shown on the form
+    const needlesCategory = attributeCategories.find(c => c.name.toLowerCase() === 'needles');
+    if (needlesCategory) {
+      const showNeedles = isProduction
+        || (isFinal && shouldShowAttributeForFinal(needlesCategory.name, isFinal))
+        || (isDesign && shouldShowAttribute(needlesCategory.name, isDesign))
+        || (!isDesign && !isFinal && !isProduction);
+      if (showNeedles) {
+        const needlesValue = (formData.attributes[needlesCategory.name] || formData.attributes[needlesCategory.id] || '').toString().trim();
+        if (!needlesValue) {
+          alert('Needles is a required field. Please select a value before saving.');
+          return;
+        }
+      }
+    }
+
     setIsLoading(true);
 
     try {
@@ -1427,9 +1443,13 @@ const EditProductPage = () => {
                     const valueById = formData.attributes[category.id] || '';
                     const valueByName = formData.attributes[category.name] || '';
                     const currentValue = valueById || valueByName;
+                    const isNeedlesRequired = category.name.toLowerCase() === 'needles' && (
+                      isProduction || (isFinal && shouldShowAttributeForFinal(category.name, isFinal)) ||
+                      (isDesign && shouldShowAttribute(category.name, isDesign)) || (!isDesign && !isFinal && !isProduction)
+                    );
                     return (
                       <div key={category.id} className="space-y-2">
-                        <label className="form-label">{category.name}</label>
+                        <label className="form-label">{category.name}{isNeedlesRequired ? ' *' : ''}</label>
                         <select
                           className="form-control"
                           value={currentValue}
