@@ -750,7 +750,7 @@ export const generateZPLRack = (
 
   // Details
   if (shelf !== undefined || floor !== undefined) {
-    zpl += `^FO${xPos},${yPos}^A0${rotation},${detailsFontSize},${detailsFontSize}^FDShelf: ${shelf || '-'} -- Floor: ${floor || '-'}^FS\n`;
+    zpl += `^FO${xPos},${yPos}^A0${rotation},${detailsFontSize},${detailsFontSize}^FDShelf: ${shelf || '-'} --- Floor: ${floor || '-'}^FS\n`;
     yPos += isVertical ? (detailsFontSize + 40) : (detailsFontSize + 10);
   }
 

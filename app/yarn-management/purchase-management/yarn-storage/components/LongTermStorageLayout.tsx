@@ -808,7 +808,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
             <div class="content">
               <div class="zone">${zoneLabel}</div>
               <div class="code">${rack.rackCode}</div>
-              <div class="details">Shelf: ${rack.shelf || '-'} | Floor: ${rack.floor || '-'}</div>
+              <div class="details">Shelf: ${rack.shelf || '-'} --- Floor: ${rack.floor || '-'}</div>
               <div class="barcode"><svg id="bc-${i + j}"></svg></div>
             </div>
           </div>
