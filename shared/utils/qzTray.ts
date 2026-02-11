@@ -699,6 +699,7 @@ export const generateZPLRack = (
     rackCodeFontSize?: number;
     detailsFontSize?: number;
     barcodeHeight?: number;
+    barcodeWidth?: number;
     orientation?: 'horizontal' | 'vertical';
   } = {}
 ): string => {
@@ -710,10 +711,11 @@ export const generateZPLRack = (
     labelHeight = 400,
     xOffset = 0,
     yOffset = 0,
-    zoneFontSize = 25,
-    rackCodeFontSize = 60,
-    detailsFontSize = 25,
+    zoneFontSize = 30,
+    rackCodeFontSize = 80,
+    detailsFontSize = 40,
     barcodeHeight = 80,
+    barcodeWidth = 2,
     orientation = 'horizontal'
   } = options;
 
@@ -744,7 +746,7 @@ export const generateZPLRack = (
     // We want to center the whole block of rows along the labelWidth (which is now the "height" of the stack)
     // And center each row along the labelHeight (which is now the "width" of the row)
 
-    const totalStackWidth = zoneFontSize + 30 + rackCodeFontSize + 40 + detailsFontSize + 30 + barcodeHeight;
+    const totalStackWidth = zoneFontSize + 40 + rackCodeFontSize + 60 + detailsFontSize + 40 + (barcodeWidth * 11 * 4); // Estimated width with padding
     const startX = xOffset + Math.max(labelMargin, (labelWidth - totalStackWidth) / 2);
     const startY = yOffset + labelMargin;
     const rowLength = labelHeight - (labelMargin * 2);
@@ -753,26 +755,22 @@ export const generateZPLRack = (
 
     // 1. Zone Label
     zpl += `^FO${currentX},${startY}^A0R,${zoneFontSize},${zoneFontSize}^FB${rowLength},1,0,C^FD${zoneLabel}^FS\n`;
-    currentX += zoneFontSize + 30;
+    currentX += zoneFontSize + 40;
 
     // 2. Large Rack Code
     zpl += `^FO${currentX},${startY}^A0R,${rackCodeFontSize},${rackCodeFontSize}^FB${rowLength},1,0,C^FD${rackCode}^FS\n`;
-    currentX += rackCodeFontSize + 40;
+    currentX += rackCodeFontSize + 60;
 
     // 3. Details
     if (shelf !== undefined || floor !== undefined) {
-      zpl += `^FO${currentX},${startY}^A0R,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
-      currentX += detailsFontSize + 30;
+      zpl += `^FO${currentX},${startY}^A0R,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} | Floor: ${floor || '-'}^FS\n`;
+      currentX += detailsFontSize + 40;
     }
 
     // 4. Barcode
-    // To center barcode manually along the vertical axis (startY to startY + rowLength)
-    // Barcodes don't support ^FB centering well, so we use an offset if possible, 
-    // but BCR with ^FO often centers better if we just use the start point since alignment is handled by the printer.
-    // However, the most reliable way is FO with calculated Y.
-    const barcodeWidthInDots = barcodeValue.length * 20; // Rough estimate for QR/Barcode width
-    const bcY = startY + Math.max(0, (rowLength - barcodeWidthInDots) / 2);
-    zpl += `^BY2,2,${barcodeHeight}\n`;
+    const barcodeFullWidth = (barcodeValue.length + 3) * 11 * barcodeWidth;
+    const bcY = startY + Math.max(0, (rowLength - barcodeFullWidth) / 2);
+    zpl += `^BY${barcodeWidth},2,${barcodeHeight}\n`;
     zpl += `^FO${currentX},${bcY}^BCR,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
 
   } else {
@@ -780,7 +778,7 @@ export const generateZPLRack = (
     // We want to center the whole block of rows along the labelHeight (stack height)
     // And center each row along the labelWidth (row width)
 
-    const totalStackHeight = zoneFontSize + 10 + rackCodeFontSize + 10 + detailsFontSize + 10 + barcodeHeight + 20;
+    const totalStackHeight = zoneFontSize + 20 + rackCodeFontSize + 20 + detailsFontSize + 20 + barcodeHeight + 40;
     const startY = yOffset + Math.max(labelMargin, (labelHeight - totalStackHeight) / 2);
     const startX = xOffset + labelMargin;
     const rowLength = labelWidth - (labelMargin * 2);
@@ -789,23 +787,22 @@ export const generateZPLRack = (
 
     // 1. Zone Label
     zpl += `^FO${startX},${currentY}^A0N,${zoneFontSize},${zoneFontSize}^FB${rowLength},1,0,C^FD${zoneLabel}^FS\n`;
-    currentY += zoneFontSize + 10;
+    currentY += zoneFontSize + 20;
 
     // 2. Large Rack Code
     zpl += `^FO${startX},${currentY}^A0N,${rackCodeFontSize},${rackCodeFontSize}^FB${rowLength},1,0,C^FD${rackCode}^FS\n`;
-    currentY += rackCodeFontSize + 10;
+    currentY += rackCodeFontSize + 20;
 
     // 3. Details
     if (shelf !== undefined || floor !== undefined) {
-      zpl += `^FO${startX},${currentY}^A0N,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
-      currentY += detailsFontSize + 10;
+      zpl += `^FO${startX},${currentY}^A0N,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} | Floor: ${floor || '-'}^FS\n`;
+      currentY += detailsFontSize + 20;
     }
 
     // 4. Barcode
-    zpl += `^BY2,2,${barcodeHeight}\n`;
-    // Center barcode horizontally
-    const barcodeWidthInDots = barcodeValue.length * 15; // Rough estimate
-    const bcX = startX + Math.max(0, (rowLength - barcodeWidthInDots) / 2);
+    const barcodeFullWidth = (barcodeValue.length + 3) * 11 * barcodeWidth;
+    const bcX = startX + Math.max(0, (rowLength - barcodeFullWidth) / 2);
+    zpl += `^BY${barcodeWidth},2,${barcodeHeight}\n`;
     zpl += `^FO${bcX},${currentY}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
   }
 

@@ -70,10 +70,11 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     columnsPerRow: 2,
     firstLabelTopMargin: 0,
     showCutLines: true,
-    zoneFontSize: 20,
-    rackCodeFontSize: 50,
-    detailsFontSize: 20,
-    barcodeHeight: 70,
+    zoneFontSize: 30,
+    rackCodeFontSize: 80,
+    detailsFontSize: 40,
+    barcodeHeight: 80,
+    barcodeWidth: 2,
     orientation: 'horizontal' as 'horizontal' | 'vertical',
   });
   const [racksReadyToPrint, setRacksReadyToPrint] = useState<Array<{
@@ -696,9 +697,10 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         paperHeight: 398, // 1.96 inches
         labelsPerPage: 1,
         columnsPerRow: 1,
-        rackCodeFontSize: 40,
-        detailsFontSize: 16,
+        rackCodeFontSize: 60,
+        detailsFontSize: 30,
         barcodeHeight: 50,
+        barcodeWidth: 2,
         orientation: 'horizontal',
       });
     } else if (size === '50mm * 25mm') {
@@ -709,9 +711,10 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         paperHeight: 203, // 1 inch
         labelsPerPage: 1,
         columnsPerRow: 1,
-        rackCodeFontSize: 30,
-        detailsFontSize: 14,
+        rackCodeFontSize: 40,
+        detailsFontSize: 20,
         barcodeHeight: 40,
+        barcodeWidth: 2,
         orientation: 'horizontal',
       });
     }
@@ -787,11 +790,11 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                 height: ${labelW}mm;
               ` : ''}
             }
-            .zone { font-size: ${isSmall ? '5pt' : '8pt'}; color: #666; margin-bottom: 0.5mm; white-space: nowrap; }
-            .code { font-weight: bold; font-size: ${isSmall ? '10pt' : '18pt'}; margin-bottom: 0.5mm; line-height: 1; }
-            .details { font-size: ${isSmall ? '5pt' : '8pt'}; margin-bottom: 1.5mm; white-space: nowrap; }
-            .barcode { width: 95%; max-height: 40%; display: flex; justify-content: center; }
-            svg { width: 100%; height: auto; max-height: 100%; }
+            .zone { font-size: ${isSmall ? '8pt' : '12pt'}; color: #666; margin-bottom: 1mm; white-space: nowrap; }
+            .code { font-weight: bold; font-size: ${isSmall ? '16pt' : '26pt'}; margin-bottom: 1mm; line-height: 1; }
+            .details { font-size: ${isSmall ? '10pt' : '18pt'}; margin-bottom: 2mm; white-space: nowrap; font-weight: 500; }
+            .barcode { width: 100%; max-height: 45%; display: flex; justify-content: center; align-items: center; }
+            svg { width: 90%; height: auto; max-height: 100%; }
           </style>
         </head>
         <body>
@@ -808,7 +811,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
             <div class="content">
               <div class="zone">${zoneLabel}</div>
               <div class="code">${rack.rackCode}</div>
-              <div class="details">Shelf: ${rack.shelf || '-'} ---- Floor: ${rack.floor || '-'}</div>
+              <div class="details">Shelf: ${rack.shelf || '-'} | Floor: ${rack.floor || '-'}</div>
               <div class="barcode"><svg id="bc-${i + j}"></svg></div>
             </div>
           </div>
@@ -1583,10 +1586,11 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     columnsPerRow: 2,
                     firstLabelTopMargin: 0,
                     showCutLines: true,
-                    zoneFontSize: 20,
-                    rackCodeFontSize: 50,
-                    detailsFontSize: 20,
-                    barcodeHeight: 70,
+                    zoneFontSize: 30,
+                    rackCodeFontSize: 80,
+                    detailsFontSize: 40,
+                    barcodeHeight: 80,
+                    barcodeWidth: 2,
                     orientation: 'horizontal',
                   })}
                   className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
