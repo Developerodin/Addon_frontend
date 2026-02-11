@@ -436,14 +436,24 @@ export const getAvailablePrinters = async (): Promise<PrinterInfo[]> => {
 /**
  * Helper to create the optimized QZ Tray configuration for 70mm x 50mm thermal labels
  */
-const getQZConfig = (printer: any) => {
+const getQZConfig = (printer: any, customSettings?: { paperWidth?: number; paperHeight?: number }) => {
   if (typeof window === 'undefined' || typeof window.qz === 'undefined') return null;
 
+  // Use custom settings if provided (dots -> inches), otherwise fallback to 4x6 inches
+  // 203 DPI is assumed for calculation
+  let width = 4;
+  let height = 6;
+  let units = "in";
+
+  if (customSettings?.paperWidth && customSettings?.paperHeight) {
+    width = customSettings.paperWidth / 203;
+    height = customSettings.paperHeight / 203;
+  }
+
   return window.qz.configs.create(printer, {
-    size: { width: 70, height: 50 }, // 70mm x 50mm landscape
-    units: "mm",
+    size: { width, height },
+    units: units,
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
-    orientation: "landscape",
     density: 203,
     interpolation: "nearest-neighbor", // Sharpest for barcodes
     reconnection: true,
@@ -1200,7 +1210,7 @@ export const printDoubleBarcodes = async (
       };
     }
 
-    const config = getQZConfig(printer);
+    const config = getQZConfig(printer, options.customSettings);
     if (!config) throw new Error("Could not create QZ configuration");
 
     // BATCH PRINTING: Group items based on labelsPerPage setting
@@ -1289,52 +1299,40 @@ export const printRacks = async (
     let printerName = options.printerName;
     if (!printerName) printerName = await window.qz.printers.getDefault();
     const printer = await window.qz.printers.find(printerName);
-    const config = getQZConfig(printer);
+    const config = getQZConfig(printer, options.customSettings);
     if (!config) throw new Error("Could not create QZ configuration");
 
-    // If custom settings with labelsPerPage > 1, batch the racks
-    const labelsPerPage = options.customSettings?.labelsPerPage || 1;
-    const columnsPerRow = options.customSettings?.columnsPerRow || 1;
-    const showCutLines = options.customSettings?.showCutLines !== false; // default true
-
-    if (labelsPerPage > 1 && options.customSettings) {
-      // Generate multi-label pages
+    if (options.customSettings) {
       const labels: string[] = [];
       const paperWidth = options.customSettings.paperWidth || 812;
       const paperHeight = options.customSettings.paperHeight || 1218;
       const firstLabelTopMargin = options.customSettings.firstLabelTopMargin || 0;
+      const labelsPerPage = options.customSettings.labelsPerPage || 1;
+      const columnsPerRow = options.customSettings.columnsPerRow || 1;
+      const showCutLines = options.customSettings.showCutLines !== false;
 
-      // Calculate label dimensions based on columns
       const labelWidth = Math.floor(paperWidth / columnsPerRow);
       const rowsPerPage = Math.ceil(labelsPerPage / columnsPerRow);
       const labelHeight = Math.floor(paperHeight / rowsPerPage);
 
-      // Font sizes based on label size
       const zoneFontSize = options.customSettings.zoneFontSize || 20;
       const rackCodeFontSize = options.customSettings.rackCodeFontSize || 50;
       const detailsFontSize = options.customSettings.detailsFontSize || 20;
       const barcodeHeight = options.customSettings.barcodeHeight || 70;
 
-      // Calculate labels per page (rows * columns)
       const labelsPerSheet = rowsPerPage * columnsPerRow;
 
       for (let i = 0; i < racks.length; i += labelsPerSheet) {
         let zpl = `^XA\n^PW${paperWidth}\n^LL${paperHeight}\n^CI28\n`;
 
-        // Add each rack to this page in grid layout
         for (let j = 0; j < labelsPerSheet && (i + j) < racks.length; j++) {
           const rack = racks[i + j];
-
-          // Calculate row and column position
           const row = Math.floor(j / columnsPerRow);
           const col = j % columnsPerRow;
-
-          // Calculate offsets
           const xOffset = col * labelWidth;
           const yOffset = row === 0 ? firstLabelTopMargin : (row * labelHeight);
 
-          // Generate rack ZPL with offset and dimensions
-          const rackZpl = generateZPLRack(rack.rackCode, rack.barcode, {
+          zpl += generateZPLRack(rack.rackCode, rack.barcode, {
             shelf: rack.shelf,
             floor: rack.floor,
             zone: rack.zone,
@@ -1342,28 +1340,19 @@ export const printRacks = async (
             labelHeight: labelHeight,
             xOffset: xOffset,
             yOffset: yOffset,
-            zoneFontSize: zoneFontSize,
-            rackCodeFontSize: rackCodeFontSize,
-            detailsFontSize: detailsFontSize,
-            barcodeHeight: barcodeHeight
+            zoneFontSize,
+            rackCodeFontSize,
+            detailsFontSize,
+            barcodeHeight
           });
-
-          zpl += rackZpl;
         }
 
-        // Add cut lines if enabled
         if (showCutLines) {
-          // Horizontal cut lines (between rows)
           for (let row = 1; row < rowsPerPage; row++) {
-            const y = row * labelHeight;
-            // Draw dashed line across the page
-            zpl += `^FO0,${y}^GB${paperWidth},1,1^FS\n`;
+            zpl += `^FO0,${row * labelHeight}^GB${paperWidth},1,1^FS\n`;
           }
-
-          // Vertical cut lines (between columns)
           for (let col = 1; col < columnsPerRow; col++) {
-            const x = col * labelWidth;
-            zpl += `^FO${x},0^GB1,${paperHeight},1^FS\n`;
+            zpl += `^FO${col * labelWidth},0^GB1,${paperHeight},1^FS\n`;
           }
         }
 
@@ -1374,7 +1363,6 @@ export const printRacks = async (
       await window.qz.print(config, labels);
       return { success: true, printed: racks.length };
     } else {
-      // Single label per page (original behavior)
       const labels = racks.map(rack =>
         generateZPLRack(rack.rackCode, rack.barcode, {
           shelf: rack.shelf,
@@ -1382,7 +1370,6 @@ export const printRacks = async (
           zone: rack.zone
         })
       );
-
       await window.qz.print(config, labels);
       return { success: true, printed: labels.length };
     }
@@ -1428,81 +1415,61 @@ export const printCones = async (
     let printerName = options.printerName;
     if (!printerName) printerName = await window.qz.printers.getDefault();
     const printer = await window.qz.printers.find(printerName);
-    const config = getQZConfig(printer);
+    const config = getQZConfig(printer, options.customSettings);
     if (!config) throw new Error("Could not create QZ configuration");
 
-    // If custom settings with labelsPerPage > 1, batch the cones
-    const labelsPerPage = options.customSettings?.labelsPerPage || 1;
-    const columnsPerRow = options.customSettings?.columnsPerRow || 1;
-    const showCutLines = options.customSettings?.showCutLines !== false; // default true
-
-    if (labelsPerPage > 1 && options.customSettings) {
-      // Generate multi-label pages
+    if (options.customSettings) {
       const labels: string[] = [];
       const paperWidth = options.customSettings.paperWidth || 812;
       const paperHeight = options.customSettings.paperHeight || 1218;
       const firstLabelTopMargin = options.customSettings.firstLabelTopMargin || 0;
+      const labelsPerPage = options.customSettings.labelsPerPage || 1;
+      const columnsPerRow = options.customSettings.columnsPerRow || 1;
+      const showCutLines = options.customSettings.showCutLines !== false;
 
-      // Calculate label dimensions based on columns
       const labelWidth = Math.floor(paperWidth / columnsPerRow);
       const rowsPerPage = Math.ceil(labelsPerPage / columnsPerRow);
       const labelHeight = Math.floor(paperHeight / rowsPerPage);
 
-      // Font sizes
       const qrCodeSize = options.customSettings.qrCodeSize || 5;
       const titleFontSize = options.customSettings.titleFontSize || 25;
       const detailsFontSize = options.customSettings.detailsFontSize || 20;
 
-      // Calculate labels per page (rows * columns)
       const labelsPerSheet = rowsPerPage * columnsPerRow;
 
       for (let i = 0; i < cones.length; i += labelsPerSheet) {
         let zpl = `^XA\n^PW${paperWidth}\n^LL${paperHeight}\n^CI28\n`;
 
-        // Add each cone to this page in grid layout
         for (let j = 0; j < labelsPerSheet && (i + j) < cones.length; j++) {
           const cone = cones[i + j];
-
-          // Calculate row and column position
           const row = Math.floor(j / columnsPerRow);
           const col = j % columnsPerRow;
-
-          // Calculate offsets
           const xOffset = col * labelWidth;
           const yOffset = row === 0 ? firstLabelTopMargin : (row * labelHeight);
 
-          // Generate cone ZPL with offset and dimensions
-          const coneZpl = generateZPLCone(cone.barcode, {
+          zpl += generateZPLCone(cone.barcode, {
             yarnName: cone.yarnName,
             supplierName: cone.supplierName,
             poNumber: cone.poNumber,
             lotNumber: cone.lotNumber,
             shadeCode: cone.shadeCode,
             weight: cone.weight,
-            labelWidth: labelWidth,
-            labelHeight: labelHeight,
-            xOffset: xOffset,
-            yOffset: yOffset,
-            qrCodeSize: qrCodeSize,
-            titleFontSize: titleFontSize,
-            detailsFontSize: detailsFontSize
+            labelWidth,
+            labelHeight,
+            xOffset,
+            yOffset,
+            qrCodeSize,
+            titleFontSize,
+            detailsFontSize
           });
-
-          zpl += coneZpl;
         }
 
-        // Add cut lines if enabled
         if (showCutLines) {
-          // Horizontal cut lines (between rows)
           for (let row = 1; row < rowsPerPage; row++) {
-            const y = row * labelHeight;
-            zpl += `^FO0,${y}^GB${paperWidth},1,1^FS\n`;
+            zpl += `^FO0,${row * labelHeight}^GB${paperWidth},1,1^FS\n`;
           }
-
-          // Vertical cut lines (between columns)
           for (let col = 1; col < columnsPerRow; col++) {
-            const x = col * labelWidth;
-            zpl += `^FO${x},0^GB1,${paperHeight},1^FS\n`;
+            zpl += `^FO${col * labelWidth},0^GB1,${paperHeight},1^FS\n`;
           }
         }
 
@@ -1513,7 +1480,6 @@ export const printCones = async (
       await window.qz.print(config, labels);
       return { success: true, printed: cones.length };
     } else {
-      // Single label per page (original behavior)
       const labels = cones.map(cone =>
         generateZPLCone(cone.barcode, {
           yarnName: cone.yarnName,
@@ -1524,7 +1490,6 @@ export const printCones = async (
           weight: cone.weight
         })
       );
-
       await window.qz.print(config, labels);
       return { success: true, printed: labels.length };
     }
