@@ -490,6 +490,125 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     }
   };
 
+  const executeBrowserPrint = async () => {
+    // Determine which cones to print
+    const conesToPrint = selectedCones.size > 0
+      ? cones.filter(cone => selectedCones.has(cone._id))
+      : cones;
+
+    if (conesToPrint.length === 0) {
+      toast.error("No cones available to print");
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error("Popup blocked! Please allow popups for this site.");
+      return;
+    }
+
+    // Determine sizes in mm
+    const isSmall = printSettings.paperSize === '50mm * 25mm';
+    const paperW = isSmall ? 50 : 101.6;
+    const paperH = isSmall ? 25 : 152.4;
+    const labelW = paperW / printSettings.columnsPerRow;
+    const labelH = paperH / (printSettings.labelsPerPage / printSettings.columnsPerRow);
+
+    let html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Browser Print - Cone Labels</title>
+          <style>
+            @page {
+              size: ${paperW}mm ${paperH}mm;
+              margin: 0;
+            }
+            body { margin: 0; padding: 0; font-family: sans-serif; -webkit-print-color-adjust: exact; }
+            .page {
+              width: ${paperW}mm;
+              height: ${paperH}mm;
+              position: relative;
+              page-break-after: always;
+              overflow: hidden;
+            }
+            .label {
+              width: ${labelW}mm;
+              height: ${labelH}mm;
+              float: left;
+              box-sizing: border-box;
+              padding: 1.5mm;
+              display: flex;
+              border: 0.1mm dotted #eee; /* Light guide for screen */
+            }
+            @media print {
+              .label { border: none; }
+            }
+            .data { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+            .qr { width: 33%; display: flex; align-items: center; justify-content: center; }
+            .title { font-weight: bold; font-size: ${isSmall ? '7pt' : '10pt'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.5mm; }
+            .text { font-size: ${isSmall ? '6pt' : '8pt'}; line-height: 1.2; margin: 0; }
+            .bc { font-family: monospace; font-size: ${isSmall ? '5.5pt' : '7pt'}; margin-top: 1mm; border-top: 0.1mm solid #ccc; pt: 0.5mm; }
+            canvas { width: 100% !important; height: auto !important; }
+          </style>
+        </head>
+        <body>
+    `;
+
+    const labelsPerPage = printSettings.labelsPerPage;
+    for (let i = 0; i < conesToPrint.length; i += labelsPerPage) {
+      html += `<div class="page">`;
+      for (let j = 0; j < labelsPerPage && (i + j) < conesToPrint.length; j++) {
+        const cone = conesToPrint[i + j];
+        html += `
+          <div class="label">
+            <div class="data">
+              <div class="title">${box?.yarnName || 'Yarn'}</div>
+              <p class="text">PO: ${effectivePoNumber || '-'}</p>
+              <p class="text">Lot: ${box?.lotNumber || '-'}</p>
+              <p class="text">Shade: ${box?.shadeCode || '-'}</p>
+              <div class="bc">${cone.barcode}</div>
+            </div>
+            <div class="qr"><canvas id="qr-${cone._id}"></canvas></div>
+          </div>
+        `;
+      }
+      html += `</div>`;
+    }
+
+    html += `
+        <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+        <script>
+          const cones = ${JSON.stringify(conesToPrint.map(c => ({ id: c._id, barcode: c.barcode })))};
+          window.onload = function() {
+            let loaded = 0;
+            cones.forEach(cone => {
+              const canvas = document.getElementById('qr-' + cone.id);
+              if (canvas) {
+                QRCode.toCanvas(canvas, cone.barcode, { 
+                  margin: 0, 
+                  width: 120,
+                  color: { dark: '#000000', light: '#ffffff' }
+                }, function(err) {
+                  loaded++;
+                  if (loaded === cones.length) {
+                    setTimeout(() => { window.print(); window.close(); }, 500);
+                  }
+                });
+              } else {
+                loaded++;
+              }
+            });
+            if (cones.length === 0) { window.print(); window.close(); }
+          };
+        </script>
+      </body></html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   if (isLoading) {
     return (
       <div className="main-content">
@@ -1225,6 +1344,13 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
             </div>
 
             <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={executeBrowserPrint}
+                className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-md transition-colors mr-auto"
+              >
+                <i className="ri-window-line mr-2"></i>
+                Test Print (Browser)
+              </button>
               <button
                 onClick={() => setShowPrintSettingsModal(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors"

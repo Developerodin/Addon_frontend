@@ -436,28 +436,50 @@ export const getAvailablePrinters = async (): Promise<PrinterInfo[]> => {
 /**
  * Helper to create the optimized QZ Tray configuration for 70mm x 50mm thermal labels
  */
-const getQZConfig = (printer: any, customSettings?: { paperWidth?: number; paperHeight?: number }) => {
+const getQZConfig = async (
+  customSettings?: { paperWidth?: number; paperHeight?: number },
+  printerName?: string
+) => {
   if (typeof window === 'undefined' || typeof window.qz === 'undefined') return null;
 
-  // Use custom settings if provided (dots -> inches), otherwise fallback to 4x6 inches
-  // 203 DPI is assumed for calculation
-  let width = 4;
-  let height = 6;
-  let units = "in";
+  try {
+    let targetPrinter = printerName;
+    if (!targetPrinter) {
+      targetPrinter = await window.qz.printers.getDefault();
+    }
 
-  if (customSettings?.paperWidth && customSettings?.paperHeight) {
-    width = customSettings.paperWidth / 203;
-    height = customSettings.paperHeight / 203;
+    if (!targetPrinter) {
+      console.warn('[QZ Tray] No printer found');
+      return null;
+    }
+
+    const printer = await window.qz.printers.find(targetPrinter);
+    if (!printer) {
+      console.warn(`[QZ Tray] Printer "${targetPrinter}" not found`);
+      return null;
+    }
+
+    // Convert dots (at 203 DPI) to mm for more reliable thermal printing
+    let width = 101.6; // 4 inches
+    let height = 152.4; // 6 inches
+
+    if (customSettings?.paperWidth && customSettings?.paperHeight) {
+      width = customSettings.paperWidth * 0.125;
+      height = customSettings.paperHeight * 0.125;
+    }
+
+    return window.qz.configs.create(printer, {
+      size: { width, height },
+      units: "mm",
+      density: 203,
+      reconnection: true,
+      colorType: 'black-white',
+      interpolation: 'nearest-neighbor'
+    });
+  } catch (err) {
+    console.error('[QZ Config Error]', err);
+    return null;
   }
-
-  return window.qz.configs.create(printer, {
-    size: { width, height },
-    units: units,
-    margins: { top: 0, right: 0, bottom: 0, left: 0 },
-    density: 203,
-    interpolation: "nearest-neighbor", // Sharpest for barcodes
-    reconnection: true,
-  });
 };
 
 /**
@@ -1189,29 +1211,8 @@ export const printDoubleBarcodes = async (
     }
 
     // Get printer once
-    let printerName = options.printerName;
-    if (!printerName) {
-      printerName = await window.qz.printers.getDefault();
-      if (!printerName) {
-        return {
-          success: false,
-          printed: 0,
-          errors: ['No default printer found'],
-        };
-      }
-    }
-
-    const printer = await window.qz.printers.find(printerName);
-    if (!printer) {
-      return {
-        success: false,
-        printed: 0,
-        errors: [`Printer "${printerName}" not found`],
-      };
-    }
-
-    const config = getQZConfig(printer, options.customSettings);
-    if (!config) throw new Error("Could not create QZ configuration");
+    const config = await getQZConfig(options.customSettings, options.printerName);
+    if (!config) throw new Error("Could not create QZ configuration. Please check your printer connection.");
 
     // BATCH PRINTING: Group items based on labelsPerPage setting
     const allLabels: string[] = [];
@@ -1296,11 +1297,8 @@ export const printRacks = async (
     const connection = await connectQZ();
     if (!connection.isConnected) throw new Error(connection.error);
 
-    let printerName = options.printerName;
-    if (!printerName) printerName = await window.qz.printers.getDefault();
-    const printer = await window.qz.printers.find(printerName);
-    const config = getQZConfig(printer, options.customSettings);
-    if (!config) throw new Error("Could not create QZ configuration");
+    const config = await getQZConfig(options.customSettings, options.printerName);
+    if (!config) throw new Error("Could not create QZ configuration. Please check your printer connection.");
 
     if (options.customSettings) {
       const labels: string[] = [];
@@ -1412,11 +1410,8 @@ export const printCones = async (
     const connection = await connectQZ();
     if (!connection.isConnected) throw new Error(connection.error);
 
-    let printerName = options.printerName;
-    if (!printerName) printerName = await window.qz.printers.getDefault();
-    const printer = await window.qz.printers.find(printerName);
-    const config = getQZConfig(printer, options.customSettings);
-    if (!config) throw new Error("Could not create QZ configuration");
+    const config = await getQZConfig(options.customSettings, options.printerName);
+    if (!config) throw new Error("Could not create QZ configuration. Please check your printer connection.");
 
     if (options.customSettings) {
       const labels: string[] = [];
