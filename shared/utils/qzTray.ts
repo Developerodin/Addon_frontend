@@ -640,6 +640,39 @@ export const generateZPLDoubleLabel = (
     const barcodeValue = product.barcodeValue || '';
     const supplier = product.supplier || 'YARN LABEL';
 
+    // Check for small label (e.g. 50mm width ≈ 400 dots)
+    if (settings.paperWidth < 500) {
+      // Small Label Layout (50x70mm)
+      // 1. Box ID (Top, Centered)
+      // 2. Supplier (Below Box ID, Centered)
+      // 3. Shade | Lot (Below Supplier, Centered, Large Text)
+      // 4. Barcode (Bottom)
+
+      const contentWidth = settings.paperWidth;
+
+      let currentY = yOffset + (settings.firstLabelTopMargin || 0) + 20;
+
+      // Box ID (Centered)
+      const boxIdZpl = `^FO0,${currentY}^A0N,25,25^FB${contentWidth},1,0,C^FDBox: ${boxId}^FS`;
+      currentY += 35;
+
+      // Supplier (Centered)
+      const supplierName = (supplier || '').substring(0, 22);
+      const supplierZpl = `^FO0,${currentY}^A0N,25,25^FB${contentWidth},1,0,C^FD${supplierName}^FS`;
+      currentY += 40;
+
+      // Shade | Lot (Centered, Small Text)
+      const detailText = `Shade: ${shadeCode} | Lot: ${lotNumber}`;
+      const textZpl = `^FO0,${currentY}^A0N,30,30^FB${contentWidth},2,0,C^FD${detailText}^FS`;
+
+      // Barcode (Bottom)
+      const barcodeHeight = settings.barcodeHeight || 100;
+      const bottomY = yOffset + (settings.paperHeight || 560) - barcodeHeight - 30;
+      const barcodeZpl = `^BY2,2,${barcodeHeight}^FO50,${bottomY}^BCN,${barcodeHeight},N,N,N^FD${barcodeValue}^FS`;
+
+      return boxIdZpl + supplierZpl + textZpl + barcodeZpl;
+    }
+
     return `
       ^FO20,${settings.supplierYPos + yOffset}^A0N,${settings.supplierFontSize},${settings.supplierFontSize}^FD${supplier}^FS
       ^FO20,${settings.boxIdYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FDBox ID: ${boxId}^FS

@@ -94,13 +94,13 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
       const mappedPoItems = (lot.poItems || []).map((poItem: any) => {
         const poItemId = String(poItem.poItem || poItem.po_item || '');
         const receivedQty = poItem.receivedQuantity || poItem.received_quantity || 0;
-        
+
         // Accumulate received quantities for each poItem
         if (poItemId) {
           const currentQty = receivedQuantitiesMap.get(poItemId) || 0;
           receivedQuantitiesMap.set(poItemId, currentQty + receivedQty);
         }
-        
+
         return {
           poItem: poItemId,
           receivedQuantity: receivedQty
@@ -130,7 +130,7 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
     items: poItems.map((item: any, index: number) => {
       const itemId = String(item._id || item.id || `${index}`);
       const receivedQuantity = receivedQuantitiesMap.get(itemId) || item.receivedQuantity || item.received_quantity || 0;
-      
+
       return {
         id: itemId,
         yarnCode: item.shadeCode || item.shade_code || item.shade || item.yarnCode || '',
@@ -218,7 +218,7 @@ const ProcessOrderPage = () => {
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4',
+    paperSize: '4x6' as '4x6' | '6x4' | '50mmx70mm',
     paperWidth: 812, // 4 inches at 203 DPI
     paperHeight: 1218, // 6 inches at 203 DPI
     labelsPerPage: 2, // Number of labels to print on single sheet (1-6)
@@ -233,7 +233,9 @@ const ProcessOrderPage = () => {
     shadeYPos: 200,
     barcodeYPos: 260,
     footerYPos: 400,
+    orientation: 'vertical' as 'horizontal' | 'vertical',
   });
+  const [isTestPrint, setIsTestPrint] = useState(false);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -1164,25 +1166,72 @@ const ProcessOrderPage = () => {
     };
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mmx70mm') => {
+    let newSettings = { ...printSettings };
+
     if (size === '4x6') {
-      setPrintSettings({
-        ...printSettings,
+      newSettings = {
+        ...newSettings,
         paperSize: '4x6',
-        paperWidth: 812, // 4 inches
-        paperHeight: 1218, // 6 inches
-      });
-    } else {
-      setPrintSettings({
-        ...printSettings,
+        paperWidth: 812, // 4 inches * 203 DPI
+        paperHeight: 1218, // 6 inches * 203 DPI
+        labelsPerPage: 2,
+        firstLabelTopMargin: 0,
+      };
+    } else if (size === '6x4') {
+      newSettings = {
+        ...newSettings,
         paperSize: '6x4',
-        paperWidth: 1218, // 6 inches
-        paperHeight: 812, // 4 inches
-      });
+        paperWidth: 1218, // 6 inches * 203 DPI
+        paperHeight: 812, // 4 inches * 203 DPI
+        labelsPerPage: 1, // Usually one label per page for landscape 6x4
+        firstLabelTopMargin: 0,
+      };
+    } else if (size === '50mmx70mm') {
+      // 50mm * 8 dots/mm = 400 dots
+      // 70mm * 8 dots/mm = 560 dots
+      newSettings = {
+        ...newSettings,
+        paperSize: '50mmx70mm',
+        paperWidth: 400,
+        paperHeight: 560,
+        labelsPerPage: 1,
+        barcodeHeight: 100,
+        barcodeYPos: 50,
+        detailsFontSize: 40, // Larger text
+        firstLabelTopMargin: 0,
+      };
     }
+
+    setPrintSettings(newSettings);
+  };
+
+  const handleOrientationChange = (orientation: 'horizontal' | 'vertical') => {
+    let newWidth = printSettings.paperWidth;
+    let newHeight = printSettings.paperHeight;
+
+    if (printSettings.paperSize === '50mmx70mm') {
+      newWidth = orientation === 'horizontal' ? 560 : 400; // 70mm vs 50mm
+      newHeight = orientation === 'horizontal' ? 400 : 560; // 50mm vs 70mm
+    } else {
+      // 4x6 / 6x4
+      // Max dimension 1218, min 812
+      const max = Math.max(printSettings.paperWidth, printSettings.paperHeight);
+      const min = Math.min(printSettings.paperWidth, printSettings.paperHeight);
+      newWidth = orientation === 'horizontal' ? max : min;
+      newHeight = orientation === 'horizontal' ? min : max;
+    }
+
+    setPrintSettings({
+      ...printSettings,
+      orientation,
+      paperWidth: newWidth,
+      paperHeight: newHeight,
+    });
   };
 
   const handlePrintAllBarcodes = async () => {
+    setIsTestPrint(false); // Reset test print flag
     if (!order || boxes.length === 0) {
       toast.error('No boxes available to print');
       return;
@@ -1192,14 +1241,48 @@ const ProcessOrderPage = () => {
     setShowPrintSettingsModal(true);
   };
 
+  const handleTestPrint = () => {
+    setIsTestPrint(true);
+    setShowPrintSettingsModal(true);
+  };
+
   const executePrintWithSettings = async () => {
     setShowPrintSettingsModal(false);
-    
+
+    // If Test Print
+    if (isTestPrint) {
+      const dummyBarcode = {
+        barcodeValue: 'TEST-123456789',
+        boxId: 'TEST-BOX-001',
+        yarnName: 'Test Yarn Name',
+        shadeCode: 'TEST-SHADE',
+        lotNumber: 'TEST-LOT',
+        supplier: 'Test Supplier Name',
+      };
+
+      try {
+        const result = await printDoubleBarcodes([dummyBarcode], {
+          printerName: defaultPrinter?.name,
+          customSettings: printSettings,
+        });
+
+        if (result.success) {
+          toast.success('Test label printed successfully');
+        } else {
+          toast.error('Failed to print test label: ' + (result.errors?.[0] || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Test print failed:', error);
+        toast.error('Test print failed');
+      }
+      return;
+    }
+
     if (!order || boxes.length === 0) {
       toast.error('No boxes available to print');
       return;
     }
-    
+
     setIsPrinting(true);
     try {
       // Check script status first
@@ -1823,9 +1906,8 @@ const ProcessOrderPage = () => {
                               <td className="px-2 py-1.5 border border-gray-200 text-xs text-gray-900">{item.shadeCode}</td>
                               <td className="px-2 py-1.5 text-right border border-gray-200 text-xs text-gray-900 font-medium">{item.orderedQuantity.toLocaleString()}</td>
                               <td className="px-2 py-1.5 text-right border border-gray-200 text-xs text-gray-900">{item.receivedQuantity.toLocaleString()}</td>
-                              <td className={`px-2 py-1.5 text-right border border-gray-200 text-xs font-medium ${
-                                pendingQuantity > 0 ? 'text-orange-600' : 'text-green-600'
-                              }`}>
+                              <td className={`px-2 py-1.5 text-right border border-gray-200 text-xs font-medium ${pendingQuantity > 0 ? 'text-orange-600' : 'text-green-600'
+                                }`}>
                                 {pendingQuantity.toLocaleString()}
                               </td>
                             </tr>
@@ -1841,11 +1923,10 @@ const ProcessOrderPage = () => {
                           <td className="px-2 py-1.5 text-right border border-gray-200 text-xs font-bold text-gray-900">
                             {order.items.reduce((sum, item) => sum + item.receivedQuantity, 0).toLocaleString()}
                           </td>
-                          <td className={`px-2 py-1.5 text-right border border-gray-200 text-xs font-bold ${
-                            order.items.reduce((sum, item) => sum + Math.max(0, item.orderedQuantity - item.receivedQuantity), 0) > 0 
-                              ? 'text-orange-600' 
-                              : 'text-green-600'
-                          }`}>
+                          <td className={`px-2 py-1.5 text-right border border-gray-200 text-xs font-bold ${order.items.reduce((sum, item) => sum + Math.max(0, item.orderedQuantity - item.receivedQuantity), 0) > 0
+                            ? 'text-orange-600'
+                            : 'text-green-600'
+                            }`}>
                             {order.items.reduce((sum, item) => sum + Math.max(0, item.orderedQuantity - item.receivedQuantity), 0).toLocaleString()}
                           </td>
                         </tr>
@@ -3201,7 +3282,7 @@ const ProcessOrderPage = () => {
               {/* Paper Size Section */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3230,10 +3311,52 @@ const ProcessOrderPage = () => {
                         />
                         <span className="ml-2 text-sm text-gray-700">6" × 4" (Landscape)</span>
                       </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="50mmx70mm"
+                          checked={printSettings.paperSize === '50mmx70mm'}
+                          onChange={() => handlePaperSizeChange('50mmx70mm')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">50mm × 70mm</span>
+                      </label>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
                       Current: {printSettings.paperWidth} × {printSettings.paperHeight} dots
                     </p>
+                  </div>
+
+                  {/* Orientation */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Orientation
+                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="orientation"
+                          value="vertical"
+                          checked={printSettings.orientation === 'vertical'}
+                          onChange={() => handleOrientationChange('vertical')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">Vertical (Portrait)</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="orientation"
+                          value="horizontal"
+                          checked={printSettings.orientation === 'horizontal'}
+                          onChange={() => handleOrientationChange('horizontal')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">Horizontal (Landscape)</span>
+                      </label>
+                    </div>
                   </div>
 
                   <div>
@@ -3282,25 +3405,27 @@ const ProcessOrderPage = () => {
               {/* Font Sizes Section */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Font Sizes</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Supplier Name Font Size
-                    </label>
-                    <input
-                      type="number"
-                      value={printSettings.supplierFontSize}
-                      onChange={(e) => setPrintSettings({ ...printSettings, supplierFontSize: parseInt(e.target.value) || 30 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      min="10"
-                      max="100"
-                    />
-                  </div>
+                  {printSettings.paperSize !== '50mmx70mm' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Supplier Name Font Size
+                      </label>
+                      <input
+                        type="number"
+                        value={printSettings.supplierFontSize}
+                        onChange={(e) => setPrintSettings({ ...printSettings, supplierFontSize: parseInt(e.target.value) || 30 })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        min="10"
+                        max="100"
+                      />
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Details Font Size (Box, Yarn, Lot, Shade)
+                      {printSettings.paperSize === '50mmx70mm' ? 'Text Font Size (Shade | Lot)' : 'Details Font Size (Box, Yarn, Lot, Shade)'}
                     </label>
                     <input
                       type="number"
@@ -3331,77 +3456,81 @@ const ProcessOrderPage = () => {
               {/* Y-Positions Section */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Y-Positions (Vertical Spacing)</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Supplier Y Position
-                    </label>
-                    <input
-                      type="number"
-                      value={printSettings.supplierYPos}
-                      onChange={(e) => setPrintSettings({ ...printSettings, supplierYPos: parseInt(e.target.value) || 30 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      min="0"
-                      max="600"
-                    />
-                  </div>
+                  {printSettings.paperSize !== '50mmx70mm' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Supplier Y Position
+                        </label>
+                        <input
+                          type="number"
+                          value={printSettings.supplierYPos}
+                          onChange={(e) => setPrintSettings({ ...printSettings, supplierYPos: parseInt(e.target.value) || 30 })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          min="0"
+                          max="600"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Box ID Y Position
-                    </label>
-                    <input
-                      type="number"
-                      value={printSettings.boxIdYPos}
-                      onChange={(e) => setPrintSettings({ ...printSettings, boxIdYPos: parseInt(e.target.value) || 80 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      min="0"
-                      max="600"
-                    />
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Box ID Y Position
+                        </label>
+                        <input
+                          type="number"
+                          value={printSettings.boxIdYPos}
+                          onChange={(e) => setPrintSettings({ ...printSettings, boxIdYPos: parseInt(e.target.value) || 80 })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          min="0"
+                          max="600"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Yarn Y Position
-                    </label>
-                    <input
-                      type="number"
-                      value={printSettings.yarnYPos}
-                      onChange={(e) => setPrintSettings({ ...printSettings, yarnYPos: parseInt(e.target.value) || 120 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      min="0"
-                      max="600"
-                    />
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Yarn Y Position
+                        </label>
+                        <input
+                          type="number"
+                          value={printSettings.yarnYPos}
+                          onChange={(e) => setPrintSettings({ ...printSettings, yarnYPos: parseInt(e.target.value) || 120 })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          min="0"
+                          max="600"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Lot Y Position
-                    </label>
-                    <input
-                      type="number"
-                      value={printSettings.lotYPos}
-                      onChange={(e) => setPrintSettings({ ...printSettings, lotYPos: parseInt(e.target.value) || 160 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      min="0"
-                      max="600"
-                    />
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Lot Y Position
+                        </label>
+                        <input
+                          type="number"
+                          value={printSettings.lotYPos}
+                          onChange={(e) => setPrintSettings({ ...printSettings, lotYPos: parseInt(e.target.value) || 160 })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          min="0"
+                          max="600"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Shade Y Position
-                    </label>
-                    <input
-                      type="number"
-                      value={printSettings.shadeYPos}
-                      onChange={(e) => setPrintSettings({ ...printSettings, shadeYPos: parseInt(e.target.value) || 200 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      min="0"
-                      max="600"
-                    />
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Shade Y Position
+                        </label>
+                        <input
+                          type="number"
+                          value={printSettings.shadeYPos}
+                          onChange={(e) => setPrintSettings({ ...printSettings, shadeYPos: parseInt(e.target.value) || 200 })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          min="0"
+                          max="600"
+                        />
+                      </div>
+                    </>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3473,7 +3602,7 @@ const ProcessOrderPage = () => {
                 className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
               >
                 <i className="ri-printer-line mr-2"></i>
-                Print with These Settings
+                {isTestPrint ? 'Print Test Label' : 'Print with These Settings'}
               </button>
             </div>
           </div>
