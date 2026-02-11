@@ -71,7 +71,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75' | '50mm * 25mm',
+    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75' | '70mm * 50mm' | '50mm * 25mm',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -484,7 +484,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     }
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75' | '50mm * 25mm') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75' | '70mm * 50mm' | '50mm * 25mm') => {
     if (size === '4x6') {
       setPrintSettings({
         ...printSettings,
@@ -499,12 +499,17 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         paperWidth: 1218,
         paperHeight: 812,
       });
-    } else if (size === '1.96x2.75') {
+    } else if (size === '70mm * 50mm') {
       setPrintSettings({
         ...printSettings,
-        paperSize: '1.96x2.75',
-        paperWidth: 398,  // 1.96 inches × 203 DPI
-        paperHeight: 558, // 2.75 inches × 203 DPI
+        paperSize: '70mm * 50mm',
+        paperWidth: 558,
+        paperHeight: 398,
+        labelsPerPage: 1,
+        columnsPerRow: 1,
+        rackCodeFontSize: 40,
+        detailsFontSize: 16,
+        barcodeHeight: 50,
       });
     } else if (size === '50mm * 25mm') {
       setPrintSettings({
@@ -517,6 +522,116 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         barcodeHeight: 50,
       });
     }
+  };
+
+  const executeBrowserPrint = async () => {
+    if (racksReadyToPrint.length === 0) {
+      toast.error("No racks available to print");
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error("Popup blocked! Please allow popups for this site.");
+      return;
+    }
+
+    const isSmall = printSettings.paperSize === '50mm * 25mm';
+    const isMedium = printSettings.paperSize === '70mm * 50mm';
+
+    let paperW = 101.6;
+    let paperH = 152.4;
+
+    if (isSmall) { paperW = 50; paperH = 25; }
+    else if (isMedium) { paperW = 70; paperH = 50; }
+    else if (printSettings.paperSize === '6x4') { paperW = 152.4; paperH = 101.6; }
+    else if (printSettings.paperSize === '1.96x2.75') { paperW = 50; paperH = 70; }
+
+    const labelW = paperW / printSettings.columnsPerRow;
+    const labelH = paperH / (printSettings.labelsPerPage / printSettings.columnsPerRow);
+
+    let html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Browser Print - Rack Labels</title>
+          <style>
+            @page { size: ${paperW}mm ${paperH}mm; margin: 0; }
+            body { margin: 0; padding: 0; font-family: sans-serif; -webkit-print-color-adjust: exact; }
+            .page {
+              width: ${paperW}mm;
+              height: ${paperH}mm;
+              position: relative;
+              page-break-after: always;
+              overflow: hidden;
+            }
+            .label {
+              width: ${labelW}mm;
+              height: ${labelH}mm;
+              float: left;
+              box-sizing: border-box;
+              padding: 2mm;
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              align-items: center;
+              text-align: center;
+              border: 0.1mm dotted #eee;
+            }
+            @media print { .label { border: none; } }
+            .zone { font-size: ${isSmall ? '6pt' : '8pt'}; color: #666; margin-bottom: 1mm; }
+            .code { font-weight: bold; font-size: ${isSmall ? '12pt' : '18pt'}; margin-bottom: 1mm; }
+            .details { font-size: ${isSmall ? '6pt' : '8pt'}; margin-bottom: 2mm; }
+            .barcode { width: 90%; }
+            svg { width: 100%; height: auto; }
+          </style>
+        </head>
+        <body>
+    `;
+
+    const labelsPerPage = printSettings.labelsPerPage;
+    for (let i = 0; i < racksReadyToPrint.length; i += labelsPerPage) {
+      html += `<div class="page">`;
+      for (let j = 0; j < labelsPerPage && (i + j) < racksReadyToPrint.length; j++) {
+        const rack = racksReadyToPrint[i + j];
+        const zoneLabel = rack.zone === 'LT' ? 'LONG TERM' : rack.zone === 'ST' ? 'SHORT TERM' : 'YARN STORAGE';
+        html += `
+          <div class="label">
+            <div class="zone">${zoneLabel}</div>
+            <div class="code">${rack.rackCode}</div>
+            <div class="details">Shelf: ${rack.shelf || '-'} | Floor: ${rack.floor || '-'}</div>
+            <div class="barcode"><svg id="bc-${i + j}"></svg></div>
+          </div>
+        `;
+      }
+      html += `</div>`;
+    }
+
+    html += `
+        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+        <script>
+          window.onload = function() {
+            const racks = ${JSON.stringify(racksReadyToPrint)};
+            racks.forEach((rack, idx) => {
+              const el = document.getElementById('bc-' + idx);
+              if (el) {
+                JsBarcode(el, rack.barcode, {
+                  format: "CODE128",
+                  width: 2,
+                  height: ${isSmall ? 40 : 60},
+                  displayValue: true,
+                  fontSize: ${isSmall ? 10 : 14}
+                });
+              }
+            });
+            setTimeout(() => { window.print(); window.close(); }, 500);
+          };
+        </script>
+      </body></html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   // Handle print selected racks barcode
@@ -1507,6 +1622,17 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                       <input
                         type="radio"
                         name="paperSize"
+                        value="70mm * 50mm"
+                        checked={printSettings.paperSize === '70mm * 50mm'}
+                        onChange={() => handlePaperSizeChange('70mm * 50mm')}
+                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">70mm * 50mm</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="paperSize"
                         value="50mm * 25mm"
                         checked={printSettings.paperSize === '50mm * 25mm'}
                         onChange={() => handlePaperSizeChange('50mm * 25mm')}
@@ -1676,6 +1802,13 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
             </div>
 
             <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={executeBrowserPrint}
+                className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-md transition-colors mr-auto"
+              >
+                <i className="ri-window-line mr-2"></i>
+                Test Print (Browser)
+              </button>
               <button
                 onClick={() => setShowPrintSettingsModal(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md"

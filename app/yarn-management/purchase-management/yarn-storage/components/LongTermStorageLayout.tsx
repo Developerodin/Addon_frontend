@@ -63,7 +63,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75',
+    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75' | '70mm * 50mm' | '50mm * 25mm',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -270,10 +270,10 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       if (mappedBox.status === "Stored" && boxDetails.storageLocation) {
         // Box is already stored - open transfer modal
         const currentStorageLocation = boxDetails.storageLocation;
-        
+
         // Find the source rack from the storage location
         const sourceRack = racks.find((r) => r.barcode === currentStorageLocation);
-        
+
         if (sourceRack) {
           // Determine transfer type based on storage location
           if (currentStorageLocation.startsWith("LT-")) {
@@ -497,17 +497,17 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     // Refresh only affected racks after transfer
     try {
       const racksToRefresh: string[] = [];
-      
+
       // Add source rack if provided
       if (sourceRackBarcode) {
         racksToRefresh.push(sourceRackBarcode);
       }
-      
+
       // Add destination rack if provided
       if (destinationRackBarcode) {
         racksToRefresh.push(destinationRackBarcode);
       }
-      
+
       // If transferSourceRack exists, add it too
       if (transferSourceRack?.barcode && !racksToRefresh.includes(transferSourceRack.barcode)) {
         racksToRefresh.push(transferSourceRack.barcode);
@@ -526,7 +526,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                 newMap.set(rack.id, details);
                 return newMap;
               });
-              
+
               // If rack details modal is open for this rack, update it
               if (isRackModalOpen && rackDetails?.storageSlot?.barcode === rackBarcode) {
                 setRackDetails(details);
@@ -554,12 +554,12 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         });
         await Promise.all(refreshPromises);
       }
-      
+
       // Call parent refresh callback if provided
       if (onRefresh) {
         onRefresh();
       }
-      
+
       toast.success("Data refreshed successfully");
     } catch (error) {
       console.error("Failed to refresh data:", error);
@@ -660,7 +660,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     }
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75' | '70mm * 50mm' | '50mm * 25mm') => {
     if (size === '4x6') {
       setPrintSettings({
         ...printSettings,
@@ -682,7 +682,142 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         paperWidth: 398,  // 1.96 inches × 203 DPI
         paperHeight: 558, // 2.75 inches × 203 DPI
       });
+    } else if (size === '70mm * 50mm') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '70mm * 50mm',
+        paperWidth: 558,  // 2.75 inches
+        paperHeight: 398, // 1.96 inches
+        labelsPerPage: 1,
+        columnsPerRow: 1,
+        rackCodeFontSize: 40,
+        detailsFontSize: 16,
+        barcodeHeight: 50,
+      });
+    } else if (size === '50mm * 25mm') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '50mm * 25mm',
+        paperWidth: 406,  // 2 inches
+        paperHeight: 203, // 1 inch
+        labelsPerPage: 1,
+        columnsPerRow: 1,
+        rackCodeFontSize: 30,
+        detailsFontSize: 14,
+        barcodeHeight: 40,
+      });
     }
+  };
+
+  const executeBrowserPrint = async () => {
+    if (racksReadyToPrint.length === 0) {
+      toast.error("No racks available to print");
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error("Popup blocked! Please allow popups for this site.");
+      return;
+    }
+
+    const isSmall = printSettings.paperSize === '50mm * 25mm';
+    const isMedium = printSettings.paperSize === '70mm * 50mm';
+
+    // Determine sizes in mm
+    let paperW = 101.6; // 4"
+    let paperH = 152.4; // 6"
+
+    if (isSmall) { paperW = 50; paperH = 25; }
+    else if (isMedium) { paperW = 70; paperH = 50; }
+    else if (printSettings.paperSize === '6x4') { paperW = 152.4; paperH = 101.6; }
+    else if (printSettings.paperSize === '1.96x2.75') { paperW = 50; paperH = 70; }
+
+    const labelW = paperW / printSettings.columnsPerRow;
+    const labelH = paperH / (printSettings.labelsPerPage / printSettings.columnsPerRow);
+
+    let html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Browser Print - Rack Labels</title>
+          <style>
+            @page { size: ${paperW}mm ${paperH}mm; margin: 0; }
+            body { margin: 0; padding: 0; font-family: sans-serif; -webkit-print-color-adjust: exact; }
+            .page {
+              width: ${paperW}mm;
+              height: ${paperH}mm;
+              position: relative;
+              page-break-after: always;
+              overflow: hidden;
+            }
+            .label {
+              width: ${labelW}mm;
+              height: ${labelH}mm;
+              float: left;
+              box-sizing: border-box;
+              padding: 2mm;
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              align-items: center;
+              text-align: center;
+              border: 0.1mm dotted #eee;
+            }
+            @media print { .label { border: none; } }
+            .zone { font-size: ${isSmall ? '6pt' : '8pt'}; color: #666; margin-bottom: 1mm; }
+            .code { font-weight: bold; font-size: ${isSmall ? '12pt' : '18pt'}; margin-bottom: 1mm; }
+            .details { font-size: ${isSmall ? '6pt' : '8pt'}; margin-bottom: 2mm; }
+            .barcode { width: 90%; }
+            svg { width: 100%; height: auto; }
+          </style>
+        </head>
+        <body>
+    `;
+
+    const labelsPerPage = printSettings.labelsPerPage;
+    for (let i = 0; i < racksReadyToPrint.length; i += labelsPerPage) {
+      html += `<div class="page">`;
+      for (let j = 0; j < labelsPerPage && (i + j) < racksReadyToPrint.length; j++) {
+        const rack = racksReadyToPrint[i + j];
+        const zoneLabel = rack.zone === 'LT' ? 'LONG TERM' : rack.zone === 'ST' ? 'SHORT TERM' : 'YARN STORAGE';
+        html += `
+          <div class="label">
+            <div class="zone">${zoneLabel}</div>
+            <div class="code">${rack.rackCode}</div>
+            <div class="details">Shelf: ${rack.shelf || '-'} | Floor: ${rack.floor || '-'}</div>
+            <div class="barcode"><svg id="bc-${i + j}"></svg></div>
+          </div>
+        `;
+      }
+      html += `</div>`;
+    }
+
+    html += `
+        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+        <script>
+          window.onload = function() {
+            const racks = ${JSON.stringify(racksReadyToPrint)};
+            racks.forEach((rack, idx) => {
+              const el = document.getElementById('bc-' + idx);
+              if (el) {
+                JsBarcode(el, rack.barcode, {
+                  format: "CODE128",
+                  width: 2,
+                  height: ${isSmall ? 40 : 60},
+                  displayValue: true,
+                  fontSize: ${isSmall ? 10 : 14}
+                });
+              }
+            });
+            setTimeout(() => { window.print(); window.close(); }, 500);
+          };
+        </script>
+      </body></html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   // Handle print selected racks barcode
@@ -1283,7 +1418,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               {/* Paper Settings */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Paper Size
@@ -1315,12 +1450,23 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                       <input
                         type="radio"
                         name="paperSize"
-                        value="1.96x2.75"
-                        checked={printSettings.paperSize === '1.96x2.75'}
-                        onChange={() => handlePaperSizeChange('1.96x2.75')}
+                        value="70mm * 50mm"
+                        checked={printSettings.paperSize === '70mm * 50mm'}
+                        onChange={() => handlePaperSizeChange('70mm * 50mm')}
                         className="w-4 h-4 text-purple-600 focus:ring-purple-500"
                       />
-                      <span className="ml-2 text-sm text-gray-700">1.96" × 2.75"</span>
+                      <span className="ml-2 text-sm text-gray-700">70mm * 50mm</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="paperSize"
+                        value="50mm * 25mm"
+                        checked={printSettings.paperSize === '50mm * 25mm'}
+                        onChange={() => handlePaperSizeChange('50mm * 25mm')}
+                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">50mm * 25mm</span>
                     </label>
                   </div>
                 </div>
@@ -1345,7 +1491,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               {/* Layout Settings */}
               <div className="space-y-4 pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Layout Settings</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1400,7 +1546,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               {/* Font & Size Settings */}
               <div className="space-y-4 pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Font & Size Settings</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1484,6 +1630,13 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
             </div>
 
             <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={executeBrowserPrint}
+                className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-md transition-colors mr-auto"
+              >
+                <i className="ri-window-line mr-2"></i>
+                Test Print (Browser)
+              </button>
               <button
                 onClick={() => setShowPrintSettingsModal(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md"
