@@ -443,12 +443,8 @@ const effectivePaperSize = (
   paperHeight: number,
   orientation?: 'horizontal' | 'vertical'
 ): { width: number; height: number } => {
-  const w = paperWidth;
-  const h = paperHeight;
-  if (orientation === 'horizontal' && h > w) {
-    return { width: h, height: w };
-  }
-  return { width: w, height: h };
+  // Return dimensions as-is; orientation is handled by ZPL rotation within labels
+  return { width: paperWidth, height: paperHeight };
 };
 
 /**
@@ -703,6 +699,7 @@ export const generateZPLRack = (
     rackCodeFontSize?: number;
     detailsFontSize?: number;
     barcodeHeight?: number;
+    orientation?: 'horizontal' | 'vertical';
   } = {}
 ): string => {
   const {
@@ -716,7 +713,8 @@ export const generateZPLRack = (
     zoneFontSize = 25,
     rackCodeFontSize = 60,
     detailsFontSize = 25,
-    barcodeHeight = 80
+    barcodeHeight = 80,
+    orientation = 'horizontal'
   } = options;
 
   const labelMargin = 20;
@@ -725,6 +723,9 @@ export const generateZPLRack = (
   // For standalone printing, include ^XA/^XZ
   // For batched printing, these will be excluded
   const isStandalone = yOffset === 0 && xOffset === 0 && !options.labelWidth;
+
+  const isVertical = orientation === 'vertical';
+  const rotation = isVertical ? 'R' : 'N'; // R = 90 degree rotation for vertical labels
 
   let zpl = '';
 
@@ -740,22 +741,22 @@ export const generateZPLRack = (
 
   // Zone Identifier
   const zoneLabel = zone === 'LT' ? 'LONG TERM STORAGE' : zone === 'ST' ? 'SHORT TERM STORAGE' : 'YARN STORAGE';
-  zpl += `^FO${xPos},${yPos}^A0N,${zoneFontSize},${zoneFontSize}^FD${zoneLabel}^FS\n`;
-  yPos += zoneFontSize + 10;
+  zpl += `^FO${xPos},${yPos}^A0${rotation},${zoneFontSize},${zoneFontSize}^FD${zoneLabel}^FS\n`;
+  yPos += isVertical ? (zoneFontSize + 50) : (zoneFontSize + 10);
 
   // Large Rack Code
-  zpl += `^FO${xPos},${yPos}^A0N,${rackCodeFontSize},${rackCodeFontSize}^FD${rackCode}^FS\n`;
-  yPos += rackCodeFontSize + 10;
+  zpl += `^FO${xPos},${yPos}^A0${rotation},${rackCodeFontSize},${rackCodeFontSize}^FD${rackCode}^FS\n`;
+  yPos += isVertical ? (rackCodeFontSize + 80) : (rackCodeFontSize + 10);
 
   // Details
   if (shelf !== undefined || floor !== undefined) {
-    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FDShelf: ${shelf || '-'}  |  Floor: ${floor || '-'}^FS\n`;
-    yPos += detailsFontSize + 10;
+    zpl += `^FO${xPos},${yPos}^A0${rotation},${detailsFontSize},${detailsFontSize}^FDShelf: ${shelf || '-'} -- Floor: ${floor || '-'}^FS\n`;
+    yPos += isVertical ? (detailsFontSize + 40) : (detailsFontSize + 10);
   }
 
   // Barcode (CODE128)
   zpl += `^BY2,2,${barcodeHeight}\n`;
-  zpl += `^FO${xPos},${yPos}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
+  zpl += `^FO${xPos},${yPos}^BC${rotation},${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
 
   if (isStandalone) {
     zpl += `^XZ\n`;
@@ -1350,7 +1351,8 @@ export const printRacks = async (
             zoneFontSize,
             rackCodeFontSize,
             detailsFontSize,
-            barcodeHeight
+            barcodeHeight,
+            orientation: options.customSettings.orientation
           });
         }
 
