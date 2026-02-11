@@ -74,6 +74,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     rackCodeFontSize: 50,
     detailsFontSize: 20,
     barcodeHeight: 70,
+    orientation: 'horizontal' as 'horizontal' | 'vertical',
   });
   const [racksReadyToPrint, setRacksReadyToPrint] = useState<Array<{
     rackCode: string;
@@ -667,6 +668,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         paperSize: '4x6',
         paperWidth: 812,
         paperHeight: 1218,
+        orientation: 'horizontal',
       });
     } else if (size === '6x4') {
       setPrintSettings({
@@ -674,6 +676,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         paperSize: '6x4',
         paperWidth: 1218,
         paperHeight: 812,
+        orientation: 'horizontal',
       });
     } else if (size === '1.96x2.75') {
       setPrintSettings({
@@ -681,6 +684,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         paperSize: '1.96x2.75',
         paperWidth: 398,  // 1.96 inches × 203 DPI
         paperHeight: 558, // 2.75 inches × 203 DPI
+        orientation: 'horizontal',
       });
     } else if (size === '70mm * 50mm') {
       setPrintSettings({
@@ -693,6 +697,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         rackCodeFontSize: 40,
         detailsFontSize: 16,
         barcodeHeight: 50,
+        orientation: 'horizontal',
       });
     } else if (size === '50mm * 25mm') {
       setPrintSettings({
@@ -705,6 +710,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         rackCodeFontSize: 30,
         detailsFontSize: 14,
         barcodeHeight: 40,
+        orientation: 'horizontal',
       });
     }
   };
@@ -723,6 +729,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
     const isSmall = printSettings.paperSize === '50mm * 25mm';
     const isMedium = printSettings.paperSize === '70mm * 50mm';
+    const isVertical = printSettings.orientation === 'vertical';
 
     // Determine sizes in mm
     let paperW = 101.6; // 4"
@@ -756,20 +763,33 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               height: ${labelH}mm;
               float: left;
               box-sizing: border-box;
-              padding: 2mm;
+              padding: 1.5mm;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              border: 0.1mm dotted #eee;
+              overflow: hidden;
+            }
+            @media print { .label { border: none; } }
+            .content {
               display: flex;
               flex-direction: column;
               justify-content: center;
               align-items: center;
               text-align: center;
-              border: 0.1mm dotted #eee;
+              width: 100%;
+              height: 100%;
+              ${isVertical ? `
+                transform: rotate(-90deg);
+                width: ${labelH}mm;
+                height: ${labelW}mm;
+              ` : ''}
             }
-            @media print { .label { border: none; } }
-            .zone { font-size: ${isSmall ? '6pt' : '8pt'}; color: #666; margin-bottom: 1mm; }
-            .code { font-weight: bold; font-size: ${isSmall ? '12pt' : '18pt'}; margin-bottom: 1mm; }
-            .details { font-size: ${isSmall ? '6pt' : '8pt'}; margin-bottom: 2mm; }
-            .barcode { width: 90%; }
-            svg { width: 100%; height: auto; }
+            .zone { font-size: ${isSmall ? '5pt' : '8pt'}; color: #666; margin-bottom: 0.5mm; white-space: nowrap; }
+            .code { font-weight: bold; font-size: ${isSmall ? '10pt' : '18pt'}; margin-bottom: 0.5mm; line-height: 1; }
+            .details { font-size: ${isSmall ? '5pt' : '8pt'}; margin-bottom: 1.5mm; white-space: nowrap; }
+            .barcode { width: 95%; max-height: 40%; display: flex; justify-content: center; }
+            svg { width: 100%; height: auto; max-height: 100%; }
           </style>
         </head>
         <body>
@@ -783,10 +803,12 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         const zoneLabel = rack.zone === 'LT' ? 'LONG TERM' : rack.zone === 'ST' ? 'SHORT TERM' : 'YARN STORAGE';
         html += `
           <div class="label">
-            <div class="zone">${zoneLabel}</div>
-            <div class="code">${rack.rackCode}</div>
-            <div class="details">Shelf: ${rack.shelf || '-'} | Floor: ${rack.floor || '-'}</div>
-            <div class="barcode"><svg id="bc-${i + j}"></svg></div>
+            <div class="content">
+              <div class="zone">${zoneLabel}</div>
+              <div class="code">${rack.rackCode}</div>
+              <div class="details">Shelf: ${rack.shelf || '-'} | Floor: ${rack.floor || '-'}</div>
+              <div class="barcode"><svg id="bc-${i + j}"></svg></div>
+            </div>
           </div>
         `;
       }
@@ -806,7 +828,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                   width: 2,
                   height: ${isSmall ? 40 : 60},
                   displayValue: true,
-                  fontSize: ${isSmall ? 10 : 14}
+                  fontSize: ${isSmall ? 10 : 14},
+                  margin: 0
                 });
               }
             });
@@ -1402,220 +1425,153 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
       {/* Print Settings Modal */}
       {showPrintSettingsModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Print Settings - Rack Barcodes</h3>
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-900">Print Settings - Rack Barcodes</h3>
               <button
                 onClick={() => setShowPrintSettingsModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
               >
-                <i className="ri-close-line text-2xl"></i>
+                <i className="ri-close-line text-xl"></i>
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
-              {/* Paper Settings */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Paper & Orientation</h4>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Paper Size
-                  </label>
-                  <div className="flex flex-wrap gap-4">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        name="paperSize"
-                        value="4x6"
-                        checked={printSettings.paperSize === '4x6'}
-                        onChange={() => handlePaperSizeChange('4x6')}
-                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">4" × 6"</span>
-                    </label>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        name="paperSize"
-                        value="6x4"
-                        checked={printSettings.paperSize === '6x4'}
-                        onChange={() => handlePaperSizeChange('6x4')}
-                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">6" × 4"</span>
-                    </label>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        name="paperSize"
-                        value="70mm * 50mm"
-                        checked={printSettings.paperSize === '70mm * 50mm'}
-                        onChange={() => handlePaperSizeChange('70mm * 50mm')}
-                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">70mm * 50mm</span>
-                    </label>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        name="paperSize"
-                        value="50mm * 25mm"
-                        checked={printSettings.paperSize === '50mm * 25mm'}
-                        onChange={() => handlePaperSizeChange('50mm * 25mm')}
-                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">50mm * 25mm</span>
-                    </label>
-                  </div>
-                  {(printSettings.paperSize === '70mm * 50mm' || printSettings.paperSize === '50mm * 25mm') && (
-                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex gap-3 animate-pulse">
-                      <i className="ri-error-warning-line text-amber-500 text-lg"></i>
-                      <div className="text-xs text-amber-800">
-                        <p className="font-semibold mb-1 uppercase">Printer Configuration Required</p>
-                        <p>The selected size <strong>({printSettings.paperSize})</strong> is non-standard. You MUST configure your printer driver's "Page Setup" with these exact dimensions for correct alignment.</p>
-                      </div>
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">Paper Size</label>
+                    <div className="flex flex-wrap gap-2.5">
+                      {['4x6', '6x4', '1.96x2.75', '70mm * 50mm', '50mm * 25mm'].map((size) => (
+                        <label key={size} className="flex items-center cursor-pointer bg-gray-50 px-2 py-1 rounded border border-gray-200 hover:border-purple-300 transition-colors">
+                          <input
+                            type="radio"
+                            name="paperSize"
+                            value={size}
+                            checked={printSettings.paperSize === size}
+                            onChange={() => handlePaperSizeChange(size as any)}
+                            className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="ml-1.5 text-xs text-gray-700">{size === '4x6' ? '4" × 6"' : size === '6x4' ? '6" × 4"' : size}</span>
+                        </label>
+                      ))}
                     </div>
-                  )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">Print Orientation</label>
+                    <div className="flex gap-2.5">
+                      {['horizontal', 'vertical'].map((orient) => (
+                        <label key={orient} className="flex items-center cursor-pointer bg-gray-50 px-3 py-1.5 rounded border border-gray-200 hover:border-purple-300 transition-colors capitalize">
+                          <input
+                            type="radio"
+                            name="orientation"
+                            value={orient}
+                            checked={printSettings.orientation === orient}
+                            onChange={() => setPrintSettings({ ...printSettings, orientation: orient as any })}
+                            className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="ml-2 text-xs font-medium text-gray-700">{orient}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Top Margin (dots)
-                    </label>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Top Margin (dots)</label>
                     <input
                       type="number"
                       value={printSettings.firstLabelTopMargin}
                       onChange={(e) => setPrintSettings({ ...printSettings, firstLabelTopMargin: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      min="0"
-                      max="200"
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Layout Settings */}
-              <div className="space-y-4 pt-4 border-t border-gray-200">
-                <h4 className="text-sm font-semibold text-gray-700 uppercase">Layout Settings</h4>
-
-                <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-3 pt-3 border-t border-gray-100">
+                <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Layout Settings</h4>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Columns Per Row
-                    </label>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Columns</label>
                     <select
                       value={printSettings.columnsPerRow}
                       onChange={(e) => setPrintSettings({ ...printSettings, columnsPerRow: parseInt(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     >
-                      <option value={1}>1 Column (Full Width)</option>
-                      <option value={2}>2 Columns (Side by Side)</option>
-                      <option value={3}>3 Columns</option>
-                      <option value={4}>4 Columns</option>
+                      {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n} Column{n > 1 ? 's' : ''}</option>)}
                     </select>
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Total Labels Per Page
-                    </label>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Labels Per Page</label>
                     <select
                       value={printSettings.labelsPerPage}
                       onChange={(e) => setPrintSettings({ ...printSettings, labelsPerPage: parseInt(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     >
-                      <option value={1}>1 Label</option>
-                      <option value={2}>2 Labels</option>
-                      <option value={3}>3 Labels</option>
-                      <option value={4}>4 Labels (Recommended)</option>
-                      <option value={6}>6 Labels</option>
-                      <option value={8}>8 Labels</option>
-                      <option value={10}>10 Labels</option>
-                      <option value={12}>12 Labels</option>
+                      {[1, 2, 3, 4, 6, 8, 10, 12].map(n => <option key={n} value={n}>{n} Label{n > 1 ? 's' : ''}</option>)}
                     </select>
                   </div>
                 </div>
-
-                <div>
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={printSettings.showCutLines}
-                      onChange={(e) => setPrintSettings({ ...printSettings, showCutLines: e.target.checked })}
-                      className="w-4 h-4 text-purple-600 focus:ring-purple-500 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Show cut lines (easier to cut labels)</span>
-                  </label>
-                </div>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={printSettings.showCutLines}
+                    onChange={(e) => setPrintSettings({ ...printSettings, showCutLines: e.target.checked })}
+                    className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 rounded"
+                  />
+                  <span className="ml-2 text-[11px] text-gray-600">Show cut lines</span>
+                </label>
               </div>
 
-              {/* Font & Size Settings */}
-              <div className="space-y-4 pt-4 border-t border-gray-200">
-                <h4 className="text-sm font-semibold text-gray-700 uppercase">Font & Size Settings</h4>
-
-                <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-3 pt-3 border-t border-gray-100">
+                <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Font & Barcode Sizes</h4>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Zone Label Font Size
-                    </label>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Zone Size</label>
                     <input
                       type="number"
                       value={printSettings.zoneFontSize}
                       onChange={(e) => setPrintSettings({ ...printSettings, zoneFontSize: parseInt(e.target.value) || 20 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      min="10"
-                      max="40"
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Rack Code Font Size
-                    </label>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Rack Code Size</label>
                     <input
                       type="number"
                       value={printSettings.rackCodeFontSize}
                       onChange={(e) => setPrintSettings({ ...printSettings, rackCodeFontSize: parseInt(e.target.value) || 50 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      min="30"
-                      max="80"
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Details Font Size
-                    </label>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Detail Size</label>
                     <input
                       type="number"
                       value={printSettings.detailsFontSize}
                       onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 20 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      min="10"
-                      max="40"
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Barcode Height (dots)
-                    </label>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Barcode Height</label>
                     <input
                       type="number"
                       value={printSettings.barcodeHeight}
                       onChange={(e) => setPrintSettings({ ...printSettings, barcodeHeight: parseInt(e.target.value) || 70 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      min="50"
-                      max="120"
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-gray-200">
+              <div className="pt-2 border-t border-gray-100">
                 <button
                   onClick={() => setPrintSettings({
                     paperSize: '4x6',
@@ -1629,34 +1585,35 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     rackCodeFontSize: 50,
                     detailsFontSize: 20,
                     barcodeHeight: 70,
+                    orientation: 'horizontal',
                   })}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                  className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
                 >
-                  <i className="ri-restart-line mr-2"></i>
-                  Reset to Default
+                  <i className="ri-restart-line mr-1.5"></i>
+                  Reset Defaults
                 </button>
               </div>
             </div>
 
-            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-end gap-3 z-10">
               <button
                 onClick={executeBrowserPrint}
-                className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-md transition-colors mr-auto"
+                className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded transition-colors mr-auto"
               >
-                <i className="ri-window-line mr-2"></i>
+                <i className="ri-window-line mr-1.5"></i>
                 Test Print (Browser)
               </button>
               <button
                 onClick={() => setShowPrintSettingsModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md"
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={executePrintWithSettings}
-                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md"
+                className="px-3 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded transition-colors"
               >
-                <i className="ri-printer-line mr-2"></i>
+                <i className="ri-printer-line mr-1.5"></i>
                 Print Rack Barcodes
               </button>
             </div>
