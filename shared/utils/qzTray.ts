@@ -738,7 +738,6 @@ export const generateZPLRack = (
     zpl += `^CI28\n`;
   }
 
-  const zoneLabel = zone === 'LT' ? 'LONG TERM STORAGE' : zone === 'ST' ? 'SHORT TERM STORAGE' : 'YARN STORAGE';
   const contentHeight = labelHeight - (labelMargin * 2);
 
   if (isVertical) {
@@ -746,24 +745,20 @@ export const generateZPLRack = (
     // We want to center the whole block of rows along the labelWidth (which is now the "height" of the stack)
     // And center each row along the labelHeight (which is now the "width" of the row)
 
-    const totalStackWidth = zoneFontSize + 40 + rackCodeFontSize + 60 + detailsFontSize + 40 + (barcodeWidth * 11 * 4); // Estimated width with padding
+    const totalStackWidth = rackCodeFontSize + 60 + detailsFontSize + 40 + (barcodeWidth * 11 * 4); // Estimated width with padding
     const startX = xOffset + Math.max(labelMargin, (labelWidth - totalStackWidth) / 2);
     const startY = yOffset + labelMargin;
     const rowLength = labelHeight - (labelMargin * 2);
 
     let currentX = startX;
 
-    // 1. Zone Label
-    zpl += `^FO${currentX},${startY}^A0R,${zoneFontSize},${zoneFontSize}^FB${rowLength},1,0,C^FD${zoneLabel}^FS\n`;
-    currentX += zoneFontSize + 40;
-
-    // 2. Large Rack Code
+    // 1. Large Rack Code
     zpl += `^FO${currentX},${startY}^A0R,${rackCodeFontSize},${rackCodeFontSize}^FB${rowLength},1,0,C^FD${rackCode}^FS\n`;
     currentX += rackCodeFontSize + 60;
 
     // 3. Details
     if (shelf !== undefined || floor !== undefined) {
-      zpl += `^FO${currentX},${startY}^A0R,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} | Floor: ${floor || '-'}^FS\n`;
+      zpl += `^FO${currentX},${startY}^A0R,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
       currentX += detailsFontSize + 40;
     }
 
@@ -778,24 +773,20 @@ export const generateZPLRack = (
     // We want to center the whole block of rows along the labelHeight (stack height)
     // And center each row along the labelWidth (row width)
 
-    const totalStackHeight = zoneFontSize + 20 + rackCodeFontSize + 20 + detailsFontSize + 20 + barcodeHeight + 40;
+    const totalStackHeight = rackCodeFontSize + 20 + detailsFontSize + 20 + barcodeHeight + 40;
     const startY = yOffset + Math.max(labelMargin, (labelHeight - totalStackHeight) / 2);
     const startX = xOffset + labelMargin;
     const rowLength = labelWidth - (labelMargin * 2);
 
     let currentY = startY;
 
-    // 1. Zone Label
-    zpl += `^FO${startX},${currentY}^A0N,${zoneFontSize},${zoneFontSize}^FB${rowLength},1,0,C^FD${zoneLabel}^FS\n`;
-    currentY += zoneFontSize + 20;
-
-    // 2. Large Rack Code
+    // 1. Large Rack Code
     zpl += `^FO${startX},${currentY}^A0N,${rackCodeFontSize},${rackCodeFontSize}^FB${rowLength},1,0,C^FD${rackCode}^FS\n`;
     currentY += rackCodeFontSize + 20;
 
     // 3. Details
     if (shelf !== undefined || floor !== undefined) {
-      zpl += `^FO${startX},${currentY}^A0N,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} | Floor: ${floor || '-'}^FS\n`;
+      zpl += `^FO${startX},${currentY}^A0N,${detailsFontSize},${detailsFontSize}^FB${rowLength},1,0,C^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
       currentY += detailsFontSize + 20;
     }
 
