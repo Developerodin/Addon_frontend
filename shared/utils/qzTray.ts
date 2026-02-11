@@ -790,7 +790,7 @@ export const generateZPLCone = (
   }
 
   if (isSmallSideBySide) {
-    // SIDE-BY-SIDE LAYOUT (e.g. 25x50mm)
+    // SIDE-BY-SIDE LAYOUT (e.g. 50x25mm)
     // Left side: Data (approx 60% width)
     // Right side: QR Code (approx 40% width)
 

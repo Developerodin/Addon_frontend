@@ -71,7 +71,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75' | '25*50mm',
+    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75' | '50mm * 25mm',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -484,7 +484,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     }
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75' | '25*50mm') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75' | '50mm * 25mm') => {
     if (size === '4x6') {
       setPrintSettings({
         ...printSettings,
@@ -506,10 +506,10 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         paperWidth: 398,  // 1.96 inches × 203 DPI
         paperHeight: 558, // 2.75 inches × 203 DPI
       });
-    } else if (size === '25*50mm') {
+    } else if (size === '50mm * 25mm') {
       setPrintSettings({
         ...printSettings,
-        paperSize: '25*50mm',
+        paperSize: '50mm * 25mm',
         paperWidth: 406,
         paperHeight: 203,
         labelsPerPage: 1,
@@ -1507,12 +1507,12 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                       <input
                         type="radio"
                         name="paperSize"
-                        value="25*50mm"
-                        checked={printSettings.paperSize === '25*50mm'}
-                        onChange={() => handlePaperSizeChange('25*50mm')}
+                        value="50mm * 25mm"
+                        checked={printSettings.paperSize === '50mm * 25mm'}
+                        onChange={() => handlePaperSizeChange('50mm * 25mm')}
                         className="w-4 h-4 text-purple-600 focus:ring-purple-500"
                       />
-                      <span className="ml-2 text-sm text-gray-700">25*50mm</span>
+                      <span className="ml-2 text-sm text-gray-700">50mm * 25mm</span>
                     </label>
                   </div>
                 </div>

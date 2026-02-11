@@ -67,7 +67,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '25*50mm',
+    paperSize: '4x6' as '4x6' | '6x4' | '50mm * 25mm',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -362,7 +362,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     }
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4' | '25*50mm') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mm * 25mm') => {
     if (size === '4x6') {
       setPrintSettings({
         ...printSettings,
@@ -381,12 +381,12 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         labelsPerPage: 4,
         columnsPerRow: 2,
       });
-    } else if (size === '25*50mm') {
+    } else if (size === '50mm * 25mm') {
       setPrintSettings({
         ...printSettings,
-        paperSize: '25*50mm',
-        paperWidth: 406,  // 2 inches landscape
-        paperHeight: 203, // 1 inch landscape
+        paperSize: '50mm * 25mm',
+        paperWidth: 406,  // 2 inches (50.8mm) landscape
+        paperHeight: 203, // 1 inch (25.4mm) landscape
         labelsPerPage: 1,
         columnsPerRow: 1,
         qrCodeSize: 4,
@@ -983,8 +983,8 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               <div className="p-4 bg-gray-100 rounded-lg flex flex-col items-center">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase mb-3 self-start">Live Preview (Approximate)</h4>
 
-                {printSettings.paperSize === '25*50mm' ? (
-                  /* 25x50mm Side-by-Side Preview */
+                {printSettings.paperSize === '50mm * 25mm' ? (
+                  /* 50x25mm Side-by-Side Preview */
                   <div className="bg-white border border-gray-400 shadow-sm flex overflow-hidden" style={{ width: '250px', height: '125px' }}>
                     <div className="flex-1 p-2 flex flex-col justify-center gap-0.5 font-mono">
                       <div className="text-[10px] font-bold border-b border-gray-100 pb-0.5 truncate uppercase">
@@ -1070,12 +1070,12 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                         <input
                           type="radio"
                           name="paperSize"
-                          value="25*50mm"
-                          checked={printSettings.paperSize === '25*50mm'}
-                          onChange={() => handlePaperSizeChange('25*50mm')}
+                          value="50mm * 25mm"
+                          checked={printSettings.paperSize === '50mm * 25mm'}
+                          onChange={() => handlePaperSizeChange('50mm * 25mm')}
                           className="w-4 h-4 text-purple-600 focus:ring-purple-500"
                         />
-                        <span className="ml-2 text-sm text-gray-700">25*50mm</span>
+                        <span className="ml-2 text-sm text-gray-700">50mm * 25mm</span>
                       </label>
                     </div>
                   </div>
