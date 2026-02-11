@@ -233,11 +233,11 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
         challanNumber: packListData?.challanNumber || packListData?.challan_number || '',
         dispatchDate: packListData?.dispatchDate || packListData?.dispatch_date || '',
         estimatedDeliveryDate: packListData?.estimatedDeliveryDate || packListData?.estimated_delivery_date || packListData?.expectedArrivalDate || packListData?.expected_arrival_date || '',
-          numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes || 0,
-          totalWeight: packListData?.totalWeight || packListData?.total_weight || 0,
-          notes: packListData?.notes || '',
-          poItems: packListData?.poItems || (Array.isArray(packListData?.poItems) ? packListData.poItems : []),
-          files: packListData?.files || []
+        numberOfBoxes: packListData?.numberOfBoxes || packListData?.number_of_boxes || 0,
+        totalWeight: packListData?.totalWeight || packListData?.total_weight || 0,
+        notes: packListData?.notes || '',
+        poItems: packListData?.poItems || (Array.isArray(packListData?.poItems) ? packListData.poItems : []),
+        files: packListData?.files || []
       }];
     })(),
     receivedLotDetails: (() => {
@@ -446,8 +446,10 @@ const PurchasePage = () => {
       const supplierCity = supplierData?.city || '';
       const supplierState = supplierData?.state || '';
       const supplierLocation = [supplierCity, supplierState].filter(Boolean).join(', ') || 'N/A';
-      const supplierContact = supplierData?.contactNumber || 'N/A';
-      const supplierGST = supplierData?.gstin || supplierData?.gst || 'N/A';
+      const supplierContactNumber = supplierData?.contactNumber || 'N/A';
+      const supplierContactName = supplierData?.contactPersonName || '';
+      const supplierEmail = supplierData?.email || 'N/A';
+      const supplierGST = supplierData?.gstNo || supplierData?.gstin || supplierData?.gst || 'N/A';
 
       // Get order details from API response
       const orderItems = detailedOrderData?.poItems || order.items || [];
@@ -485,26 +487,30 @@ const PurchasePage = () => {
       }
 
       // Replace supplier information
+      htmlTemplate = htmlTemplate.replace(/PURCHASE INVOICE/g, 'PURCHASE ORDER');
       htmlTemplate = htmlTemplate.replace(
-        /<b>Valson Polyester Pvt Ltd<\/b><br>[\s\S]*?<b>GST :<\/b> 26AAACV4941Q1ZS/g,
-        `<b>${supplierName}</b><br>${supplierAddress}<br>${supplierLocation}<br><br><b>PHON :</b><br><b>MOB :</b> ${supplierContact}<br><b>GST :</b> ${supplierGST}`
+        /<b>Valson Polyester Pvt Ltd<\/b><br>[\s\S]*?<b>E-Mail :<\/b>/g,
+        `<b>${supplierName}</b><br>${supplierAddress}<br>${supplierLocation}<br><br><b>GST No:</b> ${supplierGST}<br><b>Contact Person :</b> ${supplierContactName}<br><b>Contact No:</b> ${supplierContactNumber}<br><b>E-Mail :</b> ${supplierEmail}`
       );
 
       // Replace invoice details
       const invoiceDate = formatDate(orderDate);
-      htmlTemplate = htmlTemplate.replace(/<b>Invoice No :<\/b><br>P\/25-26\/00478/g, `<b>Invoice No :</b><br>${poNumber}`);
+      htmlTemplate = htmlTemplate.replace(/<b>PO No :<\/b><br>P\/25-26\/00478/g, `<b>PO No :</b><br>${poNumber}`);
       htmlTemplate = htmlTemplate.replace(/<b>Dated :<\/b><br>30-10-2025/g, `<b>Dated :</b><br>${invoiceDate}`);
       htmlTemplate = htmlTemplate.replace(/<b>Delivery Note :<\/b><br>/g, `<b>Delivery Note :</b><br>${dispatchNumber}`);
       htmlTemplate = htmlTemplate.replace(/<b>Mode\/Terms of Payment :<\/b><br>/g, `<b>Mode/Terms of Payment :</b><br>Credit`);
-      htmlTemplate = htmlTemplate.replace(/<b>Suppliers Ref :<\/b><br>/g, `<b>Suppliers Ref :</b><br>N/A`);
-      htmlTemplate = htmlTemplate.replace(/<b>Other References\/PO No :<\/b><br>/g, `<b>Other References/PO No :</b><br>${poNumber}`);
-      htmlTemplate = htmlTemplate.replace(/<b>Buyers Order No :<\/b><br>/g, `<b>Buyers Order No :</b><br>${poNumber}`);
-      htmlTemplate = htmlTemplate.replace(/<b>Dated :<\/b><br>/g, `<b>Dated :</b><br>${invoiceDate}`);
-      htmlTemplate = htmlTemplate.replace(/<b>Despatch Document No :<\/b><br>/g, `<b>Despatch Document No :</b><br>${dispatchNumber}`);
-      htmlTemplate = htmlTemplate.replace(/<b>Delivery Note Date :<\/b><br>/g, `<b>Delivery Note Date :</b><br>${dispatchDate}`);
 
-      // Replace consignee email
-      htmlTemplate = htmlTemplate.replace(/<b>E-Mail :<\/b>/g, `<b>E-Mail :</b> info@addon.in`);
+      // Clear specific redundant values (right side)
+      htmlTemplate = htmlTemplate.replace(/<b>Suppliers Ref :<\/b><br>/g, `<b>Suppliers Ref :</b><br>N/A`);
+      htmlTemplate = htmlTemplate.replace(/<b>Other References\/PO No :<\/b><br>/g, `<b>Other References/PO No :</b><br>`);
+      htmlTemplate = htmlTemplate.replace(/<b>Buyers Order No :<\/b><br>/g, `<b>Buyers Order No :</b><br>`);
+      htmlTemplate = htmlTemplate.replace(/<b>Despatch Document No :<\/b><br>/g, `<b>Despatch Document No :</b><br>`);
+      htmlTemplate = htmlTemplate.replace(/<b>Delivery Note Date :<\/b><br>/g, `<b>Delivery Note Date :</b><br>`);
+
+      // Replace consignee details
+      htmlTemplate = htmlTemplate.replace(/<b>GST No:<\/b><br>/g, `<b>GST No:</b> 27AAACA8827A1ZZ`);
+      htmlTemplate = htmlTemplate.replace(/<b>Contact No:<\/b>/g, `<b>Contact No:</b>`);
+      htmlTemplate = htmlTemplate.replace(/<b>E-Mail:<\/b>/g, `<b>E-Mail :</b> designer1@gmail.com`);
 
       // Generate items rows - replace the example rows
       let itemsHtml = '';
@@ -516,7 +522,7 @@ const PurchasePage = () => {
         const rate = item.rate || 0;
         const amount = quantity * rate;
 
-        itemsHtml += `<tr><td>${index + 1}</td><td>${shadeCode}</td><td>${yarnName}${sizeCount !== 'N/A' ? ' - ' + sizeCount : ''}</td><td>${quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>${rate.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>KGS</td><td>${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`;
+        itemsHtml += `<tr><td>${index + 1}</td><td>${shadeCode}</td><td>${yarnName}${sizeCount !== 'N/A' ? ' - ' + sizeCount : ''}</td><td>${quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>KGS</td><td>${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`;
       });
 
       // Replace the example product rows
@@ -527,20 +533,34 @@ const PurchasePage = () => {
 
       // Replace totals
       const totalQuantity = orderItems.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
-      htmlTemplate = htmlTemplate.replace(/TOTAL QTY : 190\.5700/g, `TOTAL QTY : ${totalQuantity.toLocaleString('en-IN', { maximumFractionDigits: 4 })}`);
-      htmlTemplate = htmlTemplate.replace(/TOTAL AMOUNT : 72,988\.30/g, `TOTAL AMOUNT : ${subTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
-      htmlTemplate = htmlTemplate.replace(/<td colspan="6">SHIPPING<\/td>\s*<td>572\.00<\/td>/g, `<td colspan="6">SHIPPING</td><td>0.00</td>`);
+      htmlTemplate = htmlTemplate.replace(/190\.5700/g, `${totalQuantity.toLocaleString('en-IN', { maximumFractionDigits: 4 })}`);
+      htmlTemplate = htmlTemplate.replace(/72,988\.30/g, `${subTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
+      htmlTemplate = htmlTemplate.replace(/<td colspan="5">SHIPPING<\/td>\s*<td>572\.00<\/td>/g, `<td colspan="5">SHIPPING</td><td>0.00</td>`);
+
+      // Update taxRowHtml to include real taxable value
+      if (isSameState && orderItems.length > 0) {
+        const avgGstRate = orderItems.reduce((sum: number, item: any) => sum + (item.gstRate || item.gst || 0), 0) / orderItems.length;
+        const sgstRate = avgGstRate / 2;
+        const cgstRate = avgGstRate / 2;
+        const sgstAmount = totalGst / 2;
+        const cgstAmount = totalGst / 2;
+        taxRowHtml = `<tr><td>SGST ${sgstRate.toFixed(2)}%</td><td>${subTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>${sgstAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>0.00</td></tr><tr><td>CGST ${cgstRate.toFixed(2)}%</td><td>${subTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>0.00</td><td>${cgstAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`;
+      } else if (orderItems.length > 0) {
+        const avgGstRate = orderItems.reduce((sum: number, item: any) => sum + (item.gstRate || item.gst || 0), 0) / orderItems.length;
+        const igstAmount = totalGst;
+        taxRowHtml = `<tr><td>IGST ${avgGstRate.toFixed(2)}%</td><td>${subTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>0.00</td><td>${igstAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`;
+      }
 
       // Replace tax section
-      htmlTemplate = htmlTemplate.replace(/<tr><td>IGST 5%<\/td>[\s\S]*?<td>3,678\.01<\/td><\/tr>/g, taxRowHtml);
-      htmlTemplate = htmlTemplate.replace(/<tr><td colspan="3" class="tax-total">TOTAL<\/td><td>77,238\.00<\/td><\/tr>/g, `<tr><td colspan="3" class="tax-total">TOTAL</td><td>${totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`);
+      htmlTemplate = htmlTemplate.replace(/<tr>\s*<td>IGST 5%<\/td>[\s\S]*?<td>3,678\.01<\/td>\s*<\/tr>/g, taxRowHtml);
+      htmlTemplate = htmlTemplate.replace(
+        /<tr>\s*<td colspan="3" class="tax-total" style="text-align: right;">TOTAL<\/td>\s*<td class="tax-total">77,238\.00<\/td>\s*<\/tr>/g,
+        `<tr><td colspan="3" class="tax-total" style="text-align: right;">TOTAL</td><td class="tax-total">${totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`
+      );
 
-      // Replace amount in words
-      htmlTemplate = htmlTemplate.replace(/<div><b>Net Amount Total :-<\/b> Seventy Seven Thousand Two Hundred Thirty Eight Only<\/div>/g, `<div><b>Net Amount Total :-</b> ${numberToWords(totalAmount)} Only</div>`);
-
-      // Replace narration
+      // Replace remarks
       const narrationText = notes || 'N/A';
-      htmlTemplate = htmlTemplate.replace(/<div style="margin-top:6px;"><b>NARRATION:<\/b> Inv No P28345 Dt 29\.10\.2025 Rcvd 30\.10\.2025<\/div>/g, `<div style="margin-top:6px;"><b>NARRATION:</b> ${narrationText}</div>`);
+      htmlTemplate = htmlTemplate.replace(/<b>Remarks:<\/b> Inv No P28345 Dt 29\.10\.2025 Rcvd 30\.10\.2025/g, `<b>Remarks:</b> ${narrationText}`);
 
       // Open print window
       const printWindow = window.open('', '_blank');
@@ -1116,7 +1136,7 @@ const PurchasePage = () => {
                             }
                             return totalWeight > 0 ? (
                               <div className="text-[10px] font-medium text-gray-500">
-                               Rec: {totalWeight.toLocaleString()} kg
+                                Rec: {totalWeight.toLocaleString()} kg
                               </div>
                             ) : null;
                           })()}
@@ -1131,7 +1151,7 @@ const PurchasePage = () => {
                               </div>
                             ) : null;
                           })()}
-                          
+
                         </div>
                       </td>
                       <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
@@ -1327,9 +1347,8 @@ const PurchasePage = () => {
         <div className={`fixed inset-0 z-50 overflow-hidden ${detailsModalOpen ? '' : 'pointer-events-none'}`}>
           {/* Backdrop */}
           <div
-            className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${
-              detailsModalOpen ? 'opacity-100' : 'opacity-0'
-            }`}
+            className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${detailsModalOpen ? 'opacity-100' : 'opacity-0'
+              }`}
             onClick={() => {
               setDetailsModalOpen(false);
               setSelectedOrder(null);
@@ -1339,9 +1358,8 @@ const PurchasePage = () => {
 
           {/* Side Modal */}
           <div
-            className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
-              detailsModalOpen ? 'translate-x-0' : 'translate-x-full'
-            }`}
+            className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${detailsModalOpen ? 'translate-x-0' : 'translate-x-full'
+              }`}
           >
             {/* Header */}
             <div className="bg-primary text-white px-6 py-4 flex-shrink-0">
@@ -1401,447 +1419,447 @@ const PurchasePage = () => {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-4 py-3">
-                {isLoadingDetails ? (
-                  <div className="text-center py-12">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading order details...</p>
-                  </div>
-                ) : (
-                  <>
-                    {activeTab === 'details' && (
-                      <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                          <div className="space-y-3">
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">PO Number</label>
-                              <div className="mt-0.5 text-xs text-gray-900 font-medium">
-                                {detailedOrderData?.poNumber || selectedOrder.orderNumber}
-                              </div>
+              {isLoadingDetails ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading order details...</p>
+                </div>
+              ) : (
+                <>
+                  {activeTab === 'details' && (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-xs font-medium text-gray-600">PO Number</label>
+                            <div className="mt-0.5 text-xs text-gray-900 font-medium">
+                              {detailedOrderData?.poNumber || selectedOrder.orderNumber}
                             </div>
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">Supplier</label>
-                              <div className="mt-0.5 text-xs text-gray-900">
-                                {detailedOrderData?.supplierName || detailedOrderData?.supplier?.brandName || selectedOrder.supplier}
-                              </div>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-gray-600">Supplier</label>
+                            <div className="mt-0.5 text-xs text-gray-900">
+                              {detailedOrderData?.supplierName || detailedOrderData?.supplier?.brandName || selectedOrder.supplier}
                             </div>
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">Order Date</label>
-                              <div className="mt-0.5 text-xs text-gray-900">
-                                {new Date(detailedOrderData?.createDate || selectedOrder.orderDate).toLocaleDateString('en-US', {
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-gray-600">Order Date</label>
+                            <div className="mt-0.5 text-xs text-gray-900">
+                              {new Date(detailedOrderData?.createDate || selectedOrder.orderDate).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-gray-600">Expected Delivery</label>
+                            <div className="mt-0.5 text-xs text-gray-900">
+                              {detailedOrderData?.poItems && detailedOrderData.poItems.length > 0 ? (
+                                new Date(
+                                  detailedOrderData.poItems.reduce((latest: string, item: any) => {
+                                    const itemDate = item.estimatedDeliveryDate;
+                                    return itemDate && (!latest || new Date(itemDate) > new Date(latest)) ? itemDate : latest;
+                                  }, '')
+                                ).toLocaleDateString('en-US', {
                                   year: 'numeric',
                                   month: 'long',
                                   day: 'numeric'
-                                })}
-                              </div>
-                            </div>
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">Expected Delivery</label>
-                              <div className="mt-0.5 text-xs text-gray-900">
-                                {detailedOrderData?.poItems && detailedOrderData.poItems.length > 0 ? (
-                                  new Date(
-                                    detailedOrderData.poItems.reduce((latest: string, item: any) => {
-                                      const itemDate = item.estimatedDeliveryDate;
-                                      return itemDate && (!latest || new Date(itemDate) > new Date(latest)) ? itemDate : latest;
-                                    }, '')
-                                  ).toLocaleDateString('en-US', {
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric'
-                                  })
-                                ) : (
-                                  new Date(selectedOrder.expectedDelivery).toLocaleDateString('en-US', {
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric'
-                                  })
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="space-y-3">
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">Status</label>
-                              <div className="mt-0.5">
-                                <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(detailedOrderData?.currentStatus || selectedOrder.status))}`}>
-                                  {convertStatusFromAPI(detailedOrderData?.currentStatus || selectedOrder.status)}
-                                </span>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">Sub Total</label>
-                              <div className="mt-0.5 text-xs text-gray-900">₹{(detailedOrderData?.subTotal || selectedOrder.subTotal || 0).toLocaleString()}</div>
-                            </div>
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">GST</label>
-                              <div className="mt-0.5 text-xs text-gray-900">₹{(detailedOrderData?.gst || selectedOrder.totalGst || 0).toLocaleString()}</div>
-                            </div>
-                            <div>
-                              <label className="text-xs font-medium text-gray-600">Total Amount</label>
-                              <div className="mt-0.5 text-xs text-gray-900 font-semibold">₹{(detailedOrderData?.total || selectedOrder.totalAmount || 0).toLocaleString()}</div>
+                                })
+                              ) : (
+                                new Date(selectedOrder.expectedDelivery).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })
+                              )}
                             </div>
                           </div>
                         </div>
-
-                        {detailedOrderData?.supplier && (
-                          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                            <label className="text-xs font-medium text-gray-700 mb-2 block">Supplier Details</label>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {detailedOrderData.supplier.brandName && (
-                                <div>
-                                  <label className="text-[10px] font-medium text-gray-600">Brand Name</label>
-                                  <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.brandName}</div>
-                                </div>
-                              )}
-                              {detailedOrderData.supplier.contactPersonName && (
-                                <div>
-                                  <label className="text-[10px] font-medium text-gray-600">Contact Person</label>
-                                  <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.contactPersonName}</div>
-                                </div>
-                              )}
-                              {detailedOrderData.supplier.contactNumber && (
-                                <div>
-                                  <label className="text-[10px] font-medium text-gray-600">Contact Number</label>
-                                  <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.contactNumber}</div>
-                                </div>
-                              )}
-                              {detailedOrderData.supplier.email && (
-                                <div>
-                                  <label className="text-[10px] font-medium text-gray-600">Email</label>
-                                  <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.email}</div>
-                                </div>
-                              )}
-                              {detailedOrderData.supplier.address && (
-                                <div className="md:col-span-2">
-                                  <label className="text-[10px] font-medium text-gray-600">Address</label>
-                                  <div className="mt-0.5 text-xs text-gray-900 whitespace-pre-line">
-                                    {detailedOrderData.supplier.address}
-                                    {detailedOrderData.supplier.city && `, ${detailedOrderData.supplier.city}`}
-                                    {detailedOrderData.supplier.state && `, ${detailedOrderData.supplier.state}`}
-                                  </div>
-                                </div>
-                              )}
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-xs font-medium text-gray-600">Status</label>
+                            <div className="mt-0.5">
+                              <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(detailedOrderData?.currentStatus || selectedOrder.status))}`}>
+                                {convertStatusFromAPI(detailedOrderData?.currentStatus || selectedOrder.status)}
+                              </span>
                             </div>
                           </div>
-                        )}
-
-                        {(detailedOrderData?.notes || selectedOrder.notes) && (
-                          <div className="mb-4">
-                            <label className="text-xs font-medium text-gray-600">Notes</label>
-                            <div className="mt-1 p-2 bg-gray-50 rounded text-xs text-gray-900">
-                              {detailedOrderData?.notes || selectedOrder.notes}
-                            </div>
+                          <div>
+                            <label className="text-xs font-medium text-gray-600">Sub Total</label>
+                            <div className="mt-0.5 text-xs text-gray-900">₹{(detailedOrderData?.subTotal || selectedOrder.subTotal || 0).toLocaleString()}</div>
                           </div>
-                        )}
+                          <div>
+                            <label className="text-xs font-medium text-gray-600">GST</label>
+                            <div className="mt-0.5 text-xs text-gray-900">₹{(detailedOrderData?.gst || selectedOrder.totalGst || 0).toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-gray-600">Total Amount</label>
+                            <div className="mt-0.5 text-xs text-gray-900 font-semibold">₹{(detailedOrderData?.total || selectedOrder.totalAmount || 0).toLocaleString()}</div>
+                          </div>
+                        </div>
+                      </div>
 
+                      {detailedOrderData?.supplier && (
+                        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                          <label className="text-xs font-medium text-gray-700 mb-2 block">Supplier Details</label>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {detailedOrderData.supplier.brandName && (
+                              <div>
+                                <label className="text-[10px] font-medium text-gray-600">Brand Name</label>
+                                <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.brandName}</div>
+                              </div>
+                            )}
+                            {detailedOrderData.supplier.contactPersonName && (
+                              <div>
+                                <label className="text-[10px] font-medium text-gray-600">Contact Person</label>
+                                <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.contactPersonName}</div>
+                              </div>
+                            )}
+                            {detailedOrderData.supplier.contactNumber && (
+                              <div>
+                                <label className="text-[10px] font-medium text-gray-600">Contact Number</label>
+                                <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.contactNumber}</div>
+                              </div>
+                            )}
+                            {detailedOrderData.supplier.email && (
+                              <div>
+                                <label className="text-[10px] font-medium text-gray-600">Email</label>
+                                <div className="mt-0.5 text-xs text-gray-900">{detailedOrderData.supplier.email}</div>
+                              </div>
+                            )}
+                            {detailedOrderData.supplier.address && (
+                              <div className="md:col-span-2">
+                                <label className="text-[10px] font-medium text-gray-600">Address</label>
+                                <div className="mt-0.5 text-xs text-gray-900 whitespace-pre-line">
+                                  {detailedOrderData.supplier.address}
+                                  {detailedOrderData.supplier.city && `, ${detailedOrderData.supplier.city}`}
+                                  {detailedOrderData.supplier.state && `, ${detailedOrderData.supplier.state}`}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {(detailedOrderData?.notes || selectedOrder.notes) && (
                         <div className="mb-4">
-                          <label className="text-xs font-medium text-gray-600 mb-2 block">Order Items</label>
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full border-collapse border border-gray-300">
-                              <thead className="bg-gray-50">
-                                <tr>
-                                  <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Yarn Name</th>
-                                  <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Size/Count</th>
-                                  <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Shade Code</th>
-                                  <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">Quantity</th>
-                                  <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">Rate</th>
-                                  <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">GST %</th>
-                                  <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">Sub Total</th>
-                                  <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Est. Delivery</th>
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white">
-                                {(detailedOrderData?.poItems || selectedOrder.items || []).map((item: any, index: number) => {
-                                  const yarnName = item.yarnName || item.yarn?.yarnName || '';
-                                  const sizeCount = item.sizeCount || '';
-                                  const shadeCode = item.shadeCode || '';
-                                  const quantity = item.quantity || 0;
-                                  const rate = item.rate || 0;
-                                  const gstRate = item.gstRate || item.gst || 18;
-                                  const subTotal = item.subTotal || (quantity * rate);
-                                  const estimatedDelivery = item.estimatedDeliveryDate || '';
-
-                                  return (
-                                    <tr key={item.id || item._id || index} className="hover:bg-gray-50">
-                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">{yarnName}</td>
-                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">{sizeCount}</td>
-                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">{shadeCode}</td>
-                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">{quantity.toLocaleString()}</td>
-                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">₹{rate.toLocaleString()}</td>
-                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">{gstRate}%</td>
-                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">₹{subTotal.toLocaleString()}</td>
-                                      <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">
-                                        {estimatedDelivery ? new Date(estimatedDelivery).toLocaleDateString() : '-'}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
+                          <label className="text-xs font-medium text-gray-600">Notes</label>
+                          <div className="mt-1 p-2 bg-gray-50 rounded text-xs text-gray-900">
+                            {detailedOrderData?.notes || selectedOrder.notes}
                           </div>
                         </div>
+                      )}
 
-                        {((selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0) || selectedOrder.packlistDetails) && (
-                          <div className="mb-4">
-                            <label className="text-xs font-medium text-gray-700 mb-2 block">
-                              Packlist Details
-                              {selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0 && (
-                                <span className="text-[10px] text-gray-500 ml-2">
-                                  ({selectedOrder.packListDetailsArray.length} {selectedOrder.packListDetailsArray.length === 1 ? 'entry' : 'entries'})
-                                </span>
-                              )}
-                            </label>
+                      <div className="mb-4">
+                        <label className="text-xs font-medium text-gray-600 mb-2 block">Order Items</label>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full border-collapse border border-gray-300">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Yarn Name</th>
+                                <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Size/Count</th>
+                                <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Shade Code</th>
+                                <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">Quantity</th>
+                                <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">Rate</th>
+                                <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">GST %</th>
+                                <th className="border border-gray-300 px-2 py-1 text-right text-[10px] font-medium text-gray-500 uppercase">Sub Total</th>
+                                <th className="border border-gray-300 px-2 py-1 text-left text-[10px] font-medium text-gray-500 uppercase">Est. Delivery</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white">
+                              {(detailedOrderData?.poItems || selectedOrder.items || []).map((item: any, index: number) => {
+                                const yarnName = item.yarnName || item.yarn?.yarnName || '';
+                                const sizeCount = item.sizeCount || '';
+                                const shadeCode = item.shadeCode || '';
+                                const quantity = item.quantity || 0;
+                                const rate = item.rate || 0;
+                                const gstRate = item.gstRate || item.gst || 18;
+                                const subTotal = item.subTotal || (quantity * rate);
+                                const estimatedDelivery = item.estimatedDeliveryDate || '';
 
-                            {selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0 ? (
-                              <div className="space-y-3">
-                                {selectedOrder.packListDetailsArray.map((packlistEntry, index) => (
-                                  <div key={index} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                                    <div className="flex items-center justify-between mb-2">
-                                      <h4 className="text-xs font-semibold text-gray-800">
-                                        Packlist Entry {index + 1}
-                                      </h4>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                      {packlistEntry.packingNumber && (
-                                        <div>
-                                          <label className="text-[10px] font-medium text-gray-600">Packing Number</label>
-                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.packingNumber}</div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.courierName && (
-                                        <div>
-                                          <label className="text-[10px] font-medium text-gray-600">Courier Name</label>
-                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.courierName}</div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.courierNumber && (
-                                        <div>
-                                          <label className="text-[10px] font-medium text-gray-600">Courier Number</label>
-                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.courierNumber}</div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.vehicleNumber && (
-                                        <div>
-                                          <label className="text-[10px] font-medium text-gray-600">Vehicle Number</label>
-                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.vehicleNumber}</div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.challanNumber && (
-                                        <div>
-                                          <label className="text-[10px] font-medium text-gray-600">Challan Number</label>
-                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.challanNumber}</div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.dispatchDate && (
-                                        <div>
-                                          <label className="text-[10px] font-medium text-gray-600">Dispatch Date</label>
-                                          <div className="mt-0.5 text-xs text-gray-900">
-                                            {new Date(packlistEntry.dispatchDate).toLocaleDateString()}
-                                          </div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.estimatedDeliveryDate && (
-                                        <div>
-                                          <label className="text-[10px] font-medium text-gray-600">Estimated Delivery Date</label>
-                                          <div className="mt-0.5 text-xs text-gray-900">
-                                            {new Date(packlistEntry.estimatedDeliveryDate).toLocaleDateString()}
-                                          </div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.numberOfBoxes !== undefined && packlistEntry.numberOfBoxes > 0 && (
-                                        <div>
-                                          <label className="text-[10px] font-medium text-gray-600">Number of Boxes</label>
-                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.numberOfBoxes}</div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.totalWeight !== undefined && packlistEntry.totalWeight > 0 && (
-                                        <div>
-                                          <label className="text-[10px] font-medium text-gray-600">Total Weight (kg)</label>
-                                          <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.totalWeight}</div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.poItems && Array.isArray(packlistEntry.poItems) && packlistEntry.poItems.length > 0 && (
-                                        <div className="md:col-span-2">
-                                          <label className="text-[10px] font-medium text-gray-600 mb-1 block">PO Items ({packlistEntry.poItems.length})</label>
-                                          <div className="mt-0.5">
-                                            {(selectedOrder.items || [])
-                                              .filter(item => packlistEntry.poItems?.includes(item.id))
-                                              .map((item, idx) => (
-                                                <div key={idx} className="text-xs text-gray-900 mb-0.5">
-                                                  • {item.yarnName} - {item.sizeCount} - {item.shadeCode} (Qty: {item.quantity})
-                                                </div>
-                                              ))}
-                                          </div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.notes && (
-                                        <div className="md:col-span-2">
-                                          <label className="text-[10px] font-medium text-gray-600">Notes</label>
-                                          <div className="mt-0.5 text-xs text-gray-900 p-1.5 bg-white rounded border border-gray-200">
-                                            {packlistEntry.notes}
-                                          </div>
-                                        </div>
-                                      )}
-                                      {packlistEntry.files && packlistEntry.files.length > 0 && (
-                                        <div className="md:col-span-2">
-                                          <label className="text-[10px] font-medium text-gray-600 mb-1 block">
-                                            Files ({packlistEntry.files.length})
-                                          </label>
-                                          <div className="space-y-1.5">
-                                            {packlistEntry.files.map((file) => (
-                                              <div
-                                                key={file.key}
-                                                className="flex items-center justify-between p-2 bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-                                              >
-                                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                  <span className="text-base">{getFileIcon(file.mimeType)}</span>
-                                                  <div className="flex-1 min-w-0">
-                                                    <div className="text-xs font-medium text-gray-900 truncate">
-                                                      {file.originalName}
-                                                    </div>
-                                                    <div className="text-[10px] text-gray-500">
-                                                      {formatFileSize(file.size)} • {file.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => window.open(file.url, '_blank')}
-                                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                                  title="View/Preview"
-                                                >
-                                                  <i className="ri-eye-line text-sm"></i>
-                                                </button>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
+                                return (
+                                  <tr key={item.id || item._id || index} className="hover:bg-gray-50">
+                                    <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">{yarnName}</td>
+                                    <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">{sizeCount}</td>
+                                    <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">{shadeCode}</td>
+                                    <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">{quantity.toLocaleString()}</td>
+                                    <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">₹{rate.toLocaleString()}</td>
+                                    <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">{gstRate}%</td>
+                                    <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900 text-right">₹{subTotal.toLocaleString()}</td>
+                                    <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-900">
+                                      {estimatedDelivery ? new Date(estimatedDelivery).toLocaleDateString() : '-'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {((selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0) || selectedOrder.packlistDetails) && (
+                        <div className="mb-4">
+                          <label className="text-xs font-medium text-gray-700 mb-2 block">
+                            Packlist Details
+                            {selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0 && (
+                              <span className="text-[10px] text-gray-500 ml-2">
+                                ({selectedOrder.packListDetailsArray.length} {selectedOrder.packListDetailsArray.length === 1 ? 'entry' : 'entries'})
+                              </span>
+                            )}
+                          </label>
+
+                          {selectedOrder.packListDetailsArray && selectedOrder.packListDetailsArray.length > 0 ? (
+                            <div className="space-y-3">
+                              {selectedOrder.packListDetailsArray.map((packlistEntry, index) => (
+                                <div key={index} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <h4 className="text-xs font-semibold text-gray-800">
+                                      Packlist Entry {index + 1}
+                                    </h4>
                                   </div>
-                                ))}
-                              </div>
-                            ) : (
-                              selectedOrder.packlistDetails && (
-                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {(selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber) && (
+                                    {packlistEntry.packingNumber && (
                                       <div>
-                                        <label className="text-[10px] font-medium text-gray-600">Packing/Tracking Number</label>
-                                        <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber}</div>
+                                        <label className="text-[10px] font-medium text-gray-600">Packing Number</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.packingNumber}</div>
                                       </div>
                                     )}
-                                    {selectedOrder.packlistDetails.courierName && (
+                                    {packlistEntry.courierName && (
                                       <div>
-                                        <label className="text-[10px] font-medium text-gray-600">Courier</label>
-                                        <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.courierName}</div>
+                                        <label className="text-[10px] font-medium text-gray-600">Courier Name</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.courierName}</div>
                                       </div>
                                     )}
-                                    {selectedOrder.packlistDetails.courierNumber && (
+                                    {packlistEntry.courierNumber && (
                                       <div>
                                         <label className="text-[10px] font-medium text-gray-600">Courier Number</label>
-                                        <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.courierNumber}</div>
+                                        <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.courierNumber}</div>
                                       </div>
                                     )}
-                                    {selectedOrder.packlistDetails.vehicleNumber && (
+                                    {packlistEntry.vehicleNumber && (
                                       <div>
                                         <label className="text-[10px] font-medium text-gray-600">Vehicle Number</label>
-                                        <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.vehicleNumber}</div>
+                                        <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.vehicleNumber}</div>
                                       </div>
                                     )}
-                                    {selectedOrder.packlistDetails.challanNumber && (
+                                    {packlistEntry.challanNumber && (
                                       <div>
                                         <label className="text-[10px] font-medium text-gray-600">Challan Number</label>
-                                        <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.challanNumber}</div>
+                                        <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.challanNumber}</div>
                                       </div>
                                     )}
-                                    {selectedOrder.packlistDetails.dispatchDate && (
+                                    {packlistEntry.dispatchDate && (
                                       <div>
                                         <label className="text-[10px] font-medium text-gray-600">Dispatch Date</label>
                                         <div className="mt-0.5 text-xs text-gray-900">
-                                          {new Date(selectedOrder.packlistDetails.dispatchDate).toLocaleDateString()}
+                                          {new Date(packlistEntry.dispatchDate).toLocaleDateString()}
                                         </div>
                                       </div>
                                     )}
-                                    {(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate) && (
+                                    {packlistEntry.estimatedDeliveryDate && (
                                       <div>
-                                        <label className="text-[10px] font-medium text-gray-600">Expected Arrival</label>
+                                        <label className="text-[10px] font-medium text-gray-600">Estimated Delivery Date</label>
                                         <div className="mt-0.5 text-xs text-gray-900">
-                                          {new Date(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate || '').toLocaleDateString()}
+                                          {new Date(packlistEntry.estimatedDeliveryDate).toLocaleDateString()}
                                         </div>
                                       </div>
                                     )}
-                                  </div>
-                                </div>
-                              )
-                            )}
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-gray-500 pt-3 border-t">
-                          <div>
-                            <span className="font-medium">Created:</span> {new Date(detailedOrderData?.createDate || selectedOrder.createdAt).toLocaleString()}
-                          </div>
-                          <div>
-                            <span className="font-medium">Last Updated:</span> {new Date(detailedOrderData?.lastUpdateDate || selectedOrder.updatedAt).toLocaleString()}
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {activeTab === 'history' && (
-                      <>
-                        {detailedOrderData?.statusLogs && detailedOrderData.statusLogs.length > 0 ? (
-                          <div className="mb-4">
-                            <label className="text-xs font-medium text-gray-600 mb-2 block">Status History</label>
-                            <div className="space-y-2">
-                              {detailedOrderData.statusLogs.map((log: any, index: number) => (
-                                <div key={index} className="p-2 bg-gray-50 rounded-lg border-l-4 border-primary">
-                                  <div className="flex justify-between items-start">
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-0.5">
-                                        <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(log.statusCode))}`}>
-                                          {convertStatusFromAPI(log.statusCode)}
-                                        </span>
-                                        <span className="text-[10px] text-gray-500">
-                                          {new Date(log.updatedAt).toLocaleString()}
-                                        </span>
+                                    {packlistEntry.numberOfBoxes !== undefined && packlistEntry.numberOfBoxes > 0 && (
+                                      <div>
+                                        <label className="text-[10px] font-medium text-gray-600">Number of Boxes</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.numberOfBoxes}</div>
                                       </div>
-                                      {log.updatedBy?.username && (
-                                        <div className="text-[10px] text-gray-600 mt-0.5">
-                                          Updated by: <span className="font-medium">{log.updatedBy.username}</span>
+                                    )}
+                                    {packlistEntry.totalWeight !== undefined && packlistEntry.totalWeight > 0 && (
+                                      <div>
+                                        <label className="text-[10px] font-medium text-gray-600">Total Weight (kg)</label>
+                                        <div className="mt-0.5 text-xs text-gray-900">{packlistEntry.totalWeight}</div>
+                                      </div>
+                                    )}
+                                    {packlistEntry.poItems && Array.isArray(packlistEntry.poItems) && packlistEntry.poItems.length > 0 && (
+                                      <div className="md:col-span-2">
+                                        <label className="text-[10px] font-medium text-gray-600 mb-1 block">PO Items ({packlistEntry.poItems.length})</label>
+                                        <div className="mt-0.5">
+                                          {(selectedOrder.items || [])
+                                            .filter(item => packlistEntry.poItems?.includes(item.id))
+                                            .map((item, idx) => (
+                                              <div key={idx} className="text-xs text-gray-900 mb-0.5">
+                                                • {item.yarnName} - {item.sizeCount} - {item.shadeCode} (Qty: {item.quantity})
+                                              </div>
+                                            ))}
                                         </div>
-                                      )}
-                                      {log.notes && (
-                                        <div className="text-xs text-gray-700 mt-1">{log.notes}</div>
-                                      )}
-                                    </div>
+                                      </div>
+                                    )}
+                                    {packlistEntry.notes && (
+                                      <div className="md:col-span-2">
+                                        <label className="text-[10px] font-medium text-gray-600">Notes</label>
+                                        <div className="mt-0.5 text-xs text-gray-900 p-1.5 bg-white rounded border border-gray-200">
+                                          {packlistEntry.notes}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {packlistEntry.files && packlistEntry.files.length > 0 && (
+                                      <div className="md:col-span-2">
+                                        <label className="text-[10px] font-medium text-gray-600 mb-1 block">
+                                          Files ({packlistEntry.files.length})
+                                        </label>
+                                        <div className="space-y-1.5">
+                                          {packlistEntry.files.map((file) => (
+                                            <div
+                                              key={file.key}
+                                              className="flex items-center justify-between p-2 bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                                            >
+                                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                <span className="text-base">{getFileIcon(file.mimeType)}</span>
+                                                <div className="flex-1 min-w-0">
+                                                  <div className="text-xs font-medium text-gray-900 truncate">
+                                                    {file.originalName}
+                                                  </div>
+                                                  <div className="text-[10px] text-gray-500">
+                                                    {formatFileSize(file.size)} • {file.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              <button
+                                                type="button"
+                                                onClick={() => window.open(file.url, '_blank')}
+                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                title="View/Preview"
+                                              >
+                                                <i className="ri-eye-line text-sm"></i>
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               ))}
                             </div>
-                          </div>
-                        ) : (
-                          <div className="text-center py-8">
-                            <div className="text-gray-400 mb-3">
-                              <i className="ri-history-line text-3xl"></i>
-                            </div>
-                            <h3 className="text-sm font-medium text-gray-900 mb-1">No Status History</h3>
-                            <p className="text-xs text-gray-500">No status changes have been recorded for this purchase order.</p>
-                          </div>
-                        )}
+                          ) : (
+                            selectedOrder.packlistDetails && (
+                              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {(selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber) && (
+                                    <div>
+                                      <label className="text-[10px] font-medium text-gray-600">Packing/Tracking Number</label>
+                                      <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.packingNumber || selectedOrder.packlistDetails.trackingNumber}</div>
+                                    </div>
+                                  )}
+                                  {selectedOrder.packlistDetails.courierName && (
+                                    <div>
+                                      <label className="text-[10px] font-medium text-gray-600">Courier</label>
+                                      <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.courierName}</div>
+                                    </div>
+                                  )}
+                                  {selectedOrder.packlistDetails.courierNumber && (
+                                    <div>
+                                      <label className="text-[10px] font-medium text-gray-600">Courier Number</label>
+                                      <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.courierNumber}</div>
+                                    </div>
+                                  )}
+                                  {selectedOrder.packlistDetails.vehicleNumber && (
+                                    <div>
+                                      <label className="text-[10px] font-medium text-gray-600">Vehicle Number</label>
+                                      <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.vehicleNumber}</div>
+                                    </div>
+                                  )}
+                                  {selectedOrder.packlistDetails.challanNumber && (
+                                    <div>
+                                      <label className="text-[10px] font-medium text-gray-600">Challan Number</label>
+                                      <div className="mt-0.5 text-xs text-gray-900">{selectedOrder.packlistDetails.challanNumber}</div>
+                                    </div>
+                                  )}
+                                  {selectedOrder.packlistDetails.dispatchDate && (
+                                    <div>
+                                      <label className="text-[10px] font-medium text-gray-600">Dispatch Date</label>
+                                      <div className="mt-0.5 text-xs text-gray-900">
+                                        {new Date(selectedOrder.packlistDetails.dispatchDate).toLocaleDateString()}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate) && (
+                                    <div>
+                                      <label className="text-[10px] font-medium text-gray-600">Expected Arrival</label>
+                                      <div className="mt-0.5 text-xs text-gray-900">
+                                        {new Date(selectedOrder.packlistDetails.estimatedDeliveryDate || selectedOrder.packlistDetails.expectedArrivalDate || '').toLocaleDateString()}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-gray-500 pt-3 border-t">
-                          <div>
-                            <span className="font-medium">Created:</span> {new Date(detailedOrderData?.createDate || selectedOrder.createdAt).toLocaleString()}
-                          </div>
-                          <div>
-                            <span className="font-medium">Last Updated:</span> {new Date(detailedOrderData?.lastUpdateDate || selectedOrder.updatedAt).toLocaleString()}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-gray-500 pt-3 border-t">
+                        <div>
+                          <span className="font-medium">Created:</span> {new Date(detailedOrderData?.createDate || selectedOrder.createdAt).toLocaleString()}
+                        </div>
+                        <div>
+                          <span className="font-medium">Last Updated:</span> {new Date(detailedOrderData?.lastUpdateDate || selectedOrder.updatedAt).toLocaleString()}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {activeTab === 'history' && (
+                    <>
+                      {detailedOrderData?.statusLogs && detailedOrderData.statusLogs.length > 0 ? (
+                        <div className="mb-4">
+                          <label className="text-xs font-medium text-gray-600 mb-2 block">Status History</label>
+                          <div className="space-y-2">
+                            {detailedOrderData.statusLogs.map((log: any, index: number) => (
+                              <div key={index} className="p-2 bg-gray-50 rounded-lg border-l-4 border-primary">
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(convertStatusFromAPI(log.statusCode))}`}>
+                                        {convertStatusFromAPI(log.statusCode)}
+                                      </span>
+                                      <span className="text-[10px] text-gray-500">
+                                        {new Date(log.updatedAt).toLocaleString()}
+                                      </span>
+                                    </div>
+                                    {log.updatedBy?.username && (
+                                      <div className="text-[10px] text-gray-600 mt-0.5">
+                                        Updated by: <span className="font-medium">{log.updatedBy.username}</span>
+                                      </div>
+                                    )}
+                                    {log.notes && (
+                                      <div className="text-xs text-gray-700 mt-1">{log.notes}</div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      </>
-                    )}
-                  </>
-                )}
+                      ) : (
+                        <div className="text-center py-8">
+                          <div className="text-gray-400 mb-3">
+                            <i className="ri-history-line text-3xl"></i>
+                          </div>
+                          <h3 className="text-sm font-medium text-gray-900 mb-1">No Status History</h3>
+                          <p className="text-xs text-gray-500">No status changes have been recorded for this purchase order.</p>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-gray-500 pt-3 border-t">
+                        <div>
+                          <span className="font-medium">Created:</span> {new Date(detailedOrderData?.createDate || selectedOrder.createdAt).toLocaleString()}
+                        </div>
+                        <div>
+                          <span className="font-medium">Last Updated:</span> {new Date(detailedOrderData?.lastUpdateDate || selectedOrder.updatedAt).toLocaleString()}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Footer */}

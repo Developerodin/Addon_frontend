@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
 import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
@@ -133,37 +133,57 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
   onSuccess,
   poOptions,
 }) => {
-  const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const reset = () => {
-    setSelectedOrderId("");
+    setSelectedOrderIds([]);
+    setSearchTerm("");
     setExcelFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
-
-  const selectedPo = poOptions.find((p) => p.id === selectedOrderId);
-  const selectedPoNumber = selectedPo?.orderNumber ?? "";
 
   const handleClose = () => {
     reset();
     onClose();
   };
 
+  const togglePoSelection = (id: string) => {
+    setSelectedOrderIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const filteredPoOptions = poOptions.filter((po) =>
+    po.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const handleSubmit = async () => {
     console.log("[ExcelProcess] handleSubmit called", {
-      selectedOrderId,
-      selectedPoNumber,
+      selectedOrderIds,
       hasExcelFile: !!excelFile,
       excelFileName: excelFile?.name,
       poOptionsCount: poOptions.length,
     });
 
-    if (!selectedOrderId || !selectedPoNumber) {
+    if (selectedOrderIds.length === 0) {
       console.log("[ExcelProcess] Validation failed: no PO selected");
-      toast.error("Please select a PO number");
+      toast.error("Please select at least one PO number");
       return;
     }
     if (!excelFile) {
@@ -184,14 +204,28 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
         return;
       }
 
-      console.log("[ExcelProcess] Fetching PO by id:", selectedOrderId);
-      const poDetails = await yarnPurchaseOrderService.getPurchaseOrderById(selectedOrderId);
-      const poItems = poDetails?.poItems || poDetails?.items || [];
-      console.log("[ExcelProcess] PO details fetched", {
-        poNumber: poDetails?.poNumber || poDetails?.po_number,
-        poItemsCount: poItems.length,
-        poItemsSample: poItems.slice(0, 2),
+      // Fetch details for all selected POs
+      console.log("[ExcelProcess] Fetching details for POs:", selectedOrderIds);
+      const allPoDetails = await Promise.all(
+        selectedOrderIds.map((id) => yarnPurchaseOrderService.getPurchaseOrderById(id))
+      );
+
+      // Create a map of PO items for matching
+      // We'll also keep track of which PO each item belongs to
+      interface POItemWithMeta {
+        poItem: any;
+        poNumber: string;
+      }
+      const allPoItems: POItemWithMeta[] = [];
+      allPoDetails.forEach((po: any) => {
+        const poNumber = po.poNumber || po.orderNumber || "";
+        const items = po.items || po.poItems || [];
+        items.forEach((item: any) => {
+          allPoItems.push({ poItem: item, poNumber });
+        });
       });
+
+      console.log("[ExcelProcess] Collected all PO items", { totalItems: allPoItems.length });
 
       const buildYarnName = (r: ExcelRow) => {
         const count = r.countSize || "";
@@ -201,93 +235,113 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
         return [count, colour, shade, type].filter(Boolean).join("-") || "Unknown";
       };
 
-      const resolvePoItemId = (r: ExcelRow): string | null => {
+      const resolveMatch = (r: ExcelRow): POItemWithMeta | null => {
         const shadeNo = (r.shadeNo || "").trim().toLowerCase();
         const yarnNameForMatch = buildYarnName(r).toLowerCase();
-        for (const item of poItems) {
-          const itemShade = (item.shadeCode || item.shade_code || item.shadeNo || "").trim().toLowerCase();
-          const itemYarn = (item.yarnName || item.yarn?.yarnName || item.yarn?.name || "").trim().toLowerCase();
-          const itemId = item._id || item.id;
+
+        for (const { poItem, poNumber } of allPoItems) {
+          const itemShade = (poItem.shadeCode || poItem.shade_code || poItem.shadeNo || "").trim().toLowerCase();
+          const itemYarn = (poItem.yarnName || poItem.yarn?.yarnName || poItem.yarn?.name || "").trim().toLowerCase();
+          const itemId = poItem._id || poItem.id;
           if (!itemId) continue;
-          if (!shadeNo && !itemShade && itemYarn && yarnNameForMatch && itemYarn.includes(yarnNameForMatch)) return itemId;
-          if (itemShade === shadeNo) return itemId;
-          if (itemShade && shadeNo && (itemShade.includes(shadeNo) || shadeNo.includes(itemShade))) return itemId;
-          if (itemYarn && yarnNameForMatch && itemYarn.includes(yarnNameForMatch)) return itemId;
+
+          if (!shadeNo && !itemShade && itemYarn && yarnNameForMatch && itemYarn.includes(yarnNameForMatch)) return { poItem, poNumber };
+          if (itemShade === shadeNo) return { poItem, poNumber };
+          if (itemShade && shadeNo && (itemShade.includes(shadeNo) || shadeNo.includes(itemShade))) return { poItem, poNumber };
+          if (itemYarn && yarnNameForMatch && itemYarn.includes(yarnNameForMatch)) return { poItem, poNumber };
         }
         return null;
       };
 
-      const lotGroups = new Map<string, ExcelRow[]>();
+      // Group Excel rows by matched PO
+      // Structure: poNumber -> lotNumber -> group of Excel rows
+      const poGroups = new Map<string, Map<string, ExcelRow[]>>();
+
       for (const r of rows) {
+        const match = resolveMatch(r);
+        if (!match) continue;
+
+        const { poNumber } = match;
         const lot = (r.lot || "LOT").trim();
-        if (!lotGroups.has(lot)) lotGroups.set(lot, []);
-        lotGroups.get(lot)!.push(r);
+
+        if (!poGroups.has(poNumber)) poGroups.set(poNumber, new Map());
+        const lotMap = poGroups.get(poNumber)!;
+        if (!lotMap.has(lot)) lotMap.set(lot, []);
+        lotMap.get(lot)!.push(r);
       }
 
-      const lots: YarnReceivingProcessPayload["items"][0]["lots"] = [];
-
-      for (const [lotNumber, groupRows] of lotGroups) {
-        const poItemMap = new Map<string, number>();
-        const boxUpdates: Array<{ yarnName: string; shadeCode: string; boxWeight: number; numberOfCones: number }> = [];
-        let totalCones = 0;
-
-        for (const r of groupRows) {
-          const poItemId = resolvePoItemId(r);
-          if (!poItemId) continue;
-          const netWeight = r.netWeight ?? 0;
-          const cones = r.noOfCones ?? 1;
-          poItemMap.set(poItemId, (poItemMap.get(poItemId) || 0) + netWeight);
-          totalCones += cones;
-          boxUpdates.push({
-            yarnName: buildYarnName(r),
-            shadeCode: r.shadeNo || "",
-            boxWeight: netWeight,
-            numberOfCones: cones,
-          });
-        }
-
-        const poItemsArr = Array.from(poItemMap.entries()).map(([poItem, receivedQuantity]) => ({
-          poItem,
-          receivedQuantity,
-        }));
-        const totalWeight = poItemsArr.reduce((s, p) => s + p.receivedQuantity, 0);
-
-        if (poItemsArr.length > 0) {
-          lots.push({
-            lotNumber,
-            numberOfBoxes: groupRows.length,
-            numberOfCones: totalCones,
-            totalWeight,
-            poItems: poItemsArr,
-            boxUpdates,
-          });
-        }
-      }
-
-      if (lots.length === 0) {
-        console.log("[ExcelProcess] No lots built - PO item matching failed", { rows, poItems });
+      if (poGroups.size === 0) {
+        console.log("[ExcelProcess] No rows matched to any selected PO");
         toast.error("Could not match any rows to PO items. Check shade codes and yarn names.");
         setIsSubmitting(false);
         return;
       }
 
-      console.log("[ExcelProcess] Lots built", { lotsCount: lots.length, lots });
+      // Build payload items array
+      const payloadItems: YarnReceivingProcessPayload["items"] = [];
 
-      const payload: YarnReceivingProcessPayload = {
-        items: [
-          {
-            poNumber: selectedPoNumber,
+      for (const [poNumber, lotMap] of Array.from(poGroups.entries())) {
+        const lots: YarnReceivingProcessPayload["items"][0]["lots"] = [];
+
+        for (const [lotNumber, groupRows] of Array.from(lotMap.entries())) {
+          const poItemWeightMap = new Map<string, number>();
+          const boxUpdates: NonNullable<YarnReceivingProcessPayload["items"][0]["lots"][0]["boxUpdates"]> = [];
+          let totalCones = 0;
+
+          for (const r of groupRows) {
+            const match = resolveMatch(r);
+            if (!match) continue;
+
+            const poItemId = match.poItem._id || match.poItem.id;
+            const netWeight = r.netWeight ?? 0;
+            const cones = r.noOfCones ?? 1;
+
+            poItemWeightMap.set(poItemId, (poItemWeightMap.get(poItemId) || 0) + netWeight);
+            totalCones += cones;
+            boxUpdates.push({
+              yarnName: buildYarnName(r),
+              shadeCode: r.shadeNo || "",
+              boxWeight: netWeight,
+              numberOfCones: cones,
+            });
+          }
+
+          const poItemsArr = Array.from(poItemWeightMap.entries()).map(([poItem, receivedQuantity]) => ({
+            poItem,
+            receivedQuantity,
+          }));
+          const totalWeight = poItemsArr.reduce((s, p) => s + p.receivedQuantity, 0);
+
+          if (poItemsArr.length > 0) {
+            lots.push({
+              lotNumber,
+              numberOfBoxes: groupRows.length,
+              numberOfCones: totalCones,
+              totalWeight,
+              poItems: poItemsArr,
+              boxUpdates,
+            });
+          }
+        }
+
+        if (lots.length > 0) {
+          payloadItems.push({
+            poNumber,
             lots,
             notes: "",
-          },
-        ],
+          });
+        }
+      }
+
+      const payload: YarnReceivingProcessPayload = {
+        items: payloadItems,
         notes: "",
       };
 
       console.log("[ExcelProcess] Calling yarnReceivingService.process", { payload });
       await yarnReceivingService.process(payload);
       console.log("[ExcelProcess] API call successful");
-      toast.success("Excel processed successfully");
+      toast.success(`Excel processed for ${payloadItems.length} PO(s)`);
       handleClose();
       onSuccess?.();
     } catch (error) {
@@ -320,20 +374,67 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
           </div>
 
           <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Select PO Number</label>
-              <select
-                value={selectedOrderId}
-                onChange={(e) => setSelectedOrderId(e.target.value)}
-                className="w-full bg-white border border-gray-200 text-[12px] font-medium rounded px-3 py-2 focus:ring-2 focus:ring-purple-200 focus:border-purple-300"
+            <div className="relative" ref={dropdownRef}>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Select PO Numbers</label>
+              <div
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="w-full bg-white border border-gray-200 text-[12px] font-medium rounded px-3 py-2 cursor-pointer flex justify-between items-center hover:border-purple-300 focus-within:ring-2 focus-within:ring-purple-200"
               >
-                <option value="">Choose PO...</option>
-                {poOptions.map((po) => (
-                  <option key={po.id} value={po.id}>
-                    {po.orderNumber}
-                  </option>
-                ))}
-              </select>
+                <span className={selectedOrderIds.length > 0 ? "text-gray-800" : "text-gray-400"}>
+                  {selectedOrderIds.length > 0
+                    ? `${selectedOrderIds.length} PO(s) selected`
+                    : "Choose POs..."}
+                </span>
+                <i className={`ri-arrow-down-s-line transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
+              </div>
+
+              {isDropdownOpen && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg p-2 max-h-60 overflow-y-auto">
+                  <div className="sticky top-0 bg-white pb-2">
+                    <input
+                      type="text"
+                      className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-purple-300"
+                      placeholder="Search PO..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    {filteredPoOptions.map((po) => (
+                      <label
+                        key={po.id}
+                        className="flex items-center gap-2 px-2 py-1.5 hover:bg-purple-50 rounded cursor-pointer transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          className="w-3 h-3 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                          checked={selectedOrderIds.includes(po.id)}
+                          onChange={() => togglePoSelection(po.id)}
+                        />
+                        <span className="text-[11px] font-medium text-gray-700">{po.orderNumber}</span>
+                      </label>
+                    ))}
+                    {filteredPoOptions.length === 0 && (
+                      <div className="text-[11px] text-gray-400 text-center py-2">No POs found</div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {selectedOrderIds.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {selectedOrderIds.map((id) => {
+                    const po = poOptions.find((p) => p.id === id);
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-purple-50 text-purple-600 text-[10px] font-bold rounded">
+                        {po?.orderNumber}
+                        <i className="ri-close-line cursor-pointer" onClick={() => togglePoSelection(id)} />
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div>
@@ -361,10 +462,10 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
             </button>
             <button
               onClick={() => {
-                console.log("[ExcelProcess] Process button clicked", { isSubmitting, selectedOrderId, hasFile: !!excelFile });
+                console.log("[ExcelProcess] Process button clicked", { isSubmitting, selectedOrderIds, hasFile: !!excelFile });
                 handleSubmit();
               }}
-              disabled={isSubmitting || !selectedOrderId || !excelFile}
+              disabled={isSubmitting || selectedOrderIds.length === 0 || !excelFile}
               className="px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
               type="button"
             >
