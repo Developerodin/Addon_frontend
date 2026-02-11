@@ -12,7 +12,7 @@ import yarnConeService, {
 } from "@/shared/services/yarnConeService";
 import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService from "@/shared/services/yarnBoxService";
-import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
+import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printCones } from "@/shared/utils/qzTray";
 
 
@@ -665,6 +665,9 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   return (
     <div className="main-content !p-[10px]">
       <Seo title={`Processed Box - ${box.boxId}`} />
+      <QZTrayLoader />
+      <QZTrayUntrustedWarning />
+      <QZTrayRequestBlocked />
 
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px]">

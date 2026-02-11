@@ -336,6 +336,7 @@ export const connectQZ = async (): Promise<QZConnection> => {
             ? `\n\n🔧 If "Remember this decision" is grayed out:\n1. Quit QZ Tray\n2. Run: rm -rf ~/Library/Application\\ Support/qz/auth/*\n3. Restart QZ Tray\n4. Check the box BEFORE clicking Allow`
             : `\n\n🔧 If "Remember this decision" is grayed out:\n1. Close QZ Tray\n2. Delete: %APPDATA%\\qz\\auth\\\n3. Restart QZ Tray\n4. Check the box BEFORE clicking Allow`;
 
+          setTimeout(() => { connectionPromise = null; }, 3000);
           return {
             isConnected: false,
             error: `${errorMessage}\n\n🔒 ACTION REQUIRED:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision"\n3. Click "Allow" again${fixInstructions}`,
@@ -346,16 +347,16 @@ export const connectQZ = async (): Promise<QZConnection> => {
       }
     } catch (error: any) {
       console.error('[QZ Tray] Connection error:', error);
+      // Clear promise on failure so user can retry after a delay
+      setTimeout(() => {
+        connectionPromise = null;
+      }, 3000);
       return {
         isConnected: false,
         error: error.message || 'Failed to connect to QZ Tray. Ensure QZ Tray is running.',
       };
-    } finally {
-      // Clear the promise after a small delay to prevent immediate re-attempts if it failed
-      setTimeout(() => {
-        connectionPromise = null;
-      }, 5000);
     }
+    // On success, keep connectionPromise so future connectQZ() reuse the same resolved connection
   })();
 
   return connectionPromise;
@@ -474,7 +475,9 @@ const getQZConfig = async (
       density: 203,
       reconnection: true,
       colorType: 'black-white',
-      interpolation: 'nearest-neighbor'
+      interpolation: 'nearest-neighbor',
+      // Send ZPL/raw directly to printer; required when driver doesn't support raw (e.g. macOS/Linux)
+      forceRaw: true,
     });
   } catch (err) {
     console.error('[QZ Config Error]', err);
@@ -1356,7 +1359,21 @@ export const printRacks = async (
     }
   } catch (error: any) {
     console.error('[QZ Tray] Rack print error:', error);
-    return { success: false, printed: 0, error: error.message };
+    const msg = error?.message || '';
+    if (msg.includes('blocked') || msg.includes('Request blocked')) {
+      const currentUrl = typeof window !== 'undefined'
+        ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`
+        : '';
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('qz-tray-request-blocked', { detail: { url: currentUrl } }));
+      }
+      return {
+        success: false,
+        printed: 0,
+        error: `Request blocked by QZ Tray. Add this site in QZ Tray → Site Manager → + → ${currentUrl}`,
+      };
+    }
+    return { success: false, printed: 0, error: msg || 'Print failed' };
   }
 };
 
@@ -1473,6 +1490,20 @@ export const printCones = async (
     }
   } catch (error: any) {
     console.error('[QZ Tray] Cone print error:', error);
-    return { success: false, printed: 0, error: error.message };
+    const msg = error?.message || '';
+    if (msg.includes('blocked') || msg.includes('Request blocked')) {
+      const currentUrl = typeof window !== 'undefined'
+        ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`
+        : '';
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('qz-tray-request-blocked', { detail: { url: currentUrl } }));
+      }
+      return {
+        success: false,
+        printed: 0,
+        error: `Request blocked by QZ Tray. Add this site in QZ Tray → Site Manager → + → ${currentUrl}`,
+      };
+    }
+    return { success: false, printed: 0, error: msg || 'Print failed' };
   }
 };
