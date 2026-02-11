@@ -63,7 +63,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75' | '70mm * 50mm' | '50mm * 25mm' | '50mm * 70mm',
+    paperSize: '4x6' as '4x6' | '6x4' | '1.96x2.75' | '50mm * 25mm' | '50mm * 70mm',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -133,13 +133,14 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         status = "Maintenance";
       }
 
-      // Use shelfNumber as row and floorNumber as column
+      // Use shelfNumber as row and floorNumber as column; sectionCode for multi-section grid
       return {
         id: slot._id,
         rackCode: slot.label,
         row: slot.shelfNumber,
         column: slot.floorNumber,
         shelf: slot.shelfNumber,
+        sectionCode: slot.sectionCode,
         barcode: slot.barcode,
         capacity: 1, // Each slot can hold one box
         currentBoxes: storedBox ? 1 : 0,
@@ -150,8 +151,35 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     return mappedRacks;
   }, [storageSlots, boxes, propsRacks]);
 
-  // Calculate grid dimensions
+  // Row index -> (sectionCode, shelfNumber) so multiple sections get separate rows (fixes 48 vs 192)
+  const rowToSectionShelf = useMemo(() => {
+    if (storageSlots.length === 0) return [];
+    const bySection = new Map<string, number>();
+    storageSlots.forEach((s) => {
+      const section = s.sectionCode ?? "";
+      const max = bySection.get(section) ?? 0;
+      if (s.shelfNumber > max) bySection.set(section, s.shelfNumber);
+    });
+    const sections = Array.from(bySection.keys()).sort();
+    const out: { sectionCode: string; shelfNumber: number }[] = [];
+    sections.forEach((sectionCode) => {
+      const maxShelf = bySection.get(sectionCode) ?? 0;
+      for (let shelf = 1; shelf <= maxShelf; shelf++) {
+        out.push({ sectionCode, shelfNumber: shelf });
+      }
+    });
+    return out;
+  }, [storageSlots]);
+
+  // Grid dimensions: one row per (section, shelf), columns = floors (4)
   const gridDimensions = useMemo(() => {
+    if (storageSlots.length > 0 && rowToSectionShelf.length > 0) {
+      const maxFloor = Math.max(...storageSlots.map((s) => s.floorNumber), 0);
+      return {
+        rows: Math.max(rowToSectionShelf.length, preferences.gridRows),
+        columns: Math.max(maxFloor, preferences.gridColumns),
+      };
+    }
     if (storageSlots.length > 0) {
       const maxShelf = Math.max(...storageSlots.map((s) => s.shelfNumber), 0);
       const maxFloor = Math.max(...storageSlots.map((s) => s.floorNumber), 0);
@@ -164,9 +192,9 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       rows: preferences.gridRows,
       columns: preferences.gridColumns,
     };
-  }, [storageSlots, preferences]);
+  }, [storageSlots, preferences, rowToSectionShelf]);
 
-  // Organize racks into grid based on shelfNumber (row) and floorNumber (column)
+  // Organize racks into grid: row = (section, shelf), col = floor (so all 192 slots show)
   const rackGrid = useMemo(() => {
     if (isLoadingSlots) {
       return [];
@@ -175,15 +203,22 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     const grid: (RackLocation | null)[][] = [];
     for (let row = 0; row < gridDimensions.rows; row++) {
       grid[row] = [];
+      const sectionShelf = rowToSectionShelf[row];
       for (let col = 0; col < gridDimensions.columns; col++) {
-        const rack = racks.find(
-          (r) => r.row === row + 1 && r.column === col + 1
-        );
-        grid[row][col] = rack || null;
+        const floor = col + 1;
+        const rack = sectionShelf
+          ? racks.find(
+            (r) =>
+              (r.sectionCode ?? "") === (sectionShelf.sectionCode ?? "") &&
+              r.row === sectionShelf.shelfNumber &&
+              r.column === floor
+          )
+          : null;
+        grid[row][col] = rack ?? null;
       }
     }
     return grid;
-  }, [racks, gridDimensions, isLoadingSlots]);
+  }, [racks, gridDimensions, isLoadingSlots, rowToSectionShelf]);
 
   // Fetch slot details for all racks (including available ones that might have data)
   useEffect(() => {
@@ -687,22 +722,14 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         paperHeight: 558, // 2.75 inches × 203 DPI
         labelsPerPage: 1,
         columnsPerRow: 1,
-        orientation: 'horizontal',
+        orientation: 'vertical',
+        firstLabelTopMargin: 20,
+        rackCodeFontSize: 40,
+        barcodeHeight: 100,
+        detailsFontSize: 40,
+        barcodeWidth: 3,
       });
-    } else if (size === '70mm * 50mm') {
-      setPrintSettings({
-        ...printSettings,
-        paperSize: '70mm * 50mm',
-        paperWidth: 558,  // 2.75 inches
-        paperHeight: 398, // 1.96 inches
-        labelsPerPage: 1,
-        columnsPerRow: 1,
-        rackCodeFontSize: 60,
-        detailsFontSize: 30,
-        barcodeHeight: 50,
-        barcodeWidth: 2,
-        orientation: 'horizontal',
-      });
+
     } else if (size === '50mm * 25mm') {
       setPrintSettings({
         ...printSettings,
@@ -731,7 +758,6 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     }
 
     const isSmall = printSettings.paperSize === '50mm * 25mm';
-    const isMedium = printSettings.paperSize === '70mm * 50mm';
     const isVertical = printSettings.orientation === 'vertical';
 
     // Determine sizes in mm
@@ -739,7 +765,6 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     let paperH = 152.4; // 6"
 
     if (isSmall) { paperW = 50; paperH = 25; }
-    else if (isMedium) { paperW = 70; paperH = 50; }
     else if (printSettings.paperSize === '6x4') { paperW = 152.4; paperH = 101.6; }
     else if (printSettings.paperSize === '1.96x2.75' || printSettings.paperSize === '50mm * 70mm') { paperW = 50; paperH = 70; }
 
@@ -1448,7 +1473,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">Paper Size</label>
                     <div className="flex flex-wrap gap-2.5">
-                      {['4x6', '6x4', '1.96x2.75', '50mm * 70mm', '70mm * 50mm', '50mm * 25mm'].map((size) => (
+                      {['4x6', '6x4', '1.96x2.75', '50mm * 70mm', '50mm * 25mm'].map((size) => (
                         <label key={size} className="flex items-center cursor-pointer bg-gray-50 px-2 py-1 rounded border border-gray-200 hover:border-purple-300 transition-colors">
                           <input
                             type="radio"

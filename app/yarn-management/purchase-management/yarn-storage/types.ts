@@ -6,6 +6,8 @@ export interface RackLocation {
   row: number;
   column: number;
   shelf?: number;
+  /** Section code (e.g. B7-G-02) so grid can show multiple sections */
+  sectionCode?: string;
   barcode: string;
   capacity: number;
   currentBoxes: number;

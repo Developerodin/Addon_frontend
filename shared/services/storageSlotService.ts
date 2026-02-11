@@ -7,6 +7,7 @@ export interface StorageSlot {
   barcode: string;
   floorNumber: number;
   shelfNumber: number;
+  sectionCode?: string;
   zoneCode: string;
   isActive: boolean;
   createdAt: string;
