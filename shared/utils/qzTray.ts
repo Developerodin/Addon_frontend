@@ -739,49 +739,50 @@ export const generateZPLRack = (
   const zoneLabel = zone === 'LT' ? 'LONG TERM STORAGE' : zone === 'ST' ? 'SHORT TERM STORAGE' : 'YARN STORAGE';
   const startX = labelMargin + xOffset;
   const startY = 20 + yOffset;
+  const contentHeight = labelHeight - 40; // Approx height for rotated centering
 
   if (isVertical) {
-    // ROTATED VERTICAL STACKING: Elements are rows stacked top-to-bottom (X increases)
+    // ROTATED VERTICAL STACKING: Elements are rows stacked top-to-bottom (X increases), Centered vertically (Y-axis)
     let currentX = startX;
 
     // 1. Zone Label
-    zpl += `^FO${currentX},${startY}^A0R,${zoneFontSize},${zoneFontSize}^FD${zoneLabel}^FS\n`;
+    zpl += `^FO${currentX},${startY}^A0R,${zoneFontSize},${zoneFontSize}^FB${contentHeight},1,0,C^FD${zoneLabel}^FS\n`;
     currentX += zoneFontSize + 30;
 
     // 2. Large Rack Code
-    zpl += `^FO${currentX},${startY}^A0R,${rackCodeFontSize},${rackCodeFontSize}^FD${rackCode}^FS\n`;
+    zpl += `^FO${currentX},${startY}^A0R,${rackCodeFontSize},${rackCodeFontSize}^FB${contentHeight},1,0,C^FD${rackCode}^FS\n`;
     currentX += rackCodeFontSize + 40;
 
     // 3. Details
     if (shelf !== undefined || floor !== undefined) {
-      zpl += `^FO${currentX},${startY}^A0R,${detailsFontSize},${detailsFontSize}^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
+      zpl += `^FO${currentX},${startY}^A0R,${detailsFontSize},${detailsFontSize}^FB${contentHeight},1,0,C^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
       currentX += detailsFontSize + 30;
     }
 
     // 4. Barcode
     zpl += `^BY2,2,${barcodeHeight}\n`;
-    zpl += `^FO${currentX},${startY}^BCR,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
+    zpl += `^FO${currentX},${startY}^BCR,${barcodeHeight},Y,N,N^FB${contentHeight},1,0,C^FD${barcodeValue}^FS\n`;
   } else {
-    // STANDARD HORIZONTAL STACKING: Elements are rows stacked top-to-bottom (Y increases)
+    // STANDARD HORIZONTAL STACKING: Elements are rows stacked top-to-bottom (Y increases), Centered horizontally (X-axis)
     let currentY = startY;
 
     // 1. Zone Label
-    zpl += `^FO${startX},${currentY}^A0N,${zoneFontSize},${zoneFontSize}^FD${zoneLabel}^FS\n`;
+    zpl += `^FO${startX},${currentY}^A0N,${zoneFontSize},${zoneFontSize}^FB${contentWidth},1,0,C^FD${zoneLabel}^FS\n`;
     currentY += zoneFontSize + 10;
 
     // 2. Large Rack Code
-    zpl += `^FO${startX},${currentY}^A0N,${rackCodeFontSize},${rackCodeFontSize}^FD${rackCode}^FS\n`;
+    zpl += `^FO${startX},${currentY}^A0N,${rackCodeFontSize},${rackCodeFontSize}^FB${contentWidth},1,0,C^FD${rackCode}^FS\n`;
     currentY += rackCodeFontSize + 10;
 
     // 3. Details
     if (shelf !== undefined || floor !== undefined) {
-      zpl += `^FO${startX},${currentY}^A0N,${detailsFontSize},${detailsFontSize}^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
+      zpl += `^FO${startX},${currentY}^A0N,${detailsFontSize},${detailsFontSize}^FB${contentWidth},1,0,C^FDShelf: ${shelf || '-'} ---- Floor: ${floor || '-'}^FS\n`;
       currentY += detailsFontSize + 10;
     }
 
     // 4. Barcode
     zpl += `^BY2,2,${barcodeHeight}\n`;
-    zpl += `^FO${startX},${currentY}^BCN,${barcodeHeight},Y,N,N^FD${barcodeValue}^FS\n`;
+    zpl += `^FO${startX},${currentY}^BCN,${barcodeHeight},Y,N,N^FB${contentWidth},1,0,C^FD${barcodeValue}^FS\n`;
   }
 
   if (isStandalone) {
