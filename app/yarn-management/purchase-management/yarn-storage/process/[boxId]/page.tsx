@@ -1402,10 +1402,11 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               </button>
             </div>
           </div>
-        </div>
-  )}
-</div >
-);
+        
+      )}
+    </div>
+    </div>
+  );
 };
 
 interface DetailItemProps {
