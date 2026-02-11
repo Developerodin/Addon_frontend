@@ -1641,6 +1641,15 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                       <span className="ml-2 text-sm text-gray-700">50mm * 25mm</span>
                     </label>
                   </div>
+                  {(printSettings.paperSize === '70mm * 50mm' || printSettings.paperSize === '50mm * 25mm') && (
+                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex gap-3 animate-pulse">
+                      <i className="ri-error-warning-line text-amber-500 text-lg"></i>
+                      <div className="text-xs text-amber-800">
+                        <p className="font-semibold mb-1 uppercase">Printer Configuration Required</p>
+                        <p>The selected size <strong>({printSettings.paperSize})</strong> is non-standard. You MUST configure your printer driver's "Page Setup" with these exact dimensions for correct alignment.</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

@@ -826,18 +826,24 @@ export const generateZPLCone = (
     const lineHeight = detailsFont + 4;
 
     // Yarn Name (Left Column)
-    const maxYarnChars = Math.floor(dataWidth / (detailsFont * 0.6));
+    const maxYarnChars = Math.floor(dataWidth / (detailsFont * 0.55));
     if (yarnName) {
       const nameLines = wrapText(yarnName, maxYarnChars);
-      nameLines.slice(0, 2).forEach((line) => { // Limit to 2 lines to save vertical space
-        zpl += `^FO${xPos},${yPos}^A0N,${detailsFont + 2},${detailsFont + 2}^FD${line}^FS\n`;
-        yPos += lineHeight + 2;
+      nameLines.slice(0, 4).forEach((line) => { // Allow up to 4 lines
+        zpl += `^FO${xPos},${yPos}^A0N,${detailsFont + 1},${detailsFont + 1}^FD${line}^FS\n`;
+        yPos += lineHeight - 1;
       });
     }
 
+    // Supplier Info
+    if (supplierName) {
+      zpl += `^FO${xPos},${yPos}^A0N,${detailsFont - 1},${detailsFont - 1}^FD${supplierName.substring(0, maxYarnChars)}^FS\n`;
+      yPos += lineHeight - 1;
+    }
+
     // PO Number (Left Column)
-    zpl += `^FO${xPos},${yPos}^A0N,${detailsFont},${detailsFont}^FDPO: ${poNumber || '-'}^FS\n`;
-    yPos += lineHeight;
+    zpl += `^FO${xPos},${yPos}^A0N,${detailsFont - 1},${detailsFont - 1}^FDPO: ${poNumber || '-'}^FS\n`;
+    yPos += lineHeight - 1;
 
     // Lot (Left Column)
     zpl += `^FO${xPos},${yPos}^A0N,${detailsFont},${detailsFont}^FDLot: ${lotNumber || '-'}^FS\n`;
@@ -847,8 +853,7 @@ export const generateZPLCone = (
     zpl += `^FO${xPos},${yPos}^A0N,${detailsFont},${detailsFont}^FDShade: ${shadeCode || '-'}^FS\n`;
     yPos += lineHeight;
 
-    // Barcode value below data (Small)
-    zpl += `^FO${xPos},${yPos}^A0N,${detailsFont - 2},${detailsFont - 2}^FD${barcodeValue}^FS\n`;
+    // Removed barcode text below data as per user request
 
     // QR Code (Right Column) - Vertically Centered in labelHeight
     const qrYPos = yOffset + Math.max(10, Math.floor((labelHeight - qrWidth) / 2));
@@ -889,10 +894,8 @@ export const generateZPLCone = (
     zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize - 2},${detailsFontSize - 2}^FDLot: ${lotNumber || '-'} | Shade: ${shadeCode || '-'}^FS\n`;
     yPos += detailsFontSize + 3;
 
-    // Barcode Text ABOVE QR Code
+    // Removed barcode text above QR as per user request
     yPos += 4;
-    zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FD${barcodeValue}^FS\n`;
-    yPos += detailsFontSize + 4;
 
     // QR Code
     const qrWidth = qrCodeSize * 30;

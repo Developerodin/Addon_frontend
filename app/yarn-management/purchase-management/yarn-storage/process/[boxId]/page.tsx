@@ -67,7 +67,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '50mm * 25mm',
+    paperSize: '4x6' as '4x6' | '6x4' | '50mm * 25mm' | '70mm * 50mm',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -362,7 +362,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     }
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mm * 25mm') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mm * 25mm' | '70mm * 50mm') => {
     if (size === '4x6') {
       setPrintSettings({
         ...printSettings,
@@ -380,6 +380,18 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         paperHeight: 812,
         labelsPerPage: 4,
         columnsPerRow: 2,
+      });
+    } else if (size === '70mm * 50mm') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '70mm * 50mm',
+        paperWidth: 558,
+        paperHeight: 398,
+        labelsPerPage: 1,
+        columnsPerRow: 1,
+        qrCodeSize: 5,
+        titleFontSize: 25,
+        detailsFontSize: 18,
       });
     } else if (size === '50mm * 25mm') {
       setPrintSettings({
@@ -507,10 +519,15 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       return;
     }
 
-    // Determine sizes in mm
     const isSmall = printSettings.paperSize === '50mm * 25mm';
-    const paperW = isSmall ? 50 : 101.6;
-    const paperH = isSmall ? 25 : 152.4;
+    const isMedium = printSettings.paperSize === '70mm * 50mm';
+
+    let paperW = 101.6;
+    let paperH = 152.4;
+
+    if (isSmall) { paperW = 50; paperH = 25; }
+    else if (isMedium) { paperW = 70; paperH = 50; }
+    else if (printSettings.paperSize === '6x4') { paperW = 152.4; paperH = 101.6; }
     const labelW = paperW / printSettings.columnsPerRow;
     const labelH = paperH / (printSettings.labelsPerPage / printSettings.columnsPerRow);
 
@@ -545,10 +562,9 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               .label { border: none; }
             }
             .data { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-            .qr { width: 33%; display: flex; align-items: center; justify-content: center; }
-            .title { font-weight: bold; font-size: ${isSmall ? '7pt' : '10pt'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.5mm; }
-            .text { font-size: ${isSmall ? '6pt' : '8pt'}; line-height: 1.2; margin: 0; }
-            .bc { font-family: monospace; font-size: ${isSmall ? '5.5pt' : '7pt'}; margin-top: 1mm; border-top: 0.1mm solid #ccc; pt: 0.5mm; }
+            .qr { width: 33%; display: flex; align-items: center; justify-content: center; padding-left: 2mm; }
+            .title { font-weight: bold; font-size: ${isSmall ? '7.5pt' : isMedium ? '11pt' : '10pt'}; line-height: 1.1; margin-bottom: 1mm; word-break: break-word; }
+            .text { font-size: ${isSmall ? '6pt' : isMedium ? '9pt' : '8pt'}; line-height: 1.2; margin: 0; }
             canvas { width: 100% !important; height: auto !important; }
           </style>
         </head>
@@ -564,10 +580,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
           <div class="label">
             <div class="data">
               <div class="title">${box?.yarnName || 'Yarn'}</div>
+              <p class="text">Supplier: ${effectiveSupplier || '-'}</p>
               <p class="text">PO: ${effectivePoNumber || '-'}</p>
               <p class="text">Lot: ${box?.lotNumber || '-'}</p>
               <p class="text">Shade: ${box?.shadeCode || '-'}</p>
-              <div class="bc">${cone.barcode}</div>
             </div>
             <div class="qr"><canvas id="qr-${cone._id}"></canvas></div>
           </div>
@@ -1106,13 +1122,13 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                   /* 50x25mm Side-by-Side Preview */
                   <div className="bg-white border border-gray-400 shadow-sm flex overflow-hidden" style={{ width: '250px', height: '125px' }}>
                     <div className="flex-1 p-2 flex flex-col justify-center gap-0.5 font-mono">
-                      <div className="text-[10px] font-bold border-b border-gray-100 pb-0.5 truncate uppercase">
+                      <div className="text-[10px] font-bold leading-tight border-b border-gray-100 pb-0.5 uppercase break-words">
                         {box.yarnName || 'Yarn Name'}
                       </div>
+                      <div className="text-[8px] text-gray-700 truncate">S: {effectiveSupplier || '-'}</div>
                       <div className="text-[8px] text-gray-700">PO: {effectivePoNumber || '-'}</div>
                       <div className="text-[8px] text-gray-700">Lot: {box.lotNumber || '-'}</div>
                       <div className="text-[8px] text-gray-700">Shade: {box.shadeCode || '-'}</div>
-                      <div className="text-[7px] text-gray-500 mt-1 truncate">{cones[0]?.barcode || 'CONE-PREVIEW'}</div>
                     </div>
                     <div className="w-[35%] bg-white border-l border-gray-50 flex items-center justify-center p-2">
                       <div className="aspect-square w-full border-2 border-black flex items-center justify-center relative">
@@ -1133,10 +1149,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                       height: printSettings.paperSize === '6x4' ? '180px' : '250px'
                     }}>
                     <div className="w-full p-3 flex flex-col gap-1 font-mono text-center">
-                      <div className="text-[10px] font-bold border-b border-gray-200 pb-1 uppercase truncate">{box.yarnName || 'Yarn Name'}</div>
-                      <div className="text-[8px]">PO: {effectivePoNumber || '-'}</div>
-                      <div className="text-[8px]">Lot: {box.lotNumber || '-'} | Shade: {box.shadeCode || '-'}</div>
-                      <div className="text-[9px] font-bold mt-2">{cones[0]?.barcode || 'CONE-PREVIEW'}</div>
+                      <div className="text-[11px] font-bold leading-tight border-b border-gray-200 pb-1 uppercase break-words">{box.yarnName || 'Yarn Name'}</div>
+                      <div className="text-[9px] text-gray-600 truncate">{effectiveSupplier || '-'}</div>
+                      <div className="text-[9px]">PO: {effectivePoNumber || '-'}</div>
+                      <div className="text-[9px]">Lot: {box.lotNumber || '-'} | Shade: {box.shadeCode || '-'}</div>
                     </div>
                     <div className="flex-1 flex items-center justify-center p-4">
                       <div className="w-16 h-16 border-2 border-black flex items-center justify-center relative">
@@ -1189,6 +1205,17 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                         <input
                           type="radio"
                           name="paperSize"
+                          value="70mm * 50mm"
+                          checked={printSettings.paperSize === '70mm * 50mm'}
+                          onChange={() => handlePaperSizeChange('70mm * 50mm')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">70mm * 50mm</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
                           value="50mm * 25mm"
                           checked={printSettings.paperSize === '50mm * 25mm'}
                           onChange={() => handlePaperSizeChange('50mm * 25mm')}
@@ -1198,173 +1225,183 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                       </label>
                     </div>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Top Margin (dots)
-                    </label>
-                    <input
-                      type="number"
-                      value={printSettings.firstLabelTopMargin}
-                      onChange={(e) => setPrintSettings({ ...printSettings, firstLabelTopMargin: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      min="0"
-                      max="200"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Layout Settings */}
-              <div className="space-y-4 pt-4 border-t border-gray-200">
-                <h4 className="text-sm font-semibold text-gray-700 uppercase">Layout Settings</h4>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Columns Per Row
-                    </label>
-                    <select
-                      value={printSettings.columnsPerRow}
-                      onChange={(e) => setPrintSettings({ ...printSettings, columnsPerRow: parseInt(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
-                    >
-                      <option value={1}>1 Column (Full Width)</option>
-                      <option value={2}>2 Columns (Side by Side)</option>
-                      <option value={3}>3 Columns</option>
-                      <option value={4}>4 Columns</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Total Labels Per Page
-                    </label>
-                    <select
-                      value={printSettings.labelsPerPage}
-                      onChange={(e) => setPrintSettings({ ...printSettings, labelsPerPage: parseInt(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
-                    >
-                      <option value={1}>1 Label</option>
-                      <option value={2}>2 Labels</option>
-                      <option value={3}>3 Labels</option>
-                      <option value={4}>4 Labels (Recommended)</option>
-                      <option value={6}>6 Labels</option>
-                      <option value={8}>8 Labels</option>
-                      <option value={10}>10 Labels</option>
-                      <option value={12}>12 Labels</option>
-                    </select>
-                  </div>
+                  {(printSettings.paperSize === '70mm * 50mm' || printSettings.paperSize === '50mm * 25mm') && (
+                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex gap-3 animate-pulse">
+                      <i className="ri-error-warning-line text-amber-500 text-lg"></i>
+                      <div className="text-xs text-amber-800">
+                        <p className="font-semibold mb-1 uppercase">Printer Configuration Required</p>
+                        <p>The selected size <strong>({printSettings.paperSize})</strong> is non-standard. You MUST configure your printer driver's "Page Setup" with these exact dimensions for correct alignment.</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={printSettings.showCutLines}
-                      onChange={(e) => setPrintSettings({ ...printSettings, showCutLines: e.target.checked })}
-                      className="w-4 h-4 text-purple-600 focus:ring-purple-500 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Show cut lines (easier to cut labels)</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Top Margin (dots)
                   </label>
+                  <input
+                    type="number"
+                    value={printSettings.firstLabelTopMargin}
+                    onChange={(e) => setPrintSettings({ ...printSettings, firstLabelTopMargin: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    min="0"
+                    max="200"
+                  />
                 </div>
-              </div>
-
-              {/* QR Code & Font Settings */}
-              <div className="space-y-4 pt-4 border-t border-gray-200">
-                <h4 className="text-sm font-semibold text-gray-700 uppercase">QR Code & Font Settings</h4>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      QR Code Size
-                    </label>
-                    <input
-                      type="number"
-                      value={printSettings.qrCodeSize}
-                      onChange={(e) => setPrintSettings({ ...printSettings, qrCodeSize: parseInt(e.target.value) || 5 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      min="3"
-                      max="10"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Module size (3-10)</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Title Font Size
-                    </label>
-                    <input
-                      type="number"
-                      value={printSettings.titleFontSize}
-                      onChange={(e) => setPrintSettings({ ...printSettings, titleFontSize: parseInt(e.target.value) || 25 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      min="15"
-                      max="40"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Details Font Size
-                    </label>
-                    <input
-                      type="number"
-                      value={printSettings.detailsFontSize}
-                      onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 20 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      min="10"
-                      max="30"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Reset to Default Button */}
-              <div className="pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => setPrintSettings({
-                    paperSize: '4x6',
-                    paperWidth: 812,
-                    paperHeight: 1218,
-                    labelsPerPage: 4,
-                    columnsPerRow: 2,
-                    firstLabelTopMargin: 0,
-                    showCutLines: true,
-                    qrCodeSize: 5,
-                    titleFontSize: 25,
-                    detailsFontSize: 20,
-                  })}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
-                >
-                  <i className="ri-restart-line mr-2"></i>
-                  Reset to Default
-                </button>
               </div>
             </div>
 
-            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+            {/* Layout Settings */}
+            <div className="space-y-4 pt-4 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-700 uppercase">Layout Settings</h4>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Columns Per Row
+                  </label>
+                  <select
+                    value={printSettings.columnsPerRow}
+                    onChange={(e) => setPrintSettings({ ...printSettings, columnsPerRow: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                  >
+                    <option value={1}>1 Column (Full Width)</option>
+                    <option value={2}>2 Columns (Side by Side)</option>
+                    <option value={3}>3 Columns</option>
+                    <option value={4}>4 Columns</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Total Labels Per Page
+                  </label>
+                  <select
+                    value={printSettings.labelsPerPage}
+                    onChange={(e) => setPrintSettings({ ...printSettings, labelsPerPage: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                  >
+                    <option value={1}>1 Label</option>
+                    <option value={2}>2 Labels</option>
+                    <option value={3}>3 Labels</option>
+                    <option value={4}>4 Labels (Recommended)</option>
+                    <option value={6}>6 Labels</option>
+                    <option value={8}>8 Labels</option>
+                    <option value={10}>10 Labels</option>
+                    <option value={12}>12 Labels</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={printSettings.showCutLines}
+                    onChange={(e) => setPrintSettings({ ...printSettings, showCutLines: e.target.checked })}
+                    className="w-4 h-4 text-purple-600 focus:ring-purple-500 rounded"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Show cut lines (easier to cut labels)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* QR Code & Font Settings */}
+            <div className="space-y-4 pt-4 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-700 uppercase">QR Code & Font Settings</h4>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    QR Code Size
+                  </label>
+                  <input
+                    type="number"
+                    value={printSettings.qrCodeSize}
+                    onChange={(e) => setPrintSettings({ ...printSettings, qrCodeSize: parseInt(e.target.value) || 5 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    min="3"
+                    max="10"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Module size (3-10)</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Title Font Size
+                  </label>
+                  <input
+                    type="number"
+                    value={printSettings.titleFontSize}
+                    onChange={(e) => setPrintSettings({ ...printSettings, titleFontSize: parseInt(e.target.value) || 25 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    min="15"
+                    max="40"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Details Font Size
+                  </label>
+                  <input
+                    type="number"
+                    value={printSettings.detailsFontSize}
+                    onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 20 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    min="10"
+                    max="30"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Reset to Default Button */}
+            <div className="pt-4 border-t border-gray-200">
               <button
-                onClick={executeBrowserPrint}
-                className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-md transition-colors mr-auto"
+                onClick={() => setPrintSettings({
+                  paperSize: '4x6',
+                  paperWidth: 812,
+                  paperHeight: 1218,
+                  labelsPerPage: 4,
+                  columnsPerRow: 2,
+                  firstLabelTopMargin: 0,
+                  showCutLines: true,
+                  qrCodeSize: 5,
+                  titleFontSize: 25,
+                  detailsFontSize: 20,
+                })}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
               >
-                <i className="ri-window-line mr-2"></i>
-                Test Print (Browser)
-              </button>
-              <button
-                onClick={() => setShowPrintSettingsModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={executePrintWithSettings}
-                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
-              >
-                <i className="ri-printer-line mr-2"></i>
-                Print Cone QR Labels
+                <i className="ri-restart-line mr-2"></i>
+                Reset to Default
               </button>
             </div>
+            </div>
+          </div>
+
+          <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+            <button
+              onClick={executeBrowserPrint}
+              className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-md transition-colors mr-auto"
+            >
+              <i className="ri-window-line mr-2"></i>
+              Test Print (Browser)
+            </button>
+            <button
+              onClick={() => setShowPrintSettingsModal(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={executePrintWithSettings}
+              className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
+            >
+              <i className="ri-printer-line mr-2"></i>
+              Print Cone QR Labels
+            </button>
           </div>
         </div>
       )}
