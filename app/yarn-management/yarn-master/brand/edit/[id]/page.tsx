@@ -350,40 +350,48 @@ const EditBrandPage = () => {
   }, []);
 
   const handleYarnCatalogChange = useCallback(
-    (index: number, catalogId: string) => {
+    (index: number, catalogId: string, selectedYarnFromModal?: YarnCatalog) => {
       const selectedCatalog = catalogId ? yarnCatalogMap[catalogId] : undefined;
+      const catalogForName = selectedYarnFromModal ?? selectedCatalog;
+      const catalogYarnName = catalogForName?.yarnName?.trim() || '';
 
-      if (!catalogId || !selectedCatalog) {
+      if (!catalogId) {
         updateYarnDetail(index, {
-          yarnCatalogId: catalogId,
-          yarnName: selectedCatalog?.yarnName ?? '',
-          yarnType: selectedCatalog?.yarnType?.id ?? '',
-          yarnsubtype: selectedCatalog?.yarnSubtype?.id ?? '',
+          yarnCatalogId: '',
+          yarnName: '',
+          yarnType: '',
+          yarnsubtype: '',
         });
-        
-        if (!catalogId) {
-          console.debug('[EditBrandPage] Yarn catalog cleared for detail', { index });
-        } else if (!selectedCatalog) {
-          console.warn('[EditBrandPage] Selected yarn catalog not found in lookup', { index, catalogId });
-        }
+        console.debug('[EditBrandPage] Yarn catalog cleared for detail', { index });
         return;
       }
 
-      const catalogYarnName = selectedCatalog.yarnName?.trim() || '';
+      if (!catalogYarnName && !selectedCatalog) {
+        updateYarnDetail(index, {
+          yarnCatalogId: catalogId,
+          yarnName: selectedYarnFromModal?.yarnName ?? '',
+          yarnType: selectedYarnFromModal?.yarnType?.id ?? selectedCatalog?.yarnType?.id ?? '',
+          yarnsubtype: selectedYarnFromModal?.yarnSubtype?.id ?? selectedCatalog?.yarnSubtype?.id ?? '',
+        });
+        console.warn('[EditBrandPage] Selected yarn catalog not found in lookup', { index, catalogId });
+        return;
+      }
+
+      const effectiveYarnName = catalogYarnName;
       
       // Try to match with existing supplier yarn details by yarn name
       let matchingSupplierDetail: SupplierYarnDetail | undefined;
-      if (originalSupplierData?.yarnDetails && catalogYarnName) {
+      if (originalSupplierData?.yarnDetails && effectiveYarnName) {
         matchingSupplierDetail = originalSupplierData.yarnDetails.find((detail) => {
           const detailYarnName = detail.yarnName?.trim() || (detail as any)?.yarn?.trim() || '';
-          return detailYarnName.toLowerCase() === catalogYarnName.toLowerCase();
+          return detailYarnName.toLowerCase() === effectiveYarnName.toLowerCase();
         });
       }
 
       console.log('[EditBrandPage] Catalog selected, matching with supplier details', {
         index,
         catalogId,
-        catalogYarnName,
+        catalogYarnName: effectiveYarnName,
         foundMatch: Boolean(matchingSupplierDetail),
       });
 
@@ -415,11 +423,14 @@ const EditBrandPage = () => {
           : String(matchingSupplierDetail.tearweight);
       }
 
+      const yarnTypeId = catalogForName?.yarnType?.id ?? selectedCatalog?.yarnType?.id ?? '';
+      const yarnSubtypeId = catalogForName?.yarnSubtype?.id ?? selectedCatalog?.yarnSubtype?.id ?? '';
+
       updateYarnDetail(index, {
         yarnCatalogId: catalogId,
-        yarnName: catalogYarnName,
-        yarnType: selectedCatalog.yarnType?.id ?? '',
-        yarnsubtype: selectedCatalog.yarnSubtype?.id ?? '',
+        yarnName: effectiveYarnName,
+        yarnType: yarnTypeId,
+        yarnsubtype: yarnSubtypeId,
         color: colorId,
         shadeNumber: shadeNumber,
         tearweight: tearweight,
@@ -427,7 +438,7 @@ const EditBrandPage = () => {
 
       console.log('[EditBrandPage] Yarn detail updated with catalog and matched supplier data', {
         index,
-        catalogYarnName,
+        catalogYarnName: effectiveYarnName,
         colorId,
         shadeNumber,
         tearweight,
@@ -553,13 +564,11 @@ const EditBrandPage = () => {
     }
 
     for (const detail of formData.yarnDetails) {
-      if (!detail.yarnCatalogId.trim()) {
+      const hasYarnName = detail.yarnName.trim();
+      const selectedCatalog = detail.yarnCatalogId?.trim() ? yarnCatalogMap[detail.yarnCatalogId] : undefined;
+      const hasNameFromCatalog = selectedCatalog?.yarnName?.trim();
+      if (!hasYarnName && !hasNameFromCatalog) {
         toast.error('Yarn name is required for each yarn detail');
-        return false;
-      }
-      const selectedCatalog = yarnCatalogMap[detail.yarnCatalogId];
-      if (!selectedCatalog) {
-        toast.error('Selected yarn name is unavailable. Please choose a different yarn');
         return false;
       }
       if (!detail.yarnType.trim()) {
@@ -581,6 +590,7 @@ const EditBrandPage = () => {
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    console.log('[EditBrandPage] Handle Submit clicked', { formData });
     e.preventDefault();
 
     if (!validateForm()) return;
@@ -601,10 +611,14 @@ const EditBrandPage = () => {
         gstNo: formData.gstNo.trim() || undefined,
         yarnDetails: formData.yarnDetails.length
           ? formData.yarnDetails.map<SupplierYarnDetail>((detail) => {
+              const yarnName = detail.yarnName.trim() || yarnCatalogMap[detail.yarnCatalogId]?.yarnName?.trim() || '';
               const normalizedDetail: SupplierYarnDetail = {
-                yarnName: detail.yarnName.trim(),
+                yarnName,
                 color: detail.color,
               };
+              if (detail.yarnCatalogId?.trim()) {
+                normalizedDetail.yarnCatalogId = detail.yarnCatalogId.trim();
+              }
               if (detail.shadeNumber.trim()) {
                 normalizedDetail.shadeNumber = detail.shadeNumber.trim();
               }
@@ -615,6 +629,8 @@ const EditBrandPage = () => {
             })
           : [],
       };
+
+      console.log('[Update Brand] Payload:', payload);
 
       await supplierService.updateSupplier(id, payload);
       toast.success('Brand updated successfully');
@@ -761,7 +777,8 @@ const EditBrandPage = () => {
 
   const handleSelectYarnFromModal = (yarn: YarnCatalog) => {
     if (modalYarnDetailIndex !== null) {
-      handleYarnCatalogChange(modalYarnDetailIndex, yarn.id);
+      const catalogId = yarn.id || (yarn as { _id?: string })._id || '';
+      handleYarnCatalogChange(modalYarnDetailIndex, catalogId, yarn);
       closeYarnNameModal();
     }
   };

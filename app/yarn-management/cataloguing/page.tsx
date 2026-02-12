@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast, Toaster } from "react-hot-toast";
 import yarnCatalogService, { BulkImportYarnCatalogRequest, YarnCatalog } from "@/shared/services/yarnCatalogService";
+import supplierService from "@/shared/services/supplierService";
 import * as XLSX from "xlsx";
 
 const CataloguingPage = () => {
@@ -19,6 +20,7 @@ const CataloguingPage = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -504,6 +506,19 @@ const CataloguingPage = () => {
     }
   };
 
+  const handleSyncCatalogWithSupplier = async () => {
+    setIsSyncing(true);
+    try {
+      await supplierService.syncYarnCatalog();
+      toast.success("Yarn catalog synced with supplier successfully");
+      await fetchYarnCatalogs();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to sync catalog with supplier");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   if (!hasPermission) {
     return (
       <div className="main-content !p-[10px]">
@@ -581,6 +596,9 @@ const CataloguingPage = () => {
               )}
               <button type="button" onClick={handleExport} disabled={isExporting} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
                 {isExporting ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-download-2-line text-xs"></i>} Export
+              </button>
+              <button type="button" onClick={handleSyncCatalogWithSupplier} disabled={isSyncing} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-[11px] font-bold rounded hover:bg-sky-700 transition-colors shadow-sm" title="Sync catalog with supplier">
+                {isSyncing ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-refresh-line text-xs"></i>} Sync catalog with supplier
               </button>
               <Link href="/yarn-management/cataloguing/add" className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
                 <i className="ri-add-line text-xs"></i> Add Yarn

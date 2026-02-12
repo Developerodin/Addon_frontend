@@ -13,6 +13,7 @@ export interface NavigationPermissions {
     Attributes: boolean;
     'Style Codes': boolean;
     Machines: boolean;
+    'Needle Configuration': boolean;
   };
   Sales: {
     'All Sales': boolean;

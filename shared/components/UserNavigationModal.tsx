@@ -115,7 +115,7 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
               <button
                 type="button"
                 className="text-xs text-primary hover:text-primary-dark"
-                onClick={() => handleSelectAll('Catalog', ['Items', 'Categories', 'Raw Material', 'Processes', 'Attributes'])}
+                onClick={() => handleSelectAll('Catalog', ['Items', 'Categories', 'Raw Material', 'Processes', 'Attributes', 'Style Codes', 'Machines', 'Needle Configuration'])}
               >
                 Toggle All
               </button>
@@ -126,7 +126,10 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
                 { key: 'Categories', label: 'Categories' },
                 { key: 'Raw Material', label: 'Raw Material' },
                 { key: 'Processes', label: 'Processes' },
-                { key: 'Attributes', label: 'Attributes' }
+                { key: 'Attributes', label: 'Attributes' },
+                { key: 'Style Codes', label: 'Style Codes' },
+                { key: 'Machines', label: 'Machines' },
+                { key: 'Needle Configuration', label: 'Needle Configuration' }
               ].map(subsection => (
                 <label key={subsection.key} className="flex items-center">
                   <input

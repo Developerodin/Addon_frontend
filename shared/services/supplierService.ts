@@ -225,6 +225,15 @@ class SupplierService {
   }
 
   /**
+   * Syncs yarn catalog with supplier. PATCH /yarn-management/suppliers/sync-yarn-catalog
+   */
+  async syncYarnCatalog(): Promise<{ message?: string }> {
+    return this.makeRequest<{ message?: string }>('/sync-yarn-catalog', {
+      method: 'PATCH',
+    });
+  }
+
+  /**
    * Fetches tear weight for a yarn from a supplier (for auto-fill on cone process page).
    * GET /suppliers/:supplierId/yarn-tearweight?yarnName=...
    * Response: { supplierId, yarnTearweights: [{ yarnName, tearweight }], notFound: [] }

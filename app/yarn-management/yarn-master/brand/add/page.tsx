@@ -213,19 +213,23 @@ const AddBrandPage = () => {
   );
 
   const handleYarnCatalogChange = useCallback(
-    (index: number, catalogId: string) => {
+    (index: number, catalogId: string, selectedYarnFromModal?: YarnCatalog) => {
       const selectedCatalog = catalogId ? yarnCatalogMap[catalogId] : undefined;
+      const catalogForName = selectedYarnFromModal ?? selectedCatalog;
+      const yarnName = catalogForName?.yarnName?.trim() ?? '';
+      const yarnTypeId = catalogForName?.yarnType?.id ?? '';
+      const yarnSubtypeId = catalogForName?.yarnSubtype?.id ?? '';
 
       updateYarnDetail(index, {
         yarnCatalogId: catalogId,
-        yarnName: selectedCatalog?.yarnName ?? '',
-        yarnType: selectedCatalog?.yarnType?.id ?? '',
-        yarnsubtype: selectedCatalog?.yarnSubtype?.id ?? '',
+        yarnName,
+        yarnType: yarnTypeId,
+        yarnsubtype: yarnSubtypeId,
       });
 
       if (!catalogId) {
         console.debug('[AddBrandPage] Yarn catalog cleared for detail', { index });
-      } else if (!selectedCatalog) {
+      } else if (!selectedCatalog && !yarnName) {
         console.warn('[AddBrandPage] Selected yarn catalog not found in lookup', { index, catalogId });
       }
     },
@@ -348,7 +352,8 @@ const AddBrandPage = () => {
         return false;
       }
       const selectedCatalog = yarnCatalogMap[detail.yarnCatalogId];
-      if (!selectedCatalog) {
+      const hasYarnName = detail.yarnName.trim() || selectedCatalog?.yarnName?.trim();
+      if (!hasYarnName) {
         toast.error('Selected yarn name is unavailable. Please choose a different yarn');
         return false;
       }
@@ -391,10 +396,14 @@ const AddBrandPage = () => {
         gstNo: formData.gstNo.trim() || undefined,
         yarnDetails: formData.yarnDetails.length
           ? formData.yarnDetails.map<SupplierYarnDetail>((detail) => {
+              const yarnName = detail.yarnName.trim() || yarnCatalogMap[detail.yarnCatalogId]?.yarnName?.trim() || '';
               const normalizedDetail: SupplierYarnDetail = {
-                yarnName: detail.yarnName.trim(),
+                yarnName,
                 color: detail.color,
               };
+              if (detail.yarnCatalogId?.trim()) {
+                normalizedDetail.yarnCatalogId = detail.yarnCatalogId.trim();
+              }
               if (detail.shadeNumber.trim()) {
                 normalizedDetail.shadeNumber = detail.shadeNumber.trim();
               }
@@ -479,7 +488,8 @@ const AddBrandPage = () => {
 
   const handleSelectYarnFromModal = (yarn: YarnCatalog) => {
     if (modalYarnDetailIndex !== null) {
-      handleYarnCatalogChange(modalYarnDetailIndex, yarn.id);
+      const catalogId = yarn.id || (yarn as { _id?: string })._id || '';
+      handleYarnCatalogChange(modalYarnDetailIndex, catalogId, yarn);
       closeYarnNameModal();
     }
   };

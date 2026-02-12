@@ -14,6 +14,7 @@ interface NavigationPermissions {
     Attributes: boolean;
     'Style Codes': boolean;
     Machines: boolean;
+    'Needle Configuration': boolean;
   };
   Sales: {
     'All Sales': boolean;
@@ -90,6 +91,7 @@ const defaultPermissions: NavigationPermissions = {
     Attributes: false,
     'Style Codes': false,
     Machines: false,
+    'Needle Configuration': false,
   },
   Sales: {
     'All Sales': false,

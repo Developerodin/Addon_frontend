@@ -4,13 +4,15 @@ import { useRouter, useParams } from 'next/navigation';
 import Seo from '@/shared/layout-components/seo/seo';
 import { toast, Toaster } from 'react-hot-toast';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import type { NeedleSizeConfigItem } from '../../types';
 
 interface Machine {
   _id?: string;
   id?: string;
   machineCode: string;
   machineNumber: string;
-  needleSize: string;
+  needleSize?: string;
+  needleSizeConfig?: NeedleSizeConfigItem[];
   model: string;
   floor: string;
   installationDate: string;
@@ -36,7 +38,6 @@ interface Machine {
 interface UpdateMachineData {
   machineCode: string;
   machineNumber: string;
-  needleSize: string;
   model: string;
   floor: string;
   installationDate: string;
@@ -90,7 +91,6 @@ const EditMachinePage = () => {
   const [formData, setFormData] = useState<UpdateMachineData>({
     machineCode: '',
     machineNumber: '',
-    needleSize: '',
     model: '',
     floor: '',
     installationDate: '',
@@ -105,6 +105,9 @@ const EditMachinePage = () => {
     company: '',
     machineType: ''
   });
+
+  /** Needle configs: user can add multiple { needleSize, cutoffQuantity } */
+  const [needleSizeConfig, setNeedleSizeConfig] = useState<NeedleSizeConfigItem[]>([]);
 
   const [errors, setErrors] = useState<Partial<UpdateMachineData>>({});
 
@@ -186,7 +189,6 @@ const EditMachinePage = () => {
       setFormData({
         machineCode: currentMachine.machineCode || '',
         machineNumber: currentMachine.machineNumber || '',
-        needleSize: currentMachine.needleSize || '',
         model: currentMachine.model || '',
         floor: currentMachine.floor || '',
         installationDate: currentMachine.installationDate ? new Date(currentMachine.installationDate).toISOString().split('T')[0] : '',
@@ -201,6 +203,7 @@ const EditMachinePage = () => {
         company: currentMachine.company || '',
         machineType: currentMachine.machineType || ''
       });
+      setNeedleSizeConfig(Array.isArray(currentMachine.needleSizeConfig) ? [...currentMachine.needleSizeConfig] : []);
     }
   }, [currentMachine]);
 
@@ -238,7 +241,13 @@ const EditMachinePage = () => {
       
       if (formData.machineCode?.trim()) payload.machineCode = formData.machineCode.trim();
       if (formData.machineNumber?.trim()) payload.machineNumber = formData.machineNumber.trim();
-      if (formData.needleSize?.trim()) payload.needleSize = formData.needleSize.trim();
+      const validNeedleConfig = needleSizeConfig.filter(c => c.needleSize?.trim());
+      payload.needleSizeConfig = validNeedleConfig.length > 0
+        ? validNeedleConfig.map(c => ({
+            needleSize: c.needleSize.trim(),
+            cutoffQuantity: typeof c.cutoffQuantity === 'number' ? c.cutoffQuantity : 0,
+          }))
+        : [];
       if (formData.model?.trim()) payload.model = formData.model.trim();
       if (formData.floor?.trim()) payload.floor = formData.floor.trim();
       if (formData.installationDate?.trim()) payload.installationDate = formData.installationDate.trim();
@@ -388,21 +397,6 @@ const EditMachinePage = () => {
                       onChange={handleInputChange}
                       className="form-control"
                       placeholder="Enter machine number"
-                    />
-                  </div>
-
-                  {/* Needle Size */}
-                  <div className="form-group">
-                    <label className="form-label">
-                      Needle Size
-                    </label>
-                    <input
-                      type="text"
-                      name="needleSize"
-                      value={formData.needleSize}
-                      onChange={handleInputChange}
-                      className="form-control"
-                      placeholder="Enter needle size"
                     />
                   </div>
 
@@ -582,6 +576,75 @@ const EditMachinePage = () => {
                     rows={4}
                     placeholder="Enter maintenance notes"
                   />
+                </div>
+
+                {/* Needle config: add multiple needleSize + cutoffQuantity */}
+                <div className="form-group border-t pt-6">
+                  <label className="form-label block mb-2">Needle Config</label>
+                  <p className="text-xs text-gray-500 mb-3">Add one or more needle size and cutoff quantity pairs.</p>
+                  {needleSizeConfig.length > 0 && (
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg mb-3">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 border-b border-gray-200">
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Needle Size</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Cutoff Quantity</th>
+                            <th className="px-3 py-2 w-20 text-right font-medium text-gray-700">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {needleSizeConfig.map((row, idx) => (
+                            <tr key={idx} className="border-b border-gray-100 last:border-0">
+                              <td className="px-3 py-2">
+                                <input
+                                  type="text"
+                                  value={row.needleSize}
+                                  onChange={(e) => {
+                                    const next = [...needleSizeConfig];
+                                    next[idx] = { ...next[idx], needleSize: e.target.value };
+                                    setNeedleSizeConfig(next);
+                                  }}
+                                  className="form-control py-1.5 text-sm"
+                                  placeholder="e.g. 10"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={row.cutoffQuantity}
+                                  onChange={(e) => {
+                                    const next = [...needleSizeConfig];
+                                    next[idx] = { ...next[idx], cutoffQuantity: e.target.value === '' ? 0 : Number(e.target.value) };
+                                    setNeedleSizeConfig(next);
+                                  }}
+                                  className="form-control py-1.5 text-sm"
+                                  placeholder="0"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => setNeedleSizeConfig(prev => prev.filter((_, i) => i !== idx))}
+                                  className="text-red-500 hover:text-red-700 text-sm font-medium"
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setNeedleSizeConfig(prev => [...prev, { needleSize: '', cutoffQuantity: 0 }])}
+                    className="ti-btn ti-btn-outline-primary text-sm"
+                  >
+                    <i className="ri-add-line me-1"></i>
+                    Add Needle config
+                  </button>
                 </div>
 
                 {/* Form Actions */}

@@ -6,13 +6,15 @@ import { toast, Toaster } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import HelpIcon from '@/shared/components/HelpIcon';
+import type { NeedleSizeConfigItem } from './types';
 
 interface Machine {
   _id?: string;
   id?: string;
   machineCode: string;
   machineNumber: string;
-  needleSize: string;
+  needleSize?: string;
+  needleSizeConfig?: NeedleSizeConfigItem[];
   model: string;
   floor: string;
   installationDate: string;
@@ -47,7 +49,7 @@ interface ExcelRow {
   'ID'?: string;
   'Machine Code': string;
   'Machine Number': string;
-  'Needle Size': string;
+  'Needle Config'?: string;
   'Model': string;
   'Floor': string;
   'Installation Date': string;
@@ -348,11 +350,15 @@ const MachinesPage = () => {
       if (!response.ok) throw new Error('Failed to fetch all machines for export');
       const data = await response.json();
       const exportSource = Array.isArray(data.results) ? data.results : [];
+      const formatNeedleConfig = (config: NeedleSizeConfigItem[] | undefined) => {
+        if (!config?.length) return '';
+        return config.map(c => `${c.needleSize} (${c.cutoffQuantity})`).join(', ');
+      };
       const exportData = exportSource.map((machine: Machine) => ({
         'ID': getMachineId(machine),
         'Machine Code': machine.machineCode,
         'Machine Number': machine.machineNumber,
-        'Needle Size': machine.needleSize,
+        'Needle Config': formatNeedleConfig(machine.needleSizeConfig),
         'Model': machine.model,
         'Floor': machine.floor,
         'Installation Date': machine.installationDate ? new Date(machine.installationDate).toLocaleDateString() : '',
@@ -406,13 +412,23 @@ const MachinesPage = () => {
           const allData = allResponse.ok ? await allResponse.json() : { results: [] };
           const allMachines: Machine[] = allData.results || [];
           
+          const parseNeedleConfig = (str: string | undefined): NeedleSizeConfigItem[] => {
+            if (!str?.trim()) return [];
+            return str.split(',').map(part => {
+              const match = part.trim().match(/^(.+?)\s*\((\d+)\)\s*$/);
+              if (match) return { needleSize: match[1].trim(), cutoffQuantity: parseInt(match[2], 10) || 0 };
+              const single = part.trim();
+              if (single) return { needleSize: single, cutoffQuantity: 0 };
+              return null;
+            }).filter((x): x is NeedleSizeConfigItem => x !== null);
+          };
           for (let i = 0; i < jsonData.length; i++) {
             const row = jsonData[i];
             try {
-              const machineData = {
+              const needleConfig = parseNeedleConfig(row['Needle Config']);
+              const machineData: Record<string, unknown> = {
                 machineCode: row['Machine Code'],
                 machineNumber: row['Machine Number'],
-                needleSize: row['Needle Size'],
                 model: row['Model'],
                 floor: row['Floor'],
                 installationDate: parseDate(row['Installation Date']),
@@ -428,6 +444,7 @@ const MachinesPage = () => {
                 company: row['Company'] || undefined,
                 machineType: row['Machine Type'] || undefined
               };
+              if (needleConfig.length > 0) machineData.needleSizeConfig = needleConfig;
               
               let machineId = row['ID'];
               if (!machineId) {
@@ -436,6 +453,7 @@ const MachinesPage = () => {
                 if (found) machineId = getMachineId(found);
               }
               
+              const body = JSON.stringify(machineData);
               if (machineId) {
                 // Update existing
                 const patchResponse = await fetch(`${API_BASE_URL}/machines/${machineId}`, {
@@ -444,7 +462,7 @@ const MachinesPage = () => {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
                   },
-                  body: JSON.stringify(machineData),
+                  body,
                 });
                 if (!patchResponse.ok) throw new Error();
                 successCount++;
@@ -456,7 +474,7 @@ const MachinesPage = () => {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
                   },
-                  body: JSON.stringify(machineData),
+                  body,
                 });
                 if (!postResponse.ok) throw new Error();
                 successCount++;
@@ -650,7 +668,7 @@ const MachinesPage = () => {
                   </th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Machine</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Floor</th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Needle Size</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Needle Config</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Supervisor</th>
                   <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
@@ -669,7 +687,30 @@ const MachinesPage = () => {
                       </div>
                     </td>
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{machine.floor}</td>
-                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{machine.needleSize}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
+                      {machine.needleSizeConfig?.length ? (
+                        <div className="min-w-[120px]">
+                          <table className="w-full text-[10px] border border-gray-100 rounded overflow-hidden">
+                            <thead>
+                              <tr className="bg-gray-50">
+                                <th className="px-1.5 py-1 text-left font-semibold text-gray-600">Size</th>
+                                <th className="px-1.5 py-1 text-left font-semibold text-gray-600">Cutoff</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {machine.needleSizeConfig.map((c, i) => (
+                                <tr key={i} className="border-t border-gray-100">
+                                  <td className="px-1.5 py-0.5">{c.needleSize}</td>
+                                  <td className="px-1.5 py-0.5">{c.cutoffQuantity}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${getStatusBadgeClass(machine.status)}`}>{machine.status}</span>
                     </td>

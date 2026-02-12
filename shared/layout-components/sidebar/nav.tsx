@@ -124,6 +124,14 @@ const BaseMenuItems: any = [
         title: "Machines",
       },
       {
+        icon: AttributeIcon,
+        path: "/catalog/needle-configuration",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Needle Configuration",
+      },
+      {
         icon: CataloguingIcon,
         path: "/yarn-management/cataloguing",
         type: "link",
