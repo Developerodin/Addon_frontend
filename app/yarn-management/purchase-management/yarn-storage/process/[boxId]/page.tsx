@@ -695,11 +695,12 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
             @media print {
               .label { border: none; }
             }
-            .data { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-            .qr { width: 33%; display: flex; align-items: center; justify-content: center; padding-left: 2mm; }
-            .title { font-weight: bold; font-size: ${isSmall ? '7.5pt' : (isMedium || isPortraitSmall) ? '11pt' : '10pt'}; line-height: 1.1; margin-bottom: 1mm; word-break: break-word; }
-            .text { font-size: ${isSmall ? '6pt' : (isMedium || isPortraitSmall) ? '9pt' : '8pt'}; line-height: 1.2; margin: 0; }
-            canvas { width: 100% !important; height: auto !important; }
+            .data { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; padding-right: 1mm; }
+            .qr { width: 32%; display: flex; align-items: center; justify-content: center; }
+            .title { font-weight: bold; font-size: ${isSmall ? '7pt' : (isMedium || isPortraitSmall) ? '11pt' : '10pt'}; line-height: 1.1; margin-bottom: 0.5mm; word-break: break-all; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+            .text { font-size: ${isSmall ? '6pt' : (isMedium || isPortraitSmall) ? '9pt' : '8pt'}; line-height: 1.2; margin: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+            .text.short { -webkit-line-clamp: 1; }
+            canvas { width: 90% !important; height: auto !important; }
           </style>
         </head>
         <body>
@@ -715,9 +716,9 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
             <div class="data">
               <div class="title">${box?.yarnName || 'Yarn'}</div>
               <p class="text">Supplier: ${effectiveSupplier || '-'}</p>
-              <p class="text">PO: ${effectivePoNumber || '-'}</p>
-              <p class="text">Lot: ${box?.lotNumber || '-'}</p>
-              <p class="text">Shade: ${box?.shadeCode || '-'}</p>
+              <p class="text short">PO: ${effectivePoNumber || '-'}</p>
+              <p class="text short">Lot: ${box?.lotNumber || '-'}</p>
+              <p class="text short">Shade: ${box?.shadeCode || '-'}</p>
             </div>
             <div class="qr"><canvas id="qr-${cone._id}"></canvas></div>
           </div>
@@ -1301,16 +1302,16 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                   {printSettings.paperSize === '50mm * 25mm' ? (
                     /* 50x25mm Side-by-Side Preview */
                     <div className="bg-white border border-gray-400 shadow-sm flex overflow-hidden" style={{ width: '250px', height: '125px' }}>
-                      <div className="flex-1 p-2 flex flex-col justify-center gap-0.5 font-mono">
-                        <div className="text-[10px] font-bold leading-tight border-b border-gray-100 pb-0.5 uppercase break-words">
+                      <div className="flex-1 p-2 flex flex-col justify-center gap-0.5 font-mono overflow-hidden">
+                        <div className="text-[10px] font-bold leading-tight border-b border-gray-100 pb-0.5 uppercase line-clamp-2">
                           {box.yarnName || 'Yarn Name'}
                         </div>
-                        <div className="text-[8px] text-gray-700 truncate">S: {effectiveSupplier || '-'}</div>
-                        <div className="text-[8px] text-gray-700">PO: {effectivePoNumber || '-'}</div>
-                        <div className="text-[8px] text-gray-700">Lot: {box.lotNumber || '-'}</div>
-                        <div className="text-[8px] text-gray-700">Shade: {box.shadeCode || '-'}</div>
+                        <div className="text-[8px] text-gray-700 line-clamp-2">Supplier: {effectiveSupplier || '-'}</div>
+                        <div className="text-[8px] text-gray-700 truncate">PO: {effectivePoNumber || '-'}</div>
+                        <div className="text-[8px] text-gray-700 truncate">Lot: {box.lotNumber || '-'}</div>
+                        <div className="text-[8px] text-gray-700 truncate">Shade: {box.shadeCode || '-'}</div>
                       </div>
-                      <div className="w-[35%] bg-white border-l border-gray-50 flex items-center justify-center p-2">
+                      <div className="w-[32%] bg-white border-l border-gray-50 flex items-center justify-center p-2">
                         <div className="aspect-square w-full border-2 border-black flex items-center justify-center relative">
                           <div className="w-full h-full p-1 flex flex-wrap gap-0.5">
                             {[...Array(9)].map((_, i) => (
