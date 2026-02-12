@@ -590,7 +590,13 @@ export const generateZPLDoubleLabel = (
     firstLabelTopMargin?: number;
     supplierFontSize?: number;
     detailsFontSize?: number;
+    boxIdFontSize?: number;
+    yarnFontSize?: number;
+    shadeLotFontSize?: number;
     barcodeHeight?: number;
+    barcodeWidth?: number;
+    qrCodeSize?: number;
+    orientation?: 'horizontal' | 'vertical';
     supplierYPos?: number;
     boxIdYPos?: number;
     yarnYPos?: number;
@@ -606,17 +612,26 @@ export const generateZPLDoubleLabel = (
     paperHeight: customSettings?.paperHeight || 1218,
     labelsPerPage: customSettings?.labelsPerPage || 2,
     firstLabelTopMargin: customSettings?.firstLabelTopMargin || 0,
-    supplierFontSize: customSettings?.supplierFontSize || 30,
-    detailsFontSize: customSettings?.detailsFontSize || 30,
+    supplierFontSize: customSettings?.supplierFontSize || 25,
+    detailsFontSize: customSettings?.detailsFontSize || 20,
+    boxIdFontSize: customSettings?.boxIdFontSize || 25,
+    yarnFontSize: customSettings?.yarnFontSize || 25,
+    shadeLotFontSize: customSettings?.shadeLotFontSize || 25,
     barcodeHeight: customSettings?.barcodeHeight || 100,
+    barcodeWidth: customSettings?.barcodeWidth || 2,
+    qrCodeSize: customSettings?.qrCodeSize || 5,
+    orientation: customSettings?.orientation || 'horizontal',
     supplierYPos: customSettings?.supplierYPos || 30,
     boxIdYPos: customSettings?.boxIdYPos || 80,
     yarnYPos: customSettings?.yarnYPos || 120,
     lotYPos: customSettings?.lotYPos || 160,
-    shadeYPos: customSettings?.shadeYPos || 200,
+    shadeYPos: customSettings?.shadeYPos || 160, // Shared with Lot in same row
     barcodeYPos: customSettings?.barcodeYPos || 260,
     footerYPos: customSettings?.footerYPos || 400,
   };
+
+  // Calculate space per label based on labelsPerPage
+  const spacePerLabel = Math.floor(settings.paperHeight / settings.labelsPerPage);
 
   // Helper: Generates ZPL for a single item at a specific Y position
   // yOffset = 0 for Top Label, 609 for Bottom Label
@@ -642,50 +657,77 @@ export const generateZPLDoubleLabel = (
 
     // Check for small label (e.g. 50mm width ≈ 400 dots)
     if (settings.paperWidth < 500) {
-      // Small Label Layout (50x70mm)
-      // 1. Box ID (Top, Centered)
-      // 2. Supplier (Below Box ID, Centered)
-      // 3. Shade | Lot (Below Supplier, Centered, Large Text)
-      // 4. Barcode (Bottom)
+      if (settings.orientation === 'vertical') {
+        const rowLength = spacePerLabel;
+        let bWidth = settings.barcodeWidth;
+        const getBcW = (w: number) => (barcodeValue.length + 3) * 11 * w;
+        while (bWidth > 1 && getBcW(bWidth) > rowLength) {
+          bWidth--;
+        }
+        const bcFullW = getBcW(bWidth);
+        const bcMargin = Math.max(0, (rowLength - bcFullW) / 2);
 
-      const contentWidth = settings.paperWidth;
+        let curX = 40; // Top margin
+        const step = 45;
 
-      let currentY = yOffset + (settings.firstLabelTopMargin || 0) + 20;
+        const detailText = `L: ${lotNumber} | S: ${shadeCode}`;
 
-      // Box ID (Centered)
-      const boxIdZpl = `^FO0,${currentY}^A0N,25,25^FB${contentWidth},1,0,C^FDBox: ${boxId}^FS`;
-      currentY += 35;
+        return `
+          ^FO${curX},${yOffset}^A0R,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${rowLength},1,0,C^FDBox ID: ${boxId}^FS
+          ^FO${curX + step},${yOffset}^A0R,${settings.supplierFontSize},${settings.supplierFontSize}^FB${rowLength},2,0,C^FD${supplier}^FS
+          ^FO${curX + step * 2 + 10},${yOffset}^A0R,${settings.yarnFontSize},${settings.yarnFontSize}^FB${rowLength},2,0,C^FDYarn: ${yarnName}^FS
+          ^FO${curX + step * 3 + 20},${yOffset}^A0R,${settings.shadeLotFontSize},${settings.shadeLotFontSize}^FB${rowLength},1,0,C^FD${detailText}^FS
+          ^BY${bWidth},2,${settings.barcodeHeight}
+          ^FO${settings.paperWidth - settings.barcodeHeight - 30},${yOffset + bcMargin}^BCR,${settings.barcodeHeight},N,N,N^FD${barcodeValue}^FS`;
+      }
 
-      // Supplier (Centered)
-      const supplierName = (supplier || '').substring(0, 22);
-      const supplierZpl = `^FO0,${currentY}^A0N,25,25^FB${contentWidth},1,0,C^FD${supplierName}^FS`;
-      currentY += 40;
+      // Small Label Layout (Horizontal/Normal orientation)
+      const contentWidth = settings.paperWidth - 40;
+      let bWidth = settings.barcodeWidth;
+      const getBcW = (w: number) => (barcodeValue.length + 3) * 11 * w;
+      while (bWidth > 1 && getBcW(bWidth) > contentWidth) {
+        bWidth--;
+      }
+      const bcFullW = getBcW(bWidth);
+      const bcX = 20 + Math.max(0, (contentWidth - bcFullW) / 2);
+      let curY = yOffset + 30;
 
-      // Shade | Lot (Centered, Small Text)
-      const detailText = `Shade: ${shadeCode} | Lot: ${lotNumber}`;
-      const textZpl = `^FO0,${currentY}^A0N,30,30^FB${contentWidth},2,0,C^FD${detailText}^FS`;
+      const detailText = `L: ${lotNumber} | S: ${shadeCode}`;
 
-      // Barcode (Bottom)
-      const barcodeHeight = settings.barcodeHeight || 100;
-      const bottomY = yOffset + (settings.paperHeight || 560) - barcodeHeight - 30;
-      const barcodeZpl = `^BY2,2,${barcodeHeight}^FO50,${bottomY}^BCN,${barcodeHeight},N,N,N^FD${barcodeValue}^FS`;
+      return `
+        ^FO20,${curY}^A0N,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${contentWidth},1,0,C^FDBox ID: ${boxId}^FS
+        ^FO20,${curY + 40}^A0N,${settings.supplierFontSize},${settings.supplierFontSize}^FB${contentWidth},2,0,C^FD${supplier}^FS
+        ^FO20,${curY + 90}^A0N,${settings.yarnFontSize},${settings.yarnFontSize}^FB${contentWidth},2,0,C^FDYarn: ${yarnName}^FS
+        ^FO20,${curY + 140}^A0N,${settings.shadeLotFontSize},${settings.shadeLotFontSize}^FB${contentWidth},1,0,C^FD${detailText}^FS
+        ^BY${bWidth},2,${settings.barcodeHeight}
+        ^FO${bcX},${yOffset + settings.paperHeight - settings.barcodeHeight - 30}^BCN,${settings.barcodeHeight},N,N,N^FD${barcodeValue}^FS`;
+    }
 
-      return boxIdZpl + supplierZpl + textZpl + barcodeZpl;
+    const rowLength = settings.orientation === 'vertical' ? spacePerLabel : settings.paperWidth;
+    const barcodeWidth = settings.barcodeWidth;
+    const barcodeFullWidth = (barcodeValue.length + 3) * 11 * barcodeWidth;
+    const barcodeMargin = Math.max(0, (rowLength - barcodeFullWidth) / 2);
+
+    if (settings.orientation === 'vertical') {
+      return `
+          ^FO${settings.supplierYPos},${yOffset}^A0R,${settings.supplierFontSize},${settings.supplierFontSize}^FB${rowLength},1,0,C^FD${supplier}^FS
+          ^FO${settings.boxIdYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDBox ID: ${boxId}^FS
+          ^FO${settings.yarnYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDYarn: ${yarnName}^FS
+          ^FO${settings.lotYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDLot: ${lotNumber}^FS
+          ^FO${settings.shadeYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDShade: ${shadeCode}^FS
+          ^BY${barcodeWidth},2,${settings.barcodeHeight}
+          ^FO${settings.barcodeYPos},${yOffset + barcodeMargin}^BCR,${settings.barcodeHeight},Y,N,N^FD${barcodeValue}^FS`;
     }
 
     return `
-      ^FO20,${settings.supplierYPos + yOffset}^A0N,${settings.supplierFontSize},${settings.supplierFontSize}^FD${supplier}^FS
-      ^FO20,${settings.boxIdYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FDBox ID: ${boxId}^FS
-      ^FO20,${settings.yarnYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FDYarn: ${yarnName}^FS
-      ^FO20,${settings.lotYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FDLot: ${lotNumber}^FS
-      ^FO20,${settings.shadeYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FDShade: ${shadeCode}^FS
-      ^BY2,2,${settings.barcodeHeight}
-      ^FO40,${settings.barcodeYPos + yOffset}^BCN,${settings.barcodeHeight},Y,N,N^FD${barcodeValue}^FS
-      ^FO600,${settings.footerYPos + yOffset}^A0N,20,20^FDMade in India^FS`;
+        ^FO0,${settings.supplierYPos + yOffset}^A0N,${settings.supplierFontSize},${settings.supplierFontSize}^FB${rowLength},1,0,C^FD${supplier}^FS
+        ^FO0,${settings.boxIdYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDBox ID: ${boxId}^FS
+        ^FO0,${settings.yarnYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDYarn: ${yarnName}^FS
+        ^FO0,${settings.lotYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDLot: ${lotNumber}^FS
+        ^FO0,${settings.shadeYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDShade: ${shadeCode}^FS
+        ^BY${barcodeWidth},2,${settings.barcodeHeight}
+        ^FO${barcodeMargin},${settings.barcodeYPos + yOffset}^BCN,${settings.barcodeHeight},Y,N,N^FD${barcodeValue}^FS`;
   };
-
-  // Calculate space per label based on labelsPerPage
-  const spacePerLabel = Math.floor(settings.paperHeight / settings.labelsPerPage);
 
   const zplData = [
     `^XA`,              // Start ZPL
@@ -773,6 +815,39 @@ export const generateZPLRack = (
 
   const contentHeight = labelHeight - (labelMargin * 2);
 
+  // SMALL NARROW LABEL (e.g. 50x70mm)
+  if (labelWidth < 500) {
+    if (orientation === 'vertical') {
+      // VERTICAL LANES (Rotated 90 Deg)
+      const rowLen = labelHeight - (labelMargin * 2);
+      const bWidth = barcodeWidth;
+      const bcFullW = (barcodeValue.length + 3) * 11 * bWidth;
+      const bcMargin = Math.max(0, (rowLen - bcFullW) / 2);
+
+      let curX = 50; // Top margin
+      const step = 50;
+
+      zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${rackCodeFontSize},${rackCodeFontSize}^FB${rowLen},1,0,C^FD${rackCode}^FS\n`;
+      zpl += `^FO${curX + step},${yOffset + labelMargin}^A0R,${detailsFontSize},${detailsFontSize}^FB${rowLen},1,0,C^FDShelf: ${shelf || '-'} | Floor: ${floor || '-'}^FS\n`;
+      zpl += `^BY${bWidth},2,${barcodeHeight}\n`;
+      zpl += `^FO${labelWidth - barcodeHeight - 30},${yOffset + labelMargin + bcMargin}^BCR,${barcodeHeight},N,N,N^FD${barcodeValue}^FS\n`;
+
+      if (isStandalone) zpl += `^XZ\n`;
+      return zpl;
+    }
+
+    // Small Horizontal Layout
+    const contentWidth = labelWidth - (labelMargin * 2);
+    let curY = yOffset + 30; // Reduced top margin
+
+    zpl += `^FO${labelMargin},${curY}^A0N,${rackCodeFontSize},${rackCodeFontSize}^FB${contentWidth},1,0,C^FD${rackCode}^FS\n`;
+    zpl += `^FO${labelMargin},${curY + 60}^A0N,${detailsFontSize},${detailsFontSize}^FB${contentWidth},1,0,C^FDShelf: ${shelf || '-'} | Floor: ${floor || '-'}^FS\n`;
+    zpl += `^BY${barcodeWidth},2,${barcodeHeight}\n`;
+    zpl += `^FO${Math.max(0, (labelWidth - (barcodeValue.length + 3) * 11 * barcodeWidth) / 2)},${yOffset + labelHeight - barcodeHeight - 30}^BCN,${barcodeHeight},N,N,N^FD${barcodeValue}^FS\n`;
+
+    if (isStandalone) zpl += `^XZ\n`;
+    return zpl;
+  }
   if (isVertical) {
     // VERTICAL ORIENTATION (Rotated 90 degrees)
     // We want to center the whole block of rows along the labelWidth (which is now the "height" of the stack)
@@ -850,6 +925,7 @@ export const generateZPLCone = (
     lotNumber?: string;
     shadeCode?: string;
     weight?: number;
+    boxId?: string;
     labelWidth?: number;
     labelHeight?: number;
     xOffset?: number;
@@ -857,6 +933,11 @@ export const generateZPLCone = (
     qrCodeSize?: number;
     titleFontSize?: number;
     detailsFontSize?: number;
+    boxIdFontSize?: number;
+    yarnFontSize?: number;
+    supplierFontSize?: number;
+    shadeLotFontSize?: number;
+    orientation?: 'horizontal' | 'vertical';
   } = {}
 ): string => {
   const {
@@ -872,7 +953,11 @@ export const generateZPLCone = (
     yOffset = 0,
     qrCodeSize = 5,
     titleFontSize = 25,
-    detailsFontSize = 20
+    detailsFontSize = 20,
+    boxIdFontSize = 25,
+    yarnFontSize = 25,
+    supplierFontSize = 20,
+    shadeLotFontSize = 20,
   } = options;
 
   const labelMargin = 15; // Slightly reduced margin for small labels
@@ -908,6 +993,75 @@ export const generateZPLCone = (
     zpl += `^CI28\n`;
   }
 
+  // PORTRAIT NARROW LABEL (e.g. 50x70mm)
+  if (labelWidth < 500 && labelHeight >= 500) {
+    if (options.orientation === 'vertical') {
+      // VERTICAL ROTATED LAYOUT
+      const rowLen = labelHeight - (labelMargin * 2);
+      let curX = 50;
+      const step = 45;
+
+      // 0. Box ID (Rotated)
+      if (boxId) {
+        zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${boxIdFontSize},${boxIdFontSize}^FB${rowLen},1,0,C^FDBox ID: ${boxId}^FS\n`;
+        curX += boxIdFontSize + 10;
+      }
+
+      // 1. Yarn Name (Rotated)
+      if (yarnName) {
+        const nameLines = wrapText(yarnName, 32);
+        for (const line of nameLines.slice(0, 2)) {
+          zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${yarnFontSize},${yarnFontSize}^FB${rowLen},1,0,C^FD${line}^FS\n`;
+          curX += yarnFontSize + 5;
+        }
+      }
+
+      // 2. Details (Rotated)
+      zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${supplierFontSize},${supplierFontSize}^FB${rowLen},1,0,C^FDSupplier: ${(supplierName || '-').substring(0, 30)}^FS\n`;
+      curX += supplierFontSize + 5;
+      zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${detailsFontSize},${detailsFontSize}^FB${rowLen},1,0,C^FDPO: ${poNumber || '-'}^FS\n`;
+      curX += detailsFontSize + 5;
+      const lotShade = `L: ${lotNumber || '-'} | S: ${shadeCode || '-'}`;
+      zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,C^FD${lotShade}^FS\n`;
+
+      // 3. QR Code (Bottom Rotated)
+      const qWidth = qrCodeSize * 30;
+      zpl += `^FO${labelWidth - qWidth - 30},${yOffset + labelHeight - qWidth - 30}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
+
+      if (isStandalone) zpl += `^XZ\n`;
+      return zpl;
+    }
+
+    const contentWidth = labelWidth - (labelMargin * 2);
+    let curY = yOffset + 20;
+
+    // Box ID (Horizontal)
+    if (boxId) {
+      zpl += `^FO${labelMargin},${curY}^A0N,${boxIdFontSize},${boxIdFontSize}^FB${contentWidth},1,0,C^FDBox ID: ${boxId}^FS\n`;
+      curY += boxIdFontSize + 5;
+    }
+
+    if (yarnName) {
+      const nameLines = wrapText(yarnName, 22);
+      for (const line of nameLines.slice(0, 2)) {
+        zpl += `^FO${labelMargin},${curY}^A0N,${yarnFontSize},${yarnFontSize}^FB${contentWidth},1,0,C^FD${line}^FS\n`;
+        curY += yarnFontSize + 5;
+      }
+    }
+
+    zpl += `^FO${labelMargin},${curY}^A0N,${supplierFontSize},${supplierFontSize}^FB${contentWidth},1,0,C^FDSupplier: ${(supplierName || '-').substring(0, 25)}^FS\n`;
+    curY += supplierFontSize + 5;
+    zpl += `^FO${labelMargin},${curY}^A0N,${detailsFontSize},${detailsFontSize}^FB${contentWidth},1,0,C^FDPO: ${poNumber || '-'}^FS\n`;
+    curY += detailsFontSize + 5;
+    const lotShadeText = `L: ${lotNumber || '-'} | S: ${shadeCode || '-'}`;
+    zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,C^FD${lotShadeText}^FS\n`;
+
+    const qrW = qrCodeSize * 30;
+    zpl += `^FO${Math.max(0, (labelWidth - qrW) / 2)},${yOffset + labelHeight - qrW - 30}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
+
+    if (isStandalone) zpl += `^XZ\n`;
+    return zpl;
+  }
   if (isSmallSideBySide) {
     // SIDE-BY-SIDE LAYOUT (e.g. 50x25mm) - same field order as browser test print
     const dataWidth = Math.floor(labelWidth * 0.65) - labelMargin;
@@ -938,6 +1092,7 @@ export const generateZPLCone = (
     yPos += lineHeight;
     const qrYPos = yOffset + Math.max(10, Math.floor((labelHeight - qrWidth) / 2));
     zpl += `^FO${qrSectionX},${qrYPos}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
+
   } else {
     // LAYOUT MATCHING BROWSER TEST PRINT: data left (~65%), QR right (~33%)
     const dataWidth = Math.floor(labelWidth * 0.65) - labelMargin;
@@ -1247,7 +1402,12 @@ export const printDoubleBarcodes = async (
       firstLabelTopMargin?: number;
       supplierFontSize?: number;
       detailsFontSize?: number;
+      boxIdFontSize?: number;
+      yarnFontSize?: number;
+      shadeLotFontSize?: number;
       barcodeHeight?: number;
+      barcodeWidth?: number;
+      orientation?: 'horizontal' | 'vertical';
       supplierYPos?: number;
       boxIdYPos?: number;
       yarnYPos?: number;
@@ -1487,6 +1647,7 @@ export const printCones = async (
     lotNumber?: string;
     shadeCode?: string;
     weight?: number;
+    boxId?: string;
   }>,
   options: {
     printerName?: string;
@@ -1501,6 +1662,12 @@ export const printCones = async (
       qrCodeSize?: number;
       titleFontSize?: number;
       detailsFontSize?: number;
+      boxIdFontSize?: number;
+      yarnFontSize?: number;
+      supplierFontSize?: number;
+      shadeLotFontSize?: number;
+      barcodeHeight?: number;
+      barcodeWidth?: number;
     };
   } = {}
 ): Promise<{ success: boolean; printed: number; error?: string }> => {

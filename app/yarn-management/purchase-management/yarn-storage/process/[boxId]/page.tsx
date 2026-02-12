@@ -53,6 +53,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   const [barcodeScanValue, setBarcodeScanValue] = useState("");
   const [isUpdatingConeId, setIsUpdatingConeId] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isFetchingWeight, setIsFetchingWeight] = useState(false);
 
   // Cone selection state
   const [selectedCones, setSelectedCones] = useState<Set<string>>(new Set());
@@ -67,7 +68,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '50mm * 25mm' | '70mm * 50mm',
+    paperSize: '4x6' as '4x6' | '6x4' | '50mm * 25mm' | '70mm * 50mm' | '50mm * 70mm',
     paperWidth: 812,
     paperHeight: 1218,
     labelsPerPage: 4,
@@ -77,6 +78,13 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     qrCodeSize: 5,
     titleFontSize: 25,
     detailsFontSize: 18,
+    boxIdFontSize: 25,
+    yarnFontSize: 25,
+    supplierFontSize: 20,
+    barcodeHeight: 100,
+    barcodeWidth: 2,
+    shadeLotFontSize: 18,
+    orientation: 'horizontal' as 'horizontal' | 'vertical',
   });
 
   const boxIdParam = useMemo(() => decodeURIComponent(params.boxId), [params]);
@@ -230,6 +238,109 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     };
   }, [result?.box?.poNumber, cones, coneInputs]);
 
+  // Fetch latest weight from API
+  const fetchLatestWeight = async (): Promise<number | null> => {
+    try {
+      setIsFetchingWeight(true);
+      // Get weight API URL from localStorage or use default
+      const weightApiUrl = typeof window !== 'undefined'
+        ? localStorage.getItem('weightApiUrl') || 'http://localhost:7001/api/weight/latest'
+        : 'http://localhost:7001/api/weight/latest';
+
+      const response = await fetch(weightApiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      // Extract weight from response: {"weight":0.65,"weightUnit":"kg",...}
+      const weight = data.weight;
+
+      if (weight !== undefined && weight !== null) {
+        return parseFloat(weight);
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Failed to fetch weight:', error);
+      // Don't show error toast, just log it - weight fetching is optional
+      return null;
+    } finally {
+      setIsFetchingWeight(false);
+    }
+  };
+
+  // Fetch weight automatically when a cone row is activated
+  useEffect(() => {
+    const autoFillWeight = async () => {
+      if (!activeConeId) return;
+
+      const weight = await fetchLatestWeight();
+      if (weight !== null && weight > 0) {
+        // Find the cone to get its current data
+        const cone = cones.find(c => c._id === activeConeId);
+
+        if (cone) {
+          // Update coneInputs with fetched weight, ensuring all fields exist
+          setConeInputs(prev => ({
+            ...prev,
+            [activeConeId]: {
+              coneWeight: weight.toString(),
+              tearWeight: prev[activeConeId]?.tearWeight || '',
+              coneStorageId: prev[activeConeId]?.coneStorageId || ''
+            }
+          }));
+
+          // Auto-focus tearWeight input after weight is fetched
+          setTimeout(() => {
+            const tearWeightInput = document.querySelector(`input[data-cone-tear-weight="${activeConeId}"]`) as HTMLInputElement;
+            if (tearWeightInput) {
+              tearWeightInput.focus();
+              tearWeightInput.select();
+            }
+          }, 300);
+        }
+      }
+    };
+
+    autoFillWeight();
+  }, [activeConeId, cones]);
+
+  // Focus weight input when a cone is activated
+  useEffect(() => {
+    if (activeConeId) {
+      // Use multiple attempts to ensure DOM is updated and input is available
+      const focusWeightInput = () => {
+        const weightInput = document.querySelector(`input[data-cone-weight="${activeConeId}"]`) as HTMLInputElement;
+        if (weightInput) {
+          weightInput.focus();
+          weightInput.select(); // Select the text if any
+          return true;
+        }
+        return false;
+      };
+
+      // Try immediately
+      if (!focusWeightInput()) {
+        // Try after a short delay
+        setTimeout(() => {
+          if (!focusWeightInput()) {
+            // Try one more time after a longer delay
+            setTimeout(() => {
+              focusWeightInput();
+            }, 200);
+          }
+        }, 100);
+      }
+    }
+  }, [activeConeId]);
+
   const box = result?.box;
   const message = result?.message;
   const effectiveSupplier =
@@ -362,7 +473,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     }
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mm * 25mm' | '70mm * 50mm') => {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mm * 25mm' | '70mm * 50mm' | '50mm * 70mm') => {
     if (size === '4x6') {
       setPrintSettings({
         ...printSettings,
@@ -392,6 +503,24 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         qrCodeSize: 5,
         titleFontSize: 25,
         detailsFontSize: 18,
+      });
+    } else if (size === '50mm * 70mm') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '50mm * 70mm',
+        paperWidth: 398,
+        paperHeight: 558,
+        labelsPerPage: 1,
+        columnsPerRow: 1,
+        qrCodeSize: 5,
+        titleFontSize: 25,
+        detailsFontSize: 18,
+        boxIdFontSize: 25,
+        yarnFontSize: 25,
+        supplierFontSize: 20,
+        shadeLotFontSize: 18,
+        firstLabelTopMargin: 20,
+        orientation: 'vertical'
       });
     } else if (size === '50mm * 25mm') {
       setPrintSettings({
@@ -481,6 +610,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         conesToPrint.map(cone => ({
           barcode: cone.barcode,
           yarnName: box.yarnName,
+          boxId: box.boxId,
           supplierName: effectiveSupplier ?? undefined,
           poNumber: effectivePoNumber ?? box.poNumber,
           lotNumber: box.lotNumber,
@@ -523,12 +653,14 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
 
     const isSmall = printSettings.paperSize === '50mm * 25mm';
     const isMedium = printSettings.paperSize === '70mm * 50mm';
+    const isPortraitSmall = printSettings.paperSize === '50mm * 70mm';
 
     let paperW = 101.6;
     let paperH = 152.4;
 
     if (isSmall) { paperW = 50; paperH = 25; }
     else if (isMedium) { paperW = 70; paperH = 50; }
+    else if (isPortraitSmall) { paperW = 50; paperH = 70; }
     else if (printSettings.paperSize === '6x4') { paperW = 152.4; paperH = 101.6; }
     const labelW = paperW / printSettings.columnsPerRow;
     const labelH = paperH / (printSettings.labelsPerPage / printSettings.columnsPerRow);
@@ -565,8 +697,8 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
             }
             .data { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
             .qr { width: 33%; display: flex; align-items: center; justify-content: center; padding-left: 2mm; }
-            .title { font-weight: bold; font-size: ${isSmall ? '7.5pt' : isMedium ? '11pt' : '10pt'}; line-height: 1.1; margin-bottom: 1mm; word-break: break-word; }
-            .text { font-size: ${isSmall ? '6pt' : isMedium ? '9pt' : '8pt'}; line-height: 1.2; margin: 0; }
+            .title { font-weight: bold; font-size: ${isSmall ? '7.5pt' : (isMedium || isPortraitSmall) ? '11pt' : '10pt'}; line-height: 1.1; margin-bottom: 1mm; word-break: break-word; }
+            .text { font-size: ${isSmall ? '6pt' : (isMedium || isPortraitSmall) ? '9pt' : '8pt'}; line-height: 1.2; margin: 0; }
             canvas { width: 100% !important; height: auto !important; }
           </style>
         </head>
@@ -828,6 +960,44 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               </div>
             )}
 
+            {/* Weighing Process Indicator */}
+            {activeConeId && (() => {
+              const activeCone = cones.find(c => c._id === activeConeId);
+              if (!activeCone) return null;
+
+              const activeConeData = coneInputs[activeConeId] || {};
+              const hasWeight = activeConeData.coneWeight && parseFloat(activeConeData.coneWeight) > 0;
+
+              // Show indicator only when weight hasn't been entered yet
+              if (!hasWeight) {
+                return (
+                  <div className="mb-3 animate-pulse">
+                    <div className="bg-blue-50 border-l-4 border-blue-500 p-2 rounded-r-lg shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-shrink-0">
+                          <i className="ri-scales-3-line text-lg text-blue-600"></i>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-xs font-semibold text-blue-900 mb-0.5">
+                            Place the cone on the weighing scale
+                          </h4>
+                          <p className="text-[10px] text-blue-700">
+                            Cone Barcode: <span className="font-mono font-semibold">{activeCone.barcode}</span> - Waiting for weight...
+                          </p>
+                        </div>
+                        {isFetchingWeight && (
+                          <div className="flex-shrink-0">
+                            <i className="ri-loader-4-line animate-spin text-blue-600 text-sm"></i>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             {cones.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
@@ -867,6 +1037,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                           {activeConeId === cone._id ? (
                             <input
                               type="text"
+                              data-cone-weight={cone._id}
                               className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                               value={coneInputs[cone._id]?.coneWeight || ""}
                               onChange={(e) =>
@@ -879,7 +1050,11 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                               onKeyDown={(event) => {
                                 if (event.key === "Enter") {
                                   event.preventDefault();
-                                  handleUpdateCone(cone);
+                                  const tearWeightInput = document.querySelector(`input[data-cone-tear-weight="${cone._id}"]`) as HTMLInputElement;
+                                  if (tearWeightInput) {
+                                    tearWeightInput.focus();
+                                    tearWeightInput.select();
+                                  }
                                 }
                               }}
                               placeholder="0.0000"
@@ -894,6 +1069,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                           {activeConeId === cone._id ? (
                             <input
                               type="text"
+                              data-cone-tear-weight={cone._id}
                               className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                               value={coneInputs[cone._id]?.tearWeight || ""}
                               onChange={(e) =>
@@ -1180,7 +1356,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">Paper Size</label>
                       <div className="flex flex-wrap gap-2.5">
-                        {['4x6', '6x4', '70mm * 50mm', '50mm * 25mm'].map((size) => (
+                        {['4x6', '6x4', '70mm * 50mm', '50mm * 70mm', '50mm * 25mm'].map((size) => (
                           <label key={size} className="flex items-center cursor-pointer bg-gray-50 px-2 py-1 rounded border border-gray-200 hover:border-purple-300 transition-colors">
                             <input
                               type="radio"
@@ -1239,13 +1415,14 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">Labels Per Page</label>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">Orientation</label>
                       <select
-                        value={printSettings.labelsPerPage}
-                        onChange={(e) => setPrintSettings({ ...printSettings, labelsPerPage: parseInt(e.target.value) })}
+                        value={printSettings.orientation}
+                        onChange={(e) => setPrintSettings({ ...printSettings, orientation: e.target.value as any })}
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none"
                       >
-                        {[1, 2, 3, 4, 6, 8, 10, 12].map(n => <option key={n} value={n}>{n} Label{n > 1 ? 's' : ''}</option>)}
+                        <option value="horizontal">Horizontal</option>
+                        <option value="vertical">Vertical (Rotated)</option>
                       </select>
                     </div>
                   </div>
@@ -1263,9 +1440,70 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
 
                 {/* QR Code & Font Settings */}
                 <div className="space-y-3 pt-3 border-t border-gray-100">
-                  <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">QR & Font Sizes</h4>
+                  <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Font & Barcode Settings</h4>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">Box ID Font Size</label>
+                      <input
+                        type="number"
+                        value={printSettings.boxIdFontSize}
+                        onChange={(e) => setPrintSettings({ ...printSettings, boxIdFontSize: parseInt(e.target.value) || 25 })}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">Yarn Font Size</label>
+                      <input
+                        type="number"
+                        value={printSettings.yarnFontSize}
+                        onChange={(e) => setPrintSettings({ ...printSettings, yarnFontSize: parseInt(e.target.value) || 25 })}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">Sup. Font Size</label>
+                      <input
+                        type="number"
+                        value={printSettings.supplierFontSize}
+                        onChange={(e) => setPrintSettings({ ...printSettings, supplierFontSize: parseInt(e.target.value) || 20 })}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">Lot/Shade Font Size</label>
+                      <input
+                        type="number"
+                        value={printSettings.detailsFontSize}
+                        onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 18 })}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                      />
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">BC Width</label>
+                      <input
+                        type="number"
+                        value={printSettings.barcodeWidth}
+                        onChange={(e) => setPrintSettings({ ...printSettings, barcodeWidth: parseInt(e.target.value) || 2 })}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                        min="1" max="4"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">BC Height</label>
+                      <input
+                        type="number"
+                        value={printSettings.barcodeHeight}
+                        onChange={(e) => setPrintSettings({ ...printSettings, barcodeHeight: parseInt(e.target.value) || 100 })}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                      />
+                    </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-700 mb-1">QR Size</label>
                       <input
@@ -1276,51 +1514,63 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                         min="3" max="10"
                       />
                     </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">Title Size</label>
-                      <input
-                        type="number"
-                        value={printSettings.titleFontSize}
-                        onChange={(e) => setPrintSettings({ ...printSettings, titleFontSize: parseInt(e.target.value) || 25 })}
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">Detail Size</label>
-                      <input
-                        type="number"
-                        value={printSettings.detailsFontSize}
-                        onChange={(e) => setPrintSettings({ ...printSettings, detailsFontSize: parseInt(e.target.value) || 20 })}
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
-                      />
-                    </div>
                   </div>
                 </div>
 
-              </div>
-
-              {/* Reset to Default Button */}
-              <div className="pt-2 border-t border-gray-100">
-                <button
-                  onClick={() => setPrintSettings({
-                    paperSize: '4x6',
-                    paperWidth: 812,
-                    paperHeight: 1218,
-                    labelsPerPage: 4,
-                    columnsPerRow: 2,
-                    firstLabelTopMargin: 0,
-                    showCutLines: true,
-                    qrCodeSize: 5,
-                    titleFontSize: 25,
-                    detailsFontSize: 20,
-                  })}
-                  className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-                >
-                  <i className="ri-restart-line mr-1.5"></i>
-                  Reset Defaults
-                </button>
+                {/* Actions Section */}
+                <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-3">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPrintSettings({
+                        paperSize: '4x6',
+                        paperWidth: 812,
+                        paperHeight: 1218,
+                        labelsPerPage: 4,
+                        columnsPerRow: 2,
+                        firstLabelTopMargin: 0,
+                        showCutLines: true,
+                        qrCodeSize: 5,
+                        titleFontSize: 25,
+                        detailsFontSize: 18,
+                        boxIdFontSize: 25,
+                        yarnFontSize: 25,
+                        supplierFontSize: 20,
+                        barcodeHeight: 100,
+                        barcodeWidth: 2,
+                        orientation: 'horizontal',
+                        shadeLotFontSize: 18
+                      })}
+                      className="px-3 py-1.5 text-[10px] font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded transition-colors uppercase border border-gray-200"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await printCones(
+                            [{
+                              barcode: 'TEST-12345678',
+                              yarnName: 'TEST YARN 30s COTTON',
+                              boxId: box.boxId || 'B-TEST-001',
+                              supplierName: 'TEST SUPPLIER PVT LTD',
+                              poNumber: 'PO-TEST-001',
+                              lotNumber: 'LOT-999',
+                              shadeCode: 'TEST-RED',
+                              weight: 1.234
+                            }],
+                            { customSettings: printSettings }
+                          );
+                          toast.success("Test label sent to printer");
+                        } catch (err: any) {
+                          toast.error(err.message || "Test print failed");
+                        }
+                      }}
+                      className="px-3 py-1.5 text-[10px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded transition-colors uppercase border border-purple-200"
+                    >
+                      Test Print
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-end gap-3 z-10">
@@ -1329,7 +1579,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                   className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded transition-colors mr-auto"
                 >
                   <i className="ri-window-line mr-1.5"></i>
-                  Test Print (Browser)
+                  Test Browser
                 </button>
                 <button
                   onClick={() => setShowPrintSettingsModal(false)}
@@ -1342,6 +1592,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                   className="px-3 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded transition-colors"
                 >
                   <i className="ri-printer-line mr-1.5"></i>
+                  Print
                 </button>
               </div>
             </div>
@@ -1349,6 +1600,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         )}
       </div>
     </div>
+
   );
 };
 
