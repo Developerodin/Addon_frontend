@@ -947,6 +947,7 @@ export const generateZPLCone = (
     lotNumber,
     shadeCode,
     weight,
+    boxId,
     labelWidth = 812,
     labelHeight = 400,
     xOffset = 0,
@@ -993,71 +994,94 @@ export const generateZPLCone = (
     zpl += `^CI28\n`;
   }
 
-  // PORTRAIT NARROW LABEL (e.g. 50x70mm)
+  // PORTRAIT NARROW LABEL (e.g. 50x70mm): QR on top, details below, all vertically centered
   if (labelWidth < 500 && labelHeight >= 500) {
+    const qrW = qrCodeSize * 30;
+    const gap = 20; // Increased gap
+
+    // Total height of details block with more generous spacing to prevent overlap
+    const boxIdH = boxId ? boxIdFontSize + 12 : 0;
+    const supplierH = supplierFontSize + 12;
+    const yarnH = (yarnFontSize + 8) * 2;
+    const lotShadeH = shadeLotFontSize + 5;
+
+    const detailsHeight = boxIdH + supplierH + yarnH + lotShadeH;
+    const totalBlockHeight = qrW + gap + detailsHeight;
+
+    // Moved up by 40 dots to align higher as requested
+    const blockStartY = yOffset + Math.max(labelMargin, Math.floor((labelHeight - totalBlockHeight) / 2)) - 40;
+
     if (options.orientation === 'vertical') {
-      // VERTICAL ROTATED LAYOUT
-      const rowLen = labelHeight - (labelMargin * 2);
-      let curX = 50;
+      // ... (existing vertical logic)
+      const rowLen = labelHeight;
       const step = 45;
+      let curX = 40;
 
-      // 0. Box ID (Rotated)
       if (boxId) {
-        zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${boxIdFontSize},${boxIdFontSize}^FB${rowLen},1,0,C^FDBox ID: ${boxId}^FS\n`;
-        curX += boxIdFontSize + 2;
+        zpl += `^FO${curX},${yOffset}^A0R,${boxIdFontSize},${boxIdFontSize}^FB${rowLen},1,0,C^FDBox ID: ${boxId}^FS\n`;
+        curX += step;
       }
 
-      // 1. Yarn Name (Rotated)
-      if (yarnName) {
-        const nameLines = wrapText(yarnName, 32);
-        for (const line of nameLines.slice(0, 2)) {
-          zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${yarnFontSize},${yarnFontSize}^FB${rowLen},1,0,C^FD${line}^FS\n`;
-          curX += yarnFontSize + 2;
-        }
-      }
+      zpl += `^FO${curX},${yOffset}^A0R,${supplierFontSize},${supplierFontSize}^FB${rowLen},2,0,C^FD${(supplierName || '-').substring(0, 30)}^FS\n`;
+      curX += step + 5;
 
-      // 2. Details (Rotated)
-      zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${supplierFontSize},${supplierFontSize}^FB${rowLen},1,0,C^FDSupplier: ${(supplierName || '-').substring(0, 30)}^FS\n`;
-      curX += supplierFontSize + 5;
-      zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${detailsFontSize},${detailsFontSize}^FB${rowLen},1,0,C^FDPO: ${poNumber || '-'}^FS\n`;
-      curX += detailsFontSize + 5;
+      zpl += `^FO${curX},${yOffset}^A0R,${yarnFontSize},${yarnFontSize}^FB${rowLen},2,0,C^FDYarn: ${(yarnName || '-').substring(0, 34)}^FS\n`;
+      curX += step + 10;
+
       const lotShade = `L: ${lotNumber || '-'} | S: ${shadeCode || '-'}`;
-      zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,C^FD${lotShade}^FS\n`;
+      zpl += `^FO${curX},${yOffset}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,C^FD${lotShade}^FS\n`;
 
-      // 3. QR Code (Bottom Rotated)
-      const qWidth = qrCodeSize * 30;
-      zpl += `^FO${labelWidth - qWidth - 30},${yOffset + labelHeight - qWidth - 30}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
+      const qrYPos = yOffset + Math.max(0, Math.floor((labelHeight - qrW) / 2));
+      zpl += `^FO${labelWidth - qrW - 30},${qrYPos}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
 
       if (isStandalone) zpl += `^XZ\n`;
       return zpl;
     }
 
+    // HORIZONTAL: QR on top, details below, all vertically centered
     const contentWidth = labelWidth - (labelMargin * 2);
-    let curY = yOffset + 20;
+    let curY = blockStartY;
 
-    // Box ID (Horizontal)
+    // 0. QR Code at top (centered)
+    zpl += `^FO${Math.max(0, Math.floor((labelWidth - qrW) / 2))},${curY}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
+    curY += qrW + gap;
+
+    // 1. Box ID - wrap if long
     if (boxId) {
-      zpl += `^FO${labelMargin},${curY}^A0N,${boxIdFontSize},${boxIdFontSize}^FB${contentWidth},1,0,C^FDBox ID: ${boxId}^FS\n`;
-      curY += boxIdFontSize + 2;
+      const boxIdLabel = `Box ID: ${boxId}`;
+      const boxIdLines = wrapText(boxIdLabel, 26); // Increased for 20px font
+      for (const line of boxIdLines.slice(0, 3)) {
+        zpl += `^FO${labelMargin},${curY}^A0N,${boxIdFontSize},${boxIdFontSize}^FB${contentWidth},1,0,C^FD${line}^FS\n`;
+        curY += boxIdFontSize + 8;
+      }
+      curY += 4; // Extra gap
     }
 
+    // 2. Supplier - wrap if long
+    const supplierLabel = `Supplier: ${supplierName || '-'}`;
+    const supplierLines = wrapText(supplierLabel, 26);
+    for (const line of supplierLines.slice(0, 2)) {
+      zpl += `^FO${labelMargin},${curY}^A0N,${supplierFontSize},${supplierFontSize}^FB${contentWidth},1,0,C^FD${line}^FS\n`;
+      curY += supplierFontSize + 8;
+    }
+    curY += 6; // Extra gap
+
+    // 3. Yarn - Allow up to 4 lines to ensure full name is shown
     if (yarnName) {
-      const nameLines = wrapText(yarnName, 22);
-      for (const line of nameLines.slice(0, 2)) {
+      const yarnPrefix = "Yarn: ";
+      const fullName = yarnPrefix + yarnName;
+      const nameLines = wrapText(fullName, 26);
+      // Increased from slice(0, 2) to slice(0, 4) to show full yarn details
+      for (const line of nameLines.slice(0, 4)) {
         zpl += `^FO${labelMargin},${curY}^A0N,${yarnFontSize},${yarnFontSize}^FB${contentWidth},1,0,C^FD${line}^FS\n`;
-        curY += yarnFontSize + 2;
+        curY += yarnFontSize + 8;
       }
     }
+    curY += 4; // Extra gap
 
-    zpl += `^FO${labelMargin},${curY}^A0N,${supplierFontSize},${supplierFontSize}^FB${contentWidth},1,0,C^FDSupplier: ${(supplierName || '-').substring(0, 25)}^FS\n`;
-    curY += supplierFontSize + 5;
-    zpl += `^FO${labelMargin},${curY}^A0N,${detailsFontSize},${detailsFontSize}^FB${contentWidth},1,0,C^FDPO: ${poNumber || '-'}^FS\n`;
-    curY += detailsFontSize + 5;
+    // 4. Lot | Shade
     const lotShadeText = `L: ${lotNumber || '-'} | S: ${shadeCode || '-'}`;
     zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,C^FD${lotShadeText}^FS\n`;
-
-    const qrW = qrCodeSize * 30;
-    zpl += `^FO${Math.max(0, (labelWidth - qrW) / 2)},${yOffset + labelHeight - qrW - 30}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
 
     if (isStandalone) zpl += `^XZ\n`;
     return zpl;

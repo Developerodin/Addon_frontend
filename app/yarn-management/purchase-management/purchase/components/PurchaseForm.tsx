@@ -7,17 +7,18 @@ import yarnCountSizeService, { CountSize } from "@/shared/services/yarnCountSize
 import yarnCatalogService, { YarnCatalog, YarnCatalogQueryParams } from "@/shared/services/yarnCatalogService";
 import {
   downloadYarnItemsTemplate,
+  downloadYarnItemsData,
   parseYarnItemsExcelFile,
   type ParsedYarnRow,
 } from "../utils/purchaseYarnExcel";
 
-export type PurchaseOrderStatus = 
-  | 'submitted to supplier' 
-  | 'in transit' 
-  | 'delivered' 
-  | 'rejected' 
-  | 'QC pending' 
-  | 'partially delivered' 
+export type PurchaseOrderStatus =
+  | 'submitted to supplier'
+  | 'in transit'
+  | 'delivered'
+  | 'rejected'
+  | 'QC pending'
+  | 'partially delivered'
   | 'stocked'
   | 'goods received'
   | 'goods partially received'
@@ -76,6 +77,7 @@ interface SupplierYarnOption {
   displayName: string;
   searchableText: string;
   shadeCode?: string;
+  yarnTypeName?: string;
   supplierDetail: SupplierYarnDetail;
   metadataSummary?: string;
 }
@@ -96,7 +98,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const supplierYarnDetailsRef = useRef<SupplierYarnDetail[]>([]);
   const isTypingRef = useRef<Record<string, boolean>>({});
-  
+
   const [formData, setFormData] = useState<PurchaseOrderData>({
     purchaseDate: initialData.purchaseDate || new Date().toISOString().split('T')[0],
     supplierId: initialData.supplierId || "",
@@ -121,7 +123,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       suggestions: SupplierYarnOption[];
       showSuggestions: boolean;
     }> = {};
-    
+
     if (initialData.items && initialData.items.length > 0) {
       initialData.items.forEach((item) => {
         if (item.id && item.yarnName) {
@@ -133,7 +135,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         }
       });
     }
-    
+
     return initialStates;
   });
 
@@ -214,10 +216,44 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       if (Array.isArray(fromRoot) && fromRoot.length > 0) {
         return normalizeCountSizeArray(fromRoot);
       }
+      // Some APIs send single countSize as string/object instead of array
+      if (typeof fromRoot === "string" && fromRoot.trim()) {
+        return [{ id: fromRoot.trim(), name: fromRoot.trim() }];
+      }
+      if (typeof fromRoot === "object" && fromRoot !== null) {
+        const id = extractIdFromValue(fromRoot);
+        const name =
+          ((fromRoot as any)?.name as string | undefined) ||
+          ((fromRoot as any)?.label as string | undefined) ||
+          id;
+        if (id) {
+          return [{ id, name: name || id }];
+        }
+      }
       return [];
     },
-    [normalizeCountSizeArray]
+    [extractIdFromValue, normalizeCountSizeArray]
   );
+
+  const extractShadeCodeFromDetail = useCallback((detail: SupplierYarnDetail): string => {
+    const direct = (detail as any)?.shadeNumber;
+    if (typeof direct === "string" && direct.trim()) return direct.trim();
+    const altShadeCode = (detail as any)?.shadeCode;
+    if (typeof altShadeCode === "string" && altShadeCode.trim()) return altShadeCode.trim();
+    const altShade = (detail as any)?.shade;
+    if (typeof altShade === "string" && altShade.trim()) return altShade.trim();
+    const colorObj = (detail as any)?.color;
+    if (typeof colorObj === "object" && colorObj !== null) {
+      const colorShade =
+        (typeof colorObj.shadeCode === "string" && colorObj.shadeCode.trim())
+          ? colorObj.shadeCode.trim()
+          : (typeof colorObj.shadeNumber === "string" && colorObj.shadeNumber.trim())
+            ? colorObj.shadeNumber.trim()
+            : "";
+      if (colorShade) return colorShade;
+    }
+    return "";
+  }, []);
 
   // Build supplier yarn options from supplier yarn details
   const buildSupplierYarnOptions = useCallback((): SupplierYarnOption[] => {
@@ -229,24 +265,24 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     const options: SupplierYarnOption[] = yarnDetails.map((detail, index) => {
       const yarnName = detail.yarnName || (detail as any)?.yarn || (detail as any)?.name || '';
       const displayName = yarnName.trim() || `Yarn ${index + 1}`;
-      
+
       // Extract type name
-      const typeName = typeof detail.yarnType === 'string' 
-        ? detail.yarnType 
+      const typeName = typeof detail.yarnType === 'string'
+        ? detail.yarnType
         : (detail.yarnType as any)?.name || '';
-      
+
       // Extract subtype name
       const subtypeName = typeof detail.yarnsubtype === 'string'
         ? detail.yarnsubtype
         : (detail.yarnsubtype as any)?.subtype || (detail.yarnsubtype as any)?.name || '';
-      
+
       // Extract color name
       const colorName = typeof detail.color === 'string'
         ? detail.color
         : (detail.color as any)?.name || '';
-      
-      const shadeCode = detail.shadeNumber || '';
-      
+
+      const shadeCode = extractShadeCodeFromDetail(detail);
+
       const metadataSummary = [
         typeName,
         subtypeName,
@@ -281,13 +317,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         displayName,
         searchableText,
         shadeCode: shadeCode || undefined,
+        yarnTypeName: typeName || undefined,
         supplierDetail: detail,
         metadataSummary,
       };
     });
 
     return options;
-  }, [extractIdFromValue]);
+  }, [extractIdFromValue, extractShadeCodeFromDetail]);
 
   /** True if the given yarn name exactly matches one of the current supplier's yarn details (case-insensitive). */
   const isYarnInSupplierData = useCallback(
@@ -400,7 +437,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               .map((detail) => {
                 const subtypeId = detail.id || detail._id;
                 if (!subtypeId || !detail.subtype) return null;
-                
+
                 const countSizeIds: string[] = [];
                 if (detail.countSize && Array.isArray(detail.countSize)) {
                   detail.countSize.forEach((cs) => {
@@ -412,7 +449,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                     }
                   });
                 }
-                
+
                 return { id: subtypeId, name: detail.subtype, countSizes: countSizeIds };
               })
               .filter(Boolean) as { id: string; name: string; countSizes: string[] }[];
@@ -438,7 +475,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               suggestions: [],
               showSuggestions: false,
             });
-            
+
             // Fetch full supplier details to ensure yarnDetails are loaded
             supplierService.getSupplierById(supplier.id)
               .then((fullSupplier) => {
@@ -530,7 +567,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       const contactPerson = supplier.contactPersonName?.toLowerCase() || "";
       const email = supplier.email?.toLowerCase() || "";
       const city = supplier.city?.toLowerCase() || "";
-      
+
       return (
         brandName.includes(normalizedQuery) ||
         contactPerson.includes(normalizedQuery) ||
@@ -543,13 +580,13 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     return filtered.sort((a, b) => {
       const aBrand = a.brandName?.toLowerCase() || "";
       const bBrand = b.brandName?.toLowerCase() || "";
-      
+
       const aStartsWith = aBrand.startsWith(normalizedQuery);
       const bStartsWith = bBrand.startsWith(normalizedQuery);
-      
+
       if (aStartsWith && !bStartsWith) return -1;
       if (!aStartsWith && bStartsWith) return 1;
-      
+
       return aBrand.localeCompare(bBrand);
     }).slice(0, 10);
   }, [suppliers]);
@@ -557,7 +594,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   // Handle supplier input
   const handleSupplierInput = (value: string) => {
     const suggestions = value.trim() ? filterSuppliers(value) : [];
-    
+
     setSupplierAutocomplete({
       query: value,
       suggestions,
@@ -582,12 +619,12 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   // Select supplier suggestion
   const selectSupplierSuggestion = async (supplier: Supplier) => {
     setSelectedSupplier(supplier);
-    
+
     // Set initial state from supplier object (in case yarnDetails are already populated)
     const initialYarnDetails = supplier.yarnDetails || [];
     setSupplierYarnDetails(initialYarnDetails);
     supplierYarnDetailsRef.current = initialYarnDetails;
-    
+
     setFormData(prev => ({
       ...prev,
       supplierId: supplier.id,
@@ -609,7 +646,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     try {
       const fullSupplier = await supplierService.getSupplierById(supplier.id);
       const yarnDetails = fullSupplier.yarnDetails || [];
-      
+
       setSupplierYarnDetails(yarnDetails);
       supplierYarnDetailsRef.current = yarnDetails;
 
@@ -633,7 +670,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     // Click outside handler for autocomplete
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      
+
       // Don't close if clicking on input or within autocomplete container
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
         return;
@@ -744,7 +781,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       gst: 5,
       subTotal: 0
     };
-    
+
     setFormData(prev => ({
       ...prev,
       items: [...prev.items, newItem]
@@ -765,7 +802,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       ...prev,
       items: prev.items.filter(item => item.id !== itemId)
     }));
-    
+
     const newStates = { ...autocompleteStates };
     delete newStates[itemId];
     setAutocompleteStates(newStates);
@@ -781,30 +818,115 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     }
   };
 
+  const handleExportYarnItems = () => {
+    try {
+      const rows: ParsedYarnRow[] = formData.items.map((item) => {
+        const yarnTypeName =
+          (typeof item.selectedYarnDetail?.yarnType === "string"
+            ? item.selectedYarnDetail?.yarnType
+            : (item.selectedYarnDetail?.yarnType as any)?.name) || "";
+        return {
+          shadeCode: item.shadeCode || "",
+          countSize: item.sizeCountName || item.sizeCount || "",
+          yarnType: yarnTypeName,
+          rate: item.rate || 0,
+          quantity: item.qty || 0,
+          gst: item.gst || 0,
+          estimatedDeliveryDate: item.estimatedDeliveryDate || "",
+        };
+      });
+      downloadYarnItemsData(rows);
+      toast.success("Yarn items exported");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to export yarn items");
+    }
+  };
+
   const addItemsFromParsedRows = useCallback(
     async (rows: ParsedYarnRow[]) => {
       const options = buildSupplierYarnOptions();
       const newItems: YarnPurchaseItem[] = [];
+      const normalizeText = (value: string) =>
+        value.trim().toLowerCase().replace(/\s+/g, " ");
+      const normalizeCountToken = (value: string) =>
+        normalizeText(value).replace(/\s*\/\s*/g, "/");
+      const extractLeadingCountFromYarnName = (value: string): string => {
+        const firstPart = (value || "").split("-")[0]?.trim() || "";
+        return firstPart;
+      };
+      const getCountCandidatesForOption = (option: SupplierYarnOption): string[] => {
+        const candidates = new Set<string>();
+        const detailCountSizes = extractCountSizeOptionsFromDetail(option.supplierDetail);
+        detailCountSizes.forEach((cs) => {
+          if (cs.name) candidates.add(normalizeCountToken(cs.name));
+          if (cs.id) candidates.add(normalizeCountToken(cs.id));
+        });
+        const fromYarnName = extractLeadingCountFromYarnName(option.displayName);
+        if (fromYarnName) candidates.add(normalizeCountToken(fromYarnName));
+        return Array.from(candidates).filter(Boolean);
+      };
 
       for (const r of rows) {
         const baseAmount = r.rate * r.quantity;
         const gstAmount = (baseAmount * r.gst) / 100;
-        const searchName = r.yarnName.trim().toLowerCase();
-        const match = options.find(
-          (o) => o.displayName.trim().toLowerCase() === searchName
-        );
-        let shadeCode = "";
-        let sizeCount = "";
-        let sizeCountName = "";
+        const excelShadeCode = r.shadeCode?.trim() || "";
+        const excelCountSize = r.countSize?.trim() || "";
+        const excelYarnType = r.yarnType?.trim() || "";
+        const normalizedShadeCode = normalizeText(excelShadeCode);
+        const normalizedCountSize = normalizeCountToken(excelCountSize);
+        const normalizedYarnType = normalizeText(excelYarnType);
+
+        // Find strict match based on shade code and count size.
+        const strictMatch = options.find((o) => {
+          const optionShadeCode = normalizeText(o.shadeCode || "");
+          const shadeMatch =
+            !normalizedShadeCode || optionShadeCode === normalizedShadeCode;
+          if (!shadeMatch) return false;
+          if (normalizedYarnType) {
+            const optionYarnType = normalizeText(o.yarnTypeName || "");
+            if (!optionYarnType || optionYarnType !== normalizedYarnType) {
+              return false;
+            }
+          }
+
+          if (!normalizedCountSize) return true; // Match by shade code if count size not provided
+
+          const countCandidates = getCountCandidatesForOption(o);
+          return countCandidates.some((count) => count === normalizedCountSize);
+        });
+
+        // Fallback: if strict match fails but shade code uniquely identifies a yarn, use it.
+        // This handles cases where Excel count-size text format differs from supplier metadata.
+        const shadeMatchedOptions = options.filter((o) => {
+          const optionShadeCode = normalizeText(o.shadeCode || "");
+          if (!Boolean(normalizedShadeCode) || optionShadeCode !== normalizedShadeCode) {
+            return false;
+          }
+          if (!normalizedYarnType) return true;
+          const optionYarnType = normalizeText(o.yarnTypeName || "");
+          return optionYarnType === normalizedYarnType;
+        });
+        const match =
+          strictMatch ||
+          (shadeMatchedOptions.length === 1 ? shadeMatchedOptions[0] : undefined);
+
+        // Preserve raw Excel values so import fills Shade Code / Count Size fields.
+        let shadeCode = excelShadeCode;
+        let sizeCount = excelCountSize;
+        let sizeCountName = excelCountSize;
         let yarnId = "";
         let selectedYarnDetail: SupplierYarnDetail | undefined;
         let selectedCatalog: YarnCatalog | undefined;
         let notInSupplierData = true;
+        let yarnName = match?.displayName || "";
 
         if (match) {
           notInSupplierData = false;
           shadeCode =
-            match.shadeCode ?? match.supplierDetail?.shadeNumber ?? "";
+            match.shadeCode ??
+            extractShadeCodeFromDetail(match.supplierDetail) ??
+            "";
           selectedYarnDetail = match.supplierDetail;
           yarnId =
             match.supplierDetail?.yarnCatalogId ||
@@ -814,22 +936,38 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           const countSizes = extractCountSizeOptionsFromDetail(
             match.supplierDetail
           );
-          if (countSizes.length > 0) {
+          const countFromYarnName = extractLeadingCountFromYarnName(
+            match.displayName
+          );
+
+          // Try to find the exact count size matched from Excel
+          const matchedSize = r.countSize
+            ? countSizes.find(cs => cs.name.trim().toLowerCase() === r.countSize.trim().toLowerCase())
+            : null;
+
+          if (matchedSize) {
+            sizeCount = matchedSize.id;
+            sizeCountName = matchedSize.name || matchedSize.id;
+          } else if (countSizes.length > 0) {
             sizeCount = countSizes[0].id;
             sizeCountName = countSizes[0].name || countSizes[0].id;
+          } else if (countFromYarnName) {
+            // Many suppliers don't store countSize metadata; derive from yarnName prefix (e.g. "20/40-...")
+            sizeCount = countFromYarnName;
+            sizeCountName = countFromYarnName;
           } else {
             // Same as selectYarnSuggestion: get count size from catalog when supplier detail has none
             try {
               const catalogResponse =
                 await yarnCatalogService.getYarnCatalogs({
-                  yarnName: r.yarnName.trim(),
+                  yarnName: yarnName.trim(),
                   status: "active",
                   limit: 20,
                   page: 1,
                 });
               const exactMatch = catalogResponse.results?.find(
                 (c) =>
-                  c.yarnName?.trim().toLowerCase() === r.yarnName.trim().toLowerCase()
+                  c.yarnName?.trim().toLowerCase() === yarnName.trim().toLowerCase()
               );
               if (exactMatch) {
                 selectedCatalog = exactMatch;
@@ -850,7 +988,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
         newItems.push({
           id: `excel-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          yarnName: r.yarnName,
+          yarnName: yarnName,
           yarnId,
           sizeCount,
           sizeCountName,
@@ -1199,7 +1337,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     if (uniqueOptions.size > 0) {
       return Array.from(uniqueOptions.entries()).map(([id, name]) => ({ id, name }));
     }
-    
+
     if (item.yarnSubtypeId && item.yarnTypeId) {
       const subtypes = yarnSubtypeMap[item.yarnTypeId] || [];
       const subtype = subtypes.find(s => s.id === item.yarnSubtypeId);
@@ -1238,7 +1376,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         total: formData.total,
       },
     });
-    
+
     if (!formData.purchaseDate.trim()) {
       console.warn('[PurchaseForm] Validation failed: purchase date missing');
       toast.error("Purchase Date is required");
@@ -1254,10 +1392,25 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       toast.error("At least one yarn item is required");
       return;
     }
-    
+
     for (let i = 0; i < formData.items.length; i++) {
       const item = formData.items[i];
       console.log(`[PurchaseForm] Validating item ${i + 1}`, item);
+      const isUnmatchedItem =
+        item.notInSupplierData === true ||
+        !isYarnInSupplierData(item.yarnName || "");
+
+      if (isUnmatchedItem) {
+        console.warn(
+          `[PurchaseForm] Validation failed: yarn not matched for item ${i + 1}`,
+          { yarnName: item.yarnName, shadeCode: item.shadeCode, sizeCount: item.sizeCount }
+        );
+        toast.error(
+          `Item ${i + 1} is not matched with supplier yarn data. Please fix before submit.`
+        );
+        return;
+      }
+
       if (!item.yarnName.trim()) {
         console.warn(`[PurchaseForm] Validation failed: yarn name missing for item ${i + 1}`);
         toast.error(`Yarn Name is required for item ${i + 1}`);
@@ -1391,6 +1544,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             </button>
             <button
               type="button"
+              onClick={handleExportYarnItems}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+              disabled={formData.items.length === 0}
+            >
+              <i className="ri-download-2-line text-xs"></i>
+              Export Excel
+            </button>
+            <button
+              type="button"
               onClick={() => excelFileInputRef.current?.click()}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
               disabled={!formData.supplierId || isImportingExcel}
@@ -1453,6 +1615,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               </button>
               <button
                 type="button"
+                onClick={handleExportYarnItems}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                disabled={formData.items.length === 0}
+              >
+                <i className="ri-download-2-line"></i>
+                Export Excel
+              </button>
+              <button
+                type="button"
                 onClick={() => excelFileInputRef.current?.click()}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
                 disabled={!formData.supplierId || isImportingExcel}
@@ -1483,302 +1654,305 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                     <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[200px]">
                       Yarn Name <span className="text-red-500">*</span>
                     </th>
-                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
-                    Size <span className="text-red-500">*</span>
-                  </th>
-                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
-                    Shade Code
-                  </th>
-                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
-                    Rate (₹) <span className="text-red-500">*</span>
-                  </th>
-                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
-                    Quantity (kg) <span className="text-red-500">*</span>
-                  </th>
-                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[180px]">
-                    Est. Delivery <span className="text-red-500">*</span>
-                  </th>
-                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[100px]">
-                    GST (%) <span className="text-red-500">*</span>
-                  </th>
-                  <th className="border border-gray-300 px-2 py-1.5 text-center text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[80px]">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {formData.items.map((item, index) => {
-                  // Get autocomplete state, defaulting to item's yarnName if state doesn't exist
-                  // This ensures existing values are displayed without triggering suggestions
-                  const autocompleteState = autocompleteStates[item.id] || { 
-                    query: item.yarnName || "", 
-                    suggestions: [], 
-                    showSuggestions: false 
-                  };
-                  const availableCountSizes = getAvailableCountSizes(item);
-                  // Show "not in supplier data" when supplier is selected, item has yarn name, but it's not in supplier's yarn list
-                  const showNotInSupplierError =
-                    Boolean(formData.supplierId) &&
-                    Boolean((item.yarnName || "").trim()) &&
-                    !isYarnInSupplierData(item.yarnName || "");
+                    <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
+                      Size <span className="text-red-500">*</span>
+                    </th>
+                    <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
+                      Shade Code
+                    </th>
+                    <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
+                      Rate (₹) <span className="text-red-500">*</span>
+                    </th>
+                    <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[120px]">
+                      Quantity (kg) <span className="text-red-500">*</span>
+                    </th>
+                    <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[180px]">
+                      Est. Delivery <span className="text-red-500">*</span>
+                    </th>
+                    <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[100px]">
+                      GST (%) <span className="text-red-500">*</span>
+                    </th>
+                    <th className="border border-gray-300 px-2 py-1.5 text-center text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[80px]">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {formData.items.map((item, index) => {
+                    // Get autocomplete state, defaulting to item's yarnName if state doesn't exist
+                    // This ensures existing values are displayed without triggering suggestions
+                    const autocompleteState = autocompleteStates[item.id] || {
+                      query: item.yarnName || "",
+                      suggestions: [],
+                      showSuggestions: false
+                    };
+                    const availableCountSizes = getAvailableCountSizes(item);
+                    // Highlight unmatched imported rows and manual invalid yarn names.
+                    const showNotMatchedError =
+                      Boolean(formData.supplierId) &&
+                      (
+                        item.notInSupplierData === true ||
+                        (Boolean((item.yarnName || "").trim()) &&
+                          !isYarnInSupplierData(item.yarnName || ""))
+                      );
 
-                  return (
-                    <tr
-                      key={item.id}
-                      className={`hover:bg-gray-50 ${showNotInSupplierError ? "border-2 border-red-400 bg-red-50/50" : ""}`}
-                    >
-                      {/* Yarn Name with Autocomplete - td z-index when dropdown open so list stacks above following rows */}
-                      <td
-                        className="border border-gray-300 px-2 py-1.5"
-                        style={{
-                          position: 'relative',
-                          overflow: 'visible',
-                          zIndex: autocompleteState.showSuggestions && autocompleteState.suggestions.length > 0 ? 50 : undefined,
-                        }}
+                    return (
+                      <tr
+                        key={item.id}
+                        className={`hover:bg-gray-50 ${showNotMatchedError ? "border-2 border-red-400 bg-red-50/50" : ""}`}
                       >
-                        <div className="relative" ref={el => { autocompleteRefs.current[item.id] = el; }}>
-                          {showNotInSupplierError && (
-                            <p className="text-[10px] text-red-600 font-medium mb-1">Not in supplier data</p>
-                          )}
-                          <input
-                            type="text"
-                            value={autocompleteState.query !== undefined ? autocompleteState.query : (item.yarnName || "")}
-                            onChange={(e) => {
-                              handleYarnNameInput(item.id, e.target.value);
-                            }}
-                            onFocus={() => {
-                              // Mark as typing to prevent click outside from closing
-                              isTypingRef.current[item.id] = true;
-                              
-                              // Similar to supplier autocomplete - show suggestions if they exist
-                              // Trigger input handler if there's a value to refresh suggestions
-                              const currentValue = autocompleteState.query !== undefined ? autocompleteState.query : item.yarnName;
-                              if (currentValue && selectedSupplier) {
-                                handleYarnNameInput(item.id, currentValue);
-                              } else if (autocompleteState.suggestions.length > 0) {
-                                setAutocompleteStates(prev => ({
-                                  ...prev,
-                                  [item.id]: { ...prev[item.id], showSuggestions: true }
-                                }));
-                              } else if (selectedSupplier && supplierYarnDetails.length > 0) {
-                                // If input is empty but supplier is selected, show all suggestions on focus
-                                // This helps user discover available yarns
-                                const allOptions = buildSupplierYarnOptions();
-                                if (allOptions.length > 0) {
+                        {/* Yarn Name with Autocomplete - td z-index when dropdown open so list stacks above following rows */}
+                        <td
+                          className="border border-gray-300 px-2 py-1.5"
+                          style={{
+                            position: 'relative',
+                            overflow: 'visible',
+                            zIndex: autocompleteState.showSuggestions && autocompleteState.suggestions.length > 0 ? 50 : undefined,
+                          }}
+                        >
+                          <div className="relative" ref={el => { autocompleteRefs.current[item.id] = el; }}>
+                            {showNotMatchedError && (
+                              <p className="text-[10px] text-red-600 font-medium mb-1">Not matched</p>
+                            )}
+                            <input
+                              type="text"
+                              value={autocompleteState.query !== undefined ? autocompleteState.query : (item.yarnName || "")}
+                              onChange={(e) => {
+                                handleYarnNameInput(item.id, e.target.value);
+                              }}
+                              onFocus={() => {
+                                // Mark as typing to prevent click outside from closing
+                                isTypingRef.current[item.id] = true;
+
+                                // Similar to supplier autocomplete - show suggestions if they exist
+                                // Trigger input handler if there's a value to refresh suggestions
+                                const currentValue = autocompleteState.query !== undefined ? autocompleteState.query : item.yarnName;
+                                if (currentValue && selectedSupplier) {
+                                  handleYarnNameInput(item.id, currentValue);
+                                } else if (autocompleteState.suggestions.length > 0) {
                                   setAutocompleteStates(prev => ({
                                     ...prev,
-                                    [item.id]: {
-                                      query: currentValue || "",
-                                      suggestions: allOptions.slice(0, 20), // Show first 20 options
-                                      showSuggestions: true
-                                    }
+                                    [item.id]: { ...prev[item.id], showSuggestions: true }
                                   }));
+                                } else if (selectedSupplier && supplierYarnDetails.length > 0) {
+                                  // If input is empty but supplier is selected, show all suggestions on focus
+                                  // This helps user discover available yarns
+                                  const allOptions = buildSupplierYarnOptions();
+                                  if (allOptions.length > 0) {
+                                    setAutocompleteStates(prev => ({
+                                      ...prev,
+                                      [item.id]: {
+                                        query: currentValue || "",
+                                        suggestions: allOptions.slice(0, 20), // Show first 20 options
+                                        showSuggestions: true
+                                      }
+                                    }));
+                                  }
                                 }
-                              }
-                              
-                              // Clear typing flag after a delay
-                              setTimeout(() => {
-                                isTypingRef.current[item.id] = false;
-                              }, 100);
-                            }}
-                            onMouseDown={(e) => {
-                              // Prevent click outside handler from closing dropdown when clicking on input
-                              e.stopPropagation();
-                            }}
-                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
-                            placeholder="Type to search..."
-                            required
-                          />
-                          {autocompleteState.showSuggestions && autocompleteState.suggestions.length > 0 && (
-                            <div 
-                              className="autocomplete-dropdown absolute z-[100] w-full mt-1 rounded-lg shadow-xl max-h-60 overflow-auto border border-gray-200 bg-white"
-                              style={{ 
-                                position: 'absolute', 
-                                top: '100%', 
-                                left: 0, 
-                                right: 0,
-                                marginTop: 4,
-                                boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+
+                                // Clear typing flag after a delay
+                                setTimeout(() => {
+                                  isTypingRef.current[item.id] = false;
+                                }, 100);
                               }}
                               onMouseDown={(e) => {
-                                // Prevent click outside handler from closing when clicking on dropdown
+                                // Prevent click outside handler from closing dropdown when clicking on input
                                 e.stopPropagation();
                               }}
-                            >
-                              {autocompleteState.suggestions.map((option, idx) => {
-                                const displayName = option.displayName;
-                                const shadeCode = option.shadeCode;
-                                const metadata = option.metadataSummary;
+                              className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
+                              placeholder="Type to search..."
+                              required
+                            />
+                            {autocompleteState.showSuggestions && autocompleteState.suggestions.length > 0 && (
+                              <div
+                                className="autocomplete-dropdown absolute z-[100] w-full mt-1 rounded-lg shadow-xl max-h-60 overflow-auto border border-gray-200 bg-white"
+                                style={{
+                                  position: 'absolute',
+                                  top: '100%',
+                                  left: 0,
+                                  right: 0,
+                                  marginTop: 4,
+                                  boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+                                }}
+                                onMouseDown={(e) => {
+                                  // Prevent click outside handler from closing when clicking on dropdown
+                                  e.stopPropagation();
+                                }}
+                              >
+                                {autocompleteState.suggestions.map((option, idx) => {
+                                  const displayName = option.displayName;
+                                  const shadeCode = option.shadeCode;
+                                  const metadata = option.metadataSummary;
 
-                                return (
-                                  <div
-                                    key={idx}
-                                    onClick={() => selectYarnSuggestion(item.id, option)}
-                                    className="px-3 py-1.5 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
-                                  >
-                                    <div className="text-xs font-medium text-gray-900">{displayName}</div>
-                                    {(metadata || shadeCode) && (
-                                      <div className="text-[10px] text-gray-500">
-                                        {metadata && <span>{metadata}</span>}
-                                        {shadeCode && <span className={metadata ? "ml-2" : ""}>Shade: {shadeCode}</span>}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </td>
+                                  return (
+                                    <div
+                                      key={idx}
+                                      onClick={() => selectYarnSuggestion(item.id, option)}
+                                      className="px-3 py-1.5 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                    >
+                                      <div className="text-xs font-medium text-gray-900">{displayName}</div>
+                                      {(metadata || shadeCode) && (
+                                        <div className="text-[10px] text-gray-500">
+                                          {metadata && <span>{metadata}</span>}
+                                          {shadeCode && <span className={metadata ? "ml-2" : ""}>Shade: {shadeCode}</span>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </td>
 
-                      {/* Size/Count */}
-                      <td className="border border-gray-300 px-2 py-1.5">
-                        <select
-                          value={item.sizeCount}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const selectedOption = availableCountSizes.find(cs => cs.id === value);
-                            updateItem(item.id, { 
-                              sizeCount: value, 
-                              sizeCountName: selectedOption?.name || value 
-                            });
-                          }}
-                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
-                          required
-                          disabled={availableCountSizes.length === 0}
-                        >
-                          <option value="">Select</option>
-                          {availableCountSizes.map(cs => (
-                            <option key={cs.id} value={cs.id}>
-                              {cs.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-
-                      {/* Shade Code */}
-                      <td className="border border-gray-300 px-2 py-1.5">
-                        <input
-                          type="text"
-                          value={item.shadeCode}
-                          onChange={(e) => updateItem(item.id, { shadeCode: e.target.value })}
-                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
-                          placeholder="Shade code"
-                        />
-                      </td>
-
-                      {/* Rate - decimal allowed */}
-                      <td className="border border-gray-300 px-2 py-1.5">
-                        <input
-                          type="text"
-                          value={item.displayRate !== undefined ? item.displayRate : (item.rate === 0 ? "" : String(item.rate))}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                              const keepRate = value === "" || value === "." || value.endsWith(".");
+                        {/* Size/Count */}
+                        <td className="border border-gray-300 px-2 py-1.5">
+                          <select
+                            value={item.sizeCount}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              const selectedOption = availableCountSizes.find(cs => cs.id === value);
                               updateItem(item.id, {
-                                displayRate: value,
-                                rate: keepRate ? item.rate : (parseFloat(value) || 0),
+                                sizeCount: value,
+                                sizeCountName: selectedOption?.name || value
                               });
-                            }
-                          }}
-                          onBlur={() => {
-                            const raw = item.displayRate ?? String(item.rate);
-                            const num = parseFloat(raw);
-                            updateItem(item.id, { rate: isNaN(num) ? 0 : num, displayRate: undefined });
-                          }}
-                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
-                          placeholder="0.00"
-                          required
-                        />
-                      </td>
+                            }}
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
+                            required
+                            disabled={availableCountSizes.length === 0}
+                          >
+                            <option value="">Select</option>
+                            {availableCountSizes.map(cs => (
+                              <option key={cs.id} value={cs.id}>
+                                {cs.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
 
-                      {/* Quantity - decimal allowed */}
-                      <td className="border border-gray-300 px-2 py-1.5">
-                        <input
-                          type="text"
-                          value={item.displayQty !== undefined ? item.displayQty : (item.qty === 0 ? "" : String(item.qty))}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                              const keepQty = value === "" || value === "." || value.endsWith(".");
-                              updateItem(item.id, {
-                                displayQty: value,
-                                qty: keepQty ? item.qty : (parseFloat(value) || 0),
-                              });
-                            }
-                          }}
-                          onBlur={() => {
-                            const raw = item.displayQty ?? String(item.qty);
-                            const num = parseFloat(raw);
-                            updateItem(item.id, { qty: isNaN(num) ? 0 : num, displayQty: undefined });
-                          }}
-                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
-                          placeholder="0.00"
-                          required
-                        />
-                      </td>
+                        {/* Shade Code */}
+                        <td className="border border-gray-300 px-2 py-1.5">
+                          <input
+                            type="text"
+                            value={item.shadeCode}
+                            onChange={(e) => updateItem(item.id, { shadeCode: e.target.value })}
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
+                            placeholder="Shade code"
+                          />
+                        </td>
 
-                      {/* Estimated Delivery Date */}
-                      <td className="border border-gray-300 px-2 py-1.5">
-                        <input
-                          type="date"
-                          value={item.estimatedDeliveryDate}
-                          onChange={(e) => updateItem(item.id, { estimatedDeliveryDate: e.target.value })}
-                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
-                          required
-                        />
-                      </td>
-
-                      {/* GST - decimal allowed (0–100) */}
-                      <td className="border border-gray-300 px-2 py-1.5">
-                        <input
-                          type="text"
-                          value={item.displayGst !== undefined ? item.displayGst : (item.gst === 0 ? "" : String(item.gst))}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                              const numValue = parseFloat(value);
-                              const inRange = value === "" || value === "." || value.endsWith(".") || (!isNaN(numValue) && numValue >= 0 && numValue <= 100);
-                              if (inRange) {
-                                const keepGst = value === "" || value === "." || value.endsWith(".");
+                        {/* Rate - decimal allowed */}
+                        <td className="border border-gray-300 px-2 py-1.5">
+                          <input
+                            type="text"
+                            value={item.displayRate !== undefined ? item.displayRate : (item.rate === 0 ? "" : String(item.rate))}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                const keepRate = value === "" || value === "." || value.endsWith(".");
                                 updateItem(item.id, {
-                                  displayGst: value,
-                                  gst: keepGst ? item.gst : (isNaN(numValue) ? 0 : numValue),
+                                  displayRate: value,
+                                  rate: keepRate ? item.rate : (parseFloat(value) || 0),
                                 });
                               }
-                            }
-                          }}
-                          onBlur={() => {
-                            const raw = item.displayGst ?? String(item.gst);
-                            const num = parseFloat(raw);
-                            let gst = isNaN(num) ? 0 : num;
-                            if (gst > 100) gst = 100;
-                            if (gst < 0) gst = 0;
-                            updateItem(item.id, { gst, displayGst: undefined });
-                          }}
-                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
-                          placeholder="0.00"
-                          required
-                        />
-                      </td>
+                            }}
+                            onBlur={() => {
+                              const raw = item.displayRate ?? String(item.rate);
+                              const num = parseFloat(raw);
+                              updateItem(item.id, { rate: isNaN(num) ? 0 : num, displayRate: undefined });
+                            }}
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
+                            placeholder="0.00"
+                            required
+                          />
+                        </td>
 
-                      {/* Action - Delete */}
-                      <td className="border border-gray-300 px-2 py-1.5 text-center">
-                        <button
-                          type="button"
-                          onClick={() => removeItem(item.id)}
-                          className="text-red-600 hover:text-red-800 hover:bg-red-50 p-0.5 rounded transition-colors"
-                          title="Remove Item"
-                        >
-                          <i className="ri-delete-bin-line text-xs"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {/* Quantity - decimal allowed */}
+                        <td className="border border-gray-300 px-2 py-1.5">
+                          <input
+                            type="text"
+                            value={item.displayQty !== undefined ? item.displayQty : (item.qty === 0 ? "" : String(item.qty))}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                const keepQty = value === "" || value === "." || value.endsWith(".");
+                                updateItem(item.id, {
+                                  displayQty: value,
+                                  qty: keepQty ? item.qty : (parseFloat(value) || 0),
+                                });
+                              }
+                            }}
+                            onBlur={() => {
+                              const raw = item.displayQty ?? String(item.qty);
+                              const num = parseFloat(raw);
+                              updateItem(item.id, { qty: isNaN(num) ? 0 : num, displayQty: undefined });
+                            }}
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
+                            placeholder="0.00"
+                            required
+                          />
+                        </td>
+
+                        {/* Estimated Delivery Date */}
+                        <td className="border border-gray-300 px-2 py-1.5">
+                          <input
+                            type="date"
+                            value={item.estimatedDeliveryDate}
+                            onChange={(e) => updateItem(item.id, { estimatedDeliveryDate: e.target.value })}
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
+                            required
+                          />
+                        </td>
+
+                        {/* GST - decimal allowed (0–100) */}
+                        <td className="border border-gray-300 px-2 py-1.5">
+                          <input
+                            type="text"
+                            value={item.displayGst !== undefined ? item.displayGst : (item.gst === 0 ? "" : String(item.gst))}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                const numValue = parseFloat(value);
+                                const inRange = value === "" || value === "." || value.endsWith(".") || (!isNaN(numValue) && numValue >= 0 && numValue <= 100);
+                                if (inRange) {
+                                  const keepGst = value === "" || value === "." || value.endsWith(".");
+                                  updateItem(item.id, {
+                                    displayGst: value,
+                                    gst: keepGst ? item.gst : (isNaN(numValue) ? 0 : numValue),
+                                  });
+                                }
+                              }
+                            }}
+                            onBlur={() => {
+                              const raw = item.displayGst ?? String(item.gst);
+                              const num = parseFloat(raw);
+                              let gst = isNaN(num) ? 0 : num;
+                              if (gst > 100) gst = 100;
+                              if (gst < 0) gst = 0;
+                              updateItem(item.id, { gst, displayGst: undefined });
+                            }}
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
+                            placeholder="0.00"
+                            required
+                          />
+                        </td>
+
+                        {/* Action - Delete */}
+                        <td className="border border-gray-300 px-2 py-1.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            className="text-red-600 hover:text-red-800 hover:bg-red-50 p-0.5 rounded transition-colors"
+                            title="Remove Item"
+                          >
+                            <i className="ri-delete-bin-line text-xs"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

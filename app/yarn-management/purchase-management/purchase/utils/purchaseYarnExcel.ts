@@ -1,14 +1,16 @@
 /**
  * Excel template and import for purchase order yarn items.
- * Columns: Yarn Name, Rate (empty in template), Quantity (empty), GST (5), Estimated Delivery Date (1 month forward).
- * Shade code is filled automatically on frontend from supplier data after import.
+ * Columns: Shade Code, Count size, Yarn Type, Rate (empty in template), Quantity (empty), GST (5), Estimated Delivery Date (1 month forward).
+ * Yarn Name is mapped automatically from shade code + count size + yarn type after import.
  */
 
 import * as XLSX from "xlsx";
 
 export const YARN_ITEMS_TEMPLATE_SHEET = "Yarn Items";
 const TEMPLATE_HEADERS = [
-  "Yarn Name",
+  "Shade Code",
+  "Count size",
+  "Yarn Type",
   "Rate",
   "Quantity",
   "GST (%)",
@@ -16,7 +18,9 @@ const TEMPLATE_HEADERS = [
 ];
 
 export interface ParsedYarnRow {
-  yarnName: string;
+  shadeCode: string;
+  countSize: string;
+  yarnType: string;
   rate: number;
   quantity: number;
   gst: number;
@@ -32,12 +36,14 @@ function defaultEstDelivery(): string {
 
 /**
  * Build and download the yarn items Excel template.
- * Yarn Name: user fills. Rate & Quantity: empty. GST 5 and Est. Delivery (1 month forward) pre-filled.
+ * Shade Code and Count size: user fills. Rate & Quantity: empty. GST 5 and Est. Delivery (1 month forward) pre-filled.
  */
 export function downloadYarnItemsTemplate(): void {
   const wb = XLSX.utils.book_new();
   const sampleRow = [
-    "e.g. Cotton 40s",
+    "e.g. SC-001",
+    "e.g. 40s",
+    "e.g. Nylon",
     "", // Rate - empty
     "", // Quantity - empty
     5, // GST (%)
@@ -46,7 +52,9 @@ export function downloadYarnItemsTemplate(): void {
   const data = [TEMPLATE_HEADERS, sampleRow];
   const ws = XLSX.utils.aoa_to_sheet(data);
   ws["!cols"] = [
-    { wch: 24 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 14 },
     { wch: 10 },
     { wch: 10 },
     { wch: 10 },
@@ -54,6 +62,40 @@ export function downloadYarnItemsTemplate(): void {
   ];
   XLSX.utils.book_append_sheet(wb, ws, YARN_ITEMS_TEMPLATE_SHEET);
   XLSX.writeFile(wb, "purchase_yarn_items_template.xlsx");
+}
+
+/**
+ * Export current yarn item rows so user can correct and re-import.
+ */
+export function downloadYarnItemsData(
+  rows: ParsedYarnRow[],
+  filename = "purchase_yarn_items_export.xlsx"
+): void {
+  const wb = XLSX.utils.book_new();
+  const data = [
+    TEMPLATE_HEADERS,
+    ...rows.map((row) => [
+      row.shadeCode || "",
+      row.countSize || "",
+      row.yarnType || "",
+      row.rate ?? "",
+      row.quantity ?? "",
+      row.gst ?? 5,
+      row.estimatedDeliveryDate || defaultEstDelivery(),
+    ]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws["!cols"] = [
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 14 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 22 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, YARN_ITEMS_TEMPLATE_SHEET);
+  XLSX.writeFile(wb, filename);
 }
 
 /**
@@ -141,9 +183,6 @@ export function parseYarnItemsExcelFile(
         }
 
         const rows: ParsedYarnRow[] = [];
-        const headers = Object.keys(json[0] as Record<string, unknown>).map(
-          (h) => h.trim().toLowerCase()
-        );
         const get = (row: Record<string, unknown>, keys: string[]) => {
           const key = Object.keys(row).find(
             (k) => keys.includes(k.trim().toLowerCase())
@@ -153,8 +192,14 @@ export function parseYarnItemsExcelFile(
 
         for (let i = 0; i < json.length; i++) {
           const row = json[i] as Record<string, unknown>;
-          const yarnName = str(
-            get(row, ["yarn name", "yarnname", "yarn_name"])
+          const shadeCode = str(
+            get(row, ["shade code", "shadecode", "shade_code", "shade"])
+          );
+          const countSize = str(
+            get(row, ["count size", "countsize", "count_size", "count", "size"])
+          );
+          const yarnType = str(
+            get(row, ["yarn type", "yarntype", "yarn_type", "type"])
           );
           const rate = num(get(row, ["rate", "rate (₹)"]));
           const quantity = num(
@@ -170,8 +215,8 @@ export function parseYarnItemsExcelFile(
             ])
           );
 
-          if (!yarnName) {
-            errors.push(`Row ${i + 2}: Yarn Name is required.`);
+          if (!shadeCode && !countSize) {
+            errors.push(`Row ${i + 2}: Shade Code or Count size is required.`);
             continue;
           }
           if (!estimatedDeliveryDate) {
@@ -182,7 +227,9 @@ export function parseYarnItemsExcelFile(
           }
 
           rows.push({
-            yarnName,
+            shadeCode,
+            countSize,
+            yarnType,
             rate,
             quantity,
             gst: gst >= 0 ? gst : 5,
