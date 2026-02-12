@@ -992,7 +992,7 @@ const AddOrderPage = () => {
               <div>
                 <h3 className="text-sm font-bold text-gray-800">Select Machine</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Only machines with an active needle (from Catalog → Needle Configuration) are shown.
+                  Only active machines with an active needle (Catalog → Needle Configuration) are shown.
                 </p>
                 {machineModalArticleIndex !== null &&
                   formData.articles[machineModalArticleIndex]?.needleSizeFromProduct && (
@@ -1042,8 +1042,9 @@ const AddOrderPage = () => {
                     </div>
                   );
                 }
-                // Only show machines whose *active* needle (from Needle Configuration) matches the item's needle
+                // Only show *active* machines whose active needle (from Needle Configuration) matches the item's needle
                 const machinesForNeedle = machines.filter((m) => {
+                  if ((m.status || '').toString().toLowerCase() !== 'active') return false;
                   const id = m._id ?? m.id;
                   const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) ?? '' : '';
                   if ((activeNeedle || '').trim() !== needleSize) return false;
@@ -1065,40 +1066,45 @@ const AddOrderPage = () => {
                 return filtered.length === 0 ? (
                   <div className="text-center py-8 px-4">
                     <p className="text-red-600 text-sm font-medium">
-                      No machine found for this item. Please check needle in item and needle available in machine.
+                      No active machine found for this item. Please check needle in item and needle available in machine.
                     </p>
                   </div>
                 ) : (
-                  <ul className="divide-y divide-gray-200 max-h-[50vh] overflow-y-auto">
-                    {filtered.map((machine) => {
-                      const id = machine._id || machine.id;
-                      const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) : '';
-                      return (
-                        <li key={id}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleArticleChange(machineModalArticleIndex, 'machineId', id ?? '');
-                              setShowMachineModal(false);
-                              setMachineModalArticleIndex(null);
-                              setMachineSearchQuery('');
-                            }}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex justify-between items-start gap-2"
-                          >
-                            <div className="min-w-0">
-                              <span className="font-medium">{machine.machineCode}</span>
-                              {activeNeedle ? (
-                                <span className="ml-2 text-xs text-emerald-600 font-medium">Needle: {activeNeedle}</span>
-                              ) : null}
-                            </div>
-                            <span className="text-gray-500 text-xs truncate shrink-0">
-                              {machine.machineNumber} · {machine.model} · {machine.floor}
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <div className="max-h-[50vh] overflow-y-auto border border-gray-200 rounded">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-700">Machine</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-700">Active Needle</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {filtered.map((machine) => {
+                          const id = machine._id || machine.id;
+                          const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) : '';
+                          return (
+                            <tr key={id}>
+                              <td className="px-3 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleArticleChange(machineModalArticleIndex, 'machineId', id ?? '');
+                                    setShowMachineModal(false);
+                                    setMachineModalArticleIndex(null);
+                                    setMachineSearchQuery('');
+                                  }}
+                                  className="w-full text-left font-medium text-purple-600 hover:underline"
+                                >
+                                  {machine.machineCode}
+                                </button>
+                              </td>
+                              <td className="px-3 py-2 text-gray-700">{activeNeedle || '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 );
               })()}
             </div>

@@ -517,41 +517,41 @@ const ProductionSupervisorPage = () => {
                   ) : (
                     <>
                       <div className="overflow-x-auto">
-                        <table className="w-full border-collapse border border-gray-200">
+                        <table className="w-full border-collapse border border-gray-300 [border-spacing:0]">
                           <thead>
-                            <tr className="bg-gray-50/30">
-                              <th className="pl-[10px] pr-1 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Article</th>
-                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">PO NO</th>
-                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Qty</th>
-                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
-                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Progress</th>
-                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Priority</th>
+                            <tr className="bg-gray-50/80">
+                              <th className="pl-[10px] pr-1 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Article</th>
+                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">PO NO</th>
+                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Qty</th>
+                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Status</th>
+                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Progress</th>
+                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Priority</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {articleViewResults.map((row) =>
+                            {articleViewResults.map((row, rowIndex) =>
                               row.orders.length === 0 ? (
                                 <tr key={row.factoryCode} className="hover:bg-gray-50/50">
-                                  <td className="pl-[10px] pr-1 py-2.5 text-[12px] font-medium text-gray-900 border border-gray-200">{row.articleNumber || row.factoryCode}</td>
-                                  <td className="px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200">—</td>
-                                  <td className="px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200">—</td>
-                                  <td className="px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200">—</td>
-                                  <td className="px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200">—</td>
-                                  <td className="px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200">—</td>
+                                  <td className={`pl-[10px] pr-1 py-2.5 text-[12px] font-medium text-gray-900 border border-gray-300 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>{row.articleNumber || row.factoryCode}</td>
+                                  <td className={`px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-300 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>—</td>
+                                  <td className={`px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-300 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>—</td>
+                                  <td className={`px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-300 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>—</td>
+                                  <td className={`px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-300 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>—</td>
+                                  <td className={`px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-300 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>—</td>
                                 </tr>
                               ) : (
                                 row.orders.map((ord, idx) => (
                                   <tr key={`${row.factoryCode}-${ord.articleId}-${ord.orderId ?? idx}`} className="hover:bg-gray-50/50">
                                     {idx === 0 && (
-                                      <td rowSpan={row.orders.length} className="pl-[10px] pr-1 py-2.5 text-[12px] font-medium text-gray-900 align-top border-r border-gray-200 bg-gray-50/50">{row.articleNumber || row.factoryCode}</td>
+                                      <td rowSpan={row.orders.length} className={`pl-[10px] pr-1 py-2.5 text-[12px] font-medium text-gray-900 align-top border border-gray-300 border-r-2 border-r-gray-400 bg-gray-50/70 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>{row.articleNumber || row.factoryCode}</td>
                                     )}
-                                    <td className="px-1.5 py-2.5 text-[12px] text-gray-700 border border-gray-200">{ord.orderNumber ?? '—'}</td>
-                                    <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{ord.plannedQuantity != null ? ord.plannedQuantity.toLocaleString() : '—'}</td>
-                                    <td className="px-1.5 py-2.5 border border-gray-200">
+                                    <td className={`px-1.5 py-2.5 text-[12px] text-gray-700 border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>{ord.orderNumber ?? '—'}</td>
+                                    <td className={`px-1.5 py-2.5 text-[12px] border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>{ord.plannedQuantity != null ? ord.plannedQuantity.toLocaleString() : '—'}</td>
+                                    <td className={`px-1.5 py-2.5 border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(ord.orderStatus ?? ord.status ?? '')}`}>{ord.orderStatus ?? ord.status ?? '—'}</span>
                                     </td>
-                                    <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{ord.progress != null ? `${ord.progress}%` : '—'}</td>
-                                    <td className="px-1.5 py-2.5 border border-gray-200">
+                                    <td className={`px-1.5 py-2.5 text-[12px] border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>{ord.progress != null ? `${ord.progress}%` : '—'}</td>
+                                    <td className={`px-1.5 py-2.5 border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getPriorityBadge(ord.orderPriority ?? ord.priority ?? '')}`}>{ord.orderPriority ?? ord.priority ?? '—'}</span>
                                     </td>
                                   </tr>
@@ -657,6 +657,7 @@ const ProductionSupervisorPage = () => {
                             <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order</th>
                             <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Articles</th>
                             <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                            <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Priority</th>
                             <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
                           </tr>
                         </thead>
@@ -673,7 +674,9 @@ const ProductionSupervisorPage = () => {
                               <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{order.articles.length} · Qty {order.articles.reduce((s, a) => s + (a.plannedQuantity || 0), 0).toLocaleString()}</td>
                               <td className="px-1.5 py-2.5 border border-gray-200">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>{order.status}</span>
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ml-1 ${getPriorityBadge(order.priority)}`}>{order.priority}</span>
+                              </td>
+                              <td className="px-1.5 py-2.5 border border-gray-200">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getPriorityBadge(order.priority)}`}>{order.priority}</span>
                               </td>
                               <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
                                 <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100">
