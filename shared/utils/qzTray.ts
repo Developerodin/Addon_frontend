@@ -1118,8 +1118,8 @@ export const generateZPLCone = (
   }
   if (isSmallSideBySide) {
     // SIDE-BY-SIDE LAYOUT (e.g. 50x25mm) - same field order as browser test print
-    const labelMarginSmall = 20; // Reduced margin for more usable space
-    const dataWidth = Math.floor(labelWidth * 0.62) - labelMarginSmall; // Increased to 62% to reduce gap
+    const labelMarginSmall = 30; // Increased from 20 to prevent left-side cutoff
+    const dataWidth = Math.floor(labelWidth * 0.62) - labelMarginSmall;
     const qrSectionX = xOffset + dataWidth + labelMarginSmall;
     // QR code size estimation for Version 3-4 at mag 4/5
     const qrWidth = qrCodeSize * 34;

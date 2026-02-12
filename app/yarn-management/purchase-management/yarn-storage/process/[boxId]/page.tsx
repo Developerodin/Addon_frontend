@@ -701,7 +701,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
             @media print {
               .label { border: none; }
             }
-            .data { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; padding-right: 1mm; }
+            .data { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; padding-right: 1mm; padding-left: 2.5mm; }
             .qr { width: 28%; display: flex; align-items: center; justify-content: center; }
             .title { font-weight: normal; font-size: ${isSmall ? '10.5pt' : (isMedium || isPortraitSmall) ? '11pt' : '10pt'}; line-height: 1.1; margin-bottom: 0.5mm; word-break: break-all; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
             .text { font-size: ${isSmall ? '10.5pt' : (isMedium || isPortraitSmall) ? '9pt' : '8pt'}; line-height: 1.2; margin: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -1309,7 +1309,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                   {printSettings.paperSize === '50mm * 25mm' ? (
                     /* 50x25mm Side-by-Side Preview */
                     <div className="bg-white border border-gray-400 shadow-sm flex overflow-hidden" style={{ width: '250px', height: '125px', fontFamily: "'Lato', sans-serif" }}>
-                      <div className="flex-1 p-2 flex flex-col justify-center gap-0.5 overflow-hidden">
+                      <div className="flex-1 py-2 pr-2 pl-4 flex flex-col justify-center gap-0.5 overflow-hidden">
                         <div className="text-[11px] font-normal leading-tight border-b border-gray-100 pb-0.5 uppercase line-clamp-2">
                           {box.yarnName || 'Yarn Name'}
                         </div>
