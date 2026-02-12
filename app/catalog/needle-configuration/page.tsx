@@ -7,13 +7,14 @@ import {
   listMachineOrderAssignments,
   createMachineOrderAssignment,
   updateMachineOrderAssignment,
+  resetMachineOrderAssignment,
   type MachineOrderAssignment,
   type CreateAssignmentBody,
   type UpdateAssignmentBody,
 } from "@/shared/services/machineOrderAssignmentService";
 import { machinesService } from "@/shared/services/machinesService";
 import { productionService } from "@/shared/services/productionService";
-import AssignmentsTable from "./components/AssignmentsTable";
+import AssignmentsCards from "./components/AssignmentsCards";
 import AddEditAssignmentModal from "./components/AddEditAssignmentModal";
 import ActiveNeedleModal from "./components/ActiveNeedleModal";
 import AssignmentLogsModal from "./components/AssignmentLogsModal";
@@ -189,15 +190,29 @@ const NeedleConfigurationPage = () => {
     }
   };
 
+  const handleReset = async (a: MachineOrderAssignment) => {
+    if (!a.id) return;
+    if (!window.confirm("Reset this assignment? This may clear or reset its configuration.")) return;
+    const t = toast.loading("Resetting…");
+    try {
+      await resetMachineOrderAssignment(a.id);
+      toast.dismiss(t);
+      toast.success("Assignment reset");
+      fetchList();
+    } catch (e) {
+      toast.dismiss(t);
+      toast.error(e instanceof Error ? e.message : "Failed to reset");
+    }
+  };
+
   return (
     <div className="main-content !p-[10px]">
       <Seo title="Needle Configuration" />
       <Toaster position="top-right" />
 
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
-        <div className="p-[10px]">
-          {/* Header Section - same as catalog items */}
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
               <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
               <h1 className="text-sm font-bold text-gray-800">Needle Configuration</h1>
@@ -205,78 +220,78 @@ const NeedleConfigurationPage = () => {
                 {totalResults}
               </span>
             </div>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={filterMachine}
-                onChange={(e) => setFilterMachine(e.target.value)}
-                className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 focus:ring-0 focus:border-purple-300 min-w-[120px]"
-              >
-                <option value="">All machines</option>
-                {machines.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.machineCode ?? m.name ?? m.id}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="text"
-                value={filterNeedle}
-                onChange={(e) => setFilterNeedle(e.target.value)}
-                placeholder="Active needle"
-                className="bg-white border border-gray-200 pl-3 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-28 min-w-[80px] placeholder:text-gray-400 font-medium"
-              />
-              <select
-                value={filterActive === "" ? "" : filterActive ? "true" : "false"}
-                onChange={(e) =>
-                  setFilterActive(
-                    e.target.value === "" ? "" : e.target.value === "true"
-                  )
-                }
-                className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 focus:ring-0 focus:border-purple-300"
-              >
-                <option value="">All</option>
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
-              </select>
-              <select
-                value={limit}
-                onChange={(e) => {
-                  setLimit(Number(e.target.value));
-                  setPage(1);
-                }}
-                className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
-              >
-                <option value={10}>Show 10</option>
-                <option value={20}>Show 20</option>
-                <option value={50}>Show 50</option>
-                <option value={100}>Show 100</option>
-              </select>
-              <button
-                type="button"
-                onClick={openAdd}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
-              >
-                <i className="ri-add-line text-xs" />
-                Add assignment
-              </button>
-            </div>
+          {/* 5 action buttons – top left: Create card + filters */}
+          <div className="flex flex-wrap items-center gap-2 mb-6">
+            <button
+              type="button"
+              onClick={openAdd}
+              className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white text-[11px] font-bold rounded-lg hover:bg-purple-700 transition-colors shadow-md"
+            >
+              <i className="ri-add-line text-sm" />
+              Create card
+            </button>
+            <select
+              value={filterMachine}
+              onChange={(e) => setFilterMachine(e.target.value)}
+              className="bg-white border border-gray-200 text-[11px] font-medium rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-200 focus:border-purple-300 min-w-[140px]"
+            >
+              <option value="">All machines</option>
+              {machines.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.machineCode ?? m.name ?? m.id}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={filterNeedle}
+              onChange={(e) => setFilterNeedle(e.target.value)}
+              placeholder="Active needle"
+              className="bg-white border border-gray-200 pl-3 pr-3 py-2 text-[11px] rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-300 w-32 min-w-[80px] placeholder:text-gray-400 font-medium"
+            />
+            <select
+              value={filterActive === "" ? "" : filterActive ? "true" : "false"}
+              onChange={(e) =>
+                setFilterActive(e.target.value === "" ? "" : e.target.value === "true")
+              }
+              className="bg-white border border-gray-200 text-[11px] font-medium rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-200 focus:border-purple-300"
+            >
+              <option value="">Status: All</option>
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+            <select
+              value={limit}
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
+                setPage(1);
+              }}
+              className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded-lg px-3 py-2 pr-8 focus:ring-2 focus:ring-purple-200 focus:border-purple-300 appearance-none cursor-pointer"
+            >
+              <option value={10}>Show 10</option>
+              <option value={20}>Show 20</option>
+              <option value={50}>Show 50</option>
+              <option value={100}>Show 100</option>
+            </select>
           </div>
         </div>
 
-        <AssignmentsTable
-        rows={rows}
-        page={page}
-        limit={limit}
-        totalResults={totalResults}
-        totalPages={totalPages}
-        isLoading={isLoading}
-        togglingActiveId={togglingActiveId}
-        onPageChange={setPage}
-        onConfig={openEdit}
-        onChangeNeedle={openActiveNeedle}
-        onLogs={openLogs}
-        onToggleActive={handleToggleActive}
+        <AssignmentsCards
+          rows={rows}
+          page={page}
+          limit={limit}
+          totalResults={totalResults}
+          totalPages={totalPages}
+          isLoading={isLoading}
+          togglingActiveId={togglingActiveId}
+          onPageChange={setPage}
+          onConfig={openEdit}
+          onChangeNeedle={openActiveNeedle}
+          onLogs={openLogs}
+          onToggleActive={handleToggleActive}
+          onReset={handleReset}
         />
 
           <AddEditAssignmentModal

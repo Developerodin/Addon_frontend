@@ -12,13 +12,15 @@ export const OrderStatus = {
 export type OrderStatusType = (typeof OrderStatus)[keyof typeof OrderStatus];
 
 export interface ProductionOrderItem {
+  /** Mongo ID of production order – always send this, never orderNumber */
   productionOrder: string;
+  /** Mongo ID of article – always send this, never articleNumber */
   article: string;
   status?: OrderStatusType;
   priority?: number;
-  /** Display only – from populated API (orderNumber) */
+  /** Display only – from populated API; never sent in PATCH */
   orderNumber?: string;
-  /** Display only – from populated API (articleNumber) */
+  /** Display only – from populated API; never sent in PATCH */
   articleNumber?: string;
 }
 
@@ -231,15 +233,42 @@ export async function createMachineOrderAssignment(
   return normalizeAssignment(data.data ?? data);
 }
 
+/** Mongo ObjectId is 24 hex chars. Short codes (e.g. ARTMLJSS8X0039) must not be sent as article. */
+const MONGO_ID_REGEX = /^[a-fA-F0-9]{24}$/;
+
+/** Payload for PATCH: only fields API accepts. Only items with valid Mongo ids for productionOrder and article. */
+function sanitizeProductionOrderItemsForApi(
+  items: ProductionOrderItem[]
+): { productionOrder: string; article: string; status?: OrderStatusType; priority?: number }[] {
+  return items
+    .map((item) => {
+      const po = String(item.productionOrder ?? '').trim();
+      const art = String(item.article ?? '').trim();
+      if (!po || !art) return null;
+      if (!MONGO_ID_REGEX.test(po) || !MONGO_ID_REGEX.test(art)) return null;
+      return {
+        productionOrder: po,
+        article: art,
+        status: item.status,
+        priority: item.priority,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null);
+}
+
 /** Update assignment (audit logged on backend) */
 export async function updateMachineOrderAssignment(
   id: string,
   body: UpdateAssignmentBody
 ): Promise<MachineOrderAssignment> {
+  const payload = { ...body };
+  if (Array.isArray(payload.productionOrderItems)) {
+    payload.productionOrderItems = sanitizeProductionOrderItemsForApi(payload.productionOrderItems);
+  }
   const res = await fetch(`${BASE}/${id}`, {
     method: 'PATCH',
     headers: getAuthHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -256,6 +285,20 @@ export async function deleteMachineOrderAssignment(id: string): Promise<void> {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as { message?: string }).message || 'Failed to delete assignment');
   }
+}
+
+/** Reset assignment – POST :id/reset, no body */
+export async function resetMachineOrderAssignment(id: string): Promise<MachineOrderAssignment> {
+  const res = await fetch(`${BASE}/${id}/reset`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message || 'Failed to reset assignment');
+  }
+  const data = await res.json();
+  return normalizeAssignment(data.data ?? data);
 }
 
 /** Logs for a single assignment (dateFrom, dateTo optional) */

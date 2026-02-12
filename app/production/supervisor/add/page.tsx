@@ -516,21 +516,23 @@ const AddOrderPage = () => {
         createdOrder?.id ?? createdOrder?._id ?? raw?.id ?? raw?._id ?? raw?.order?.id ?? raw?.data?.id;
       const orderNumber = createdOrder?.orderNumber ?? raw?.orderNumber ?? orderId ?? '';
 
-      // Get article IDs: create response often doesn't include articles, so fetch order
-      let createdArticles: any[] = createdOrder?.articles ?? raw?.articles ?? [];
       if (!orderId) {
         setApiError('Order created but could not read order ID from response.');
         toast.error('Order created but could not read order ID. Check console.');
         return;
       }
+
+      // Always fetch full order so we get article _id (Mongo ObjectId). Create response often has only short id.
+      let createdArticles: any[] = [];
+      const orderRes = await productionService.getOrder(orderId);
+      if (orderRes.success && orderRes.data?.articles?.length) {
+        createdArticles = orderRes.data.articles;
+      }
       if (createdArticles.length === 0) {
-        const orderRes = await productionService.getOrder(orderId);
-        if (orderRes.success && orderRes.data?.articles?.length) {
-          createdArticles = orderRes.data.articles;
-        }
+        createdArticles = createdOrder?.articles ?? raw?.articles ?? [];
       }
 
-      // Backend may return articles as array of IDs (strings) or array of objects; resolve articleId per row
+      // Resolve articleId per row – must be Mongo _id (24-char hex), never short code (e.g. ARTMLJSS8X0039)
       const byMachine = new Map<string, { productionOrder: string; article: string; priority?: number }[]>();
       formData.articles.forEach((article, i) => {
         const machineId = (article.machineId ?? '').toString().trim();
@@ -538,7 +540,8 @@ const AddOrderPage = () => {
         const art = createdArticles[i] ?? createdArticles.find(
           (a: any) => typeof a === 'object' && (a?.articleNumber || a?.factoryCode || '').toString() === (article.articleNumber || '').toString()
         );
-        const articleId = typeof art === 'string' ? art : (art?.id ?? art?._id);
+        const rawId = typeof art === 'string' ? art : (art?._id ?? art?.id);
+        const articleId = typeof rawId === 'string' && /^[a-fA-F0-9]{24}$/.test(rawId) ? rawId : null;
         if (!articleId) return;
         if (!byMachine.has(machineId)) byMachine.set(machineId, []);
         const queuePriority = article.queuePriority != null && article.queuePriority >= 1 ? article.queuePriority : i + 1;
@@ -1038,7 +1041,11 @@ const AddOrderPage = () => {
                     </div>
                   );
                 }
+                // Only show machines whose *active* needle (from Needle Configuration) matches the item's needle
                 const machinesForNeedle = machines.filter((m) => {
+                  const id = m._id ?? m.id;
+                  const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) ?? '' : '';
+                  if ((activeNeedle || '').trim() !== needleSize) return false;
                   const config = m.needleSizeConfig || [];
                   const hasInConfig = config.some((c) => (c.needleSize || '').trim() === needleSize);
                   const hasSingle = (m.needleSize || '').trim() === needleSize;

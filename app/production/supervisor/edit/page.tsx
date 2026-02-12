@@ -6,7 +6,14 @@ import Link from "next/link";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, UpdateOrderRequest } from "@/shared/services/productionService";
-import { getMachineActiveNeedleMap } from "@/shared/services/machineOrderAssignmentService";
+import {
+  getMachineActiveNeedleMap,
+  listMachineOrderAssignments,
+  getAssignmentByMachineId,
+  updateMachineOrderAssignment,
+  OrderStatus,
+  type MachineOrderAssignment,
+} from "@/shared/services/machineOrderAssignmentService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import axios from "axios";
@@ -19,6 +26,8 @@ interface Article {
   linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
   priority: 'High' | 'Medium' | 'Low' | 'Urgent';
   machineId?: string;
+  /** Queue position (1, 2, 3...) for this article on the selected machine */
+  queuePriority?: number;
   remarks?: string;
   productId?: string;
   /** Needle size from product's Needles attribute (for filtering machines) */
@@ -67,7 +76,7 @@ interface EditOrderFormData {
 const EditOrderContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const orderId = searchParams.get('id');
+  const orderId = searchParams?.get('id') ?? null;
   
   const [order, setOrder] = useState<ProductionOrder | null>(null);
   const [formData, setFormData] = useState<EditOrderFormData>({
@@ -91,6 +100,8 @@ const EditOrderContent = () => {
   const [machineSearchQuery, setMachineSearchQuery] = useState('');
   const [machineActiveNeedleMap, setMachineActiveNeedleMap] = useState<Map<string, string>>(new Map());
   const [needlesValueIdToName, setNeedlesValueIdToName] = useState<Record<string, string>>({});
+  /** Machine ID -> assignment (for modal: PO count, article numbers; and for submit sync) */
+  const [assignmentsByMachineId, setAssignmentsByMachineId] = useState<Map<string, MachineOrderAssignment>>(new Map());
 
   // Load order data and machines
   useEffect(() => {
@@ -102,19 +113,37 @@ const EditOrderContent = () => {
     }
   }, [orderId]);
 
+  // Fetch assignments (machine -> assignment with productionOrderItems for modal + submit sync). Returns map so loadOrder can use it for queuePriority.
+  const fetchAssignments = async (): Promise<Map<string, MachineOrderAssignment>> => {
+    try {
+      const data = await listMachineOrderAssignments({ page: 1, limit: 500, isActive: true });
+      const map = new Map<string, MachineOrderAssignment>();
+      data.results.forEach((a) => {
+        const mid = typeof a.machine === "object" && a.machine
+          ? (a.machine as { id?: string }).id ?? (a.machine as { _id?: string })._id
+          : a.machine;
+        if (mid) map.set(String(mid), a);
+      });
+      setAssignmentsByMachineId(map);
+      return map;
+    } catch {
+      setAssignmentsByMachineId(new Map());
+      return new Map();
+    }
+  };
+
   //  Load both order and machines together
   const loadOrderAndMachines = async () => {
     if (!orderId) return;
     
     setIsLoading(true);
     try {
-      // Load machines, yarn catalogs, and order
-      await Promise.all([
+      const [_, __, assignmentsMap] = await Promise.all([
         fetchMachines(),
-        fetchYarnCatalogs()
+        fetchYarnCatalogs(),
+        fetchAssignments(),
       ]);
-      // Then load order
-      await loadOrder();
+      await loadOrder(assignmentsMap);
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Failed to load data');
@@ -357,7 +386,7 @@ const EditOrderContent = () => {
     }
   };
 
-  const loadOrder = async () => {
+  const loadOrder = async (assignmentsMap?: Map<string, MachineOrderAssignment>) => {
     if (!orderId) return;
     
     try {
@@ -366,6 +395,7 @@ const EditOrderContent = () => {
       if (response.success) {
         const orderData = response.data;
         setOrder(orderData);
+        const map = assignmentsMap ?? assignmentsByMachineId;
 
         let needlesMap: Record<string, string> = {};
         try {
@@ -385,7 +415,22 @@ const EditOrderContent = () => {
           // ignore
         }
 
+        // Resolve queue priority from machine-order-assignment for this order/article/machine
+        const getQueuePriority = (articleId: string, machineId: string): number | undefined => {
+          if (!machineId || !map.size) return undefined;
+          const assn = map.get(String(machineId));
+          const items = assn?.productionOrderItems ?? [];
+          const item = items.find(
+            (i) => String(i.productionOrder) === String(orderId) && String(i.article) === String(articleId)
+          );
+          return item?.priority != null && item.priority >= 1 ? item.priority : undefined;
+        };
+
         const articlesWithBOM = await Promise.all(orderData.articles.map(async (article: any) => {
+          const articleId = article.id ?? article._id;
+          const machineId = typeof article.machineId === "object" && article.machineId ? article.machineId.id || article.machineId._id : article.machineId || "";
+          const queuePriority = getQueuePriority(articleId, machineId);
+
           try {
             const productResponse = await axios.get(`${API_BASE_URL}/products?page=1&limit=1000&search=${encodeURIComponent(article.articleNumber)}`);
             const products = productResponse.data.results || [];
@@ -435,12 +480,13 @@ const EditOrderContent = () => {
                   : undefined;
 
               return {
-                id: article.id,
+                id: article._id ?? article.id,
                 articleNumber: article.articleNumber,
                 plannedQuantity: article.plannedQuantity,
                 linkingType: article.linkingType,
                 priority: article.priority,
-                machineId: typeof article.machineId === 'object' && article.machineId ? article.machineId.id || article.machineId._id : article.machineId || '',
+                machineId,
+                queuePriority,
                 remarks: article.remarks || '',
                 productId: matchingProduct.id,
                 needleSizeFromProduct,
@@ -452,12 +498,13 @@ const EditOrderContent = () => {
           }
           
           return {
-            id: article.id,
+            id: article._id ?? article.id,
             articleNumber: article.articleNumber,
             plannedQuantity: article.plannedQuantity,
             linkingType: article.linkingType,
             priority: article.priority,
-            machineId: typeof article.machineId === 'object' && article.machineId ? article.machineId.id || article.machineId._id : article.machineId || '',
+            machineId,
+            queuePriority,
             remarks: article.remarks || ''
           };
         }));
@@ -510,7 +557,7 @@ const EditOrderContent = () => {
     }
   };
 
-  const handleArticleChange = (articleIndex: number, field: keyof Article, value: string | number) => {
+  const handleArticleChange = (articleIndex: number, field: keyof Article, value: string | number | undefined) => {
     setFormData(prev => ({
       ...prev,
       articles: prev.articles.map((article, index) => {
@@ -583,6 +630,7 @@ const EditOrderContent = () => {
       linkingType: 'Auto Linking',
       priority: 'Medium',
       machineId: '',
+      queuePriority: undefined,
       remarks: ''
     };
 
@@ -634,7 +682,63 @@ const EditOrderContent = () => {
       const response = await productionService.updateOrder(orderId, updateData);
       
       if (response.success) {
-        toast.success('Production order updated successfully!');
+        // Sync machine-order-assignments: update/add/remove this order's items per machine
+        const currentMachineIds = new Set(formData.articles.map((a) => a.machineId).filter(Boolean) as string[]);
+        const previousMachineIds = new Set<string>();
+        assignmentsByMachineId.forEach((assn, mid) => {
+          const hasThisOrder = (assn.productionOrderItems ?? []).some((i) => String(i.productionOrder) === String(orderId));
+          if (hasThisOrder) previousMachineIds.add(mid);
+        });
+
+        let syncErrors = 0;
+        // Remove this order from machines that no longer have any article on them
+        for (const mid of Array.from(previousMachineIds)) {
+          if (currentMachineIds.has(mid)) continue;
+          const assn = assignmentsByMachineId.get(mid);
+          if (!assn?.id) continue;
+          const itemsWithoutThisOrder = (assn.productionOrderItems ?? []).filter((i) => String(i.productionOrder) !== String(orderId));
+          try {
+            await updateMachineOrderAssignment(assn.id, { productionOrderItems: itemsWithoutThisOrder });
+          } catch (e) {
+            syncErrors++;
+            console.warn("Failed to remove order from assignment", mid, e);
+          }
+        }
+        // Add/update this order's articles on each selected machine
+        for (const mid of Array.from(currentMachineIds)) {
+          const assn = await getAssignmentByMachineId(mid).catch(() => null);
+          if (!assn?.id) {
+            syncErrors++;
+            toast.error(`No active needle assignment for machine. Order updated but machine link skipped.`);
+            continue;
+          }
+          const currentItems = assn.productionOrderItems ?? [];
+          const itemsWithoutThisOrder = currentItems.filter((i) => String(i.productionOrder) !== String(orderId));
+          const newItems = formData.articles
+            .filter((a) => a.machineId === mid)
+            .map((a, i) => ({
+              productionOrder: orderId!,
+              article: a.id,
+              priority: a.queuePriority != null && a.queuePriority >= 1 ? a.queuePriority : i + 1,
+              status: OrderStatus.PENDING,
+            }));
+          const merged = [...itemsWithoutThisOrder, ...newItems];
+          try {
+            await updateMachineOrderAssignment(assn.id, { productionOrderItems: merged });
+          } catch (e) {
+            syncErrors++;
+            console.warn("Failed to update assignment for machine", mid, e);
+            toast.error(e instanceof Error ? e.message : "Failed to update machine assignment");
+          }
+        }
+
+        if (syncErrors === 0 && (currentMachineIds.size > 0 || previousMachineIds.size > 0)) {
+          toast.success("Order and machine assignments updated.");
+        } else if (syncErrors === 0) {
+          toast.success("Production order updated successfully!");
+        } else {
+          toast.success("Order updated. Some machine links could not be synced.");
+        }
         router.push('/production/supervisor');
       } else {
         // Extract error message with better handling
@@ -717,7 +821,7 @@ const EditOrderContent = () => {
             }));
             
             return {
-              id: article.id,
+              id: article._id ?? article.id,
               articleNumber: article.articleNumber,
               plannedQuantity: article.plannedQuantity,
               linkingType: article.linkingType,
@@ -733,7 +837,7 @@ const EditOrderContent = () => {
         }
         
         return {
-          id: article.id,
+          id: article._id ?? article.id,
           articleNumber: article.articleNumber,
           plannedQuantity: article.plannedQuantity,
           linkingType: article.linkingType,
@@ -903,6 +1007,7 @@ const EditOrderContent = () => {
                           <th className="w-32 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Linking</th>
                           <th className="w-24 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                           <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine</th>
+                          <th className="w-20 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Queue #</th>
                           <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                           <th className="w-16 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                         </tr>
@@ -989,6 +1094,19 @@ const EditOrderContent = () => {
                                 </span>
                                 <i className="ri-arrow-down-s-line text-gray-500 shrink-0" />
                               </button>
+                            </td>
+                            <td className="px-2 py-2">
+                              {article.machineId ? (
+                                <NumericInput
+                                  className="form-control form-control-sm w-full text-xs py-1 px-2 h-8"
+                                  value={article.queuePriority}
+                                  onChange={(value) => handleArticleChange(index, "queuePriority", value >= 1 ? value : undefined)}
+                                  placeholder="1"
+                                  allowDecimals={false}
+                                />
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
                             </td>
                             <td className="px-2 py-2">
                               <input
@@ -1185,7 +1303,11 @@ const EditOrderContent = () => {
                     </div>
                   );
                 }
+                // Only show machines whose *active* needle (from Needle Configuration) matches the item's needle
                 const machinesForNeedle = machines.filter((m) => {
+                  const id = m._id ?? m.id;
+                  const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) ?? '' : '';
+                  if ((activeNeedle || '').trim() !== needleSize) return false;
                   const config = m.needleSizeConfig || [];
                   const hasInConfig = config.some((c) => (c.needleSize || '').trim() === needleSize);
                   const hasSingle = (m.needleSize || '').trim() === needleSize;
@@ -1208,36 +1330,45 @@ const EditOrderContent = () => {
                     </p>
                   </div>
                 ) : (
-                  <ul className="divide-y divide-gray-200 max-h-[50vh] overflow-y-auto">
-                    {filtered.map((machine) => {
-                      const id = machine._id || machine.id;
-                      const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) : '';
-                      return (
-                        <li key={id}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleArticleChange(machineModalArticleIndex, 'machineId', id ?? '');
-                              setShowMachineModal(false);
-                              setMachineModalArticleIndex(null);
-                              setMachineSearchQuery('');
-                            }}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex justify-between items-start gap-2"
-                          >
-                            <div className="min-w-0">
-                              <span className="font-medium">{machine.machineCode}</span>
-                              {activeNeedle ? (
-                                <span className="ml-2 text-xs text-emerald-600 font-medium">Needle: {activeNeedle}</span>
-                              ) : null}
-                            </div>
-                            <span className="text-gray-500 text-xs truncate shrink-0">
-                              {machine.machineNumber} · {machine.model} · {machine.floor}
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
+                    <table className="min-w-full text-sm border border-gray-200">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Active needle</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase"># POs</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Article #</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {filtered.map((machine) => {
+                          const id = machine._id || machine.id;
+                          const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) : "";
+                          const assn = id ? assignmentsByMachineId.get(String(id)) : null;
+                          const items = assn?.productionOrderItems ?? [];
+                          const poCount = new Set(items.map((i) => String(i.productionOrder ?? "")).filter(Boolean)).size;
+                          const articleNumbers = items.map((i) => i.articleNumber || i.article || "—").join(", ");
+                          return (
+                            <tr
+                              key={id}
+                              onClick={() => {
+                                handleArticleChange(machineModalArticleIndex, "machineId", id ?? "");
+                                setShowMachineModal(false);
+                                setMachineModalArticleIndex(null);
+                                setMachineSearchQuery("");
+                              }}
+                              className="cursor-pointer hover:bg-purple-50 transition-colors"
+                            >
+                              <td className="px-3 py-2 font-medium text-gray-900">{machine.machineCode}</td>
+                              <td className="px-3 py-2 text-xs text-emerald-600 font-medium">{activeNeedle || "—"}</td>
+                              <td className="px-3 py-2 text-xs text-gray-600">{poCount}</td>
+                              <td className="px-3 py-2 text-xs text-gray-600 max-w-[200px] truncate" title={articleNumbers}>{articleNumbers || "—"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 );
               })()}
             </div>
