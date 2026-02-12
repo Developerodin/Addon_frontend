@@ -223,11 +223,13 @@ const ProcessOrderPage = () => {
     paperHeight: 1218, // 6 inches at 203 DPI
     labelsPerPage: 2, // Number of labels to print on single sheet (1-6)
     firstLabelTopMargin: 0, // Top margin for first label only
-    supplierFontSize: 30,
+    supplierFontSize: 27,
     detailsFontSize: 30,
+    boxIdFontSize: 22,
     barcodeHeight: 100,
+    barcodeWidth: 3,
     supplierYPos: 30,
-    boxIdYPos: 80,
+    boxIdYPos: 65,
     yarnYPos: 120,
     lotYPos: 160,
     shadeYPos: 200,
@@ -3408,19 +3410,34 @@ const ProcessOrderPage = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   {printSettings.paperSize !== '50mmx70mm' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Supplier Name Font Size
-                      </label>
-                      <input
-                        type="number"
-                        value={printSettings.supplierFontSize}
-                        onChange={(e) => setPrintSettings({ ...printSettings, supplierFontSize: parseInt(e.target.value) || 30 })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        min="10"
-                        max="100"
-                      />
-                    </div>
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Supplier Name Font Size
+                        </label>
+                        <input
+                          type="number"
+                          value={printSettings.supplierFontSize}
+                          onChange={(e) => setPrintSettings({ ...printSettings, supplierFontSize: parseInt(e.target.value) || 27 })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          min="10"
+                          max="100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Box ID Font Size
+                        </label>
+                        <input
+                          type="number"
+                          value={printSettings.boxIdFontSize ?? 22}
+                          onChange={(e) => setPrintSettings({ ...printSettings, boxIdFontSize: parseInt(e.target.value) || 22 })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          min="10"
+                          max="100"
+                        />
+                      </div>
+                    </>
                   )}
 
                   <div>
@@ -3438,18 +3455,34 @@ const ProcessOrderPage = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Barcode Height (dots)
-                  </label>
-                  <input
-                    type="number"
-                    value={printSettings.barcodeHeight}
-                    onChange={(e) => setPrintSettings({ ...printSettings, barcodeHeight: parseInt(e.target.value) || 100 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    min="50"
-                    max="200"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Barcode Width (module width, 1-10)
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      value={printSettings.barcodeWidth ?? 3}
+                      onChange={(e) => setPrintSettings({ ...printSettings, barcodeWidth: parseInt(e.target.value) || 3 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="1"
+                      max="5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Barcode Height (dots)
+                    </label>
+                    <input
+                      type="number"
+                      value={printSettings.barcodeHeight}
+                      onChange={(e) => setPrintSettings({ ...printSettings, barcodeHeight: parseInt(e.target.value) || 100 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      min="50"
+                      max="200"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -3481,7 +3514,7 @@ const ProcessOrderPage = () => {
                         <input
                           type="number"
                           value={printSettings.boxIdYPos}
-                          onChange={(e) => setPrintSettings({ ...printSettings, boxIdYPos: parseInt(e.target.value) || 80 })}
+                          onChange={(e) => setPrintSettings({ ...printSettings, boxIdYPos: parseInt(e.target.value) || 65 })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                           min="0"
                           max="600"
@@ -3571,16 +3604,19 @@ const ProcessOrderPage = () => {
                     paperHeight: 1218,
                     labelsPerPage: 2,
                     firstLabelTopMargin: 0,
-                    supplierFontSize: 30,
+                    supplierFontSize: 27,
                     detailsFontSize: 30,
+                    boxIdFontSize: 22,
                     barcodeHeight: 100,
+                    barcodeWidth: 3,
                     supplierYPos: 30,
-                    boxIdYPos: 80,
+                    boxIdYPos: 65,
                     yarnYPos: 120,
                     lotYPos: 160,
                     shadeYPos: 200,
                     barcodeYPos: 260,
                     footerYPos: 400,
+                    orientation: 'vertical',
                   })}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
                 >

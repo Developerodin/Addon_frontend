@@ -614,11 +614,11 @@ export const generateZPLDoubleLabel = (
     firstLabelTopMargin: customSettings?.firstLabelTopMargin || 0,
     supplierFontSize: customSettings?.supplierFontSize || 25,
     detailsFontSize: customSettings?.detailsFontSize || 20,
-    boxIdFontSize: customSettings?.boxIdFontSize || 25,
+    boxIdFontSize: customSettings?.boxIdFontSize || 22,
     yarnFontSize: customSettings?.yarnFontSize || 25,
     shadeLotFontSize: customSettings?.shadeLotFontSize || 25,
     barcodeHeight: customSettings?.barcodeHeight || 100,
-    barcodeWidth: customSettings?.barcodeWidth || 2,
+    barcodeWidth: Math.round(Number(customSettings?.barcodeWidth) || 3),
     qrCodeSize: customSettings?.qrCodeSize || 5,
     orientation: customSettings?.orientation || 'horizontal',
     supplierYPos: customSettings?.supplierYPos || 30,
@@ -711,7 +711,7 @@ export const generateZPLDoubleLabel = (
     if (settings.orientation === 'vertical') {
       return `
           ^FO${settings.supplierYPos},${yOffset}^A0R,${settings.supplierFontSize},${settings.supplierFontSize}^FB${rowLength},1,0,C^FD${supplier}^FS
-          ^FO${settings.boxIdYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDBox ID: ${boxId}^FS
+          ^FO${settings.boxIdYPos},${yOffset}^A0R,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${rowLength},1,0,C^FDBox ID: ${boxId}^FS
           ^FO${settings.yarnYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDYarn: ${yarnName}^FS
           ^FO${settings.lotYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDLot: ${lotNumber}^FS
           ^FO${settings.shadeYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDShade: ${shadeCode}^FS
@@ -721,7 +721,7 @@ export const generateZPLDoubleLabel = (
 
     return `
         ^FO0,${settings.supplierYPos + yOffset}^A0N,${settings.supplierFontSize},${settings.supplierFontSize}^FB${rowLength},1,0,C^FD${supplier}^FS
-        ^FO0,${settings.boxIdYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDBox ID: ${boxId}^FS
+        ^FO0,${settings.boxIdYPos + yOffset}^A0N,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${rowLength},1,0,C^FDBox ID: ${boxId}^FS
         ^FO0,${settings.yarnYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDYarn: ${yarnName}^FS
         ^FO0,${settings.lotYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDLot: ${lotNumber}^FS
         ^FO0,${settings.shadeYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,C^FDShade: ${shadeCode}^FS
@@ -954,9 +954,9 @@ export const generateZPLCone = (
     qrCodeSize = 5,
     titleFontSize = 25,
     detailsFontSize = 20,
-    boxIdFontSize = 25,
+    boxIdFontSize = 22,
     yarnFontSize = 25,
-    supplierFontSize = 20,
+    supplierFontSize = 17,
     shadeLotFontSize = 20,
   } = options;
 
@@ -1004,7 +1004,7 @@ export const generateZPLCone = (
       // 0. Box ID (Rotated)
       if (boxId) {
         zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${boxIdFontSize},${boxIdFontSize}^FB${rowLen},1,0,C^FDBox ID: ${boxId}^FS\n`;
-        curX += boxIdFontSize + 10;
+        curX += boxIdFontSize + 2;
       }
 
       // 1. Yarn Name (Rotated)
@@ -1012,7 +1012,7 @@ export const generateZPLCone = (
         const nameLines = wrapText(yarnName, 32);
         for (const line of nameLines.slice(0, 2)) {
           zpl += `^FO${curX},${yOffset + labelMargin}^A0R,${yarnFontSize},${yarnFontSize}^FB${rowLen},1,0,C^FD${line}^FS\n`;
-          curX += yarnFontSize + 5;
+          curX += yarnFontSize + 2;
         }
       }
 
@@ -1038,14 +1038,14 @@ export const generateZPLCone = (
     // Box ID (Horizontal)
     if (boxId) {
       zpl += `^FO${labelMargin},${curY}^A0N,${boxIdFontSize},${boxIdFontSize}^FB${contentWidth},1,0,C^FDBox ID: ${boxId}^FS\n`;
-      curY += boxIdFontSize + 5;
+      curY += boxIdFontSize + 2;
     }
 
     if (yarnName) {
       const nameLines = wrapText(yarnName, 22);
       for (const line of nameLines.slice(0, 2)) {
         zpl += `^FO${labelMargin},${curY}^A0N,${yarnFontSize},${yarnFontSize}^FB${contentWidth},1,0,C^FD${line}^FS\n`;
-        curY += yarnFontSize + 5;
+        curY += yarnFontSize + 2;
       }
     }
 
@@ -1692,9 +1692,13 @@ export const printCones = async (
       const rowsPerPage = Math.ceil(labelsPerPage / columnsPerRow);
       const labelHeight = Math.floor(paperHeight / rowsPerPage);
 
-      const qrCodeSize = options.customSettings.qrCodeSize || 5;
-      const titleFontSize = options.customSettings.titleFontSize || 25;
-      const detailsFontSize = options.customSettings.detailsFontSize || 20;
+      const qrCodeSize = options.customSettings.qrCodeSize ?? 6;
+      const titleFontSize = options.customSettings.titleFontSize ?? 25;
+      const detailsFontSize = options.customSettings.detailsFontSize ?? 20;
+      const boxIdFontSize = options.customSettings.boxIdFontSize ?? 22;
+      const yarnFontSize = options.customSettings.yarnFontSize ?? 25;
+      const supplierFontSize = options.customSettings.supplierFontSize ?? 17;
+      const shadeLotFontSize = options.customSettings.shadeLotFontSize ?? 20;
 
       const labelsPerSheet = rowsPerPage * columnsPerRow;
 
@@ -1715,13 +1719,18 @@ export const printCones = async (
             lotNumber: cone.lotNumber,
             shadeCode: cone.shadeCode,
             weight: cone.weight,
+            boxId: cone.boxId,
             labelWidth,
             labelHeight,
             xOffset,
             yOffset,
             qrCodeSize,
             titleFontSize,
-            detailsFontSize
+            detailsFontSize,
+            boxIdFontSize,
+            yarnFontSize,
+            supplierFontSize,
+            shadeLotFontSize
           });
         }
 
