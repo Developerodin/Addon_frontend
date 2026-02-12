@@ -435,16 +435,17 @@ const ProcessOrderPage = () => {
                 ? box.yarnName
                 : '';
 
-              // Auto-fill from PO items if lot number exists
+              // Auto-fill from lot PO items if lot number exists
               let autoFilledYarnName = yarnName;
               let autoFilledShadeCode = box.shadeCode || '';
               const boxLotNumber = box.lotNumber || '';
 
               if (boxLotNumber && rawApiOrder) {
-                const poItemData = getPOItemDataFromLotNumber(boxLotNumber);
-                if (poItemData) {
-                  autoFilledYarnName = poItemData.yarnName;
-                  autoFilledShadeCode = poItemData.shadeCode;
+                const poItemOptions = getPOItemsDataFromLotNumber(boxLotNumber);
+                if (poItemOptions.length > 0) {
+                  // Default to first yarn from lot's PO items
+                  autoFilledYarnName = poItemOptions[0].yarnName;
+                  autoFilledShadeCode = poItemOptions[0].shadeCode;
                 }
               }
 
@@ -575,10 +576,10 @@ const ProcessOrderPage = () => {
     }
   };
 
-  // Get PO item data from lot number using receivedLotDetails
-  const getPOItemDataFromLotNumber = (lotNumber: string): { yarnName: string; shadeCode: string } | null => {
+  // Get PO item yarn options from lot number using receivedLotDetails
+  const getPOItemsDataFromLotNumber = (lotNumber: string): Array<{ yarnName: string; shadeCode: string }> => {
     if (!rawApiOrder || !rawApiOrder.receivedLotDetails || !rawApiOrder.poItems) {
-      return null;
+      return [];
     }
 
     // Find the lot in receivedLotDetails
@@ -587,28 +588,45 @@ const ProcessOrderPage = () => {
     );
 
     if (!lot || !lot.poItems || lot.poItems.length === 0) {
-      return null;
+      return [];
     }
 
-    // Get the first PO item ID from the lot (assuming one PO item per lot)
-    const poItemId = lot.poItems[0]?.poItem;
-    if (!poItemId) {
-      return null;
+    // Get PO item IDs from lot and preserve order
+    const poItemIds = (lot.poItems || [])
+      .map((poItem: any) => String(poItem?.poItem || poItem?.po_item || ''))
+      .filter(Boolean);
+
+    if (poItemIds.length === 0) {
+      return [];
     }
 
-    // Find the PO item in poItems array
-    const poItem = rawApiOrder.poItems.find((item: any) =>
-      String(item._id || item.id) === String(poItemId)
+    const poItemsById = new Map<string, any>(
+      (rawApiOrder.poItems || []).map((item: any) => [String(item._id || item.id), item])
     );
 
-    if (!poItem) {
-      return null;
-    }
+    const seen = new Set<string>();
+    const options: Array<{ yarnName: string; shadeCode: string }> = [];
 
-    return {
-      yarnName: poItem.yarnName || '',
-      shadeCode: poItem.shadeCode || ''
-    };
+    poItemIds.forEach((poItemId: string) => {
+      const poItem = poItemsById.get(poItemId);
+      if (!poItem) return;
+
+      const yarnName = poItem.yarnName || '';
+      const shadeCode = poItem.shadeCode || '';
+      const key = `${yarnName}__${shadeCode}`;
+      if (yarnName && !seen.has(key)) {
+        seen.add(key);
+        options.push({ yarnName, shadeCode });
+      }
+    });
+
+    return options;
+  };
+
+  // Get first PO item data from lot number (default selection)
+  const getPOItemDataFromLotNumber = (lotNumber: string): { yarnName: string; shadeCode: string } | null => {
+    const options = getPOItemsDataFromLotNumber(lotNumber);
+    return options.length > 0 ? options[0] : null;
   };
 
   // Handle barcode scan
@@ -624,7 +642,7 @@ const ProcessOrderPage = () => {
         const existingData = boxData[boxId];
         const lotNumber = existingData?.lotNumber?.trim() || foundBox.lotNumber?.trim() || '';
 
-        // Auto-fill data from PO items if lot number exists
+        // Auto-fill data from lot PO items if lot number exists
         let autoFilledData = {
           yarnName: existingData?.yarnName || '',
           shadeCode: existingData?.shadeCode || '',
@@ -632,10 +650,11 @@ const ProcessOrderPage = () => {
         };
 
         if (lotNumber && rawApiOrder) {
-          const poItemData = getPOItemDataFromLotNumber(lotNumber);
-          if (poItemData) {
-            autoFilledData.yarnName = poItemData.yarnName;
-            autoFilledData.shadeCode = poItemData.shadeCode;
+          const poItemOptions = getPOItemsDataFromLotNumber(lotNumber);
+          if (poItemOptions.length > 0) {
+            // Default to first yarn from lot's PO items
+            autoFilledData.yarnName = poItemOptions[0].yarnName;
+            autoFilledData.shadeCode = poItemOptions[0].shadeCode;
           }
         }
 
@@ -669,26 +688,17 @@ const ProcessOrderPage = () => {
     return item?.shadeCode || '';
   };
 
-  // Get unique yarn names from PO items
-  const getUniqueYarnNames = (): string[] => {
-    if (!order || !order.items) return [];
-    const uniqueNames = Array.from(new Set(order.items.map(item => item.yarnName).filter(Boolean)));
-    return uniqueNames;
-  };
-
-  // Check if there are multiple yarn names in the PO
-  const hasMultipleYarnNames = (): boolean => {
-    return getUniqueYarnNames().length > 1;
-  };
-
   // Handle yarn name change - auto-fill shade code
-  const handleYarnNameChange = (boxId: string, yarnName: string) => {
+  const handleYarnNameChange = (boxId: string, yarnName: string, lotNumber?: string) => {
+    const lotOptions = lotNumber ? getPOItemsDataFromLotNumber(lotNumber) : [];
+    const lotMatch = lotOptions.find(option => option.yarnName === yarnName);
+
     setBoxData(prev => ({
       ...prev,
       [boxId]: {
         ...prev[boxId],
         yarnName,
-        shadeCode: getShadeCodeForYarn(yarnName)
+        shadeCode: lotMatch?.shadeCode || getShadeCodeForYarn(yarnName)
       }
     }));
   };
@@ -2519,31 +2529,38 @@ const ProcessOrderPage = () => {
                                   </button>
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
-                                  {isActive && hasMultipleYarnNames() ? (
-                                    <select
-                                      className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                                      value={data.yarnName}
-                                      onChange={(e) => handleYarnNameChange(boxId, e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
-                                          if (nextInput) {
-                                            (nextInput as HTMLInputElement).focus();
-                                          }
-                                        }
-                                      }}
-                                    >
-                                      <option value="">Select Yarn Name</option>
-                                      {getUniqueYarnNames().map((yarnName) => (
-                                        <option key={yarnName} value={yarnName}>
-                                          {yarnName}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <span className="text-[12px] text-gray-900">{data.yarnName || '-'}</span>
-                                  )}
+                                  {(() => {
+                                    const yarnOptionsForLot = data.lotNumber ? getPOItemsDataFromLotNumber(data.lotNumber) : [];
+                                    const showLotDropdown = yarnOptionsForLot.length > 1;
+
+                                    if (showLotDropdown) {
+                                      return (
+                                        <select
+                                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                                          value={data.yarnName}
+                                          onChange={(e) => handleYarnNameChange(boxId, e.target.value, data.lotNumber)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              e.preventDefault();
+                                              const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
+                                              if (nextInput) {
+                                                (nextInput as HTMLInputElement).focus();
+                                              }
+                                            }
+                                          }}
+                                        >
+                                          <option value="">Select Yarn Name</option>
+                                          {yarnOptionsForLot.map((option) => (
+                                            <option key={`${option.yarnName}-${option.shadeCode}`} value={option.yarnName}>
+                                              {option.yarnName}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      );
+                                    }
+
+                                    return <span className="text-[12px] text-gray-900">{data.yarnName || '-'}</span>;
+                                  })()}
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   <span className="text-[12px] text-gray-900">{data.shadeCode || '-'}</span>
@@ -2793,31 +2810,38 @@ const ProcessOrderPage = () => {
                                 </button>
                               </td>
                               <td className="px-1.5 py-2 border border-gray-200">
-                                {isActive && hasMultipleYarnNames() ? (
-                                  <select
-                                    className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                                    value={data.yarnName}
-                                    onChange={(e) => handleYarnNameChange(boxId, e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
-                                        if (nextInput) {
-                                          (nextInput as HTMLInputElement).focus();
-                                        }
-                                      }
-                                    }}
-                                  >
-                                    <option value="">Select Yarn Name</option>
-                                    {getUniqueYarnNames().map((yarnName) => (
-                                      <option key={yarnName} value={yarnName}>
-                                        {yarnName}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span className="text-[12px] text-gray-900">{data.yarnName || '-'}</span>
-                                )}
+                                {(() => {
+                                  const yarnOptionsForLot = data.lotNumber ? getPOItemsDataFromLotNumber(data.lotNumber) : [];
+                                  const showLotDropdown = yarnOptionsForLot.length > 1;
+
+                                  if (showLotDropdown) {
+                                    return (
+                                      <select
+                                        className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+                                        value={data.yarnName}
+                                        onChange={(e) => handleYarnNameChange(boxId, e.target.value, data.lotNumber)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            const nextInput = (e.target as HTMLElement).parentElement?.nextElementSibling?.querySelector('input');
+                                            if (nextInput) {
+                                              (nextInput as HTMLInputElement).focus();
+                                            }
+                                          }
+                                        }}
+                                      >
+                                        <option value="">Select Yarn Name</option>
+                                        {yarnOptionsForLot.map((option) => (
+                                          <option key={`${option.yarnName}-${option.shadeCode}`} value={option.yarnName}>
+                                            {option.yarnName}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    );
+                                  }
+
+                                  return <span className="text-[12px] text-gray-900">{data.yarnName || '-'}</span>;
+                                })()}
                               </td>
                               <td className="px-1.5 py-2 border border-gray-200">
                                 <span className="text-[12px] text-gray-900">{data.shadeCode || '-'}</span>

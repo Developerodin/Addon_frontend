@@ -1978,6 +1978,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             <table className="min-w-full border border-gray-200 bg-white">
               <thead>
                 <tr>
+                  <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-center uppercase tracking-wider">Total Qty</th>
                   <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-center uppercase tracking-wider">SubTotal</th>
                   <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-center uppercase tracking-wider">GST</th>
                   <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-center uppercase tracking-wider">Total</th>
@@ -1985,6 +1986,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               </thead>
               <tbody>
                 <tr>
+                  <td className="border border-gray-200 px-2 py-1.5 text-xs text-gray-900 text-right">
+                    {formData.items.reduce((sum, item) => sum + (item.qty || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg
+                  </td>
                   <td className="border border-gray-200 px-2 py-1.5 text-xs text-gray-900 text-right">
                     ₹{formData.subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
