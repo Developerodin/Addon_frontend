@@ -1162,8 +1162,13 @@ export const generateZPLCone = (
     // 4. Lot 
     printShortLine("Lot: ", lotNumber || '-', detailsFont);
 
-    // 5. Shade
-    printShortLine("Shade: ", shadeCode || '-', detailsFont);
+    // 5. Shade (Allow wrapping as it can be very long)
+    const shadeText = `Shade: ${shadeCode || '-'}`;
+    const shadeLines = wrapText(shadeText, maxYarnChars);
+    shadeLines.slice(0, 2).forEach((line) => {
+      zpl += `^FO${xPos},${yPos}^A0N,${detailsFont},${detailsFont}^FD${line}^FS\n`;
+      yPos += lineHeight;
+    });
 
     // QR Code Alignment: Center horizontally in the remaining right area
     const rightAreaW = labelWidth - qrSectionX - 10;

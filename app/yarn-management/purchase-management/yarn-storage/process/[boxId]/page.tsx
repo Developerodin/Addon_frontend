@@ -718,7 +718,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               <p class="text">Supplier: ${effectiveSupplier || '-'}</p>
               <p class="text short">PO: ${effectivePoNumber || '-'}</p>
               <p class="text short">Lot: ${box?.lotNumber || '-'}</p>
-              <p class="text short">Shade: ${box?.shadeCode || '-'}</p>
+              <p class="text">Shade: ${box?.shadeCode || '-'}</p>
             </div>
             <div class="qr"><canvas id="qr-${cone._id}"></canvas></div>
           </div>
@@ -1309,7 +1309,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                         <div className="text-[8px] text-gray-700 line-clamp-2">Supplier: {effectiveSupplier || '-'}</div>
                         <div className="text-[8px] text-gray-700 truncate">PO: {effectivePoNumber || '-'}</div>
                         <div className="text-[8px] text-gray-700 truncate">Lot: {box.lotNumber || '-'}</div>
-                        <div className="text-[8px] text-gray-700 truncate">Shade: {box.shadeCode || '-'}</div>
+                        <div className="text-[8px] text-gray-700 line-clamp-2">Shade: {box.shadeCode || '-'}</div>
                       </div>
                       <div className="w-[32%] bg-white border-l border-gray-50 flex items-center justify-center p-2">
                         <div className="aspect-square w-full border-2 border-black flex items-center justify-center relative">
