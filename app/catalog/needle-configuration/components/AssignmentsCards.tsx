@@ -59,6 +59,8 @@ export interface AssignmentsCardsProps {
   readOnly?: boolean;
   /** Optional card click handler (e.g. for read-only view to open PO details modal). */
   onCardClick?: (a: MachineOrderAssignment) => void;
+  /** When set (e.g. 5), use this many columns on xl and consistent card sizing. */
+  columnsPerRow?: number;
 }
 
 export default function AssignmentsCards({
@@ -77,6 +79,7 @@ export default function AssignmentsCards({
   onReset,
   readOnly = false,
   onCardClick,
+  columnsPerRow,
 }: AssignmentsCardsProps) {
   if (isLoading) {
     return (
@@ -102,7 +105,13 @@ export default function AssignmentsCards({
   return (
     <>
       <div className="p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div
+          className={
+            columnsPerRow === 5
+              ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3"
+              : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+          }
+        >
           {rows.map((row) => {
             const { poCount, articleCount } = getItemCounts(row);
             const needleCount = needleOptionsCount(row);
@@ -115,12 +124,12 @@ export default function AssignmentsCards({
                 tabIndex={readOnly && onCardClick ? 0 : undefined}
                 onClick={readOnly && onCardClick ? () => onCardClick(row) : undefined}
                 onKeyDown={readOnly && onCardClick ? (e) => { if (e.key === "Enter" || e.key === " ") onCardClick(row); } : undefined}
-                className={`rounded-xl shadow-lg overflow-hidden border border-white/10 transition-transform hover:scale-[1.02] ${readOnly && onCardClick ? "cursor-pointer" : ""}`}
+                className={`min-w-0 rounded-xl shadow-lg overflow-hidden border border-white/10 transition-transform hover:scale-[1.02] ${readOnly && onCardClick ? "cursor-pointer" : ""}`}
                 style={{ background: CARD_BG }}
               >
-                <div className="p-4 text-white min-h-[200px] flex flex-col">
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <h3 className="text-lg font-bold truncate drop-shadow-sm text-white">
+                <div className={`p-3 text-white flex flex-col ${columnsPerRow === 5 ? "min-h-[140px]" : "min-h-[200px]"}`}>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h3 className={`font-bold truncate drop-shadow-sm text-white ${columnsPerRow === 5 ? "text-sm" : "text-lg"}`}>
                       {machineLabel(row)}
                     </h3>
                     {!readOnly && (isToggling ? (
@@ -154,7 +163,7 @@ export default function AssignmentsCards({
                     ))}
                   </div>
 
-                  <div className="space-y-2 text-sm text-white/95 flex-1">
+                  <div className={`space-y-1.5 text-white/95 flex-1 ${columnsPerRow === 5 ? "text-xs" : "text-sm"}`}>
                     <div className="flex items-center gap-2">
                       <i className="ri-scissors-line text-white/80" />
                       <span className="font-medium">Active needle:</span>
@@ -173,11 +182,11 @@ export default function AssignmentsCards({
                   </div>
 
                   {!readOnly && (
-                    <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-gray-400/40">
+                    <div className={`flex items-center justify-end gap-1.5 border-t border-gray-400/40 ${columnsPerRow === 5 ? "mt-2 pt-2" : "mt-4 pt-3"}`}>
                       <button
                         type="button"
                         onClick={() => onConfig?.(row)}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#5b5f9e]/70 text-white hover:bg-[#5b5f9e] transition-colors"
+                        className={`flex items-center justify-center rounded-lg bg-[#5b5f9e]/70 text-white hover:bg-[#5b5f9e] transition-colors ${columnsPerRow === 5 ? "w-7 h-7" : "w-9 h-9"}`}
                         title="View Orders"
                       >
                         <i className="ri-settings-3-line text-sm" />
@@ -185,7 +194,7 @@ export default function AssignmentsCards({
                       <button
                         type="button"
                         onClick={() => onChangeNeedle?.(row)}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#5b5f9e]/70 text-white hover:bg-[#5b5f9e] transition-colors"
+                        className={`flex items-center justify-center rounded-lg bg-[#5b5f9e]/70 text-white hover:bg-[#5b5f9e] transition-colors ${columnsPerRow === 5 ? "w-7 h-7" : "w-9 h-9"}`}
                         title="Change needle"
                       >
                         <i className="ri-edit-2-line text-sm" />
@@ -193,7 +202,7 @@ export default function AssignmentsCards({
                       <button
                         type="button"
                         onClick={() => onLogs?.(row)}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#5b5f9e]/70 text-white hover:bg-[#5b5f9e] transition-colors"
+                        className={`flex items-center justify-center rounded-lg bg-[#5b5f9e]/70 text-white hover:bg-[#5b5f9e] transition-colors ${columnsPerRow === 5 ? "w-7 h-7" : "w-9 h-9"}`}
                         title="Logs"
                       >
                         <i className="ri-file-list-3-line text-sm" />
@@ -201,7 +210,7 @@ export default function AssignmentsCards({
                       <button
                         type="button"
                         onClick={() => onReset?.(row)}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#5b5f9e]/70 text-white hover:bg-[#5b5f9e] transition-colors"
+                        className={`flex items-center justify-center rounded-lg bg-[#5b5f9e]/70 text-white hover:bg-[#5b5f9e] transition-colors ${columnsPerRow === 5 ? "w-7 h-7" : "w-9 h-9"}`}
                         title="Reset"
                       >
                         <i className="ri-restart-line text-sm" />

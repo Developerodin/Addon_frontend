@@ -2,7 +2,12 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
-import { listMachineOrderAssignments, type MachineOrderAssignment } from "@/shared/services/machineOrderAssignmentService";
+import {
+  listMachineOrderAssignments,
+  getMachineOrderAssignment,
+  updateAssignmentItemsPriorities,
+  type MachineOrderAssignment,
+} from "@/shared/services/machineOrderAssignmentService";
 import { machinesService } from "@/shared/services/machinesService";
 import AssignmentsCards from "@/app/catalog/needle-configuration/components/AssignmentsCards";
 
@@ -19,6 +24,46 @@ export default function MachineViewTab() {
 
   const [machines, setMachines] = useState<{ id: string; machineCode?: string; name?: string }[]>([]);
   const [poDetailsAssignment, setPoDetailsAssignment] = useState<MachineOrderAssignment | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [zoomedCardIndex, setZoomedCardIndex] = useState<number | null>(null);
+
+  const handleReorderItems = useCallback(
+    async (fromIndex: number, toIndex: number) => {
+      if (!poDetailsAssignment || fromIndex === toIndex) return;
+      const items = [...(poDetailsAssignment.productionOrderItems ?? [])].sort(
+        (a, b) => (a.priority ?? 999) - (b.priority ?? 999)
+      );
+      const [removed] = items.splice(fromIndex, 1);
+      items.splice(toIndex, 0, removed);
+      const itemIds = items
+        .map((item) => item.itemId)
+        .filter((id): id is string => Boolean(id));
+      if (itemIds.length !== items.length) {
+        toast.error("Some items lack id – refresh and try again");
+        return;
+      }
+      const payload = items.map((item, i) => ({
+        itemId: item.itemId!,
+        priority: i + 1,
+      }));
+      setSavingOrder(true);
+      try {
+        const updated = await updateAssignmentItemsPriorities(poDetailsAssignment.id, payload);
+        setPoDetailsAssignment(updated);
+        setRows((prev) =>
+          prev.map((r) => (r.id === poDetailsAssignment.id ? updated : r))
+        );
+        toast.success("Priority updated");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to update order");
+      } finally {
+        setSavingOrder(false);
+        setDraggedIndex(null);
+      }
+    },
+    [poDetailsAssignment]
+  );
 
   const fetchList = useCallback(async () => {
     try {
@@ -128,42 +173,112 @@ export default function MachineViewTab() {
         isLoading={isLoading}
         onPageChange={setPage}
         readOnly
-        onCardClick={setPoDetailsAssignment}
+        columnsPerRow={5}
+        onCardClick={async (a) => {
+          setPoDetailsAssignment(a);
+          try {
+            const full = await getMachineOrderAssignment(a.id);
+            setPoDetailsAssignment(full);
+            setRows((prev) => prev.map((r) => (r.id === a.id ? full : r)));
+          } catch {
+            // keep list assignment if refetch fails
+          }
+        }}
       />
 
-      {/* PO details – right-side drawer, 70% width */}
+      {/* PO details – right-side drawer, ~49% width (30% less than before) */}
       {poDetailsAssignment && (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setPoDetailsAssignment(null)} aria-hidden />
-          <div className="fixed inset-y-0 right-0 w-[70%] bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 shrink-0">
-              <h3 className="text-sm font-bold text-gray-800">PO details</h3>
+          <div
+            className="fixed inset-y-0 right-0 w-[49%] shadow-2xl z-50 flex flex-col animate-slide-in-right overflow-hidden"
+            style={{
+              background: "#f6f6f6",
+              backgroundImage: `
+                radial-gradient(circle at 1px 1px, rgba(0,0,0,.06) 1px, transparent 0)
+              `,
+              backgroundSize: "24px 24px",
+            }}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200/80 bg-white/80 backdrop-blur px-4 py-3 shrink-0">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">PO details</h3>
+                <p className="text-[10px] text-gray-500 mt-0.5">Drag cards to change priority · + zoom in / − zoom out</p>
+              </div>
               <button
                 type="button"
-                onClick={() => setPoDetailsAssignment(null)}
+                onClick={() => { setPoDetailsAssignment(null); setZoomedCardIndex(null); }}
                 className="text-gray-400 hover:text-gray-600 p-1"
               >
                 <i className="ri-close-line text-lg" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-6">
+              {savingOrder && (
+                <div className="mb-3 text-[11px] text-amber-600 font-medium flex items-center gap-1">
+                  <span className="animate-spin rounded-full h-3 w-3 border-2 border-amber-500 border-t-transparent" />
+                  Saving order…
+                </div>
+              )}
               {poDetailsAssignment.productionOrderItems?.length ? (
-                <table className="w-full border-collapse border border-gray-200 text-[11px]">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-2 py-2 text-left font-bold text-[#495057] border border-gray-200">PO / Order</th>
-                      <th className="px-2 py-2 text-left font-bold text-[#495057] border border-gray-200">Article</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {poDetailsAssignment.productionOrderItems.map((item, idx) => (
-                      <tr key={idx} className="border border-gray-200">
-                        <td className="px-2 py-2 border border-gray-200">{item.orderNumber ?? item.productionOrder ?? "—"}</td>
-                        <td className="px-2 py-2 border border-gray-200">{item.articleNumber ?? item.article ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="space-y-3">
+                  {[...(poDetailsAssignment.productionOrderItems ?? [])]
+                    .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
+                    .map((item, idx) => {
+                    const isZoomed = zoomedCardIndex === idx;
+                    const displayPriority = item.priority ?? idx + 1;
+                    return (
+                      <div
+                        key={item.itemId ?? `${item.productionOrder}-${item.article}-${idx}`}
+                        draggable
+                        onDragStart={() => setDraggedIndex(idx)}
+                        onDragEnd={() => setDraggedIndex(null)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.add("ring-2", "ring-purple-400");
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.classList.remove("ring-2", "ring-purple-400");
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.remove("ring-2", "ring-purple-400");
+                          const from = draggedIndex;
+                          if (from !== null) handleReorderItems(from, idx);
+                        }}
+                        className={`group relative flex items-center gap-3 py-3 px-4 rounded-xl border border-white/20 shadow-lg transition-all duration-200 cursor-grab active:cursor-grabbing touch-none w-fit max-w-[280px] ${
+                          isZoomed ? "scale-110 z-10 shadow-xl" : ""
+                        }`}
+                        style={{
+                          marginLeft: idx === 0 ? 0 : `${24 * Math.pow(1.5, idx - 1)}px`,
+                          background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 40%, #7c3aed 100%)",
+                          color: "#fff",
+                        }}
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-[11px] font-bold" title={`Priority ${displayPriority}`}>
+                          {displayPriority}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[12px] font-bold truncate">
+                            {item.orderNumber ?? item.productionOrder ?? "—"}
+                          </div>
+                          <div className="text-[11px] text-white/90 truncate">
+                            {item.articleNumber ?? item.article ?? "—"}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setZoomedCardIndex(isZoomed ? null : idx); }}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                          title={isZoomed ? "Zoom out" : "Zoom in"}
+                        >
+                          <i className={isZoomed ? "ri-subtract-line text-sm" : "ri-add-line text-sm"} />
+                        </button>
+                        <i className="ri-draggable text-white/70 group-hover:text-white shrink-0" />
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 <p className="text-[11px] text-gray-500">No PO items.</p>
               )}

@@ -563,7 +563,8 @@ const AddOrderPage = () => {
           if (assignment?.id) {
             await addProductionOrderItemsToAssignment(
               assignment.id,
-              items.map((it) => ({ ...it, status: OrderStatus.PENDING }))
+              items.map((it) => ({ ...it, status: OrderStatus.PENDING })),
+              assignment
             );
           } else {
             assignmentErrors++;

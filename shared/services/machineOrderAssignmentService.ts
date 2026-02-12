@@ -12,6 +12,8 @@ export const OrderStatus = {
 export type OrderStatusType = (typeof OrderStatus)[keyof typeof OrderStatus];
 
 export interface ProductionOrderItem {
+  /** Subdocument _id from API – used for PATCH .../items batch update (priority) */
+  itemId?: string;
   /** Mongo ID of production order – always send this, never orderNumber */
   productionOrder: string;
   /** Mongo ID of article – always send this, never articleNumber */
@@ -94,6 +96,7 @@ function normalizeAssignment(raw: any): MachineOrderAssignment {
     activeNeedle: raw.activeNeedle ?? '',
     productionOrderItems: Array.isArray(raw.productionOrderItems)
       ? raw.productionOrderItems.map((item: any) => ({
+          itemId: item.id ?? item._id,
           productionOrder: item.productionOrder?.id ?? item.productionOrder?._id ?? item.productionOrder,
           article: item.article?.id ?? item.article?._id ?? item.article,
           status: item.status,
@@ -174,22 +177,27 @@ export async function getAssignmentByMachineId(machineId: string): Promise<Machi
   return data.results[0] ?? null;
 }
 
-/** Append production order items to a machine assignment (updates needle config for that machine). */
+/**
+ * Append production order items to a machine assignment (updates needle config for that machine).
+ * Uses previousAssignment.productionOrderItems when provided so we don't rely only on GET-by-id
+ * (which may omit or truncate items); otherwise fetches assignment by id and merges.
+ */
 export async function addProductionOrderItemsToAssignment(
   assignmentId: string,
-  newItems: ProductionOrderItem[]
+  newItems: ProductionOrderItem[],
+  previousAssignment?: MachineOrderAssignment | null
 ): Promise<MachineOrderAssignment> {
-  const assignment = await getMachineOrderAssignment(assignmentId);
-  const existing = assignment.productionOrderItems ?? [];
-  const merged = [
-    ...existing,
-    ...newItems.map((item) => ({
-      productionOrder: item.productionOrder,
-      article: item.article,
+  const existing =
+    previousAssignment?.productionOrderItems?.length
+      ? previousAssignment.productionOrderItems
+      : (await getMachineOrderAssignment(assignmentId)).productionOrderItems ?? [];
+  const sanitizedNew = sanitizeProductionOrderItemsForApi(
+    newItems.map((item) => ({
+      ...item,
       status: item.status ?? OrderStatus.PENDING,
-      priority: item.priority,
-    })),
-  ];
+    }))
+  );
+  const merged = [...existing, ...sanitizedNew];
   return updateMachineOrderAssignment(assignmentId, { productionOrderItems: merged });
 }
 
@@ -214,6 +222,24 @@ export async function updateProductionOrderItemPriority(
     return item;
   });
   await updateMachineOrderAssignment(assignment.id, { productionOrderItems: updated });
+}
+
+/** Batch update item priorities. PATCH :assignmentId/items with { items: [{ itemId, priority }, ...] }. Returns updated assignment (populated). */
+export async function updateAssignmentItemsPriorities(
+  assignmentId: string,
+  items: { itemId: string; priority: number }[]
+): Promise<MachineOrderAssignment> {
+  const res = await fetch(`${BASE}/${assignmentId}/items`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ items }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message || 'Failed to update item priorities');
+  }
+  const data = await res.json();
+  return normalizeAssignment(data.data ?? data);
 }
 
 /** Create assignment */
