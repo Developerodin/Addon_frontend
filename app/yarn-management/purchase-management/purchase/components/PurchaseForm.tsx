@@ -78,6 +78,7 @@ interface SupplierYarnOption {
   searchableText: string;
   shadeCode?: string;
   yarnTypeName?: string;
+  yarnSubtypeName?: string;
   supplierDetail: SupplierYarnDetail;
   metadataSummary?: string;
 }
@@ -318,6 +319,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         searchableText,
         shadeCode: shadeCode || undefined,
         yarnTypeName: typeName || undefined,
+        yarnSubtypeName: subtypeName || undefined,
         supplierDetail: detail,
         metadataSummary,
       };
@@ -825,10 +827,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           (typeof item.selectedYarnDetail?.yarnType === "string"
             ? item.selectedYarnDetail?.yarnType
             : (item.selectedYarnDetail?.yarnType as any)?.name) || "";
+        const yarnSubtypeName =
+          (typeof item.selectedYarnDetail?.yarnsubtype === "string"
+            ? item.selectedYarnDetail?.yarnsubtype
+            : (item.selectedYarnDetail?.yarnsubtype as any)?.subtype ||
+              (item.selectedYarnDetail?.yarnsubtype as any)?.name) || "";
         return {
           shadeCode: item.shadeCode || "",
           countSize: item.sizeCountName || item.sizeCount || "",
-          yarnType: yarnTypeName,
+          yarnSubtype: yarnSubtypeName,
           rate: item.rate || 0,
           quantity: item.qty || 0,
           gst: item.gst || 0,
@@ -849,8 +856,12 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       const newItems: YarnPurchaseItem[] = [];
       const normalizeText = (value: string) =>
         value.trim().toLowerCase().replace(/\s+/g, " ");
-      const normalizeCountToken = (value: string) =>
+      const normalizeShadeToken = (value: string) =>
         normalizeText(value).replace(/\s*\/\s*/g, "/");
+      const normalizeCountToken = (value: string) =>
+        normalizeText(value)
+          .replace(/\s*\/\s*/g, "/")
+          .replace(/['’`]/g, "");
       const extractLeadingCountFromYarnName = (value: string): string => {
         const firstPart = (value || "").split("-")[0]?.trim() || "";
         return firstPart;
@@ -872,20 +883,20 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         const gstAmount = (baseAmount * r.gst) / 100;
         const excelShadeCode = r.shadeCode?.trim() || "";
         const excelCountSize = r.countSize?.trim() || "";
-        const excelYarnType = r.yarnType?.trim() || "";
-        const normalizedShadeCode = normalizeText(excelShadeCode);
+        const excelYarnSubtype = r.yarnSubtype?.trim() || "";
+        const normalizedShadeCode = normalizeShadeToken(excelShadeCode);
         const normalizedCountSize = normalizeCountToken(excelCountSize);
-        const normalizedYarnType = normalizeText(excelYarnType);
+        const normalizedYarnSubtype = normalizeText(excelYarnSubtype);
 
         // Find strict match based on shade code and count size.
         const strictMatch = options.find((o) => {
-          const optionShadeCode = normalizeText(o.shadeCode || "");
+          const optionShadeCode = normalizeShadeToken(o.shadeCode || "");
           const shadeMatch =
             !normalizedShadeCode || optionShadeCode === normalizedShadeCode;
           if (!shadeMatch) return false;
-          if (normalizedYarnType) {
-            const optionYarnType = normalizeText(o.yarnTypeName || "");
-            if (!optionYarnType || optionYarnType !== normalizedYarnType) {
+          if (normalizedYarnSubtype) {
+            const optionYarnSubtype = normalizeText(o.yarnSubtypeName || "");
+            if (!optionYarnSubtype || optionYarnSubtype !== normalizedYarnSubtype) {
               return false;
             }
           }
@@ -899,13 +910,13 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         // Fallback: if strict match fails but shade code uniquely identifies a yarn, use it.
         // This handles cases where Excel count-size text format differs from supplier metadata.
         const shadeMatchedOptions = options.filter((o) => {
-          const optionShadeCode = normalizeText(o.shadeCode || "");
+          const optionShadeCode = normalizeShadeToken(o.shadeCode || "");
           if (!Boolean(normalizedShadeCode) || optionShadeCode !== normalizedShadeCode) {
             return false;
           }
-          if (!normalizedYarnType) return true;
-          const optionYarnType = normalizeText(o.yarnTypeName || "");
-          return optionYarnType === normalizedYarnType;
+          if (!normalizedYarnSubtype) return true;
+          const optionYarnSubtype = normalizeText(o.yarnSubtypeName || "");
+          return optionYarnSubtype === normalizedYarnSubtype;
         });
         const match =
           strictMatch ||
@@ -1124,6 +1135,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       yarnTypeId: undefined,
       yarnSubtypeId: undefined,
       shadeCode: "",
+      // Clear stale import mismatch flag while user edits manually.
+      notInSupplierData: undefined,
     });
 
     // Clear typing flag after a longer delay to allow for rapid typing and dropdown interaction
@@ -1396,9 +1409,10 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     for (let i = 0; i < formData.items.length; i++) {
       const item = formData.items[i];
       console.log(`[PurchaseForm] Validating item ${i + 1}`, item);
-      const isUnmatchedItem =
-        item.notInSupplierData === true ||
-        !isYarnInSupplierData(item.yarnName || "");
+      const hasYarnName = Boolean((item.yarnName || "").trim());
+      const isUnmatchedItem = hasYarnName
+        ? !isYarnInSupplierData(item.yarnName || "")
+        : item.notInSupplierData === true;
 
       if (isUnmatchedItem) {
         console.warn(
@@ -1688,13 +1702,12 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                     };
                     const availableCountSizes = getAvailableCountSizes(item);
                     // Highlight unmatched imported rows and manual invalid yarn names.
+                    const hasYarnName = Boolean((item.yarnName || "").trim());
                     const showNotMatchedError =
                       Boolean(formData.supplierId) &&
-                      (
-                        item.notInSupplierData === true ||
-                        (Boolean((item.yarnName || "").trim()) &&
-                          !isYarnInSupplierData(item.yarnName || ""))
-                      );
+                      (hasYarnName
+                        ? !isYarnInSupplierData(item.yarnName || "")
+                        : item.notInSupplierData === true);
 
                     return (
                       <tr

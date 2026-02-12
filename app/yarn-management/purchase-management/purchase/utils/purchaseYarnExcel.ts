@@ -1,7 +1,7 @@
 /**
  * Excel template and import for purchase order yarn items.
- * Columns: Shade Code, Count size, Yarn Type, Rate (empty in template), Quantity (empty), GST (5), Estimated Delivery Date (1 month forward).
- * Yarn Name is mapped automatically from shade code + count size + yarn type after import.
+ * Columns: Shade Code, Count size, Yarn Subtype, Rate (empty in template), Quantity (empty), GST (5), Estimated Delivery Date (1 month forward).
+ * Yarn Name is mapped automatically from shade code + count size + yarn subtype after import.
  */
 
 import * as XLSX from "xlsx";
@@ -10,7 +10,7 @@ export const YARN_ITEMS_TEMPLATE_SHEET = "Yarn Items";
 const TEMPLATE_HEADERS = [
   "Shade Code",
   "Count size",
-  "Yarn Type",
+  "Yarn Subtype",
   "Rate",
   "Quantity",
   "GST (%)",
@@ -20,7 +20,7 @@ const TEMPLATE_HEADERS = [
 export interface ParsedYarnRow {
   shadeCode: string;
   countSize: string;
-  yarnType: string;
+  yarnSubtype: string;
   rate: number;
   quantity: number;
   gst: number;
@@ -43,7 +43,7 @@ export function downloadYarnItemsTemplate(): void {
   const sampleRow = [
     "e.g. SC-001",
     "e.g. 40s",
-    "e.g. Nylon",
+    "e.g. Compact",
     "", // Rate - empty
     "", // Quantity - empty
     5, // GST (%)
@@ -77,7 +77,7 @@ export function downloadYarnItemsData(
     ...rows.map((row) => [
       row.shadeCode || "",
       row.countSize || "",
-      row.yarnType || "",
+      row.yarnSubtype || "",
       row.rate ?? "",
       row.quantity ?? "",
       row.gst ?? 5,
@@ -198,8 +198,8 @@ export function parseYarnItemsExcelFile(
           const countSize = str(
             get(row, ["count size", "countsize", "count_size", "count", "size"])
           );
-          const yarnType = str(
-            get(row, ["yarn type", "yarntype", "yarn_type", "type"])
+          const yarnSubtype = str(
+            get(row, ["yarn subtype", "yarnsubtype", "yarn_subtype", "subtype"])
           );
           const rate = num(get(row, ["rate", "rate (₹)"]));
           const quantity = num(
@@ -229,7 +229,7 @@ export function parseYarnItemsExcelFile(
           rows.push({
             shadeCode,
             countSize,
-            yarnType,
+            yarnSubtype,
             rate,
             quantity,
             gst: gst >= 0 ? gst : 5,
