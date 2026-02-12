@@ -8,6 +8,8 @@ interface OrderLogsModalProps {
   orderNumber?: string;
   isOpen: boolean;
   onClose: () => void;
+  /** When true, render only inner content for use inside a side drawer */
+  embedInDrawer?: boolean;
 }
 
 interface LogEntry {
@@ -27,7 +29,8 @@ const OrderLogsModal: React.FC<OrderLogsModalProps> = ({
   orderId,
   orderNumber,
   isOpen,
-  onClose
+  onClose,
+  embedInDrawer
 }) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -121,25 +124,15 @@ const OrderLogsModal: React.FC<OrderLogsModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full h-[90vh] flex flex-col">
+  const inner = (
+    <div className={`bg-white flex flex-col h-full ${embedInDrawer ? '' : 'rounded-lg shadow-xl max-w-6xl w-full h-[90vh]'}`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+        <div className="flex items-center justify-between p-[10px] border-b border-gray-200 flex-shrink-0">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
-              Order Logs
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">
-              {orderNumber ? `Order: ${orderNumber}` : `Order ID: ${orderId}`}
-            </p>
+            <h2 className="text-sm font-bold text-gray-900">Order Logs</h2>
+            <p className="text-[11px] text-gray-600 mt-0.5">{orderNumber ? `Order: ${orderNumber}` : `Order ID: ${orderId}`}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <i className="ri-close-line text-2xl"></i>
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><i className="ri-close-line text-lg"></i></button>
         </div>
 
         {/* Filters */}
@@ -338,6 +331,10 @@ const OrderLogsModal: React.FC<OrderLogsModalProps> = ({
           )}
         </div>
       </div>
+  );
+  return embedInDrawer ? inner : (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      {inner}
     </div>
   );
 };

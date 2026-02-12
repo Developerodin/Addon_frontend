@@ -153,6 +153,58 @@ export interface PaginatedResponse<T> {
   totalResults: number;
 }
 
+/** Single order row in article-wise report */
+export interface ArticleWiseReportOrder {
+  articleId: string;
+  orderId: string;
+  orderNumber: string;
+  orderStatus: string;
+  orderPriority: string;
+  orderCurrentFloor: string;
+  orderNote?: string;
+  orderCreatedAt?: string;
+  plannedQuantity: number;
+  status: string;
+  progress: number;
+  linkingType: string;
+  priority: string;
+  remarks?: string;
+  machineId?: string;
+  machine?: { machineCode?: string; machineNumber?: string; model?: string; floor?: string };
+  floorQuantities?: Record<string, unknown>;
+  startedAt?: string;
+  completedAt?: string;
+  logs?: Array<{
+    id: string;
+    action: string;
+    quantity?: number;
+    fromFloor?: string;
+    toFloor?: string;
+    remarks?: string;
+    timestamp?: string;
+    date?: string;
+    userId?: string;
+    previousValue?: unknown;
+    newValue?: unknown;
+    qualityStatus?: string | null;
+  }>;
+}
+
+/** Single article in article-wise report */
+export interface ArticleWiseReportArticle {
+  factoryCode: string;
+  articleNumber: string;
+  orders: ArticleWiseReportOrder[];
+}
+
+export interface ArticleWiseReportResponse {
+  results: ArticleWiseReportArticle[];
+  page: number;
+  limit: number;
+  totalPages: number;
+  total: number;
+}
+
 class ProductionService {
   private baseUrl = `${API_BASE_URL}/production`;
 
@@ -603,6 +655,24 @@ class ProductionService {
 
   async getOrderTrackingReport(orderId: string): Promise<ApiResponse<any>> {
     return this.request(`/reports/order-tracking/${orderId}`);
+  }
+
+  /** Article-wise production report. Optional: articleNumber (factoryCode), limit (default 50, max 100), page (default 1), logsPerArticle (default 20, max 100). */
+  async getArticleWiseReport(filters: {
+    articleNumber?: string;
+    limit?: number;
+    page?: number;
+    logsPerArticle?: number;
+  } = {}): Promise<ApiResponse<ArticleWiseReportResponse>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, String(value));
+      }
+    });
+    const queryString = queryParams.toString();
+    const endpoint = queryString ? `/reports/article-wise?${queryString}` : '/reports/article-wise';
+    return this.request<ArticleWiseReportResponse>(endpoint);
   }
 
   // Logging & Audit APIs

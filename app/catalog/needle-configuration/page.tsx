@@ -1,186 +1,321 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
-import { Toaster } from "react-hot-toast";
+import { Toaster, toast } from "react-hot-toast";
 import {
-  listNeedleConfigurations,
-  NeedleConfiguration,
-} from "@/shared/services/needleConfigurationService";
+  listMachineOrderAssignments,
+  createMachineOrderAssignment,
+  updateMachineOrderAssignment,
+  type MachineOrderAssignment,
+  type CreateAssignmentBody,
+  type UpdateAssignmentBody,
+} from "@/shared/services/machineOrderAssignmentService";
+import { machinesService } from "@/shared/services/machinesService";
+import { productionService } from "@/shared/services/productionService";
+import AssignmentsTable from "./components/AssignmentsTable";
+import AddEditAssignmentModal from "./components/AddEditAssignmentModal";
+import ActiveNeedleModal from "./components/ActiveNeedleModal";
+import AssignmentLogsModal from "./components/AssignmentLogsModal";
 
-const formatDate = (v?: string) =>
-  v ? new Date(v).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "-";
+/** Collect unique needle sizes from machine list (needleSizeConfig or needleSize) */
+function getNeedlesFromMachines(machines: { needleSizeConfig?: { needleSize: string }[]; needleSize?: string }[]): string[] {
+  const set = new Set<string>();
+  machines.forEach((m) => {
+    if (Array.isArray(m.needleSizeConfig)) {
+      m.needleSizeConfig.forEach((c) => c.needleSize && set.add(c.needleSize));
+    }
+    if (m.needleSize) set.add(m.needleSize);
+  });
+  return Array.from(set).sort();
+}
 
 const NeedleConfigurationPage = () => {
-  const [rows, setRows] = useState<NeedleConfiguration[]>([]);
+  const [rows, setRows] = useState<MachineOrderAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
-  const [search, setSearch] = useState("");
+  const [filterMachine, setFilterMachine] = useState("");
+  const [filterNeedle, setFilterNeedle] = useState("");
+  const [filterActive, setFilterActive] = useState<boolean | "">("");
 
-  const fetchList = async () => {
+  const [machines, setMachines] = useState<{ id: string; machineCode?: string; name?: string; needleSizeConfig?: { needleSize: string }[]; needleSize?: string }[]>([]);
+  const [productionOrders, setProductionOrders] = useState<any[]>([]);
+
+  const [addEditOpen, setAddEditOpen] = useState(false);
+  const [editAssignment, setEditAssignment] = useState<MachineOrderAssignment | null>(null);
+  const [activeNeedleOpen, setActiveNeedleOpen] = useState(false);
+  const [activeNeedleAssignment, setActiveNeedleAssignment] = useState<MachineOrderAssignment | null>(null);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logsAssignment, setLogsAssignment] = useState<MachineOrderAssignment | null>(null);
+  const [togglingActiveId, setTogglingActiveId] = useState<string | null>(null);
+
+  const fetchList = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await listNeedleConfigurations({ page, limit, search: search || undefined });
-      setRows(data.results ?? []);
-      setTotalPages(data.totalPages ?? 1);
-      setTotalResults(data.totalResults ?? 0);
-    } catch {
+      const data = await listMachineOrderAssignments({
+        page,
+        limit,
+        machine: filterMachine || undefined,
+        activeNeedle: filterNeedle || undefined,
+        isActive: filterActive === "" ? undefined : filterActive,
+      });
+      setRows(data.results);
+      setTotalPages(data.totalPages);
+      setTotalResults(data.totalResults);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to load assignments");
       setRows([]);
       setTotalPages(1);
       setTotalResults(0);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [page, limit, filterMachine, filterNeedle, filterActive]);
 
   useEffect(() => {
     fetchList();
-  }, [page, limit, search]);
+  }, [fetchList]);
 
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [filterMachine, filterNeedle, filterActive]);
+
+  useEffect(() => {
+    machinesService.getMachines(1, 500, "").then((res) => {
+      const list = res.results ?? [];
+      setMachines(
+        list.map((m: any) => ({
+          id: m.id ?? m._id,
+          machineCode: m.machineCode,
+          name: m.name,
+          needleSizeConfig: m.needleSizeConfig,
+          needleSize: m.needleSize,
+        }))
+      );
+    }).catch(() => setMachines([]));
+  }, []);
+
+  useEffect(() => {
+    productionService.getOrders({ limit: 500 }).then((res) => {
+      if (res.success && res.data?.results) {
+        setProductionOrders(res.data.results);
+      } else {
+        setProductionOrders([]);
+      }
+    }).catch(() => setProductionOrders([]));
+  }, []);
+
+  const availableNeedles = getNeedlesFromMachines(machines);
+  /** For "Change active needle" modal: only needles from this assignment's machine.needleSizeConfig */
+  const activeNeedleModalOptions = (() => {
+    if (!activeNeedleAssignment) return [];
+    const m = activeNeedleAssignment.machine;
+    if (typeof m === "object" && m && Array.isArray((m as any).needleSizeConfig)) {
+      return ((m as any).needleSizeConfig as { needleSize: string }[])
+        .map((c) => c.needleSize)
+        .filter(Boolean);
+    }
+    return [activeNeedleAssignment.activeNeedle].filter(Boolean);
+  })();
+  const machineOptions = machines.map((m) => ({
+    id: m.id,
+    machineCode: m.machineCode,
+    name: m.name,
+  }));
+
+  const openEdit = (a: MachineOrderAssignment) => {
+    setEditAssignment(a);
+    setAddEditOpen(true);
+  };
+
+  const openAdd = () => {
+    setEditAssignment(null);
+    setAddEditOpen(true);
+  };
+
+  const handleCreate = async (body: CreateAssignmentBody) => {
+    await createMachineOrderAssignment(body);
+    toast.success("Assignment created");
+    fetchList();
+  };
+
+  const handleUpdate = async (id: string, body: UpdateAssignmentBody) => {
+    await updateMachineOrderAssignment(id, body);
+    toast.success("Assignment updated");
+    fetchList();
+  };
+
+  const openActiveNeedle = (a: MachineOrderAssignment) => {
+    setActiveNeedleAssignment(a);
+    setActiveNeedleOpen(true);
+  };
+
+  const handleActiveNeedleSave = async (activeNeedle: string) => {
+    if (!activeNeedleAssignment?.id) return;
+    await updateMachineOrderAssignment(activeNeedleAssignment.id, { activeNeedle });
+    toast.success("Active needle updated");
+    setActiveNeedleOpen(false);
+    setActiveNeedleAssignment(null);
+    fetchList();
+  };
+
+  const openLogs = (a: MachineOrderAssignment) => {
+    setLogsAssignment(a);
+    setLogsOpen(true);
+  };
+
+  const handleToggleActive = async (a: MachineOrderAssignment) => {
+    if (!a.id) return;
+    const nextActive = !a.isActive;
+    const message = nextActive
+      ? "Activate this assignment?"
+      : "Deactivate this assignment? It will be marked inactive.";
+    if (!window.confirm(message)) return;
+    setTogglingActiveId(a.id);
+    const t = toast.loading(nextActive ? "Activating…" : "Deactivating…");
+    try {
+      await updateMachineOrderAssignment(a.id, { isActive: nextActive });
+      toast.dismiss(t);
+      toast.success(nextActive ? "Assignment activated" : "Assignment deactivated");
+      fetchList();
+    } catch (e) {
+      toast.dismiss(t);
+      toast.error(e instanceof Error ? e.message : "Failed to update status");
+    } finally {
+      setTogglingActiveId(null);
+    }
+  };
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Needle Configuration" />
       <Toaster position="top-right" />
 
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
-            <h1 className="text-xl font-semibold text-gray-900">Needle Configuration</h1>
-            <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-              {totalResults} total
-            </span>
-          </div>
-          <p className="text-sm text-gray-600">
-            View and manage needle configurations. Table only for now.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
-              className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-sm rounded focus:ring-0 focus:border-purple-300 w-56"
-            />
-            <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-          </div>
-        </div>
-      </div>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header Section - same as catalog items */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
+              <h1 className="text-sm font-bold text-gray-800">Needle Configuration</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {totalResults}
+              </span>
+            </div>
 
-      <div className="box">
-        <div className="box-header flex items-center justify-between">
-          <h3 className="box-title">Needle Configuration List</h3>
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span>Page {page} of {totalPages}</span>
-            <select
-              value={limit}
-              onChange={(e) => {
-                setLimit(Number(e.target.value));
-                setPage(1);
-              }}
-              className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1 focus:ring-0 focus:border-gray-300"
-            >
-              {[10, 20, 50, 100].map((n) => (
-                <option key={n} value={n}>{n}/page</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="box-body p-0">
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-16">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mb-4 opacity-60" />
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-[0.2em]">Loading</p>
-            </div>
-          ) : rows.length === 0 ? (
-            <div className="py-16 text-center text-gray-500">
-              <p className="text-sm font-medium">No needle configurations found</p>
-              <p className="text-xs text-gray-400 mt-1">Try adjusting the search.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead className="bg-gray-50/50">
-                  <tr>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      #
-                    </th>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      Needle Size
-                    </th>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      Cutoff Qty
-                    </th>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      Name / Code
-                    </th>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      Created
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, idx) => (
-                    <tr
-                      key={row.id}
-                      className="border-b border-gray-100 hover:bg-gray-50/50"
-                    >
-                      <td className="px-3 py-2.5 text-sm text-gray-600">
-                        {(page - 1) * limit + idx + 1}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-800">
-                        {row.needleSize ?? row.name ?? "-"}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-800">
-                        {row.cutoffQuantity ?? "-"}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-800">
-                        {row.name ?? row.code ?? "-"}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-600">
-                        {formatDate(row.createdAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-        {totalPages > 1 && (
-          <div className="box-footer flex items-center justify-between px-3 py-2 border-t border-gray-200">
-            <span className="text-xs text-gray-500">
-              Showing {(page - 1) * limit + 1}–{Math.min(page * limit, totalResults)} of {totalResults}
-            </span>
-            <div className="flex gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={filterMachine}
+                onChange={(e) => setFilterMachine(e.target.value)}
+                className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 focus:ring-0 focus:border-purple-300 min-w-[120px]"
+              >
+                <option value="">All machines</option>
+                {machines.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.machineCode ?? m.name ?? m.id}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={filterNeedle}
+                onChange={(e) => setFilterNeedle(e.target.value)}
+                placeholder="Active needle"
+                className="bg-white border border-gray-200 pl-3 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-28 min-w-[80px] placeholder:text-gray-400 font-medium"
+              />
+              <select
+                value={filterActive === "" ? "" : filterActive ? "true" : "false"}
+                onChange={(e) =>
+                  setFilterActive(
+                    e.target.value === "" ? "" : e.target.value === "true"
+                  )
+                }
+                className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 focus:ring-0 focus:border-purple-300"
+              >
+                <option value="">All</option>
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
+              >
+                <option value={10}>Show 10</option>
+                <option value={20}>Show 20</option>
+                <option value={50}>Show 50</option>
+                <option value={100}>Show 100</option>
+              </select>
               <button
                 type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="px-2 py-1 text-xs font-medium rounded border border-gray-200 bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                onClick={openAdd}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
               >
-                Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="px-2 py-1 text-xs font-medium rounded border border-gray-200 bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                Next
+                <i className="ri-add-line text-xs" />
+                Add assignment
               </button>
             </div>
           </div>
-        )}
+        </div>
+
+        <AssignmentsTable
+        rows={rows}
+        page={page}
+        limit={limit}
+        totalResults={totalResults}
+        totalPages={totalPages}
+        isLoading={isLoading}
+        togglingActiveId={togglingActiveId}
+        onPageChange={setPage}
+        onConfig={openEdit}
+        onChangeNeedle={openActiveNeedle}
+        onLogs={openLogs}
+        onToggleActive={handleToggleActive}
+        />
+
+          <AddEditAssignmentModal
+          isOpen={addEditOpen}
+          onClose={() => {
+            setAddEditOpen(false);
+            setEditAssignment(null);
+          }}
+          editAssignment={editAssignment}
+          machines={machineOptions}
+          productionOrders={productionOrders}
+          onCreate={handleCreate}
+          onUpdate={handleUpdate}
+        />
+
+        <ActiveNeedleModal
+          isOpen={activeNeedleOpen}
+          onClose={() => {
+            setActiveNeedleOpen(false);
+            setActiveNeedleAssignment(null);
+          }}
+          currentNeedle={activeNeedleAssignment?.activeNeedle ?? ""}
+          availableNeedles={activeNeedleModalOptions}
+          onSave={handleActiveNeedleSave}
+        />
+
+        <AssignmentLogsModal
+          isOpen={logsOpen}
+          onClose={() => {
+            setLogsOpen(false);
+            setLogsAssignment(null);
+          }}
+          assignmentId={logsAssignment?.id ?? ""}
+          assignmentLabel={
+            logsAssignment
+              ? `${logsAssignment.activeNeedle} (${typeof logsAssignment.machine === "object" ? (logsAssignment.machine as any)?.machineCode : logsAssignment.machine})`
+              : undefined
+          }
+        />
       </div>
     </div>
   );

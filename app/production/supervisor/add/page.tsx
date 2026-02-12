@@ -6,6 +6,12 @@ import Link from "next/link";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, CreateOrderRequest } from "@/shared/services/productionService";
+import {
+  getMachineActiveNeedleMap,
+  getAssignmentByMachineId,
+  addProductionOrderItemsToAssignment,
+  OrderStatus,
+} from "@/shared/services/machineOrderAssignmentService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import axios from "axios";
@@ -18,8 +24,12 @@ interface Article {
   linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
   priority: 'High' | 'Medium' | 'Low' | 'Urgent';
   machineId?: string;
+  /** Queue position (1, 2, 3...) for this article on the selected machine (needle config productionOrderItems.priority) */
+  queuePriority?: number;
   remarks?: string;
   productId?: string;
+  /** Needle size from product's Needles attribute (for filtering machines) */
+  needleSizeFromProduct?: string;
   bom?: ProductBOM[];
 }
 
@@ -27,6 +37,7 @@ interface Product {
   id: string;
   name: string;
   factoryCode: string;
+  attributes?: Record<string, string | number>;
   bom?: ProductBOM[];
 }
 
@@ -50,6 +61,8 @@ interface Machine {
   model: string;
   floor: string;
   status: 'Active' | 'Under Maintenance' | 'Idle';
+  needleSizeConfig?: { needleSize: string }[];
+  needleSize?: string;
 }
 
 interface AddOrderFormData {
@@ -71,6 +84,7 @@ const AddOrderPage = () => {
         linkingType: 'Auto Linking',
         priority: 'Medium',
         machineId: '',
+        queuePriority: undefined,
         remarks: ''
       }
     ],
@@ -91,6 +105,10 @@ const AddOrderPage = () => {
   const [showMachineModal, setShowMachineModal] = useState(false);
   const [machineModalArticleIndex, setMachineModalArticleIndex] = useState<number | null>(null);
   const [machineSearchQuery, setMachineSearchQuery] = useState('');
+  /** Machine ID -> active needle (from Catalog Needle Configuration); used to filter and show needle in dropdown */
+  const [machineActiveNeedleMap, setMachineActiveNeedleMap] = useState<Map<string, string>>(new Map());
+  /** Needles attribute value ID -> display name (for filtering machines by product's Needles) */
+  const [needlesValueIdToName, setNeedlesValueIdToName] = useState<Record<string, string>>({});
 
   // Valid production floors (API may return e.g. "knitting Floor" – match case-insensitively)
   const validProductionFloors = [
@@ -101,27 +119,38 @@ const AddOrderPage = () => {
   const floorMatches = (floor: string) =>
     validProductionFloors.some((f) => floor?.toLowerCase().includes(f.toLowerCase()));
 
-  // Fetch machines from API
+  // Fetch machine IDs that have active needle (from needle configuration), then fetch machines and filter
   const fetchMachines = async () => {
     try {
       setIsLoadingMachines(true);
+      let activeMap = new Map<string, string>();
+      try {
+        activeMap = await getMachineActiveNeedleMap();
+        setMachineActiveNeedleMap(activeMap);
+      } catch {
+        setMachineActiveNeedleMap(new Map());
+      }
+
       const response = await fetch(`${API_BASE_URL}/machines?page=1&limit=1000`, {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch machines');
       }
-      
+
       const data = await response.json();
       const machinesArray = Array.isArray(data.results) ? data.results : [];
-      // Filter machines to only include those with valid production floors
-      const validMachines = machinesArray.filter((machine: Machine) => 
-        floorMatches(machine.floor)
-      );
+      // Only machines with valid production floors AND with an active needle in needle configuration
+      const validMachines = machinesArray.filter((machine: Machine) => {
+        const id = machine._id ?? machine.id;
+        if (!id) return false;
+        if (!floorMatches(machine.floor)) return false;
+        return activeMap.has(String(id));
+      });
       setMachines(validMachines);
     } catch (error) {
       console.error('Error fetching machines:', error);
@@ -130,6 +159,33 @@ const AddOrderPage = () => {
       setIsLoadingMachines(false);
     }
   };
+
+  // Fetch Needles attribute option values (id -> name) for resolving product's Needles when filtering machines
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/product-attributes?page=1&limit=500`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const results = data.results || [];
+        const needlesAttr = results.find((a: { name: string }) => a.name?.toLowerCase() === 'needles');
+        const map: Record<string, string> = {};
+        (needlesAttr?.optionValues || []).forEach((v: { id?: number; _id?: string; name?: string }) => {
+          const name = v.name;
+          if (!name) return;
+          if (v.id != null) map[String(v.id)] = name;
+          if (v._id) map[String(v._id)] = name;
+        });
+        if (!cancelled) setNeedlesValueIdToName(map);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Fetch machines on component mount
   useEffect(() => {
@@ -190,11 +246,12 @@ const AddOrderPage = () => {
     }
   };
 
-  // Open product selection modal
+  // Open product selection modal — set loading true first so modal shows loader immediately (no blank flash)
   const openProductModal = (articleIndex: number) => {
     setSelectedArticleIndex(articleIndex);
-    setShowProductModal(true);
     setProductSearchQuery('');
+    setIsLoadingProducts(true);
+    setShowProductModal(true);
     fetchProducts();
   };
 
@@ -208,11 +265,13 @@ const AddOrderPage = () => {
   // Select product and update article
   const selectProduct = async (product: Product) => {
     if (selectedArticleIndex === null) return;
+    const productId = product.id ?? (product as any)._id;
+    if (!productId) return;
 
     try {
       // Fetch full product details with BOM
-      const productResponse = await axios.get(`${API_BASE_URL}/products/${product.id}`);
-      const fullProduct = productResponse.data;
+      const productResponse = await axios.get(`${API_BASE_URL}/products/${productId}`);
+      const fullProduct = productResponse.data?.data ?? productResponse.data;
 
       // Normalize BOM structure - handle both yarnCatalogId and materialId formats
       const normalizedBOM = await Promise.all((fullProduct.bom || []).map(async (bomItem: any) => {
@@ -252,15 +311,24 @@ const AddOrderPage = () => {
         };
       }));
 
+      // Resolve Needles attribute to display name (for machine filtering)
+      const attrs = fullProduct.attributes || {};
+      const needlesRaw = attrs.Needles ?? attrs.needles;
+      const needleSizeFromProduct =
+        needlesRaw != null && needlesRaw !== ''
+          ? needlesValueIdToName[String(needlesRaw)] ?? String(needlesRaw)
+          : undefined;
+
       // Update article with factory code and product details
       setFormData(prev => ({
         ...prev,
         articles: prev.articles.map((article, index) => 
           index === selectedArticleIndex 
-            ? { 
+              ? { 
                 ...article, 
                 articleNumber: product.factoryCode,
-                productId: product.id,
+                productId: productId,
+                needleSizeFromProduct,
                 bom: normalizedBOM
               }
             : article
@@ -271,7 +339,7 @@ const AddOrderPage = () => {
       toast.success(`Factory code ${product.factoryCode} selected`);
     } catch (error) {
       console.error('Error fetching product details:', error);
-      // Still update with factory code even if BOM fetch fails
+      // Still update with factory code even if BOM fetch fails (no needle filter in catch - product fetch may have failed)
       setFormData(prev => ({
         ...prev,
         articles: prev.articles.map((article, index) => 
@@ -279,7 +347,7 @@ const AddOrderPage = () => {
             ? { 
                 ...article, 
                 articleNumber: product.factoryCode,
-                productId: product.id
+                productId: productId
               }
             : article
         )
@@ -292,12 +360,15 @@ const AddOrderPage = () => {
   const validateForm = (): boolean => {
     const newErrors: {[key: string]: string} = {};
 
-    // Validate articles
     formData.articles.forEach((article, index) => {
+      const artNum = (article.articleNumber || '').toString().trim();
+      if (!artNum) {
+        newErrors[`article_${index}_articleNumber`] = 'Article # required';
+      }
       if (article.plannedQuantity <= 0) {
-        newErrors[`article_${index}_quantity`] = 'Planned Quantity must be greater than 0';
+        newErrors[`article_${index}_quantity`] = 'Qty must be > 0';
       } else if (article.plannedQuantity > 100000) {
-        newErrors[`article_${index}_quantity`] = 'Planned Quantity cannot exceed 100,000';
+        newErrors[`article_${index}_quantity`] = 'Qty cannot exceed 100,000';
       }
     });
 
@@ -315,9 +386,8 @@ const AddOrderPage = () => {
           const updatedArticle = { ...article, [field]: value };
           // If article number is manually changed, clear product association
           if (field === 'articleNumber' && typeof value === 'string') {
-            // Only clear if it's different from what was set via product selection
-            // We'll keep it simple - manual changes clear the association
             updatedArticle.productId = undefined;
+            updatedArticle.needleSizeFromProduct = undefined;
             updatedArticle.bom = undefined;
           }
           return updatedArticle;
@@ -326,14 +396,12 @@ const AddOrderPage = () => {
       })
     }));
 
-    // Clear error when user starts typing
-    const errorKey = `article_${articleIndex}_${field}`;
-    if (errors[errorKey]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[errorKey];
-        return newErrors;
-      });
+    if (field === 'articleNumber') {
+      const key = `article_${articleIndex}_articleNumber`;
+      if (errors[key]) setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
+    } else if (field === 'plannedQuantity') {
+      const key = `article_${articleIndex}_quantity`;
+      if (errors[key]) setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
     }
   };
 
@@ -383,6 +451,7 @@ const AddOrderPage = () => {
       linkingType: 'Auto Linking',
       priority: 'Medium',
       machineId: '',
+      queuePriority: undefined,
       remarks: ''
     };
 
@@ -429,35 +498,90 @@ const AddOrderPage = () => {
       console.log('Submitting order data:', orderData);
       const response = await productionService.createOrder(orderData);
       console.log('Order creation response:', response);
-      
-      if (response.success) {
-        toast.success('Production order created successfully!');
-        router.push('/production/supervisor');
-      } else {
-        // Extract error message with better handling
+
+      if (!response.success) {
         const errorMessage = response.error?.message || 'Failed to create order';
         const errorCode = response.error?.code || 'UNKNOWN_ERROR';
         const errorDetails = response.error?.details || [];
-        
-        console.error('Order creation error:', {
-          code: errorCode,
-          message: errorMessage,
-          details: errorDetails,
-          fullError: response.error,
-          fullResponse: response
-        });
-        
-        // Set API error state for display
+        console.error('Order creation error:', { code: errorCode, message: errorMessage, details: errorDetails, fullError: response.error });
         setApiError(errorMessage);
-        
-        // Show error in toast
-        toast.error(errorMessage, {
-          duration: 6000,
-        });
-        
-        // Also show alert for critical errors
+        toast.error(errorMessage, { duration: 6000 });
         alert(`Error: ${errorMessage}\n\nPlease check the form and try again.`);
+        return;
       }
+
+      const raw = response.data as any;
+      const createdOrder = raw?.order ?? raw?.data ?? raw;
+      let orderId: string | undefined =
+        createdOrder?.id ?? createdOrder?._id ?? raw?.id ?? raw?._id ?? raw?.order?.id ?? raw?.data?.id;
+      const orderNumber = createdOrder?.orderNumber ?? raw?.orderNumber ?? orderId ?? '';
+
+      // Get article IDs: create response often doesn't include articles, so fetch order
+      let createdArticles: any[] = createdOrder?.articles ?? raw?.articles ?? [];
+      if (!orderId) {
+        setApiError('Order created but could not read order ID from response.');
+        toast.error('Order created but could not read order ID. Check console.');
+        return;
+      }
+      if (createdArticles.length === 0) {
+        const orderRes = await productionService.getOrder(orderId);
+        if (orderRes.success && orderRes.data?.articles?.length) {
+          createdArticles = orderRes.data.articles;
+        }
+      }
+
+      // Backend may return articles as array of IDs (strings) or array of objects; resolve articleId per row
+      const byMachine = new Map<string, { productionOrder: string; article: string; priority?: number }[]>();
+      formData.articles.forEach((article, i) => {
+        const machineId = (article.machineId ?? '').toString().trim();
+        if (!machineId) return;
+        const art = createdArticles[i] ?? createdArticles.find(
+          (a: any) => typeof a === 'object' && (a?.articleNumber || a?.factoryCode || '').toString() === (article.articleNumber || '').toString()
+        );
+        const articleId = typeof art === 'string' ? art : (art?.id ?? art?._id);
+        if (!articleId) return;
+        if (!byMachine.has(machineId)) byMachine.set(machineId, []);
+        const queuePriority = article.queuePriority != null && article.queuePriority >= 1 ? article.queuePriority : i + 1;
+        byMachine.get(machineId)!.push({
+          productionOrder: orderId!,
+          article: articleId,
+          priority: queuePriority,
+        });
+      });
+
+      // Always call assignment API when there are machines; keep page open until done, then redirect
+      if (byMachine.size > 0) {
+        toast.loading('Linking order to machine(s)...', { id: 'linking-machines' });
+      }
+      let assignmentErrors = 0;
+      for (const [machineId, items] of byMachine) {
+        try {
+          const assignment = await getAssignmentByMachineId(machineId);
+          if (assignment?.id) {
+            await addProductionOrderItemsToAssignment(
+              assignment.id,
+              items.map((it) => ({ ...it, status: OrderStatus.PENDING }))
+            );
+          } else {
+            assignmentErrors++;
+            toast.error(`No active assignment for selected machine. Order ${orderNumber} created but machine link skipped.`);
+          }
+        } catch (err: any) {
+          assignmentErrors++;
+          console.warn(`Could not link order to machine ${machineId} in needle config:`, err);
+          toast.error(err?.message || `Failed to link order to machine. Order ${orderNumber} created.`);
+        }
+      }
+      toast.dismiss('linking-machines');
+
+      if (assignmentErrors === 0 && byMachine.size > 0) {
+        toast.success(`Order ${orderNumber} created and linked to ${byMachine.size} machine(s).`);
+      } else if (assignmentErrors === 0) {
+        toast.success('Production order created successfully!');
+      } else {
+        toast.success(`Order ${orderNumber} created. Some machine links could not be updated.`);
+      }
+      router.push('/production/supervisor');
     } catch (error: any) {
       console.error('Error creating order:', error);
       // This should rarely happen now since service returns errors in ApiResponse format
@@ -485,6 +609,7 @@ const AddOrderPage = () => {
           linkingType: 'Auto Linking',
           priority: 'Medium',
           machineId: '',
+          queuePriority: undefined,
           remarks: ''
         }
       ],
@@ -495,52 +620,44 @@ const AddOrderPage = () => {
   };
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Add New Production Order"/>
-      
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none mb-4">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <h1 className="box-title text-xl font-semibold">Add New Production Order</h1>
-                <HelpIcon
-                  title="Add New Production Order"
-                  content={
-                    <div className="space-y-3">
-                      <div>
-                        <h4 className="font-semibold text-base mb-1">What is this page?</h4>
-                        <p className="text-gray-700 text-sm">
-                          Create a new production order with article details and specifications.
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-semibold text-base mb-1">Required Fields:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
-                          <li><strong>Order Priority:</strong> Urgent, High, Medium, or Low</li>
-                          <li><strong>Article Number:</strong> Any alphanumeric characters</li>
-                          <li><strong>Planned Quantity:</strong> Number of units to produce (1-100,000)</li>
-                          <li><strong>Linking Type:</strong> Auto, Rosso, or Hand linking</li>
-                          <li><strong>Priority (per article):</strong> Urgent, High, Medium, or Low</li>
-                        </ul>
-                      </div>
-                    </div>
-                  }
-                />
-              </div>
-              <div className="box-tools">
-                <Link href="/production/supervisor" className="ti-btn ti-btn-secondary ti-btn-sm">
-                  <i className="ri-arrow-left-line me-1"></i> Back
-                </Link>
-              </div>
-            </div>
-          </div>
 
-          {/* Form */}
-          <div className="box">
-            <div className="box-body p-4">
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-[10px] border-b border-gray-100">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Add New Production Order</h1>
+              <HelpIcon
+                title="Add New Production Order"
+                content={
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="font-semibold text-base mb-1">What is this page?</h4>
+                      <p className="text-gray-700 text-sm">Create a new production order with article details and specifications.</p>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-base mb-1">Required Fields:</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
+                        <li><strong>Order Priority:</strong> Urgent, High, Medium, or Low</li>
+                        <li><strong>Article Number:</strong> Any alphanumeric characters</li>
+                        <li><strong>Planned Quantity:</strong> Number of units to produce (1-100,000)</li>
+                        <li><strong>Linking Type:</strong> Auto, Rosso, or Hand linking</li>
+                        <li><strong>Priority (per article):</strong> Urgent, High, Medium, or Low</li>
+                      </ul>
+                    </div>
+                  </div>
+                }
+              />
+            </div>
+            <Link href="/production/supervisor" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm">
+              <i className="ri-arrow-left-line text-xs"></i> Back
+            </Link>
+          </div>
+        </div>
+
+        <div className="p-[10px]">
               <form onSubmit={handleSubmit}>
                 {/* API Error Display */}
                 {apiError && (
@@ -598,15 +715,14 @@ const AddOrderPage = () => {
                 {/* Articles Table */}
                 <div className="border-t pt-4">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-base font-semibold text-gray-900">Articles ({formData.articles.length})</h3>
+                    <h3 className="text-sm font-bold text-gray-800">Articles ({formData.articles.length})</h3>
                     <button
                       type="button"
                       onClick={addArticle}
-                      className="ti-btn ti-btn-primary ti-btn-w-sm flex items-center gap-2"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm"
                       title="Add Article"
                     >
-                      <i className="ri-add-line text-sm"></i>
-                      <span>Add Article</span>
+                      <i className="ri-add-line text-xs"></i> Add Article
                     </button>
                   </div>
 
@@ -619,6 +735,7 @@ const AddOrderPage = () => {
                           <th className="w-32 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Linking</th>
                           <th className="w-24 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                           <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine</th>
+                          <th className="w-20 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Queue #</th>
                           <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                           <th className="w-16 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                         </tr>
@@ -630,7 +747,7 @@ const AddOrderPage = () => {
                               <div className="flex gap-1">
                                 <input
                                   type="text"
-                                  className="form-control form-control-sm flex-1 text-xs py-1 px-2 h-8"
+                                  className={`form-control form-control-sm flex-1 text-xs py-1 px-2 h-8 ${errors[`article_${index}_articleNumber`] ? 'border-red-500' : ''}`}
                                   value={article.articleNumber}
                                   onChange={(e) => handleArticleChange(index, 'articleNumber', e.target.value)}
                                   placeholder="Factory Code"
@@ -638,30 +755,35 @@ const AddOrderPage = () => {
                                 <button
                                   type="button"
                                   onClick={() => openProductModal(index)}
-                                  className="ti-btn ti-btn-primary ti-btn-sm px-2 h-8"
+                                  className="flex items-center justify-center w-8 h-8 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
                                   title="Select Factory Code"
                                 >
                                   <i className="ri-search-line text-xs"></i>
                                 </button>
                               </div>
+                              {errors[`article_${index}_articleNumber`] && (
+                                <div className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_articleNumber`]}</div>
+                              )}
                             </td>
                             <td className="px-2 py-2">
                               <NumericInput
-                                className={`form-control-sm w-full text-xs py-1 px-2 h-8 ${errors[`article_${index}_quantity`] ? 'border-danger' : ''}`}
+                                className={`form-control-sm w-full text-xs py-1 px-2 h-8 ${errors[`article_${index}_quantity`] ? 'border-red-500' : ''} disabled:opacity-60 disabled:cursor-not-allowed`}
                                 value={article.plannedQuantity}
                                 onChange={(value) => handleArticleChange(index, 'plannedQuantity', value)}
                                 placeholder="0"
                                 allowDecimals
+                                disabled={!article.productId}
                               />
                               {errors[`article_${index}_quantity`] && (
-                                <div className="text-danger text-xs mt-1 truncate">{errors[`article_${index}_quantity`]}</div>
+                                <div className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_quantity`]}</div>
                               )}
                             </td>
                             <td className="px-2 py-2">
                               <select
-                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8"
+                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8 disabled:opacity-60 disabled:cursor-not-allowed"
                                 value={article.linkingType}
                                 onChange={(e) => handleArticleChange(index, 'linkingType', e.target.value as 'Auto Linking' | 'Rosso Linking' | 'Hand Linking')}
+                                disabled={!article.productId}
                               >
                                 <option value="Auto Linking">Auto</option>
                                 <option value="Rosso Linking">Rosso</option>
@@ -670,9 +792,10 @@ const AddOrderPage = () => {
                             </td>
                             <td className="px-2 py-2">
                               <select
-                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8"
+                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8 disabled:opacity-60 disabled:cursor-not-allowed"
                                 value={article.priority}
                                 onChange={(e) => handleArticleChange(index, 'priority', e.target.value as 'Urgent' | 'High' | 'Medium' | 'Low')}
+                                disabled={!article.productId}
                               >
                                 <option value="Urgent">Urgent</option>
                                 <option value="High">High</option>
@@ -688,8 +811,9 @@ const AddOrderPage = () => {
                                   setMachineSearchQuery('');
                                   setShowMachineModal(true);
                                 }}
-                                disabled={isLoadingMachines}
-                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8 text-left bg-white border border-gray-300 rounded flex items-center justify-between gap-1"
+                                disabled={isLoadingMachines || !article.productId}
+                                title={!article.productId ? 'Select an article (factory code) first' : undefined}
+                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8 text-left bg-white border border-gray-300 rounded flex items-center justify-between gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 <span className="truncate">
                                   {article.machineId
@@ -700,12 +824,26 @@ const AddOrderPage = () => {
                               </button>
                             </td>
                             <td className="px-2 py-2">
+                              {article.machineId ? (
+                                <NumericInput
+                                  className="form-control form-control-sm w-full text-xs py-1 px-2 h-8"
+                                  value={article.queuePriority}
+                                  onChange={(value) => handleArticleChange(index, 'queuePriority', value >= 1 ? value : undefined)}
+                                  placeholder="1"
+                                  allowDecimals={false}
+                                />
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2">
                               <input
                                 type="text"
-                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8"
+                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8 disabled:opacity-60 disabled:cursor-not-allowed"
                                 placeholder="Remarks..."
                                 value={article.remarks || ''}
                                 onChange={(e) => handleArticleChange(index, 'remarks', e.target.value)}
+                                disabled={!article.productId}
                               />
                             </td>
                             <td className="px-2 py-2 text-center">
@@ -713,10 +851,10 @@ const AddOrderPage = () => {
                                 <button
                                   type="button"
                                   onClick={() => removeArticle(article.id)}
-                                  className="ti-btn ti-btn-danger ti-btn-w-sm flex items-center justify-center w-8 h-8"
+                                  className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-600 border border-red-100 rounded hover:bg-red-100"
                                   title="Remove Article"
                                 >
-                                  <i className="ri-delete-bin-line text-sm"></i>
+                                  <i className="ri-delete-bin-line text-xs"></i>
                                 </button>
                               )}
                             </td>
@@ -807,55 +945,59 @@ const AddOrderPage = () => {
                 )}
 
                 {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row justify-between items-center pt-6 border-t mt-6 gap-4" >
+                <div className="flex flex-wrap justify-between items-center pt-4 border-t border-gray-100 mt-4 gap-3">
                   <button
                     type="button"
-                    className="ti-btn ti-btn-light ti-btn-w-sm flex items-center gap-2 w-full sm:w-auto"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50"
                     onClick={handleReset}
                   >
-                    <i className="ri-refresh-line text-sm"></i>
-                    <span>Reset</span>
+                    <i className="ri-refresh-line text-xs"></i> Reset
                   </button>
-
-                  <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                    <Link
-                      href="/production/supervisor"
-                      className="ti-btn ti-btn-secondary ti-btn-w-sm flex items-center gap-2 w-full sm:w-auto"
-                    >
-                      <i className="ri-close-line text-sm"></i>
-                      <span>Cancel</span>
+                  <div className="flex flex-wrap gap-2">
+                    <Link href="/production/supervisor" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">
+                      <i className="ri-close-line text-xs"></i> Cancel
                     </Link>
                     <button
                       type="submit"
-                      className="ti-btn ti-btn-primary ti-btn-w-sm flex items-center gap-2 w-full sm:w-auto"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-60"
                       disabled={isSubmitting}
                     >
                       {isSubmitting ? (
                         <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          <span>Creating...</span>
+                          <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
+                          Creating...
                         </>
                       ) : (
                         <>
-                          <i className="ri-add-line text-sm"></i>
-                          <span>Create Order</span>
+                          <i className="ri-add-line text-xs"></i> Create Order
                         </>
                       )}
                     </button>
                   </div>
                 </div>
               </form>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Machine Selection Modal */}
+      {/* Machine Selection — side drawer from right */}
       {showMachineModal && machineModalArticleIndex !== null && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Select Machine</h3>
+        <div className="fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 z-0 bg-black/50" onClick={() => { setShowMachineModal(false); setMachineModalArticleIndex(null); setMachineSearchQuery(''); }} aria-hidden />
+          <div className="relative z-10 ml-auto w-full max-w-xl h-full bg-white shadow-xl flex flex-col border-l border-gray-200" onClick={(e) => e.stopPropagation()}>
+            <div className="p-[10px] border-b border-gray-200 flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Select Machine</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Only machines with an active needle (from Catalog → Needle Configuration) are shown.
+                </p>
+                {machineModalArticleIndex !== null &&
+                  formData.articles[machineModalArticleIndex]?.needleSizeFromProduct && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Filtered by item needle:{" "}
+                    <strong>{formData.articles[machineModalArticleIndex].needleSizeFromProduct}</strong>
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -863,38 +1005,66 @@ const AddOrderPage = () => {
                   setMachineModalArticleIndex(null);
                   setMachineSearchQuery('');
                 }}
-                className="ti-btn ti-btn-light ti-btn-sm"
+                className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-200 rounded hover:bg-gray-100"
               >
-                <i className="ri-close-line" />
+                <i className="ri-close-line text-sm" />
               </button>
             </div>
-            <div className="p-4 border-b">
-              <input
-                type="text"
-                className="form-control w-full"
-                placeholder="Search by machine code, number, model or floor..."
-                value={machineSearchQuery}
-                onChange={(e) => setMachineSearchQuery(e.target.value)}
-              />
-            </div>
+            {machineModalArticleIndex !== null && formData.articles[machineModalArticleIndex]?.needleSizeFromProduct?.trim() && (
+              <div className="p-[10px] border-b border-gray-200">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 text-[11px] rounded px-3 py-1.5 w-full focus:ring-0 focus:border-purple-300"
+                  placeholder="Search by machine code, number, model or floor..."
+                  value={machineSearchQuery}
+                  onChange={(e) => setMachineSearchQuery(e.target.value)}
+                />
+              </div>
+            )}
             <div className="flex-1 overflow-y-auto p-4 min-h-0">
               {(() => {
+                const article =
+                  machineModalArticleIndex !== null
+                    ? formData.articles[machineModalArticleIndex]
+                    : null;
+                const needleSize = article?.needleSizeFromProduct?.trim();
+                // No needle on item: show error, do not show machine list
+                if (!needleSize || needleSize.length === 0) {
+                  return (
+                    <div className="text-center py-8 px-4">
+                      <p className="text-red-600 text-sm font-medium">
+                        No needle set for this item. Please set Needles attribute in item (Catalog) before selecting a machine.
+                      </p>
+                    </div>
+                  );
+                }
+                const machinesForNeedle = machines.filter((m) => {
+                  const config = m.needleSizeConfig || [];
+                  const hasInConfig = config.some((c) => (c.needleSize || '').trim() === needleSize);
+                  const hasSingle = (m.needleSize || '').trim() === needleSize;
+                  return hasInConfig || hasSingle;
+                });
                 const q = machineSearchQuery.trim().toLowerCase();
                 const filtered = q
-                  ? machines.filter(
+                  ? machinesForNeedle.filter(
                       (m) =>
                         (m.machineCode ?? '').toLowerCase().includes(q) ||
                         (m.machineNumber ?? '').toLowerCase().includes(q) ||
                         (m.model ?? '').toLowerCase().includes(q) ||
                         (m.floor ?? '').toLowerCase().includes(q)
                     )
-                  : machines;
+                  : machinesForNeedle;
                 return filtered.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">No machines found</div>
+                  <div className="text-center py-8 px-4">
+                    <p className="text-red-600 text-sm font-medium">
+                      No machine found for this item. Please check needle in item and needle available in machine.
+                    </p>
+                  </div>
                 ) : (
                   <ul className="divide-y divide-gray-200 max-h-[50vh] overflow-y-auto">
                     {filtered.map((machine) => {
                       const id = machine._id || machine.id;
+                      const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) : '';
                       return (
                         <li key={id}>
                           <button
@@ -905,10 +1075,15 @@ const AddOrderPage = () => {
                               setMachineModalArticleIndex(null);
                               setMachineSearchQuery('');
                             }}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex justify-between items-center gap-2"
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex justify-between items-start gap-2"
                           >
-                            <span className="font-medium">{machine.machineCode}</span>
-                            <span className="text-gray-500 text-xs truncate">
+                            <div className="min-w-0">
+                              <span className="font-medium">{machine.machineCode}</span>
+                              {activeNeedle ? (
+                                <span className="ml-2 text-xs text-emerald-600 font-medium">Needle: {activeNeedle}</span>
+                              ) : null}
+                            </div>
+                            <span className="text-gray-500 text-xs truncate shrink-0">
                               {machine.machineNumber} · {machine.model} · {machine.floor}
                             </span>
                           </button>
@@ -923,69 +1098,75 @@ const AddOrderPage = () => {
         </div>
       )}
 
-      {/* Product Selection Modal */}
+      {/* Product Selection — side drawer from right */}
       {showProductModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Select Factory Code</h3>
-              <button
-                onClick={closeProductModal}
-                className="ti-btn ti-btn-light ti-btn-sm"
-              >
-                <i className="ri-close-line"></i>
+        <div className="fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 z-0" onClick={closeProductModal} aria-hidden />
+          <div className="relative z-10 ml-auto w-full max-w-xl h-full bg-white shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-[10px] border-b border-gray-200 flex justify-between items-center shrink-0">
+              <h3 className="text-sm font-bold text-gray-800">Select Factory Code</h3>
+              <button onClick={closeProductModal} type="button" className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-200 rounded hover:bg-gray-100">
+                <i className="ri-close-line text-sm"></i>
               </button>
             </div>
-            
-            <div className="p-4 border-b">
+            <div className="p-[10px] border-b border-gray-200 shrink-0">
               <input
                 type="text"
-                className="form-control w-full"
+                className="bg-white border border-gray-200 text-[11px] rounded px-3 py-1.5 w-full focus:ring-0 focus:border-purple-300"
                 placeholder="Search by factory code or product name..."
                 value={productSearchQuery}
                 onChange={(e) => {
                   setProductSearchQuery(e.target.value);
+                  setIsLoadingProducts(true);
                   fetchProducts(e.target.value);
                 }}
               />
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-2 min-h-0">
               {isLoadingProducts ? (
-                <div className="text-center py-8">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="sr-only">Loading...</span>
-                  </div>
+                <div className="flex flex-col items-center justify-center py-12 gap-2">
+                  <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-gray-500">Loading products...</p>
                 </div>
               ) : products.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No products found
-                </div>
+                <div className="text-center py-6 text-gray-500 text-sm">No products found</div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full">
+                  <table className="min-w-full text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Factory Code</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product Name</th>
-                        <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase w-24">Action</th>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">Factory Code</th>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">Product Name</th>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">Needle</th>
+                        <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-16">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {products.map((product) => (
-                        <tr key={product.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-2 text-sm font-medium">{product.factoryCode || 'N/A'}</td>
-                          <td className="px-4 py-2 text-sm">{product.name}</td>
-                          <td className="px-4 py-2 text-center">
-                            <button
-                              onClick={() => selectProduct(product)}
-                              className="ti-btn ti-btn-primary px-4 py-2 min-w-[80px] whitespace-nowrap"
-                            >
-                              Select
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {products.map((product) => {
+                        const productId = product.id ?? (product as any)._id;
+                        const needlesRaw = product.attributes?.Needles ?? product.attributes?.needles;
+                        const needleDisplay =
+                          needlesRaw != null && needlesRaw !== ''
+                            ? needlesValueIdToName[String(needlesRaw)] ?? String(needlesRaw)
+                            : '—';
+                        return (
+                          <tr key={productId} className="hover:bg-gray-50">
+                            <td className="px-2 py-1.5 text-xs font-medium">{product.factoryCode || 'N/A'}</td>
+                            <td className="px-2 py-1.5 text-xs truncate max-w-[140px]">{product.name}</td>
+                            <td className="px-2 py-1.5 text-xs text-gray-600">{needleDisplay}</td>
+                            <td className="px-2 py-1.5 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); selectProduct({ ...product, id: productId }); }}
+                                className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+                              >
+                                Select
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

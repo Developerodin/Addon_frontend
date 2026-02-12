@@ -1337,7 +1337,7 @@ const AddProductPage = () => {
                               >
                                 <option value="">Select {attrDef.name}</option>
                                 {attrDef.optionValues.map((option) => (
-                                  <option key={option._id} value={option._id}>
+                                  <option key={option._id} value={option.name}>
                                     {option.name}
                                   </option>
                                 ))}

@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import axios from 'axios';
 import Seo from '@/shared/layout-components/seo/seo';
@@ -412,36 +412,25 @@ const EditProductPage = () => {
     return () => clearTimeout(timeoutId);
   }, [isYarnModalOpen, modalYarnSearchQuery, modalCurrentYarnPage]);
 
-  // Debug effect to monitor attributeCategories
+  // Normalize product attributes from value-ID to value-name once when categories are loaded (API expects name → value string)
+  const attributesNormalizedRef = useRef(false);
   useEffect(() => {
-    if (attributeCategories.length > 0) {
-      console.log('attributeCategories updated:', attributeCategories);
-      console.log('First category optionValues:', attributeCategories[0].optionValues);
-      
-      // Map category names to IDs to help debug
-      const categoryNameToId: Record<string, string> = {};
-      attributeCategories.forEach(cat => {
-        categoryNameToId[cat.name] = cat.id;
-      });
-      console.log('Category name to ID mapping:', categoryNameToId);
-      
-      // Check if product attributes match by name or by ID
-      if (Object.keys(formData.attributes).length > 0) {
-        console.log('Current product attributes:', formData.attributes);
-        
-        // Check which attributes match by name vs. by ID
-        const matchesByName = attributeCategories.filter(cat => 
-          formData.attributes[cat.name] !== undefined
-        );
-        
-        const matchesById = attributeCategories.filter(cat => 
-          formData.attributes[cat.id] !== undefined
-        );
-        
-        console.log('Attributes matching by name:', matchesByName.map(c => c.name));
-        console.log('Attributes matching by ID:', matchesById.map(c => c.name));
-      }
+    if (attributeCategories.length === 0 || attributesNormalizedRef.current) return;
+    if (Object.keys(formData.attributes).length === 0) {
+      attributesNormalizedRef.current = true;
+      return;
     }
+    attributesNormalizedRef.current = true;
+    setFormData(prev => {
+      const next: Record<string, string> = {};
+      for (const cat of attributeCategories) {
+        const raw = prev.attributes[cat.name] ?? prev.attributes[cat.id];
+        if (raw == null || raw === '') continue;
+        const option = cat.optionValues?.find((o: any) => String(o._id) === String(raw) || o.name === raw);
+        next[cat.name] = option ? option.name : String(raw);
+      }
+      return { ...prev, attributes: next };
+    });
   }, [attributeCategories, formData.attributes]);
 
 
@@ -1458,7 +1447,7 @@ const EditProductPage = () => {
                           <option value="">Select {category.name}</option>
                           {category.optionValues?.length ? (
                             category.optionValues.map((option) => (
-                              <option key={option._id} value={option._id}>{option.name}</option>
+                              <option key={option._id} value={option.name}>{option.name}</option>
                             ))
                           ) : (
                             <option value="" disabled>No options available</option>

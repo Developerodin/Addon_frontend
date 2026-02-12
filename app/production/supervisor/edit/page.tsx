@@ -6,6 +6,7 @@ import Link from "next/link";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, UpdateOrderRequest } from "@/shared/services/productionService";
+import { getMachineActiveNeedleMap } from "@/shared/services/machineOrderAssignmentService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import axios from "axios";
@@ -20,6 +21,8 @@ interface Article {
   machineId?: string;
   remarks?: string;
   productId?: string;
+  /** Needle size from product's Needles attribute (for filtering machines) */
+  needleSizeFromProduct?: string;
   bom?: ProductBOM[];
 }
 
@@ -27,6 +30,7 @@ interface Product {
   id: string;
   name: string;
   factoryCode: string;
+  attributes?: Record<string, string | number>;
   bom?: ProductBOM[];
 }
 
@@ -50,6 +54,8 @@ interface Machine {
   model: string;
   floor: string;
   status: 'Active' | 'Under Maintenance' | 'Idle';
+  needleSizeConfig?: { needleSize: string }[];
+  needleSize?: string;
 }
 
 interface EditOrderFormData {
@@ -83,6 +89,8 @@ const EditOrderContent = () => {
   const [showMachineModal, setShowMachineModal] = useState(false);
   const [machineModalArticleIndex, setMachineModalArticleIndex] = useState<number | null>(null);
   const [machineSearchQuery, setMachineSearchQuery] = useState('');
+  const [machineActiveNeedleMap, setMachineActiveNeedleMap] = useState<Map<string, string>>(new Map());
+  const [needlesValueIdToName, setNeedlesValueIdToName] = useState<Record<string, string>>({});
 
   // Load order data and machines
   useEffect(() => {
@@ -125,27 +133,29 @@ const EditOrderContent = () => {
   const floorMatches = (floor: string) =>
     validProductionFloors.some((f) => floor?.toLowerCase().includes(f.toLowerCase()));
 
-  // Fetch machines from API
+  // Fetch machines: only those with valid floor AND active needle in needle configuration
   const fetchMachines = async () => {
     try {
       setIsLoadingMachines(true);
-      const response = await fetch(`${API_BASE_URL}/machines?page=1&limit=1000`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch machines');
+      let activeMap = new Map<string, string>();
+      try {
+        activeMap = await getMachineActiveNeedleMap();
+        setMachineActiveNeedleMap(activeMap);
+      } catch {
+        setMachineActiveNeedleMap(new Map());
       }
-      
+
+      const response = await fetch(`${API_BASE_URL}/machines?page=1&limit=1000`, {
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) throw new Error('Failed to fetch machines');
       const data = await response.json();
       const machinesArray = Array.isArray(data.results) ? data.results : [];
-      // Filter machines to only include those with valid production floors
-      const validMachines = machinesArray.filter((machine: Machine) => 
-        floorMatches(machine.floor)
-      );
+      const validMachines = machinesArray.filter((machine: Machine) => {
+        const id = machine._id ?? machine.id;
+        if (!id || !floorMatches(machine.floor)) return false;
+        return activeMap.has(String(id));
+      });
       setMachines(validMachines);
     } catch (error) {
       console.error('Error fetching machines:', error);
@@ -154,6 +164,33 @@ const EditOrderContent = () => {
       setIsLoadingMachines(false);
     }
   };
+
+  // Fetch Needles attribute option values (for resolving product's Needles when filtering machines)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/product-attributes?page=1&limit=500`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const results = data.results || [];
+        const needlesAttr = results.find((a: { name: string }) => a.name?.toLowerCase() === 'needles');
+        const map: Record<string, string> = {};
+        (needlesAttr?.optionValues || []).forEach((v: { id?: number; _id?: string; name?: string }) => {
+          const name = v.name;
+          if (!name) return;
+          if (v.id != null) map[String(v.id)] = name;
+          if (v._id) map[String(v._id)] = name;
+        });
+        if (!cancelled) setNeedlesValueIdToName(map);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Fetch yarn catalogs for BOM display
   const fetchYarnCatalogs = async () => {
@@ -270,7 +307,13 @@ const EditOrderContent = () => {
         };
       }));
 
-      // Update article with factory code and product details
+      const attrs = fullProduct.attributes || {};
+      const needlesRaw = attrs.Needles ?? attrs.needles;
+      const needleSizeFromProduct =
+        needlesRaw != null && needlesRaw !== ''
+          ? needlesValueIdToName[String(needlesRaw)] ?? String(needlesRaw)
+          : undefined;
+
       setFormData(prev => ({
         ...prev,
         articles: prev.articles.map((article, index) => 
@@ -279,6 +322,7 @@ const EditOrderContent = () => {
                 ...article, 
                 articleNumber: product.factoryCode,
                 productId: product.id,
+                needleSizeFromProduct,
                 bom: normalizedBOM
               }
             : article
@@ -289,7 +333,12 @@ const EditOrderContent = () => {
       toast.success(`Factory code ${product.factoryCode} selected`);
     } catch (error) {
       console.error('Error fetching product details:', error);
-      // Still update with factory code even if BOM fetch fails
+      const attrs = (product as Product).attributes || {};
+      const needlesRaw = attrs.Needles ?? attrs.needles;
+      const needleSizeFromProduct =
+        needlesRaw != null && needlesRaw !== ''
+          ? needlesValueIdToName[String(needlesRaw)] ?? String(needlesRaw)
+          : undefined;
       setFormData(prev => ({
         ...prev,
         articles: prev.articles.map((article, index) => 
@@ -297,7 +346,8 @@ const EditOrderContent = () => {
             ? { 
                 ...article, 
                 articleNumber: product.factoryCode,
-                productId: product.id
+                productId: product.id,
+                needleSizeFromProduct
               }
             : article
         )
@@ -316,17 +366,34 @@ const EditOrderContent = () => {
       if (response.success) {
         const orderData = response.data;
         setOrder(orderData);
-        // Fetch product BOM for each article if articleNumber matches a product's factoryCode
+
+        let needlesMap: Record<string, string> = {};
+        try {
+          const attrRes = await fetch(`${API_BASE_URL}/product-attributes?page=1&limit=500`, { headers: { Accept: 'application/json' } });
+          if (attrRes.ok) {
+            const attrData = await attrRes.json();
+            const results = attrData.results || [];
+            const needlesAttr = results.find((a: { name: string }) => a.name?.toLowerCase() === 'needles');
+            (needlesAttr?.optionValues || []).forEach((v: { id?: number; _id?: string; name?: string }) => {
+              if (v.name) {
+                if (v.id != null) needlesMap[String(v.id)] = v.name;
+                if (v._id) needlesMap[String(v._id)] = v.name;
+              }
+            });
+          }
+        } catch {
+          // ignore
+        }
+
         const articlesWithBOM = await Promise.all(orderData.articles.map(async (article: any) => {
           try {
-            // Try to find product by factory code
             const productResponse = await axios.get(`${API_BASE_URL}/products?page=1&limit=1000&search=${encodeURIComponent(article.articleNumber)}`);
             const products = productResponse.data.results || [];
             const matchingProduct = products.find((p: Product) => p.factoryCode === article.articleNumber);
             
             if (matchingProduct) {
               const fullProductResponse = await axios.get(`${API_BASE_URL}/products/${matchingProduct.id}`);
-              const fullProduct = fullProductResponse.data;
+              const fullProduct = fullProductResponse.data?.data ?? fullProductResponse.data;
               
               // Normalize BOM structure
               const normalizedBOM = await Promise.all((fullProduct.bom || []).map(async (bomItem: any) => {
@@ -359,7 +426,14 @@ const EditOrderContent = () => {
                   yarnName: yarnName || 'Unknown Yarn'
                 };
               }));
-              
+
+              const attrs = fullProduct.attributes || {};
+              const needlesRaw = attrs.Needles ?? attrs.needles;
+              const needleSizeFromProduct =
+                needlesRaw != null && needlesRaw !== ''
+                  ? needlesMap[String(needlesRaw)] ?? String(needlesRaw)
+                  : undefined;
+
               return {
                 id: article.id,
                 articleNumber: article.articleNumber,
@@ -369,6 +443,7 @@ const EditOrderContent = () => {
                 machineId: typeof article.machineId === 'object' && article.machineId ? article.machineId.id || article.machineId._id : article.machineId || '',
                 remarks: article.remarks || '',
                 productId: matchingProduct.id,
+                needleSizeFromProduct,
                 bom: normalizedBOM
               };
             }
@@ -406,12 +481,15 @@ const EditOrderContent = () => {
   const validateForm = (): boolean => {
     const newErrors: {[key: string]: string} = {};
 
-    // Validate articles
     formData.articles.forEach((article, index) => {
+      const artNum = (article.articleNumber || '').toString().trim();
+      if (!artNum) {
+        newErrors[`article_${index}_articleNumber`] = 'Article # required';
+      }
       if (article.plannedQuantity <= 0) {
-        newErrors[`article_${index}_quantity`] = 'Planned Quantity must be greater than 0';
+        newErrors[`article_${index}_quantity`] = 'Qty must be > 0';
       } else if (article.plannedQuantity > 100000) {
-        newErrors[`article_${index}_quantity`] = 'Planned Quantity cannot exceed 100,000';
+        newErrors[`article_${index}_quantity`] = 'Qty cannot exceed 100,000';
       }
     });
 
@@ -441,6 +519,7 @@ const EditOrderContent = () => {
           // If article number is manually changed, clear product association
           if (field === 'articleNumber' && typeof value === 'string') {
             updatedArticle.productId = undefined;
+            updatedArticle.needleSizeFromProduct = undefined;
             updatedArticle.bom = undefined;
           }
           return updatedArticle;
@@ -449,14 +528,12 @@ const EditOrderContent = () => {
       })
     }));
 
-    // Clear error when user starts typing
-    const errorKey = `article_${articleIndex}_${field}`;
-    if (errors[errorKey]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[errorKey];
-        return newErrors;
-      });
+    if (field === 'articleNumber') {
+      const key = `article_${articleIndex}_articleNumber`;
+      if (errors[key]) setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
+    } else if (field === 'plannedQuantity') {
+      const key = `article_${articleIndex}_quantity`;
+      if (errors[key]) setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
     }
   };
 
@@ -677,12 +754,12 @@ const EditOrderContent = () => {
 
   if (isLoading) {
     return (
-      <div className="main-content">
+      <div className="main-content !p-[10px]">
         <Seo title="Edit Production Order"/>
-        <div className="flex justify-center items-center min-h-96">
+        <div className="bg-white shadow-sm border border-gray-100 rounded flex justify-center items-center min-h-64">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading order...</p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-3 opacity-50"></div>
+            <p className="text-[11px] font-medium text-gray-500">Loading order...</p>
           </div>
         </div>
       </div>
@@ -691,17 +768,16 @@ const EditOrderContent = () => {
 
   if (!order) {
     return (
-      <div className="main-content">
+      <div className="main-content !p-[10px]">
         <Seo title="Edit Production Order"/>
-        <div className="text-center py-12">
-          <div className="text-gray-400 mb-4">
-            <i className="ri-error-warning-line text-6xl"></i>
+        <div className="bg-white shadow-sm border border-gray-100 rounded text-center py-12 px-4">
+          <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i className="ri-error-warning-line text-xl text-gray-300"></i>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Order not found</h3>
-          <p className="text-gray-500 mb-4">The order you're looking for doesn't exist or has been deleted.</p>
-          <Link href="/production/supervisor" className="ti-btn ti-btn-primary">
-            <i className="ri-arrow-left-line me-2"></i>
-            Back to Dashboard
+          <h3 className="text-sm font-bold text-gray-800 mb-2">Order not found</h3>
+          <p className="text-[11px] text-gray-500 mb-4">The order doesn't exist or has been deleted.</p>
+          <Link href="/production/supervisor" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700">
+            <i className="ri-arrow-left-line text-xs"></i> Back to Dashboard
           </Link>
         </div>
       </div>
@@ -709,101 +785,73 @@ const EditOrderContent = () => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Edit Production Order"/>
-      
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none mb-4">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <h1 className="box-title text-xl font-semibold">Edit Production Order</h1>
-                <HelpIcon
-                  title="Edit Production Order"
-                  content={
-                    <div className="space-y-3">
-                      <div>
-                        <h4 className="font-semibold text-base mb-1">What is this page?</h4>
-                        <p className="text-gray-700 text-sm">
-                          Edit an existing production order. Update order priority, notes, and article details.
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-semibold text-base mb-1">What can you edit?</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
-                          <li><strong>Order Priority:</strong> Change urgency level (Urgent, High, Medium, Low)</li>
-                          <li><strong>Articles:</strong> Add, remove, or modify article details</li>
-                          <li><strong>Article Number:</strong> 4-5 alphanumeric characters (e.g., ART001)</li>
-                          <li><strong>Planned Quantity:</strong> Number of units to produce (1-100,000)</li>
-                          <li><strong>Linking Type:</strong> Auto, Rosso, or Hand linking</li>
-                          <li><strong>Article Priority:</strong> Set individual article priority</li>
-                          <li><strong>Machine:</strong> Select machine for each article</li>
-                          <li><strong>Order Note:</strong> Update order-level instructions</li>
-                        </ul>
-                      </div>
 
-                      <div>
-                        <h4 className="font-semibold text-base mb-1">Important Notes:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
-                          <li>You can add or remove articles from the order</li>
-                          <li>Article numbers must be unique and contain only uppercase letters and numbers</li>
-                          <li>Order status and current floor are managed by the production process</li>
-                          <li>Changes will be logged in the system audit trail</li>
-                        </ul>
-                      </div>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-[10px] border-b border-gray-100">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Edit Production Order</h1>
+              <HelpIcon
+                title="Edit Production Order"
+                content={
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="font-semibold text-base mb-1">What is this page?</h4>
+                      <p className="text-gray-700 text-sm">Edit an existing production order. Update order priority, notes, and article details.</p>
                     </div>
-                  }
-                />
-              </div>
-              <div className="box-tools">
-                <Link href="/production/supervisor" className="ti-btn ti-btn-secondary ti-btn-sm">
-                  <i className="ri-arrow-left-line me-1"></i> Back
-                </Link>
-              </div>
+                    <div>
+                      <h4 className="font-semibold text-base mb-1">What can you edit?</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
+                        <li><strong>Order Priority:</strong> Urgent, High, Medium, Low</li>
+                        <li><strong>Articles:</strong> Add, remove, or modify article details</li>
+                        <li><strong>Order Note:</strong> Order-level instructions</li>
+                      </ul>
+                    </div>
+                  </div>
+                }
+              />
+            </div>
+            <Link href="/production/supervisor" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm">
+              <i className="ri-arrow-left-line text-xs"></i> Back
+            </Link>
+          </div>
+        </div>
+
+        <div className="p-[10px] border-b border-gray-100">
+          <h3 className="text-sm font-bold text-gray-800 mb-3">Order Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Order Number</label>
+              <p className="text-[12px] font-bold text-gray-900">{order.orderNumber}</p>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Status</label>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+                order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                order.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+                order.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                order.status === 'On Hold' ? 'bg-red-100 text-red-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {order.status}
+              </span>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Floor</label>
+              <p className="text-[12px] font-bold text-gray-900">{order.currentFloor}</p>
             </div>
           </div>
-
-          {/* Order Information Display */}
-          <div className="box mb-6">
-            <div className="box-body">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="form-label text-sm font-medium text-gray-600">Order Number</label>
-                  <p className="text-lg font-semibold text-gray-900">{order.orderNumber}</p>
-                </div>
-                <div>
-                  <label className="form-label text-sm font-medium text-gray-600">Current Status</label>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                    order.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                    order.status === 'Completed' ? 'bg-green-100 text-green-800' :
-                    order.status === 'On Hold' ? 'bg-red-100 text-red-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {order.status}
-                  </span>
-                </div>
-                <div>
-                  <label className="form-label text-sm font-medium text-gray-600">Current Floor</label>
-                  <p className="text-lg font-semibold text-gray-900">{order.currentFloor}</p>
-                </div>
-              </div>
-              <div className="mt-4">
-                <label className="form-label text-sm font-medium text-gray-600">Articles</label>
-                <p className="text-lg font-semibold text-gray-900">
-                  {order.articles.length} Article{order.articles.length > 1 ? 's' : ''} 
-                  (Total Qty: {order.articles.reduce((sum, article) => sum + article.plannedQuantity, 0).toLocaleString()})
-                </p>
-              </div>
-            </div>
+          <div className="mt-2">
+            <span className="text-[11px] font-medium text-gray-600">
+              {order.articles.length} Article{order.articles.length > 1 ? 's' : ''} · Total Qty: {order.articles.reduce((sum, article) => sum + article.plannedQuantity, 0).toLocaleString()}
+            </span>
           </div>
+        </div>
 
-          {/* Edit Form */}
-          <div className="box">
-            <div className="box-body p-4">
+        <div className="p-[10px]">
               <form onSubmit={handleSubmit}>
                 {/* Order Priority + Order Note */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -835,15 +883,14 @@ const EditOrderContent = () => {
                 {/* Articles Table */}
                 <div className="border-t pt-4">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-base font-semibold text-gray-900">Articles ({formData.articles.length})</h3>
+                    <h3 className="text-sm font-bold text-gray-800">Articles ({formData.articles.length})</h3>
                     <button
                       type="button"
                       onClick={addArticle}
-                      className="ti-btn ti-btn-primary ti-btn-w-sm flex items-center gap-2"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm"
                       title="Add Article"
                     >
-                      <i className="ri-add-line text-sm"></i>
-                      <span>Add Article</span>
+                      <i className="ri-add-line text-xs"></i> Add Article
                     </button>
                   </div>
 
@@ -867,7 +914,7 @@ const EditOrderContent = () => {
                               <div className="flex gap-1">
                                 <input
                                   type="text"
-                                  className="form-control form-control-sm flex-1 text-xs py-1 px-2 h-8"
+                                  className={`form-control form-control-sm flex-1 text-xs py-1 px-2 h-8 ${errors[`article_${index}_articleNumber`] ? 'border-red-500' : ''}`}
                                   value={article.articleNumber}
                                   onChange={(e) => handleArticleChange(index, 'articleNumber', e.target.value)}
                                   placeholder="Factory Code"
@@ -875,30 +922,35 @@ const EditOrderContent = () => {
                                 <button
                                   type="button"
                                   onClick={() => openProductModal(index)}
-                                  className="ti-btn ti-btn-primary ti-btn-sm px-2 h-8"
+                                  className="flex items-center justify-center w-8 h-8 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
                                   title="Select Factory Code"
                                 >
                                   <i className="ri-search-line text-xs"></i>
                                 </button>
                               </div>
+                              {errors[`article_${index}_articleNumber`] && (
+                                <div className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_articleNumber`]}</div>
+                              )}
                             </td>
                             <td className="px-2 py-2">
                               <NumericInput
-                                className={`form-control-sm w-full text-xs py-1 px-2 h-8 ${errors[`article_${index}_quantity`] ? 'border-danger' : ''}`}
+                                className={`form-control-sm w-full text-xs py-1 px-2 h-8 ${errors[`article_${index}_quantity`] ? 'border-red-500' : ''} disabled:opacity-60 disabled:cursor-not-allowed`}
                                 value={article.plannedQuantity}
                                 onChange={(value) => handleArticleChange(index, 'plannedQuantity', value)}
                                 placeholder="0"
                                 allowDecimals
+                                disabled={!article.productId}
                               />
                               {errors[`article_${index}_quantity`] && (
-                                <div className="text-danger text-xs mt-1 truncate">{errors[`article_${index}_quantity`]}</div>
+                                <div className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_quantity`]}</div>
                               )}
                             </td>
                             <td className="px-2 py-2">
                               <select
-                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8"
+                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8 disabled:opacity-60 disabled:cursor-not-allowed"
                                 value={article.linkingType}
                                 onChange={(e) => handleArticleChange(index, 'linkingType', e.target.value as 'Auto Linking' | 'Rosso Linking' | 'Hand Linking')}
+                                disabled={!article.productId}
                               >
                                 <option value="Auto Linking">Auto</option>
                                 <option value="Rosso Linking">Rosso</option>
@@ -907,9 +959,10 @@ const EditOrderContent = () => {
                             </td>
                             <td className="px-2 py-2">
                               <select
-                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8"
+                                className="form-select form-select-sm w-full text-xs py-1 px-2 h-8 disabled:opacity-60 disabled:cursor-not-allowed"
                                 value={article.priority}
                                 onChange={(e) => handleArticleChange(index, 'priority', e.target.value as 'Urgent' | 'High' | 'Medium' | 'Low')}
+                                disabled={!article.productId}
                               >
                                 <option value="Urgent">Urgent</option>
                                 <option value="High">High</option>
@@ -925,8 +978,9 @@ const EditOrderContent = () => {
                                   setMachineSearchQuery('');
                                   setShowMachineModal(true);
                                 }}
-                                disabled={isLoadingMachines}
-                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8 text-left bg-white border border-gray-300 rounded flex items-center justify-between gap-1"
+                                disabled={isLoadingMachines || !article.productId}
+                                title={!article.productId ? 'Select factory code first' : undefined}
+                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8 text-left bg-white border border-gray-300 rounded flex items-center justify-between gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 <span className="truncate">
                                   {article.machineId
@@ -939,10 +993,11 @@ const EditOrderContent = () => {
                             <td className="px-2 py-2">
                               <input
                                 type="text"
-                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8"
+                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8 disabled:opacity-60 disabled:cursor-not-allowed"
                                 placeholder="Remarks..."
                                 value={article.remarks || ''}
                                 onChange={(e) => handleArticleChange(index, 'remarks', e.target.value)}
+                                disabled={!article.productId}
                               />
                             </td>
                             <td className="px-2 py-2 text-center">
@@ -950,10 +1005,10 @@ const EditOrderContent = () => {
                                 <button
                                   type="button"
                                   onClick={() => removeArticle(article.id)}
-                                  className="ti-btn ti-btn-danger ti-btn-w-sm flex items-center justify-center w-8 h-8"
+                                  className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-600 border border-red-100 rounded hover:bg-red-100"
                                   title="Remove Article"
                                 >
-                                  <i className="ri-delete-bin-line text-sm"></i>
+                                  <i className="ri-delete-bin-line text-xs"></i>
                                 </button>
                               )}
                             </td>
@@ -1044,55 +1099,55 @@ const EditOrderContent = () => {
                 )}
 
                 {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row justify-between items-center pt-6 border-t mt-6 gap-4">
+                <div className="flex flex-wrap justify-between items-center pt-4 border-t border-gray-100 mt-4 gap-3">
                   <button
                     type="button"
-                    className="ti-btn ti-btn-light ti-btn-w-sm flex items-center gap-2 w-full sm:w-auto"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50"
                     onClick={handleReset}
                   >
-                    <i className="ri-refresh-line text-sm"></i>
-                    <span>Reset Changes</span>
+                    <i className="ri-refresh-line text-xs"></i> Reset
                   </button>
-
-                  <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                    <Link
-                      href="/production/supervisor"
-                      className="ti-btn ti-btn-secondary ti-btn-w-sm flex items-center gap-2 w-full sm:w-auto"
-                    >
-                      <i className="ri-close-line text-sm"></i>
-                      <span>Cancel</span>
+                  <div className="flex flex-wrap gap-2">
+                    <Link href="/production/supervisor" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">
+                      <i className="ri-close-line text-xs"></i> Cancel
                     </Link>
                     <button
                       type="submit"
-                      className="ti-btn ti-btn-primary ti-btn-w-sm flex items-center gap-2 w-full sm:w-auto"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-60"
                       disabled={isSubmitting}
                     >
                       {isSubmitting ? (
                         <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          <span>Updating...</span>
+                          <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
+                          Updating...
                         </>
                       ) : (
                         <>
-                          <i className="ri-save-line text-sm"></i>
-                          <span>Update Order</span>
+                          <i className="ri-save-line text-xs"></i> Update Order
                         </>
                       )}
                     </button>
                   </div>
                 </div>
               </form>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Machine Selection Modal */}
+      {/* Machine Selection — side drawer from right */}
       {showMachineModal && machineModalArticleIndex !== null && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Select Machine</h3>
+        <div className="fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 z-0 bg-black/50" onClick={() => { setShowMachineModal(false); setMachineModalArticleIndex(null); setMachineSearchQuery(''); }} aria-hidden />
+          <div className="relative z-10 ml-auto w-full max-w-xl h-full bg-white shadow-xl flex flex-col border-l border-gray-200" onClick={(e) => e.stopPropagation()}>
+            <div className="p-[10px] border-b border-gray-200 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Select Machine</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Only machines with an active needle (from Catalog → Needle Configuration) are shown.</p>
+                {machineModalArticleIndex !== null && formData.articles[machineModalArticleIndex]?.needleSizeFromProduct && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Filtered by item needle: <strong>{formData.articles[machineModalArticleIndex].needleSizeFromProduct}</strong>
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -1100,38 +1155,63 @@ const EditOrderContent = () => {
                   setMachineModalArticleIndex(null);
                   setMachineSearchQuery('');
                 }}
-                className="ti-btn ti-btn-light ti-btn-sm"
+                className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-200 rounded hover:bg-gray-100"
               >
-                <i className="ri-close-line" />
+                <i className="ri-close-line text-sm" />
               </button>
             </div>
-            <div className="p-4 border-b">
-              <input
-                type="text"
-                className="form-control w-full"
-                placeholder="Search by machine code, number, model or floor..."
-                value={machineSearchQuery}
-                onChange={(e) => setMachineSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+            {machineModalArticleIndex !== null && formData.articles[machineModalArticleIndex]?.needleSizeFromProduct?.trim() && (
+              <div className="p-[10px] border-b border-gray-200 shrink-0">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 text-[11px] rounded px-3 py-1.5 w-full focus:ring-0 focus:border-purple-300"
+                  placeholder="Search by machine code, number, model or floor..."
+                  value={machineSearchQuery}
+                  onChange={(e) => setMachineSearchQuery(e.target.value)}
+                />
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto p-[10px] min-h-0">
               {(() => {
+                const article =
+                  machineModalArticleIndex !== null ? formData.articles[machineModalArticleIndex] : null;
+                const needleSize = article?.needleSizeFromProduct?.trim();
+                if (!needleSize || needleSize.length === 0) {
+                  return (
+                    <div className="text-center py-8 px-4">
+                      <p className="text-red-600 text-sm font-medium">
+                        No needle set for this item. Please set Needles attribute in item (Catalog) before selecting a machine.
+                      </p>
+                    </div>
+                  );
+                }
+                const machinesForNeedle = machines.filter((m) => {
+                  const config = m.needleSizeConfig || [];
+                  const hasInConfig = config.some((c) => (c.needleSize || '').trim() === needleSize);
+                  const hasSingle = (m.needleSize || '').trim() === needleSize;
+                  return hasInConfig || hasSingle;
+                });
                 const q = machineSearchQuery.trim().toLowerCase();
                 const filtered = q
-                  ? machines.filter(
+                  ? machinesForNeedle.filter(
                       (m) =>
                         (m.machineCode ?? '').toLowerCase().includes(q) ||
                         (m.machineNumber ?? '').toLowerCase().includes(q) ||
                         (m.model ?? '').toLowerCase().includes(q) ||
                         (m.floor ?? '').toLowerCase().includes(q)
                     )
-                  : machines;
+                  : machinesForNeedle;
                 return filtered.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">No machines found</div>
+                  <div className="text-center py-8 px-4">
+                    <p className="text-red-600 text-sm font-medium">
+                      No machine found for this item. Please check needle in item and needle available in machine.
+                    </p>
+                  </div>
                 ) : (
                   <ul className="divide-y divide-gray-200 max-h-[50vh] overflow-y-auto">
                     {filtered.map((machine) => {
                       const id = machine._id || machine.id;
+                      const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) : '';
                       return (
                         <li key={id}>
                           <button
@@ -1142,10 +1222,15 @@ const EditOrderContent = () => {
                               setMachineModalArticleIndex(null);
                               setMachineSearchQuery('');
                             }}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex justify-between items-center gap-2"
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex justify-between items-start gap-2"
                           >
-                            <span className="font-medium">{machine.machineCode}</span>
-                            <span className="text-gray-500 text-xs truncate">
+                            <div className="min-w-0">
+                              <span className="font-medium">{machine.machineCode}</span>
+                              {activeNeedle ? (
+                                <span className="ml-2 text-xs text-emerald-600 font-medium">Needle: {activeNeedle}</span>
+                              ) : null}
+                            </div>
+                            <span className="text-gray-500 text-xs truncate shrink-0">
                               {machine.machineNumber} · {machine.model} · {machine.floor}
                             </span>
                           </button>
@@ -1160,24 +1245,21 @@ const EditOrderContent = () => {
         </div>
       )}
 
-      {/* Product Selection Modal */}
+      {/* Product Selection — side drawer from right */}
       {showProductModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Select Factory Code</h3>
-              <button
-                onClick={closeProductModal}
-                className="ti-btn ti-btn-light ti-btn-sm"
-              >
-                <i className="ri-close-line"></i>
+        <div className="fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 z-0" onClick={closeProductModal} aria-hidden />
+          <div className="relative z-10 ml-auto w-full max-w-xl h-full bg-white shadow-xl flex flex-col border-l border-gray-200" onClick={(e) => e.stopPropagation()}>
+            <div className="p-[10px] border-b border-gray-200 flex justify-between items-center shrink-0">
+              <h3 className="text-sm font-bold text-gray-800">Select Factory Code</h3>
+              <button onClick={closeProductModal} className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-200 rounded hover:bg-gray-100">
+                <i className="ri-close-line text-sm"></i>
               </button>
             </div>
-            
-            <div className="p-4 border-b">
+            <div className="p-[10px] border-b border-gray-200 shrink-0">
               <input
                 type="text"
-                className="form-control w-full"
+                className="bg-white border border-gray-200 text-[11px] rounded px-3 py-1.5 w-full focus:ring-0 focus:border-purple-300"
                 placeholder="Search by factory code or product name..."
                 value={productSearchQuery}
                 onChange={(e) => {
@@ -1187,7 +1269,7 @@ const EditOrderContent = () => {
               />
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-[10px] min-h-0">
               {isLoadingProducts ? (
                 <div className="text-center py-8">
                   <div className="spinner-border text-primary" role="status">
@@ -1216,7 +1298,7 @@ const EditOrderContent = () => {
                           <td className="px-4 py-2 text-center">
                             <button
                               onClick={() => selectProduct(product)}
-                              className="ti-btn ti-btn-primary px-4 py-2 min-w-[80px] whitespace-nowrap"
+                              className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
                             >
                               Select
                             </button>
@@ -1238,13 +1320,11 @@ const EditOrderContent = () => {
 const EditOrderPage = () => {
   return (
     <Suspense fallback={
-      <div className="main-content">
+      <div className="main-content !p-[10px]">
         <Seo title="Edit Production Order"/>
-        <div className="flex justify-center items-center min-h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading...</p>
-          </div>
+        <div className="bg-white shadow-sm border border-gray-100 rounded flex justify-center items-center min-h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 opacity-50"></div>
+          <p className="ml-3 text-[11px] font-medium text-gray-500">Loading...</p>
         </div>
       </div>
     }>

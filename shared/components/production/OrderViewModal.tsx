@@ -57,6 +57,8 @@ interface ProductionOrder {
 interface OrderViewModalProps {
   order: ProductionOrder;
   onClose: () => void;
+  /** When true, render only inner content (no overlay) for use inside a side drawer */
+  embedInDrawer?: boolean;
 }
 
 interface ArticleLog {
@@ -77,7 +79,7 @@ interface ArticleLog {
   createdAt?: string;
 }
 
-const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
+const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose, embedInDrawer }) => {
   const [activeTab, setActiveTab] = useState<'articles' | 'logs'>('articles');
   const [articleLogs, setArticleLogs] = useState<ArticleLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
@@ -183,20 +185,19 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
     return Math.round(((article.completedQuantity || 0) / article.plannedQuantity) * 100);
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+  const content = (
+    <div className={`bg-white overflow-hidden flex flex-col h-full ${embedInDrawer ? '' : 'rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh]'}`}>
         {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200">
+        <div className="flex justify-between items-center p-[10px] border-b border-gray-200 flex-shrink-0">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Order Details</h2>
-            <p className="text-gray-600">Order Number: {order.orderNumber || order.id}</p>
+            <h2 className="text-sm font-bold text-gray-900">Order Details</h2>
+            <p className="text-[11px] text-gray-600">Order Number: {order.orderNumber || order.id}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1"
           >
-            <i className="ri-close-line text-2xl"></i>
+            <i className="ri-close-line text-lg"></i>
           </button>
         </div>
 
@@ -627,25 +628,38 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50">
+        <div className="flex justify-end p-[10px] border-t border-gray-200 bg-gray-50 flex-shrink-0">
           <button
             onClick={onClose}
-            className="ti-btn ti-btn-secondary"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50"
           >
             Close
           </button>
         </div>
       </div>
+  );
 
-      {/* Article Logs Modal */}
-      {showArticleLogsModal && selectedArticle && (
-        <ArticleLogsModal 
-          articleId={selectedArticle._id || selectedArticle.id}
-          articleNumber={selectedArticle.articleNumber}
-          isOpen={showArticleLogsModal}
-          onClose={closeArticleLogsModal}
-        />
-      )}
+  const articleLogsModal = showArticleLogsModal && selectedArticle && (
+    <ArticleLogsModal
+      articleId={selectedArticle._id || selectedArticle.id}
+      articleNumber={selectedArticle.articleNumber}
+      isOpen={showArticleLogsModal}
+      onClose={closeArticleLogsModal}
+    />
+  );
+
+  if (embedInDrawer) {
+    return (
+      <>
+        {content}
+        {articleLogsModal}
+      </>
+    );
+  }
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      {content}
+      {articleLogsModal}
     </div>
   );
 };

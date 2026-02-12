@@ -1544,22 +1544,19 @@ const ProductListPage = () => {
           const attributesResponse = await axios.get(`${API_BASE_URL}/product-attributes?page=1&limit=10000`);
           const allAttributes = attributesResponse.data.results || [];
           
-          // Create mapping: attribute name -> attribute value name -> attribute value ID
-          const attributeMapping: Record<string, Record<string, number>> = {};
+          // Build set of valid (attributeName, attributeValue) for validation — we send name → value string, not IDs
+          const validAttributeValueSet = new Set<string>();
           allAttributes.forEach((attr: any) => {
-            attributeMapping[attr.name.toLowerCase()] = {};
-            attr.optionValues.forEach((value: any) => {
-              // Handle different possible ID field names
-              const valueId = value.id || value._id || value.valueId;
-              if (valueId) {
-                attributeMapping[attr.name.toLowerCase()][value.name.toLowerCase()] = valueId;
-              }
+            const attrKey = (attr.name ?? '').toString().toLowerCase();
+            (attr.optionValues || []).forEach((value: any) => {
+              const valueName = (value.name ?? value.value ?? '').toString().trim().toLowerCase();
+              if (valueName) validAttributeValueSet.add(`${attrKey}::${valueName}`);
             });
           });
 
           setImportProgress(50);
 
-          // Group attributes by product ID and map to IDs
+          // Group attributes by product ID — pass attribute name → value string (no value IDs)
           const productAttributes: Record<string, Record<string, string>> = {};
           const mappingErrors: string[] = [];
 
@@ -1595,14 +1592,10 @@ const ProductListPage = () => {
               productAttributes[productId] = {};
             }
 
-            // Map attribute name and value to ID
-            const attributeNameLower = attributeName.toLowerCase();
-            const attributeValueLower = attributeValue.toLowerCase();
-            
-            if (attributeMapping[attributeNameLower] && attributeMapping[attributeNameLower][attributeValueLower]) {
-              const attributeValueId = attributeMapping[attributeNameLower][attributeValueLower];
-              // Use attribute name as key and attribute value ID as value
-              productAttributes[productId][attributeName] = attributeValueId.toString();
+            // Validate option exists, then store attribute name → value string
+            const key = `${attributeName.toLowerCase()}::${attributeValue.toLowerCase()}`;
+            if (validAttributeValueSet.has(key)) {
+              productAttributes[productId][attributeName] = attributeValue;
             } else {
               mappingErrors.push(`Product ${productId}: Attribute "${attributeName}" with value "${attributeValue}" not found in system`);
             }

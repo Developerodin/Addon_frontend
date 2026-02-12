@@ -7,7 +7,7 @@ import HelpIcon from "@/shared/components/HelpIcon";
 import OrderViewModal from "../../../shared/components/production/OrderViewModal";
 import OrderLogsModal from "../../../shared/components/production/OrderLogsModal";
 import ArticleLogsModal from "../../../shared/components/production/ArticleLogsModal";
-import { productionService, OrderFilters } from "@/shared/services/productionService";
+import { productionService, OrderFilters, ArticleWiseReportArticle, ArticleWiseReportResponse } from "@/shared/services/productionService";
 
 interface ProductionOrder {
   id: string;
@@ -32,7 +32,10 @@ interface FloorQuantity {
 }
 
 
+type SupervisorTab = 'orders' | 'article-view';
+
 const ProductionSupervisorPage = () => {
+  const [activeTab, setActiveTab] = useState<SupervisorTab>('orders');
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -54,6 +57,16 @@ const ProductionSupervisorPage = () => {
   });
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+
+  // Article view state
+  const [articleViewResults, setArticleViewResults] = useState<ArticleWiseReportArticle[]>([]);
+  const [articleViewLoading, setArticleViewLoading] = useState(false);
+  const [articleViewPage, setArticleViewPage] = useState(1);
+  const [articleViewLimit, setArticleViewLimit] = useState(50);
+  const [articleViewTotalPages, setArticleViewTotalPages] = useState(1);
+  const [articleViewTotal, setArticleViewTotal] = useState(0);
+  const [articleFilter, setArticleFilter] = useState('');
+  const [articleViewLogsPerArticle, setArticleViewLogsPerArticle] = useState(20);
 
   // Load orders from API
   const loadOrders = async () => {
@@ -125,6 +138,39 @@ const ProductionSupervisorPage = () => {
 
     return () => clearTimeout(timeoutId);
   }, [currentPage, itemsPerPage, filters, searchQuery]);
+
+  // Load article-wise report when on Article view tab
+  const loadArticleView = async () => {
+    setArticleViewLoading(true);
+    try {
+      const response = await productionService.getArticleWiseReport({
+        page: articleViewPage,
+        limit: Math.min(articleViewLimit, 100),
+        logsPerArticle: Math.min(articleViewLogsPerArticle, 100),
+        ...(articleFilter.trim() && { articleNumber: articleFilter.trim() }),
+      });
+      if (response.success && response.data) {
+        const data = response.data as ArticleWiseReportResponse;
+        setArticleViewResults(data.results || []);
+        setArticleViewTotalPages(data.totalPages ?? 1);
+        setArticleViewTotal(data.total ?? 0);
+      } else {
+        toast.error(response.error?.message || 'Failed to load article report');
+        setArticleViewResults([]);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to load article report');
+      setArticleViewResults([]);
+    } finally {
+      setArticleViewLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'article-view') return;
+    const t = setTimeout(() => loadArticleView(), articleFilter ? 400 : 0);
+    return () => clearTimeout(t);
+  }, [activeTab, articleViewPage, articleViewLimit, articleViewLogsPerArticle, articleFilter]);
 
   // No client-side filtering needed since we're using API filtering
   const paginatedOrders = orders;
@@ -303,513 +349,381 @@ const ProductionSupervisorPage = () => {
     return priorityClasses[priority as keyof typeof priorityClasses] || 'bg-gray-100 text-gray-800';
   };
 
+  const isDrawerOpen = showViewModal || showOrderLogsModal;
+
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Production Supervisor Dashboard"/>
-      
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <h1 className="box-title text-2xl font-semibold">Production Supervisor Dashboard</h1>
-                <HelpIcon
-                  title="Production Supervisor Dashboard"
-                  content={
-                    <div className="space-y-4">
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
-                        <p className="text-gray-700">
-                          This is the Production Supervisor Dashboard where you can manage production orders, track progress, and oversee manufacturing operations.
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li><strong>View Orders:</strong> Browse all production orders with real-time status</li>
-                          <li><strong>Add New Order:</strong> Click "Add New Order" to create a new production order</li>
-                          <li><strong>Track Progress:</strong> Monitor order progress and completion status</li>
-                          <li><strong>Manage Priorities:</strong> Set and update order priorities (Urgent, High, Medium, Low)</li>
-                          <li><strong>Filter & Search:</strong> Use filters and search to find specific orders by order number, customer name, or article number</li>
-                          <li><strong>View Logs:</strong> Click the logs button to view detailed activity logs for orders and articles</li>
-                          <li><strong>Bulk Operations:</strong> Select multiple orders for bulk actions</li>
-                        </ul>
-                      </div>
+
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Header - items page style */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Production Supervisor</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {totalResults}
+              </span>
+              <HelpIcon
+                title="Production Supervisor Dashboard"
+                content={
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                      <p className="text-gray-700">
+                        This is the Production Supervisor Dashboard where you can manage production orders, track progress, and oversee manufacturing operations.
+                      </p>
                     </div>
-                  }
-                />
-              </div>
-              <div className="box-tools flex items-center space-x-2">
-                <button 
-                  type="button" 
-                  className="ti-btn ti-btn-light"
-                  onClick={loadOrders}
-                  disabled={isLoading}
-                  title="Refresh Orders"
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <li><strong>View Orders:</strong> Browse all production orders with real-time status</li>
+                        <li><strong>Add New Order:</strong> Click "Add New Order" to create a new production order</li>
+                        <li><strong>Track Progress:</strong> Monitor order progress and completion status</li>
+                        <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
+                        <li><strong>View Logs:</strong> Click the logs button to view detailed activity logs</li>
+                        <li><strong>Bulk Operations:</strong> Select multiple orders for bulk actions</li>
+                      </ul>
+                    </div>
+                  </div>
+                }
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                onClick={loadOrders}
+                disabled={isLoading}
+                title="Refresh Orders"
+              >
+                <i className={`ri-refresh-line text-xs ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+              </button>
+              {selectedOrders.length > 0 && (
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-100 text-[11px] font-bold rounded hover:bg-red-100 shadow-sm"
+                  onClick={handleBulkDelete}
                 >
-                  <i className={`ri-refresh-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+                  <i className="ri-delete-bin-line text-xs"></i> Delete ({selectedOrders.length})
                 </button>
-                {selectedOrders.length > 0 && (
-                  <button 
-                    type="button" 
-                    className="ti-btn ti-btn-danger"
-                    onClick={handleBulkDelete}
-                  >
-                    <i className="ri-delete-bin-line me-2"></i> Delete Selected ({selectedOrders.length})
-                  </button>
-                )}
-                <Link 
-                  href="/production/supervisor/add"
-                  className="ti-btn ti-btn-primary"
-                >
-                  <i className="ri-add-line me-2"></i> Add New Order
-                </Link>
-              </div>
+              )}
+              <Link
+                href="/production/supervisor/add"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-add-line text-xs"></i> Add New Order
+              </Link>
             </div>
           </div>
 
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-            <div className="box bg-gradient-to-r from-blue-500 to-blue-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-blue-100 text-sm font-medium">Active Orders</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.filter(order => order.status === 'In Progress').length}
-                    </p>
-                  </div>
-                  <div className="text-blue-200">
-                    <i className="ri-cog-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
+          {/* Small stat cards - items page style */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+            <div className="bg-blue-50 border border-blue-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wide">In Progress</span>
+              <span className="text-sm font-bold text-blue-900">{orders.filter(o => o.status === 'In Progress').length}</span>
             </div>
-
-            <div className="box bg-gradient-to-r from-green-500 to-green-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-green-100 text-sm font-medium">Completed Today</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.filter(order => order.status === 'Completed').length}
-                    </p>
-                  </div>
-                  <div className="text-green-200">
-                    <i className="ri-check-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
+            <div className="bg-green-50 border border-green-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-green-700 uppercase tracking-wide">Completed</span>
+              <span className="text-sm font-bold text-green-900">{orders.filter(o => o.status === 'Completed').length}</span>
             </div>
-
-            <div className="box bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-yellow-100 text-sm font-medium">Pending Orders</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.filter(order => order.status === 'Pending').length}
-                    </p>
-                  </div>
-                  <div className="text-yellow-200">
-                    <i className="ri-time-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
+            <div className="bg-yellow-50 border border-yellow-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-yellow-700 uppercase tracking-wide">Pending</span>
+              <span className="text-sm font-bold text-yellow-900">{orders.filter(o => o.status === 'Pending').length}</span>
             </div>
-
-            <div className="box bg-gradient-to-r from-red-500 to-red-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-red-100 text-sm font-medium">On Hold</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.filter(order => order.status === 'On Hold').length}
-                    </p>
-                  </div>
-                  <div className="text-red-200">
-                    <i className="ri-error-warning-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
+            <div className="bg-red-50 border border-red-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-red-700 uppercase tracking-wide">On Hold</span>
+              <span className="text-sm font-bold text-red-900">{orders.filter(o => o.status === 'On Hold').length}</span>
             </div>
           </div>
 
-          {/* Content Box */}
-          <div className="box">
-            <div className="box-body">
-              {/* Search and Filters Header */}
-              <div className="mb-6">
-                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                  {/* Filter Toggle and Actions */}
-                  <div className="flex items-center gap-3 flex-shrink-0 order-2 sm:order-1">
-                    <button
-                      type="button"
-                      className={`ti-btn ${showFilters ? 'ti-btn-primary' : 'ti-btn-secondary'}`}
-                      onClick={() => setShowFilters(!showFilters)}
-                    >
-                      <i className="ri-filter-3-line me-2"></i>
-                      Filters {hasActiveFilters && <span className="badge bg-white text-primary ml-1">●</span>}
-                    </button>
-                    
-                    {hasActiveFilters && (
-                      <button
-                        type="button"
-                        className="ti-btn ti-btn-light"
-                        onClick={clearFilters}
-                      >
-                        <i className="ri-close-line me-1"></i>
-                        Clear
-                      </button>
-                    )}
-                  </div>
+          {/* Tabs */}
+          <div className="flex border-b border-gray-200 mb-0">
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                activeTab === 'orders' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('orders')}
+            >
+              Orders
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                activeTab === 'article-view' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('article-view')}
+            >
+              Article view
+            </button>
+          </div>
+        </div>
 
-                  {/* Search Bar */}
-                  <div className="w-full sm:w-80 lg:w-96 order-1 sm:order-2">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        className="form-control py-3 pl-10 pr-4 w-full"
-                        placeholder="Search by order number, customer name, or article number..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                      <i className="ri-search-line text-lg absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    </div>
-                  </div>
-
-                  {/* Rows per page selector */}
-                  <div className="flex items-center gap-2 order-3">
-                    <label className="text-sm text-gray-600 whitespace-nowrap">Show:</label>
+        {/* Content */}
+        <div className="min-h-[300px]">
+              {activeTab === 'article-view' ? (
+                <>
+                  <div className="p-[10px] mb-2 flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-40 placeholder:text-gray-400 font-medium"
+                      placeholder="Filter by article..."
+                      value={articleFilter}
+                      onChange={(e) => setArticleFilter(e.target.value)}
+                    />
                     <select
-                      className="form-select form-select-sm w-20"
-                      value={itemsPerPage}
-                      onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                      className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
+                      value={articleViewLimit}
+                      onChange={(e) => { setArticleViewLimit(Number(e.target.value)); setArticleViewPage(1); }}
                     >
                       <option value={10}>10</option>
                       <option value={25}>25</option>
                       <option value={50}>50</option>
                       <option value={100}>100</option>
                     </select>
-                    <span className="text-sm text-gray-600 whitespace-nowrap">per page</span>
+                    <select
+                      className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
+                      value={articleViewLogsPerArticle}
+                      onChange={(e) => { setArticleViewLogsPerArticle(Number(e.target.value)); setArticleViewPage(1); }}
+                    >
+                      <option value={10}>10 logs</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+                      onClick={loadArticleView}
+                      disabled={articleViewLoading}
+                    >
+                      <i className={`ri-refresh-line text-xs ${articleViewLoading ? 'animate-spin' : ''}`}></i> Refresh
+                    </button>
                   </div>
-                </div>
-
-                {/* Filters Panel */}
-                {showFilters && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {/* Status Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Status</label>
-                        <select
-                          className="form-select"
-                          value={filters.status}
-                          onChange={(e) => handleFilterChange('status', e.target.value)}
-                        >
-                          <option value="">All Status</option>
-                          <option value="Pending">Pending</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Completed">Completed</option>
-                          <option value="On Hold">On Hold</option>
-                          <option value="Cancelled">Cancelled</option>
-                        </select>
+                  {articleViewLoading ? (
+                    <div className="flex flex-col items-center justify-center py-20">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+                      <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
+                    </div>
+                  ) : articleViewResults.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                        <i className="ri-inbox-line text-xl text-gray-200"></i>
                       </div>
-
-                      {/* Priority Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Priority</label>
-                        <select
-                          className="form-select"
-                          value={filters.priority}
-                          onChange={(e) => handleFilterChange('priority', e.target.value)}
-                        >
-                          <option value="">All Priorities</option>
-                          <option value="Urgent">Urgent</option>
-                          <option value="High">High</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Low">Low</option>
-                        </select>
+                      <h3 className="text-xs font-bold text-gray-400 mb-1">NO ARTICLE DATA</h3>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse border border-gray-200">
+                          <thead>
+                            <tr className="bg-gray-50/30">
+                              <th className="pl-[10px] pr-1 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Article</th>
+                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">PO NO</th>
+                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Qty</th>
+                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Progress</th>
+                              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Priority</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {articleViewResults.map((row) =>
+                              row.orders.length === 0 ? (
+                                <tr key={row.factoryCode} className="hover:bg-gray-50/50">
+                                  <td className="pl-[10px] pr-1 py-2.5 text-[12px] font-medium text-gray-900 border border-gray-200">{row.articleNumber || row.factoryCode}</td>
+                                  <td className="px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200">—</td>
+                                  <td className="px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200">—</td>
+                                  <td className="px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200">—</td>
+                                  <td className="px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200">—</td>
+                                  <td className="px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200">—</td>
+                                </tr>
+                              ) : (
+                                row.orders.map((ord, idx) => (
+                                  <tr key={`${row.factoryCode}-${ord.articleId}-${ord.orderId ?? idx}`} className="hover:bg-gray-50/50">
+                                    {idx === 0 && (
+                                      <td rowSpan={row.orders.length} className="pl-[10px] pr-1 py-2.5 text-[12px] font-medium text-gray-900 align-top border-r border-gray-200 bg-gray-50/50">{row.articleNumber || row.factoryCode}</td>
+                                    )}
+                                    <td className="px-1.5 py-2.5 text-[12px] text-gray-700 border border-gray-200">{ord.orderNumber ?? '—'}</td>
+                                    <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{ord.plannedQuantity != null ? ord.plannedQuantity.toLocaleString() : '—'}</td>
+                                    <td className="px-1.5 py-2.5 border border-gray-200">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(ord.orderStatus ?? ord.status ?? '')}`}>{ord.orderStatus ?? ord.status ?? '—'}</span>
+                                    </td>
+                                    <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{ord.progress != null ? `${ord.progress}%` : '—'}</td>
+                                    <td className="px-1.5 py-2.5 border border-gray-200">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getPriorityBadge(ord.orderPriority ?? ord.priority ?? '')}`}>{ord.orderPriority ?? ord.priority ?? '—'}</span>
+                                    </td>
+                                  </tr>
+                                ))
+                              )
+                            )}
+                          </tbody>
+                        </table>
                       </div>
-
-                      {/* Linking Type Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Linking Type</label>
-                        <select
-                          className="form-select"
-                          value={filters.linkingType}
-                          onChange={(e) => handleFilterChange('linkingType', e.target.value)}
-                        >
-                          <option value="">All Types</option>
-                          <option value="Auto Linking">Auto Linking</option>
-                          <option value="Rosso Linking">Rosso Linking</option>
-                          <option value="Hand Linking">Hand Linking</option>
-                        </select>
+                      <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100">
+                        <div className="text-[11px] font-medium text-[#495057]">Page {articleViewPage} of {articleViewTotalPages} · {articleViewTotal} article(s)</div>
+                        <div className="flex items-center gap-1">
+                          <button className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30" onClick={() => setArticleViewPage((p) => Math.max(1, p - 1))} disabled={articleViewPage <= 1}>Prev</button>
+                          <span className="px-2 text-[11px] text-gray-500">{articleViewPage}</span>
+                          <button className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30" onClick={() => setArticleViewPage((p) => Math.min(articleViewTotalPages, p + 1))} disabled={articleViewPage >= articleViewTotalPages}>Next</button>
+                        </div>
                       </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-100">
+                    <button
+                      type="button"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${showFilters ? 'bg-purple-600 text-white border-purple-600' : 'bg-white border-gray-200 text-[#495057] hover:bg-gray-50'}`}
+                      onClick={() => setShowFilters(!showFilters)}
+                    >
+                      <i className="ri-filter-3-line text-xs"></i> Filters {hasActiveFilters && <span className="ml-1">●</span>}
+                    </button>
+                    {hasActiveFilters && (
+                      <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50" onClick={clearFilters}>
+                        <i className="ri-close-line text-xs"></i> Clear
+                      </button>
+                    )}
+                    <div className="relative flex-1 min-w-[140px] max-w-[240px]">
+                      <input
+                        type="text"
+                        className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
+                        placeholder="Search order, article..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                      <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                    </div>
+                    <select
+                      className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
+                      value={itemsPerPage}
+                      onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                    >
+                      <option value={10}>Show 10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                  {showFilters && (
+                    <div className="p-[10px] bg-gray-50 border-b border-gray-100 flex flex-wrap gap-2">
+                      <select className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1.5" value={filters.status} onChange={(e) => handleFilterChange('status', e.target.value)}>
+                        <option value="">All Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                        <option value="On Hold">On Hold</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                      <select className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1.5" value={filters.priority} onChange={(e) => handleFilterChange('priority', e.target.value)}>
+                        <option value="">All Priorities</option>
+                        <option value="Urgent">Urgent</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                      </select>
+                      <input type="text" className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1.5 w-28" placeholder="Floor..." value={filters.floor} onChange={(e) => handleFilterChange('floor', e.target.value)} />
+                    </div>
+                  )}
 
-                      {/* Floor Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Floor</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          placeholder="Filter by floor..."
-                          value={filters.floor}
-                          onChange={(e) => handleFilterChange('floor', e.target.value)}
-                        />
+                  {isLoading ? (
+                    <div className="flex flex-col items-center justify-center py-20">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+                      <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
+                    </div>
+                  ) : orders.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                        <i className="ri-file-list-line text-xl text-gray-200"></i>
+                      </div>
+                      <h3 className="text-xs font-bold text-gray-400 mb-1">NO ORDERS FOUND</h3>
+                      {!hasActiveFilters && (
+                        <Link href="/production/supervisor/add" className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700">
+                          <i className="ri-add-line text-xs"></i> Add First Order
+                        </Link>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-gray-200">
+                        <thead>
+                          <tr className="bg-gray-50/30">
+                            <th className="pl-[10px] pr-1 py-2.5 w-10 border border-gray-200">
+                              <input type="checkbox" checked={selectAll} onChange={handleSelectAll} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                            </th>
+                            <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order</th>
+                            <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Articles</th>
+                            <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                            <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedOrders.map((order) => (
+                            <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
+                              <td className="pl-[10px] pr-1 py-2.5 border border-gray-200">
+                                <input type="checkbox" checked={selectedOrders.includes(order.id)} onChange={() => handleOrderSelect(order.id)} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                              </td>
+                              <td className="px-1.5 py-2.5 border border-gray-200">
+                                <div className="text-[12px] font-bold text-gray-900">{order.orderNumber || order.id}</div>
+                                <div className="text-[10px] text-gray-500">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}</div>
+                              </td>
+                              <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{order.articles.length} · Qty {order.articles.reduce((s, a) => s + (a.plannedQuantity || 0), 0).toLocaleString()}</td>
+                              <td className="px-1.5 py-2.5 border border-gray-200">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>{order.status}</span>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ml-1 ${getPriorityBadge(order.priority)}`}>{order.priority}</span>
+                              </td>
+                              <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                                <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100">
+                                  <button className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100" onClick={() => handleViewOrder(order)} title="View"><i className="ri-eye-line text-xs"></i></button>
+                                  <button className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-200 rounded hover:bg-gray-100" onClick={() => handleViewOrderLogs(order)} title="Logs"><i className="ri-file-list-line text-xs"></i></button>
+                                  <Link href={`/production/supervisor/edit?id=${order.id}`} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100" title="Edit"><i className="ri-pencil-line text-xs"></i></Link>
+                                  <button className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100" onClick={() => handleDeleteOrder(order.id)} title="Delete"><i className="ri-delete-bin-line text-xs"></i></button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {!isLoading && orders.length > 0 && (
+                    <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100">
+                      <div className="text-[11px] font-medium text-[#495057]">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage <= 1} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Prev</button>
+                        {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                          const pageNum = totalPages <= 7 ? i + 1 : currentPage <= 4 ? i + 1 : currentPage >= totalPages - 3 ? totalPages - 6 + i : currentPage - 3 + i;
+                          return (
+                            <button key={pageNum} onClick={() => handlePageChange(pageNum)} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${currentPage === pageNum ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>{pageNum}</button>
+                          );
+                        })}
+                        <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= totalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Next</button>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-
-              {isLoading ? (
-                <div className="flex justify-center items-center py-12">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading orders...</p>
-                  </div>
-                </div>
-              ) : orders.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="text-gray-400 mb-4">
-                    <i className="ri-file-list-line text-6xl"></i>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No orders found</h3>
-                  <p className="text-gray-500 mb-4">
-                    {hasActiveFilters 
-                      ? 'Try adjusting your filters or search terms' 
-                      : 'Get started by adding your first order'
-                    }
-                  </p>
-                  {!hasActiveFilters && (
-                    <Link 
-                      href="/production/supervisor/add"
-                      className="ti-btn ti-btn-primary"
-                    >
-                      <i className="ri-add-line me-2"></i>
-                      Add First Order
-                    </Link>
                   )}
-                </div>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table whitespace-nowrap min-w-full">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">
-                          <input 
-                            type="checkbox" 
-                            className="form-check-input" 
-                            checked={selectAll}
-                            onChange={handleSelectAll}
-                          />
-                        </th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Order Info</th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Articles</th>
-                        
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Status</th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {paginatedOrders.map((order) => (
-                        <tr 
-                          key={order.id}
-                          className="hover:bg-gray-50 transition-colors duration-150"
-                        >
-                          <td className="px-4 py-4">
-                            <input 
-                              type="checkbox" 
-                              className="form-check-input" 
-                              checked={selectedOrders.includes(order.id)}
-                              onChange={() => handleOrderSelect(order.id)}
-                            />
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="space-y-1">
-                              <div className="font-medium text-gray-900">
-                                {order.orderNumber || order.id}
-                                {order.orderNote && (
-                                  <span className="text-sm text-gray-500 ml-2">
-                                    ({order.orderNote})
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 
-                                  (order.articles && order.articles.length > 0 && order.articles[0].createdAt ? 
-                                    new Date(order.articles[0].createdAt).toLocaleDateString() : 'N/A')}
-                              </div>
-                              <div className="text-xs text-gray-400">
-                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : 
-                                  (order.articles && order.articles.length > 0 && order.articles[0].updatedAt ? 
-                                    new Date(order.articles[0].updatedAt).toLocaleDateString() : 'N/A')}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="space-y-1">
-                              <div className="font-medium text-gray-900">
-                                {order.articles.length} Article{order.articles.length > 1 ? 's' : ''}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                Total Qty: {order.articles.reduce((sum, article) => sum + (article.plannedQuantity || 0), 0).toLocaleString()}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                Avg Progress: {Math.round(order.articles.reduce((sum, article) => sum + (article.progress || 0), 0) / order.articles.length)}%
-                              </div>
-                            </div>
-                          </td>
-                          
-                          <td className="px-4 py-4">
-                            <div className="space-y-2">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
-                                {order.status}
-                              </span>
-                              <div>
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(order.priority)}`}>
-                                  {order.priority}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="flex items-center space-x-2">
-                              <button 
-                                className="ti-btn ti-btn-info ti-btn-sm"
-                                onClick={() => handleViewOrder(order)}
-                                title="View Articles"
-                              >
-                                <i className="ri-eye-line"></i>
-                              </button>
-                              <button 
-                                className="ti-btn ti-btn-secondary ti-btn-sm"
-                                onClick={() => handleViewOrderLogs(order)}
-                                title="View Order Logs"
-                              >
-                                <i className="ri-file-list-line"></i>
-                              </button>
-                              <Link 
-                                href={`/production/supervisor/edit?id=${order.id}`}
-                                className="ti-btn ti-btn-primary ti-btn-sm"
-                                title="Edit Order"
-                              >
-                                <i className="ri-edit-line"></i>
-                              </Link>
-                              <button 
-                                className="ti-btn ti-btn-danger ti-btn-sm"
-                                onClick={() => handleDeleteOrder(order.id)}
-                                title="Delete Order"
-                              >
-                                <i className="ri-delete-bin-line"></i>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                </>
               )}
-
-              {/* Pagination */}
-              {!isLoading && orders.length > 0 && (
-                <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-6 border-t border-gray-200">
-                  <div className="text-sm text-gray-700 mb-4 sm:mb-0">
-                    <span className="font-medium">
-                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} 
-                    </span>
-                    <span className="text-gray-500"> of {totalResults.toLocaleString()} orders</span>
-                  </div>
-                  
-                  <nav aria-label="Page navigation" className="flex items-center space-x-1">
-                    <button
-                      className={`px-3 py-2 text-sm font-medium rounded-md ${
-                        currentPage > 1
-                          ? 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
-                          : 'text-gray-300 bg-gray-100 border border-gray-200 cursor-not-allowed'
-                      }`}
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage <= 1}
-                    >
-                      <i className="ri-arrow-left-s-line"></i>
-                    </button>
-                    
-                    {/* Page Numbers */}
-                    {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 7) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 4) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 3) {
-                        pageNum = totalPages - 6 + i;
-                      } else {
-                        pageNum = currentPage - 3 + i;
-                      }
-                      
-                      return (
-                        <button
-                          key={pageNum}
-                          className={`px-3 py-2 text-sm font-medium rounded-md ${
-                            currentPage === pageNum
-                              ? 'bg-primary text-white border border-primary'
-                              : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
-                          }`}
-                          onClick={() => handlePageChange(pageNum)}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                    
-                    <button
-                      className={`px-3 py-2 text-sm font-medium rounded-md ${
-                        currentPage < totalPages
-                          ? 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
-                          : 'text-gray-300 bg-gray-100 border border-gray-200 cursor-not-allowed'
-                      }`}
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage >= totalPages}
-                    >
-                      <i className="ri-arrow-right-s-line"></i>
-                    </button>
-                  </nav>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* View Articles Modal */}
-      {showViewModal && selectedOrder && (
-        <OrderViewModal order={selectedOrder} onClose={closeViewModal} />
+      {/* Side drawer for modals - opens from right */}
+      {isDrawerOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { closeViewModal(); closeOrderLogsModal(); }} aria-hidden />
+          <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right">
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {showViewModal && selectedOrder && <OrderViewModal order={selectedOrder} onClose={closeViewModal} embedInDrawer />}
+              {showOrderLogsModal && selectedOrder && <OrderLogsModal orderId={selectedOrder.id} orderNumber={selectedOrder.orderNumber} isOpen onClose={closeOrderLogsModal} embedInDrawer />}
+            </div>
+          </div>
+        </>
       )}
-
-      {/* Order Logs Modal */}
-      {showOrderLogsModal && selectedOrder && (
-        <OrderLogsModal 
-          orderId={selectedOrder.id}
-          orderNumber={selectedOrder.orderNumber}
-          isOpen={showOrderLogsModal}
-          onClose={closeOrderLogsModal}
-        />
-      )}
-
-      {/* Article Logs Modal */}
-      {showArticleLogsModal && selectedArticle && (
-        <ArticleLogsModal 
-          articleId={selectedArticle.id}
-          articleNumber={selectedArticle.articleNumber}
-          isOpen={showArticleLogsModal}
-          onClose={closeArticleLogsModal}
-        />
-      )}
-
     </div>
   );
 };

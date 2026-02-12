@@ -108,8 +108,27 @@ const EditMachinePage = () => {
 
   /** Needle configs: user can add multiple { needleSize, cutoffQuantity } */
   const [needleSizeConfig, setNeedleSizeConfig] = useState<NeedleSizeConfigItem[]>([]);
+  /** Needle size options from catalog attributes (Needles attribute) */
+  const [needleOptions, setNeedleOptions] = useState<string[]>([]);
 
   const [errors, setErrors] = useState<Partial<UpdateMachineData>>({});
+
+  // Fetch needle options from catalog attributes (Needles attribute)
+  const fetchNeedleOptions = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/product-attributes?page=1&limit=500`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const results = data.results || [];
+      const needlesAttr = results.find((a: { name: string }) => a.name?.toLowerCase() === 'needles');
+      const values = needlesAttr?.optionValues || [];
+      setNeedleOptions(values.map((v: { name: string }) => v.name).filter(Boolean));
+    } catch {
+      setNeedleOptions([]);
+    }
+  };
 
   // Fetch machine data
   const fetchMachine = async (id: string) => {
@@ -177,6 +196,7 @@ const EditMachinePage = () => {
     if (finalMachineId) {
       fetchMachine(finalMachineId);
       fetchSupervisors();
+      fetchNeedleOptions();
     } else {
       console.log('No valid machine ID found, setting error');
       setError('No valid machine ID found in URL');
@@ -581,7 +601,7 @@ const EditMachinePage = () => {
                 {/* Needle config: add multiple needleSize + cutoffQuantity */}
                 <div className="form-group border-t pt-6">
                   <label className="form-label block mb-2">Needle Config</label>
-                  <p className="text-xs text-gray-500 mb-3">Add one or more needle size and cutoff quantity pairs.</p>
+                  <p className="text-xs text-gray-500 mb-3">Select needle size from catalog (Needles attribute) and set cutoff quantity.</p>
                   {needleSizeConfig.length > 0 && (
                     <div className="overflow-x-auto border border-gray-200 rounded-lg mb-3">
                       <table className="w-full text-sm">
@@ -593,20 +613,27 @@ const EditMachinePage = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {needleSizeConfig.map((row, idx) => (
+                          {needleSizeConfig.map((row, idx) => {
+                            const optionsForRow = needleOptions.includes(row.needleSize)
+                              ? needleOptions
+                              : [...needleOptions, row.needleSize].filter(Boolean);
+                            return (
                             <tr key={idx} className="border-b border-gray-100 last:border-0">
                               <td className="px-3 py-2">
-                                <input
-                                  type="text"
+                                <select
                                   value={row.needleSize}
                                   onChange={(e) => {
                                     const next = [...needleSizeConfig];
                                     next[idx] = { ...next[idx], needleSize: e.target.value };
                                     setNeedleSizeConfig(next);
                                   }}
-                                  className="form-control py-1.5 text-sm"
-                                  placeholder="e.g. 10"
-                                />
+                                  className="form-select py-1.5 text-sm"
+                                >
+                                  <option value="">Select needle size</option>
+                                  {optionsForRow.map((opt) => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
                               </td>
                               <td className="px-3 py-2">
                                 <input
@@ -632,7 +659,8 @@ const EditMachinePage = () => {
                                 </button>
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
