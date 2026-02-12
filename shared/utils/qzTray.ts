@@ -1118,59 +1118,61 @@ export const generateZPLCone = (
   }
   if (isSmallSideBySide) {
     // SIDE-BY-SIDE LAYOUT (e.g. 50x25mm) - same field order as browser test print
-    const dataWidth = Math.floor(labelWidth * 0.58) - labelMargin; // Reduced to 58% to give QR code more room
-    const qrSectionX = xOffset + dataWidth + labelMargin;
-    // Estimate QR size: version 2/3 QR with mag 4 is ~120-135 dots
-    const qrWidth = qrCodeSize * 33;
-    let yPos = 15 + yOffset;
-    const xPos = labelMargin + xOffset;
-    const detailsFont = Math.min(detailsFontSize, 18);
+    const labelMarginSmall = 20; // Reduced margin for more usable space
+    const dataWidth = Math.floor(labelWidth * 0.62) - labelMarginSmall; // Increased to 62% to reduce gap
+    const qrSectionX = xOffset + dataWidth + labelMarginSmall;
+    // QR code size estimation for Version 3-4 at mag 4/5
+    const qrWidth = qrCodeSize * 34;
+    let yPos = 10 + yOffset; // Reduced top gap
+    const xPos = labelMarginSmall + xOffset;
+    const detailsFont = 18; // Fixed font size to 18
     const lineHeight = detailsFont + 4;
 
-    // Use a more conservative font width factor (0.6) for characters
-    const charWidthFactor = 0.6;
+    const charWidthFactor = 0.62;
     const maxYarnChars = Math.floor(dataWidth / (detailsFont * charWidthFactor));
 
-    // 1. Yarn Name (title) - Allow 2 lines
+    // Helper for Bold/Darker text (double printing)
+    const printBold = (text: string, x: number, y: number, font: number, fieldData: string) => {
+      zpl += `^FO${x},${y}^A0N,${font},${font}^FD${fieldData}^FS\n`;
+      zpl += `^FO${x + 1},${y}^A0N,${font},${font}^FD${fieldData}^FS\n`; // Horizontal bold
+    };
+
+    // 1. Yarn Name (title) - Darkened (Bold)
     if (yarnName) {
       const nameLines = wrapText(yarnName, maxYarnChars);
       nameLines.slice(0, 2).forEach((line) => {
-        zpl += `^FO${xPos},${yPos}^A0N,${detailsFont + 1},${detailsFont + 1}^FD${line}^FS\n`;
-        yPos += lineHeight;
+        printBold("Yarn", xPos, yPos, detailsFont, line);
+        yPos += lineHeight + 1;
       });
     }
 
-    // 2. Supplier (Allow wrapping)
+    // 2. Supplier (Allow wrapping) - Darkened (Bold)
     const supplierText = `Supplier: ${supplierName || '-'}`;
     const supplierLines = wrapText(supplierText, maxYarnChars);
     supplierLines.slice(0, 2).forEach((line) => {
-      zpl += `^FO${xPos},${yPos}^A0N,${detailsFont - 1},${detailsFont - 1}^FD${line}^FS\n`;
-      yPos += lineHeight - 1;
-    });
-
-    // Helper to print prefixed lines safely truncated (for PO, Lot, Shade)
-    const printShortLine = (prefix: string, value: string, font: number) => {
-      const maxValChars = maxYarnChars - prefix.length;
-      const safeValue = (value || '-').substring(0, Math.max(1, maxValChars));
-      zpl += `^FO${xPos},${yPos}^A0N,${font},${font}^FD${prefix}${safeValue}^FS\n`;
-      yPos += lineHeight - 1;
-    };
-
-    // 3. PO
-    printShortLine("PO: ", poNumber || '-', detailsFont - 1);
-
-    // 4. Lot 
-    printShortLine("Lot: ", lotNumber || '-', detailsFont);
-
-    // 5. Shade (Allow wrapping as it can be very long)
-    const shadeText = `Shade: ${shadeCode || '-'}`;
-    const shadeLines = wrapText(shadeText, maxYarnChars);
-    shadeLines.slice(0, 2).forEach((line) => {
-      zpl += `^FO${xPos},${yPos}^A0N,${detailsFont},${detailsFont}^FD${line}^FS\n`;
+      printBold("Supplier", xPos, yPos, detailsFont, line);
       yPos += lineHeight;
     });
 
-    // QR Code Alignment: Center horizontally in the remaining right area
+    // 3. PO - Darkened (Bold)
+    const poText = `PO: ${poNumber || '-'}`;
+    printBold("PO", xPos, yPos, detailsFont, poText);
+    yPos += lineHeight;
+
+    // 4. Lot - Darkened (Bold)
+    const lotText = `L: ${lotNumber || '-'}`;
+    printBold("Lot", xPos, yPos, detailsFont, lotText);
+    yPos += lineHeight;
+
+    // 5. Shade (Allow wrapping) - Darkened (Bold)
+    const shadeText = `S: ${shadeCode || '-'}`;
+    const shadeLines = wrapText(shadeText, maxYarnChars);
+    shadeLines.slice(0, 2).forEach((line) => {
+      printBold("Shade", xPos, yPos, detailsFont, line);
+      yPos += lineHeight;
+    });
+
+    // QR Code Alignment: Perfect centering in the right segment
     const rightAreaW = labelWidth - qrSectionX - 10;
     const qrXPos = qrSectionX + Math.max(0, Math.floor((rightAreaW - qrWidth) / 2));
     const qrYPos = yOffset + Math.max(10, Math.floor((labelHeight - qrWidth) / 2));

@@ -15,6 +15,11 @@ import yarnBoxService from "@/shared/services/yarnBoxService";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printCones } from "@/shared/utils/qzTray";
 
+// Load Google Font for preview
+const LatoFontHeader = () => (
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet" />
+);
+
 
 const getProcessedBoxStorageKey = (boxId: string) =>
   `processedBoxResult:${boxId}`;
@@ -670,12 +675,13 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       <html>
         <head>
           <title>Browser Print - Cone Labels</title>
+          <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
           <style>
             @page {
               size: ${paperW}mm ${paperH}mm;
               margin: 0;
             }
-            body { margin: 0; padding: 0; font-family: sans-serif; -webkit-print-color-adjust: exact; }
+            body { margin: 0; padding: 0; font-family: 'Lato', sans-serif; -webkit-print-color-adjust: exact; }
             .page {
               width: ${paperW}mm;
               height: ${paperH}mm;
@@ -696,9 +702,9 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               .label { border: none; }
             }
             .data { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; padding-right: 1mm; }
-            .qr { width: 32%; display: flex; align-items: center; justify-content: center; }
-            .title { font-weight: bold; font-size: ${isSmall ? '7pt' : (isMedium || isPortraitSmall) ? '11pt' : '10pt'}; line-height: 1.1; margin-bottom: 0.5mm; word-break: break-all; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-            .text { font-size: ${isSmall ? '6pt' : (isMedium || isPortraitSmall) ? '9pt' : '8pt'}; line-height: 1.2; margin: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+            .qr { width: 28%; display: flex; align-items: center; justify-content: center; }
+            .title { font-weight: normal; font-size: ${isSmall ? '10.5pt' : (isMedium || isPortraitSmall) ? '11pt' : '10pt'}; line-height: 1.1; margin-bottom: 0.5mm; word-break: break-all; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+            .text { font-size: ${isSmall ? '10.5pt' : (isMedium || isPortraitSmall) ? '9pt' : '8pt'}; line-height: 1.2; margin: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
             .text.short { -webkit-line-clamp: 1; }
             canvas { width: 90% !important; height: auto !important; }
           </style>
@@ -717,8 +723,8 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               <div class="title">${box?.yarnName || 'Yarn'}</div>
               <p class="text">Supplier: ${effectiveSupplier || '-'}</p>
               <p class="text short">PO: ${effectivePoNumber || '-'}</p>
-              <p class="text short">Lot: ${box?.lotNumber || '-'}</p>
-              <p class="text">Shade: ${box?.shadeCode || '-'}</p>
+              <p class="text short">L: ${box?.lotNumber || '-'}</p>
+              <p class="text">S: ${box?.shadeCode || '-'}</p>
             </div>
             <div class="qr"><canvas id="qr-${cone._id}"></canvas></div>
           </div>
@@ -797,6 +803,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
 
   return (
     <div className="main-content !p-[10px]">
+      <LatoFontHeader />
       <Seo title={`Processed Box - ${box.boxId}`} />
       <QZTrayLoader />
       <QZTrayUntrustedWarning />
@@ -1301,17 +1308,17 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
 
                   {printSettings.paperSize === '50mm * 25mm' ? (
                     /* 50x25mm Side-by-Side Preview */
-                    <div className="bg-white border border-gray-400 shadow-sm flex overflow-hidden" style={{ width: '250px', height: '125px' }}>
-                      <div className="flex-1 p-2 flex flex-col justify-center gap-0.5 font-mono overflow-hidden">
-                        <div className="text-[10px] font-bold leading-tight border-b border-gray-100 pb-0.5 uppercase line-clamp-2">
+                    <div className="bg-white border border-gray-400 shadow-sm flex overflow-hidden" style={{ width: '250px', height: '125px', fontFamily: "'Lato', sans-serif" }}>
+                      <div className="flex-1 p-2 flex flex-col justify-center gap-0.5 overflow-hidden">
+                        <div className="text-[11px] font-normal leading-tight border-b border-gray-100 pb-0.5 uppercase line-clamp-2">
                           {box.yarnName || 'Yarn Name'}
                         </div>
-                        <div className="text-[8px] text-gray-700 line-clamp-2">Supplier: {effectiveSupplier || '-'}</div>
-                        <div className="text-[8px] text-gray-700 truncate">PO: {effectivePoNumber || '-'}</div>
-                        <div className="text-[8px] text-gray-700 truncate">Lot: {box.lotNumber || '-'}</div>
-                        <div className="text-[8px] text-gray-700 line-clamp-2">Shade: {box.shadeCode || '-'}</div>
+                        <div className="text-[11px] text-gray-700 line-clamp-2">Supplier: {effectiveSupplier || '-'}</div>
+                        <div className="text-[11px] text-gray-700 truncate">PO: {effectivePoNumber || '-'}</div>
+                        <div className="text-[11px] text-gray-700 truncate">L: {box.lotNumber || '-'}</div>
+                        <div className="text-[11px] text-gray-700 line-clamp-2">S: {box.shadeCode || '-'}</div>
                       </div>
-                      <div className="w-[32%] bg-white border-l border-gray-50 flex items-center justify-center p-2">
+                      <div className="w-[28%] bg-white border-l border-gray-50 flex items-center justify-center p-2">
                         <div className="aspect-square w-full border-2 border-black flex items-center justify-center relative">
                           <div className="w-full h-full p-1 flex flex-wrap gap-0.5">
                             {[...Array(9)].map((_, i) => (
@@ -1327,9 +1334,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                     <div className="bg-white border border-gray-400 shadow-sm flex flex-col items-center overflow-hidden"
                       style={{
                         width: printSettings.paperSize === '6x4' ? '250px' : '180px',
-                        height: printSettings.paperSize === '6x4' ? '180px' : '250px'
+                        height: printSettings.paperSize === '6x4' ? '180px' : '250px',
+                        fontFamily: "'Lato', sans-serif"
                       }}>
-                      <div className="w-full p-3 flex flex-col gap-1 font-mono text-center">
+                      <div className="w-full p-3 flex flex-col gap-1 text-center">
                         <div className="text-[11px] font-bold leading-tight border-b border-gray-200 pb-1 uppercase break-words">{box.yarnName || 'Yarn Name'}</div>
                         <div className="text-[9px] text-gray-600 truncate">{effectiveSupplier || '-'}</div>
                         <div className="text-[9px]">PO: {effectivePoNumber || '-'}</div>
@@ -1619,6 +1627,7 @@ const DetailItem: React.FC<DetailItemProps> = ({ label, value, isMono }) => (
     <div
       className={`mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200 ${isMono ? "font-mono" : ""
         }`}
+      style={!isMono ? { fontFamily: "'Lato', sans-serif" } : {}}
     >
       {value}
     </div>
