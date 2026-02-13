@@ -302,12 +302,12 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
             }
           }));
 
-          // Auto-focus tearWeight input after weight is fetched
+          // Auto-focus Storage Location after weight is fetched (tear weight is pre-filled)
           setTimeout(() => {
-            const tearWeightInput = document.querySelector(`input[data-cone-tear-weight="${activeConeId}"]`) as HTMLInputElement;
-            if (tearWeightInput) {
-              tearWeightInput.focus();
-              tearWeightInput.select();
+            const storageInput = document.querySelector(`input[data-cone-storage="${activeConeId}"]`) as HTMLInputElement;
+            if (storageInput) {
+              storageInput.focus();
+              storageInput.select();
             }
           }, 300);
         }
@@ -1064,10 +1064,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                               onKeyDown={(event) => {
                                 if (event.key === "Enter") {
                                   event.preventDefault();
-                                  const tearWeightInput = document.querySelector(`input[data-cone-tear-weight="${cone._id}"]`) as HTMLInputElement;
-                                  if (tearWeightInput) {
-                                    tearWeightInput.focus();
-                                    tearWeightInput.select();
+                                  const storageInput = document.querySelector(`input[data-cone-storage="${cone._id}"]`) as HTMLInputElement;
+                                  if (storageInput) {
+                                    storageInput.focus();
+                                    storageInput.select();
                                   }
                                 }
                               }}
