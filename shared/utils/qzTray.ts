@@ -612,11 +612,11 @@ export const generateZPLDoubleLabel = (
     paperHeight: customSettings?.paperHeight || 1218,
     labelsPerPage: customSettings?.labelsPerPage || 2,
     firstLabelTopMargin: customSettings?.firstLabelTopMargin || 0,
-    supplierFontSize: customSettings?.supplierFontSize || 22,
-    detailsFontSize: customSettings?.detailsFontSize || 22,
-    boxIdFontSize: customSettings?.boxIdFontSize || 22,
-    yarnFontSize: customSettings?.yarnFontSize || 22,
-    shadeLotFontSize: customSettings?.shadeLotFontSize || 22,
+    supplierFontSize: customSettings?.supplierFontSize || 20,
+    detailsFontSize: customSettings?.detailsFontSize || 20,
+    boxIdFontSize: customSettings?.boxIdFontSize || 20,
+    yarnFontSize: customSettings?.yarnFontSize || 20,
+    shadeLotFontSize: customSettings?.shadeLotFontSize || 20,
     barcodeHeight: customSettings?.barcodeHeight || 100,
     barcodeWidth: Math.round(Number(customSettings?.barcodeWidth) || 3),
     qrCodeSize: customSettings?.qrCodeSize || 5,
@@ -953,12 +953,12 @@ export const generateZPLCone = (
     xOffset = 0,
     yOffset = 0,
     qrCodeSize = 5,
-    titleFontSize = 22,
-    detailsFontSize = 22,
-    boxIdFontSize = 22,
-    yarnFontSize = 22,
-    supplierFontSize = 22,
-    shadeLotFontSize = 22,
+    titleFontSize = 20,
+    detailsFontSize = 20,
+    boxIdFontSize = 20,
+    yarnFontSize = 20,
+    supplierFontSize = 20,
+    shadeLotFontSize = 20,
   } = options;
 
   const labelMargin = 30; // Increased margin to prevent cutting at edges
@@ -1774,11 +1774,11 @@ export const printCones = async (
 
       const qrCodeSize = options.customSettings.qrCodeSize ?? 6;
       const titleFontSize = options.customSettings.titleFontSize ?? 25;
-      const detailsFontSize = options.customSettings.detailsFontSize ?? 22;
-      const boxIdFontSize = options.customSettings.boxIdFontSize ?? 22;
-      const yarnFontSize = options.customSettings.yarnFontSize ?? 22;
-      const supplierFontSize = options.customSettings.supplierFontSize ?? 22;
-      const shadeLotFontSize = options.customSettings.shadeLotFontSize ?? 22;
+      const detailsFontSize = options.customSettings.detailsFontSize ?? 20;
+      const boxIdFontSize = options.customSettings.boxIdFontSize ?? 20;
+      const yarnFontSize = options.customSettings.yarnFontSize ?? 20;
+      const supplierFontSize = options.customSettings.supplierFontSize ?? 20;
+      const shadeLotFontSize = options.customSettings.shadeLotFontSize ?? 20;
 
       const labelsPerSheet = rowsPerPage * columnsPerRow;
 
