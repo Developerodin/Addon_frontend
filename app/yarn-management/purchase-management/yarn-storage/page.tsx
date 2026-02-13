@@ -1,6 +1,7 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { useSelector } from "react-redux";
+import { useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -39,13 +40,23 @@ const getPreferencesStorageKey = (userId?: string): string => {
   return "yarnStoragePreferences"; // Fallback for non-authenticated users
 };
 
-const YarnStoragePage = () => {
+/** Inner content that uses useSearchParams - must be under Suspense for static export */
+const YarnStorageContent = () => {
   const { hasSubPermission } = useNavigation();
   const user = useSelector((state: any) => state.auth?.user);
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<
     "unallocated" | "allocated" | "long-term" | "short-term"
   >("unallocated");
   const [showPreferences, setShowPreferences] = useState(false);
+
+  // When returning from process page (?tab=short-term), show Short-Term Storage tab
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "short-term") {
+      setActiveTab("short-term");
+    }
+  }, [searchParams]);
 
   // Load preferences from localStorage (user-specific or system default)
   const loadPreferences = useCallback((): StoragePreferencesType => {
@@ -459,5 +470,11 @@ const YarnStoragePage = () => {
     </div>
   );
 };
+
+const YarnStoragePage = () => (
+  <Suspense fallback={<div className="main-content !p-[10px] min-h-[200px]" />}>
+    <YarnStorageContent />
+  </Suspense>
+);
 
 export default YarnStoragePage;

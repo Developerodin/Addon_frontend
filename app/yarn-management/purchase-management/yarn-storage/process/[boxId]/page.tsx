@@ -131,7 +131,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       toast.error(
         "Processed box details not available. Please process the box again."
       );
-      router.push("/yarn-management/purchase-management/yarn-storage");
+      router.push("/yarn-management/purchase-management/yarn-storage?tab=short-term");
       return;
     }
 
@@ -145,7 +145,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     } catch (error) {
       console.error("Failed to parse processed box details:", error);
       toast.error("Failed to load processed box details");
-      router.push("/yarn-management/purchase-management/yarn-storage");
+      router.push("/yarn-management/purchase-management/yarn-storage?tab=short-term");
       return;
     } finally {
       setIsLoading(false);
@@ -445,6 +445,11 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
           coneStorageId: updatedCone.coneStorageId || "",
         },
       }));
+
+      // Return focus to Scan Cone Barcode for next cone
+      setTimeout(() => {
+        (document.querySelector("input[data-scan-cone-barcode]") as HTMLInputElement)?.focus();
+      }, 0);
     } catch (error) {
       console.error("Failed to update cone weights:", error);
       toast.error(
@@ -790,7 +795,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
             Processed box data not found
           </h3>
           <Link
-            href="/yarn-management/purchase-management/yarn-storage"
+            href="/yarn-management/purchase-management/yarn-storage?tab=short-term"
             className="ti-btn ti-btn-primary"
           >
             <i className="ri-arrow-left-line me-2"></i>
@@ -815,7 +820,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
               <Link
-                href="/yarn-management/purchase-management/yarn-storage"
+                href="/yarn-management/purchase-management/yarn-storage?tab=short-term"
                 className="text-gray-500 hover:text-gray-700 transition-colors"
                 title="Back to Yarn Storage"
               >
@@ -955,6 +960,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                 <label className="text-xs font-medium text-gray-600 mb-1 block">Scan Cone Barcode</label>
                 <input
                   type="text"
+                  data-scan-cone-barcode
                   className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                   placeholder="Scan cone barcode to activate row"
                   value={barcodeScanValue}
@@ -1090,7 +1096,11 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                               onKeyDown={(event) => {
                                 if (event.key === "Enter") {
                                   event.preventDefault();
-                                  handleUpdateCone(cone);
+                                  const storageInput = document.querySelector(`input[data-cone-storage="${cone._id}"]`) as HTMLInputElement;
+                                  if (storageInput) {
+                                    storageInput.focus();
+                                    storageInput.select();
+                                  }
                                 }
                               }}
                               placeholder="0.0000"
@@ -1119,6 +1129,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                           {activeConeId === cone._id ? (
                             <input
                               type="text"
+                              data-cone-storage={cone._id}
                               className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                               value={coneInputs[cone._id]?.coneStorageId || ""}
                               onChange={(e) =>
