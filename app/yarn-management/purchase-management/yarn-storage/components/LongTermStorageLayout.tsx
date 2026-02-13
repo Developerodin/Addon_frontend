@@ -52,6 +52,15 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const [isLoadingBox, setIsLoadingBox] = useState(false);
   const [showPrintBarcodeModal, setShowPrintBarcodeModal] = useState(false);
   const [selectedRacksForPrint, setSelectedRacksForPrint] = useState<string[]>([]);
+  /** Full rack data for selected (so Print Selected works across paginated pages) */
+  const [selectedRacksDataForPrint, setSelectedRacksDataForPrint] = useState<Array<{
+    id: string;
+    rackCode: string;
+    barcode: string;
+    shelf?: number | string;
+    floor?: number;
+    zone?: string;
+  }>>([]);
   const [rackSlotDetails, setRackSlotDetails] = useState<Map<string, SlotDetailsResponse>>(new Map());
   const [loadingSlotDetails, setLoadingSlotDetails] = useState<Set<string>>(new Set());
   const [isPrinting, setIsPrinting] = useState(false);
@@ -930,26 +939,19 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     printWindow.document.close();
   };
 
-  // Handle print selected racks barcode
+  // Handle print selected racks barcode (uses selectedRacksDataForPrint so selection works across pages)
   const handlePrintSelectedRacks = () => {
-    if (selectedRacksForPrint.length === 0) {
+    if (selectedRacksDataForPrint.length === 0) {
       toast.error("Please select at least one rack");
       return;
     }
 
-    const selectedRacks = racks.filter((r) => selectedRacksForPrint.includes(r.id) && r.barcode);
-    if (selectedRacks.length === 0) {
-      toast.error("No valid racks selected");
-      return;
-    }
-
-    // Prepare racks for printing and show settings modal
-    setRacksReadyToPrint(selectedRacks.map(r => ({
+    setRacksReadyToPrint(selectedRacksDataForPrint.map((r) => ({
       rackCode: r.rackCode,
-      barcode: r.barcode!,
+      barcode: r.barcode,
       shelf: r.shelf,
-      floor: r.column,
-      zone: 'LT'
+      floor: r.floor,
+      zone: r.zone ?? "LT",
     })));
     setShowPrintBarcodeModal(false);
     setShowPrintSettingsModal(true);
@@ -1025,6 +1027,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       if (result.success) {
         toast.success(`Successfully printed ${result.printed} rack barcode(s)`, { id: toastId });
         setSelectedRacksForPrint([]);
+        setSelectedRacksDataForPrint([]);
         setRacksReadyToPrint([]);
       } else {
         toast.error(result.error || "Failed to print rack barcodes", { id: toastId });
@@ -1407,6 +1410,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           if (e.target === e.currentTarget) {
             setShowPrintBarcodeModal(false);
             setSelectedRacksForPrint([]);
+            setSelectedRacksDataForPrint([]);
           }
         }}>
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -1416,62 +1420,142 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               </h3>
             </div>
             <div className="box-body px-6 py-4 overflow-y-auto flex-1">
-              <div className="mb-4 flex justify-between items-center">
+              <div className="mb-4 flex justify-between items-center flex-wrap gap-2">
                 <label className="form-label text-sm font-medium text-gray-700">
                   Select Racks <span className="text-red-500">*</span>
                 </label>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
-                      const allRackIds = racks.filter((r) => r.barcode).map((r) => r.id);
-                      setSelectedRacksForPrint(allRackIds);
+                      const withBarcode = racks.filter((r) => r.barcode);
+                      setSelectedRacksForPrint((prev) => {
+                        const set = new Set(prev);
+                        withBarcode.forEach((r) => set.add(r.id));
+                        return Array.from(set);
+                      });
+                      setSelectedRacksDataForPrint((prev) => {
+                        const ids = new Set(prev.map((x) => x.id));
+                        const add = withBarcode.filter((r) => !ids.has(r.id)).map((r) => ({
+                          id: r.id,
+                          rackCode: r.rackCode,
+                          barcode: r.barcode!,
+                          shelf: r.shelf,
+                          floor: r.column,
+                          zone: "LT",
+                        }));
+                        return [...prev, ...add];
+                      });
                     }}
                     className="text-xs text-primary hover:underline"
                   >
-                    Select All
+                    Select All (this page)
                   </button>
                   <span className="text-gray-300">|</span>
                   <button
                     type="button"
-                    onClick={() => setSelectedRacksForPrint([])}
+                    onClick={() => {
+                      setSelectedRacksForPrint([]);
+                      setSelectedRacksDataForPrint([]);
+                    }}
                     className="text-xs text-primary hover:underline"
                   >
                     Clear All
                   </button>
                 </div>
               </div>
-              <div className="border border-gray-200 rounded-lg p-4 max-h-[400px] overflow-y-auto bg-gray-50">
-                <div className="space-y-2">
-                  {racks
-                    .filter((rack) => rack.barcode)
-                    .map((rack) => (
-                      <label
-                        key={rack.id}
-                        className="flex items-center p-2 rounded hover:bg-white cursor-pointer transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedRacksForPrint.includes(rack.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedRacksForPrint([...selectedRacksForPrint, rack.id]);
-                            } else {
-                              setSelectedRacksForPrint(selectedRacksForPrint.filter((id) => id !== rack.id));
-                            }
-                          }}
-                          className="form-checkbox h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
-                        />
-                        <span className="ml-3 text-sm text-gray-700">
-                          <span className="font-medium">{rack.rackCode}</span>
-                          <span className="text-gray-500 ml-2">(Floor: {rack.column}, Shelf: {rack.shelf})</span>
-                        </span>
-                      </label>
-                    ))}
+              {/* Pagination in modal */}
+              {!isLoadingSlots && storageTotalResults > 0 && (
+                <div className="flex flex-wrap items-center gap-3 mb-3 py-2 border border-gray-200 rounded-lg px-3 bg-gray-50">
+                  <span className="text-xs text-gray-600">
+                    Racks {(storagePage - 1) * storageLimit + 1}–{Math.min(storagePage * storageLimit, storageTotalResults)} of {storageTotalResults}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-600">Per page:</label>
+                    <select
+                      value={storageLimit}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setStorageLimit(val);
+                        setStoragePage(1);
+                      }}
+                      className="text-xs border border-gray-300 rounded px-2 py-1"
+                    >
+                      {PAGE_SIZE_OPTIONS.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setStoragePage((p) => Math.max(1, p - 1))}
+                      disabled={storagePage <= 1}
+                      className="ti-btn ti-btn-light text-xs px-2 py-1 disabled:opacity-50"
+                    >
+                      <i className="ri-arrow-left-s-line"></i>
+                    </button>
+                    <span className="text-xs text-gray-600 px-2">
+                      Page {storagePage} of {storageTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setStoragePage((p) => Math.min(storageTotalPages, p + 1))}
+                      disabled={storagePage >= storageTotalPages}
+                      className="ti-btn ti-btn-light text-xs px-2 py-1 disabled:opacity-50"
+                    >
+                      <i className="ri-arrow-right-s-line"></i>
+                    </button>
+                  </div>
                 </div>
+              )}
+              <div className="border border-gray-200 rounded-lg p-4 max-h-[400px] overflow-y-auto bg-gray-50">
+                {isLoadingSlots ? (
+                  <div className="flex justify-center py-8 text-gray-500 text-sm">Loading racks...</div>
+                ) : (
+                  <div className="space-y-2">
+                    {racks
+                      .filter((rack) => rack.barcode)
+                      .map((rack) => (
+                        <label
+                          key={rack.id}
+                          className="flex items-center p-2 rounded hover:bg-white cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedRacksForPrint.includes(rack.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedRacksForPrint([...selectedRacksForPrint, rack.id]);
+                                setSelectedRacksDataForPrint((prev) => [...prev, {
+                                  id: rack.id,
+                                  rackCode: rack.rackCode,
+                                  barcode: rack.barcode!,
+                                  shelf: rack.shelf,
+                                  floor: rack.column,
+                                  zone: "LT",
+                                }]);
+                              } else {
+                                setSelectedRacksForPrint(selectedRacksForPrint.filter((id) => id !== rack.id));
+                                setSelectedRacksDataForPrint((prev) => prev.filter((r) => r.id !== rack.id));
+                              }
+                            }}
+                            className="form-checkbox h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+                          />
+                          <span className="ml-3 text-sm text-gray-700">
+                            <span className="font-medium">{rack.rackCode}</span>
+                            <span className="text-gray-500 ml-2">(Floor: {rack.column}, Shelf: {rack.shelf})</span>
+                          </span>
+                        </label>
+                      ))}
+                  </div>
+                )}
               </div>
               <div className="mt-4 text-sm text-gray-600">
-                Selected: {selectedRacksForPrint.length} of {racks.filter((r) => r.barcode).length} racks
+                Selected: {selectedRacksDataForPrint.length} rack(s) total
+                {racks.filter((r) => r.barcode).length > 0 && (
+                  <span className="text-gray-500 ml-1">({racks.filter((r) => r.barcode).length} on this page)</span>
+                )}
               </div>
             </div>
             <div className="box-footer border-t border-gray-200 px-6 py-4 flex justify-end gap-2 flex-shrink-0">
@@ -1479,6 +1563,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                 onClick={() => {
                   setShowPrintBarcodeModal(false);
                   setSelectedRacksForPrint([]);
+                  setSelectedRacksDataForPrint([]);
                 }}
                 className="ti-btn ti-btn-light"
               >
@@ -1489,6 +1574,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                   await handlePrintAllRacks();
                   setShowPrintBarcodeModal(false);
                   setSelectedRacksForPrint([]);
+                  setSelectedRacksDataForPrint([]);
                 }}
                 className="ti-btn ti-btn-primary"
                 disabled={isPrinting}
@@ -1498,23 +1584,24 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                 ) : (
                   <i className="ri-printer-line me-1"></i>
                 )}
-                Print All Racks
+                Print All (this page)
               </button>
               <button
                 onClick={async () => {
                   await handlePrintSelectedRacks();
                   setShowPrintBarcodeModal(false);
                   setSelectedRacksForPrint([]);
+                  setSelectedRacksDataForPrint([]);
                 }}
                 className="ti-btn ti-btn-primary"
-                disabled={selectedRacksForPrint.length === 0 || isPrinting}
+                disabled={selectedRacksDataForPrint.length === 0 || isPrinting}
               >
                 {isPrinting ? (
                   <i className="ri-loader-4-line animate-spin me-1"></i>
                 ) : (
                   <i className="ri-printer-line me-1"></i>
                 )}
-                Print Selected ({selectedRacksForPrint.length})
+                Print Selected ({selectedRacksDataForPrint.length})
               </button>
             </div>
           </div>
