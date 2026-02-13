@@ -33,6 +33,7 @@ export default function MachineViewTab() {
   const [zoomedCardIndex, setZoomedCardIndex] = useState<number | null>(null);
   const [updatingStatusItemId, setUpdatingStatusItemId] = useState<string | null>(null);
   const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
+  const [yarnMenuOpenItemId, setYarnMenuOpenItemId] = useState<string | null>(null);
 
   const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
     OrderStatus.PENDING,
