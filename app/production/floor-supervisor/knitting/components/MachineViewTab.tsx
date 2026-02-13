@@ -6,7 +6,11 @@ import {
   listMachineOrderAssignments,
   getMachineOrderAssignment,
   updateAssignmentItemsPriorities,
+  updateAssignmentItemStatus,
+  updateAssignmentItemYarnIssueStatus,
+  OrderStatus,
   type MachineOrderAssignment,
+  type OrderStatusType,
 } from "@/shared/services/machineOrderAssignmentService";
 import { machinesService } from "@/shared/services/machinesService";
 import AssignmentsCards from "@/app/catalog/needle-configuration/components/AssignmentsCards";
@@ -27,6 +31,66 @@ export default function MachineViewTab() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [savingOrder, setSavingOrder] = useState(false);
   const [zoomedCardIndex, setZoomedCardIndex] = useState<number | null>(null);
+  const [updatingStatusItemId, setUpdatingStatusItemId] = useState<string | null>(null);
+  const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
+
+  const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
+    OrderStatus.PENDING,
+    OrderStatus.IN_PROGRESS,
+    OrderStatus.COMPLETED,
+    OrderStatus.ON_HOLD,
+    OrderStatus.CANCELLED,
+  ];
+
+  /** Only first-priority item can be set to In Progress / Completed; others get Pending, On Hold, Cancelled only. */
+  const getStatusOptionsForItem = useCallback((idx: number, currentStatus?: OrderStatusType): OrderStatusType[] => {
+    if (idx === 0) return ORDER_STATUS_OPTIONS;
+    const restricted = [OrderStatus.PENDING, OrderStatus.ON_HOLD, OrderStatus.CANCELLED];
+    const current = currentStatus ?? OrderStatus.PENDING;
+    if (current === OrderStatus.IN_PROGRESS || current === OrderStatus.COMPLETED) {
+      return [current, ...restricted.filter((s) => s !== current)];
+    }
+    return restricted;
+  }, []);
+
+  const handleItemStatusChange = useCallback(
+    async (itemId: string, newStatus: OrderStatusType) => {
+      if (!poDetailsAssignment?.id || !itemId) return;
+      setUpdatingStatusItemId(itemId);
+      try {
+        const updated = await updateAssignmentItemStatus(poDetailsAssignment.id, itemId, newStatus);
+        setPoDetailsAssignment(updated);
+        setRows((prev) => prev.map((r) => (r.id === poDetailsAssignment.id ? updated : r)));
+        toast.success("Item status updated");
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Failed to update item status";
+        alert(message);
+      } finally {
+        setUpdatingStatusItemId(null);
+      }
+    },
+    [poDetailsAssignment]
+  );
+
+  const handleAskForYarn = useCallback(
+    async (itemId: string) => {
+      if (!poDetailsAssignment?.id || !itemId) return;
+      setYarnMenuOpenItemId(null);
+      setUpdatingYarnItemId(itemId);
+      try {
+        const updated = await updateAssignmentItemYarnIssueStatus(poDetailsAssignment.id, itemId, "In Progress");
+        setPoDetailsAssignment(updated);
+        setRows((prev) => prev.map((r) => (r.id === poDetailsAssignment.id ? updated : r)));
+        toast.success("Yarn issue status set to In Progress");
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Failed to update yarn issue status";
+        alert(message);
+      } finally {
+        setUpdatingYarnItemId(null);
+      }
+    },
+    [poDetailsAssignment]
+  );
 
   const handleReorderItems = useCallback(
     async (fromIndex: number, toIndex: number) => {
@@ -191,29 +255,26 @@ export default function MachineViewTab() {
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setPoDetailsAssignment(null)} aria-hidden />
           <div
-            className="fixed inset-y-0 right-0 w-[49%] shadow-2xl z-50 flex flex-col animate-slide-in-right overflow-hidden"
+            className="fixed inset-y-0 right-0 w-full max-w-[380px] shadow-2xl z-50 flex flex-col animate-slide-in-right overflow-hidden bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl border-l border-white/30 dark:border-slate-700/50"
             style={{
-              background: "#f6f6f6",
-              backgroundImage: `
-                radial-gradient(circle at 1px 1px, rgba(0,0,0,.06) 1px, transparent 0)
-              `,
-              backgroundSize: "24px 24px",
+              backgroundImage: "radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.15) 1px, transparent 0)",
+              backgroundSize: "20px 20px",
             }}
           >
-            <div className="flex items-center justify-between border-b border-gray-200/80 bg-white/80 backdrop-blur px-4 py-3 shrink-0">
-              <div>
-                <h3 className="text-sm font-bold text-gray-800">PO details</h3>
-                <p className="text-[10px] text-gray-500 mt-0.5">Drag cards to change priority · + zoom in / − zoom out</p>
+            <div className="p-6 pb-2 shrink-0">
+              <div className="flex items-center justify-between mb-1">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">PO details</h1>
+                <button
+                  type="button"
+                  onClick={() => { setPoDetailsAssignment(null); setZoomedCardIndex(null); }}
+                  className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500 dark:text-slate-400"
+                >
+                  <i className="ri-close-line text-xl" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => { setPoDetailsAssignment(null); setZoomedCardIndex(null); }}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
-                <i className="ri-close-line text-lg" />
-              </button>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">Drag cards to change priority</p>
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 relative">
               {savingOrder && (
                 <div className="mb-3 text-[11px] text-amber-600 font-medium flex items-center gap-1">
                   <span className="animate-spin rounded-full h-3 w-3 border-2 border-amber-500 border-t-transparent" />
@@ -221,66 +282,116 @@ export default function MachineViewTab() {
                 </div>
               )}
               {poDetailsAssignment.productionOrderItems?.length ? (
-                <div className="space-y-3">
+                <div className="space-y-6">
                   {[...(poDetailsAssignment.productionOrderItems ?? [])]
                     .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
                     .map((item, idx) => {
-                    const isZoomed = zoomedCardIndex === idx;
                     const displayPriority = item.priority ?? idx + 1;
+                    const isFirst = idx === 0;
+                    const canDrag = !(isFirst && item.status === OrderStatus.IN_PROGRESS);
+                    const showAskForYarn = idx <= 1;
+                    const isLast = idx === (poDetailsAssignment!.productionOrderItems?.length ?? 0) - 1;
                     return (
-                      <div
-                        key={item.itemId ?? `${item.productionOrder}-${item.article}-${idx}`}
-                        draggable
-                        onDragStart={() => setDraggedIndex(idx)}
-                        onDragEnd={() => setDraggedIndex(null)}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.currentTarget.classList.add("ring-2", "ring-purple-400");
-                        }}
-                        onDragLeave={(e) => {
-                          e.currentTarget.classList.remove("ring-2", "ring-purple-400");
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          e.currentTarget.classList.remove("ring-2", "ring-purple-400");
-                          const from = draggedIndex;
-                          if (from !== null) handleReorderItems(from, idx);
-                        }}
-                        className={`group relative flex items-center gap-3 py-3 px-4 rounded-xl border border-white/20 shadow-lg transition-all duration-200 cursor-grab active:cursor-grabbing touch-none w-fit max-w-[280px] ${
-                          isZoomed ? "scale-110 z-10 shadow-xl" : ""
-                        }`}
-                        style={{
-                          marginLeft: idx === 0 ? 0 : `${24 * Math.pow(1.5, idx - 1)}px`,
-                          background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 40%, #7c3aed 100%)",
-                          color: "#fff",
-                        }}
-                      >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-[11px] font-bold" title={`Priority ${displayPriority}`}>
-                          {displayPriority}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[12px] font-bold truncate">
-                            {item.orderNumber ?? item.productionOrder ?? "—"}
-                          </div>
-                          <div className="text-[11px] text-white/90 truncate">
-                            {item.articleNumber ?? item.article ?? "—"}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setZoomedCardIndex(isZoomed ? null : idx); }}
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-                          title={isZoomed ? "Zoom out" : "Zoom in"}
+                      <div key={item.itemId ?? `${item.productionOrder}-${item.article}-${idx}`} className="relative">
+                        {!isLast && (
+                          <div
+                            className="absolute left-9 top-10 bottom-0 w-px border-l-2 border-dashed border-indigo-400/40 z-0"
+                            style={{ bottom: "-24px" }}
+                            aria-hidden
+                          />
+                        )}
+                        <div
+                          draggable={canDrag}
+                          onDragStart={() => canDrag && setDraggedIndex(idx)}
+                          onDragEnd={() => setDraggedIndex(null)}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            if (idx === 0 && item.status === OrderStatus.IN_PROGRESS) return;
+                            e.currentTarget.classList.add("ring-2", "ring-indigo-400");
+                          }}
+                          onDragLeave={(e) => {
+                            e.currentTarget.classList.remove("ring-2", "ring-indigo-400");
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.remove("ring-2", "ring-indigo-400");
+                            const from = draggedIndex;
+                            if (from === null) return;
+                            if (idx === 0 && item.status === OrderStatus.IN_PROGRESS) return;
+                            handleReorderItems(from, idx);
+                          }}
+                          className={`relative z-10 rounded-[30px] p-3 text-white transition-all duration-200 active:scale-[0.98] ${
+                            canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+                          } ring-0`}
+                          style={{
+                            background: "linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9))",
+                            backdropFilter: "blur(8px)",
+                            boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.2)",
+                            border: "1px solid rgba(255, 255, 255, 0.18)",
+                          }}
                         >
-                          <i className={isZoomed ? "ri-subtract-line text-sm" : "ri-add-line text-sm"} />
-                        </button>
-                        <i className="ri-draggable text-white/70 group-hover:text-white shrink-0" />
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="w-7 h-7 shrink-0 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px]">
+                                {displayPriority}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <div className="flex items-center gap-2 mb-1.5 flex-nowrap">
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <i className="ri-flag-line text-white/80 text-[10px] shrink-0" title="Order status" />
+                                    <span className="text-[8px] text-white/70 uppercase tracking-wider">Order</span>
+                                    <select
+                                      value={item.status ?? OrderStatus.PENDING}
+                                      onChange={(e) => {
+                                        const val = e.target.value as OrderStatusType;
+                                        if (item.itemId) handleItemStatusChange(item.itemId, val);
+                                      }}
+                                      disabled={!item.itemId || updatingStatusItemId === item.itemId}
+                                      className="bg-white/20 px-1.5 py-0.5 rounded-md text-[9px] font-medium text-white focus:ring-1 focus:ring-white/50 disabled:opacity-60 [&>option]:bg-gray-800 [&>option]:text-white max-w-[82px]"
+                                    >
+                                      {getStatusOptionsForItem(idx, item.status).map((opt) => (
+                                        <option key={opt} value={opt}>{opt}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <i className="ri-yarn-line text-white/80 text-[10px] shrink-0" title="Yarn status" />
+                                    <span className="text-[8px] text-white/70 uppercase tracking-wider">Yarn</span>
+                                    {showAskForYarn ? (
+                                      <select
+                                        value={item.yarnIssueStatus ? String(item.yarnIssueStatus) : ""}
+                                        onChange={(e) => {
+                                          if (e.target.value === "ask" && item.itemId) handleAskForYarn(item.itemId);
+                                        }}
+                                        disabled={!item.itemId || updatingYarnItemId === item.itemId}
+                                        className="bg-white/20 px-1.5 py-0.5 rounded-md text-[9px] font-medium text-white focus:ring-1 focus:ring-white/50 disabled:opacity-60 [&>option]:bg-gray-800 [&>option]:text-white max-w-[82px]"
+                                      >
+                                        <option value={item.yarnIssueStatus ? String(item.yarnIssueStatus) : ""}>{item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}</option>
+                                        <option value="ask">Ask for yarn</option>
+                                      </select>
+                                    ) : (
+                                      <span className="bg-white/20 px-1.5 py-0.5 rounded-md text-[9px] font-medium">
+                                        {item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <h3 className="font-bold text-[10px] tracking-wide text-white truncate">
+                                  {item.orderNumber ?? item.productionOrder ?? "—"} · {item.articleNumber ?? item.article ?? "—"}
+                                </h3>
+                              </div>
+                            </div>
+                            {canDrag && (
+                              <i className="ri-draggable text-white/50 text-sm shrink-0 cursor-grab active:cursor-grabbing" aria-hidden />
+                            )}
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <p className="text-[11px] text-gray-500">No PO items.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">No PO items.</p>
               )}
             </div>
           </div>

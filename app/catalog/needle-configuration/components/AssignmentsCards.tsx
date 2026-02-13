@@ -3,8 +3,11 @@
 import React from "react";
 import type { MachineOrderAssignment } from "@/shared/services/machineOrderAssignmentService";
 
-function machineLabel(a: MachineOrderAssignment): string {
-  const m = a.machine;
+/** Rows can be assignment or top-items (productionOrder/article may be populated objects). */
+type AssignmentRow = MachineOrderAssignment | { machine: unknown; productionOrderItems?: Array<{ productionOrder?: string | { id?: string; _id?: string }; article?: unknown }> };
+
+function machineLabel(a: AssignmentRow): string {
+  const m = (a as { machine?: unknown }).machine;
   if (typeof m === "object" && m) {
     return (m as any).machineCode ?? (m as any).name ?? (m as any).id ?? "-";
   }
@@ -20,9 +23,11 @@ function needleOptionsCount(a: MachineOrderAssignment): number {
   return 0;
 }
 
-function getItemCounts(a: MachineOrderAssignment): { poCount: number; articleCount: number } {
-  const items = a.productionOrderItems ?? [];
-  const poCount = new Set(items.map((i) => String(i.productionOrder ?? "")).filter(Boolean)).size;
+function getItemCounts(a: AssignmentRow): { poCount: number; articleCount: number } {
+  const items = (a.productionOrderItems ?? []) as Array<{ productionOrder?: string | { id?: string; _id?: string } }>;
+  const poCount = new Set(
+    items.map((i) => (typeof i.productionOrder === "string" ? i.productionOrder : (i.productionOrder?.id ?? i.productionOrder?._id ?? ""))).filter(Boolean)
+  ).size;
   return { poCount, articleCount: items.length };
 }
 
@@ -42,7 +47,7 @@ function getPagination(currentPage: number, totalPages: number): (number | strin
 }
 
 export interface AssignmentsCardsProps {
-  rows: MachineOrderAssignment[];
+  rows: AssignmentRow[];
   page: number;
   limit: number;
   totalResults: number;
@@ -58,9 +63,13 @@ export interface AssignmentsCardsProps {
   /** When true, hide active toggle and action buttons (read-only cards). */
   readOnly?: boolean;
   /** Optional card click handler (e.g. for read-only view to open PO details modal). */
-  onCardClick?: (a: MachineOrderAssignment) => void;
+  onCardClick?: (a: AssignmentRow) => void;
   /** When set (e.g. 5), use this many columns on xl and consistent card sizing. */
   columnsPerRow?: number;
+  /** Compact cards: smaller size, hide active needle and needle options (e.g. for yarn-issue). */
+  compact?: boolean;
+  /** When true with compact, show only machine name (no PO/article count). */
+  nameOnly?: boolean;
 }
 
 export default function AssignmentsCards({
@@ -80,6 +89,8 @@ export default function AssignmentsCards({
   readOnly = false,
   onCardClick,
   columnsPerRow,
+  compact = false,
+  nameOnly = false,
 }: AssignmentsCardsProps) {
   if (isLoading) {
     return (
@@ -104,17 +115,19 @@ export default function AssignmentsCards({
 
   return (
     <>
-      <div className="p-4">
+      <div className={`min-w-0 ${compact ? "p-2" : "p-4"}`}>
         <div
           className={
-            columnsPerRow === 5
-              ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3"
-              : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+            compact
+              ? "grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 min-w-0"
+              : columnsPerRow === 5
+                ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3"
+                : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
           }
         >
           {rows.map((row) => {
             const { poCount, articleCount } = getItemCounts(row);
-            const needleCount = needleOptionsCount(row);
+            const needleCount = needleOptionsCount(row as MachineOrderAssignment);
             const isToggling = !readOnly && togglingActiveId === row.id;
 
             return (
@@ -124,20 +137,20 @@ export default function AssignmentsCards({
                 tabIndex={readOnly && onCardClick ? 0 : undefined}
                 onClick={readOnly && onCardClick ? () => onCardClick(row) : undefined}
                 onKeyDown={readOnly && onCardClick ? (e) => { if (e.key === "Enter" || e.key === " ") onCardClick(row); } : undefined}
-                className={`min-w-0 rounded-xl shadow-lg overflow-hidden border border-white/10 transition-transform hover:scale-[1.02] ${readOnly && onCardClick ? "cursor-pointer" : ""}`}
+                className={`rounded-lg shadow-md overflow-hidden border border-white/10 min-w-0 ${compact ? "rounded-lg transition-[filter] hover:brightness-110" : "rounded-xl transition-transform hover:scale-[1.02]"} ${readOnly && onCardClick ? "cursor-pointer" : ""}`}
                 style={{ background: CARD_BG }}
               >
-                <div className={`p-3 text-white flex flex-col ${columnsPerRow === 5 ? "min-h-[140px]" : "min-h-[200px]"}`}>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className={`font-bold truncate drop-shadow-sm text-white ${columnsPerRow === 5 ? "text-sm" : "text-lg"}`}>
+                <div className={`text-white flex flex-col ${compact ? "p-2.5 min-h-0" : `p-3 ${columnsPerRow === 5 ? "min-h-[140px]" : "min-h-[200px]"}`}`}>
+                  <div className={`flex items-start justify-between gap-2 ${compact ? "" : "mb-2"}`}>
+                    <h3 className={`font-bold truncate drop-shadow-sm text-white ${compact ? "text-sm" : columnsPerRow === 5 ? "text-sm" : "text-lg"}`}>
                       {machineLabel(row)}
                     </h3>
-                    {!readOnly && (isToggling ? (
+                    {!readOnly && !compact && (isToggling ? (
                       <span className="flex items-center gap-1 text-xs text-white/90 shrink-0">
                         <span className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
                         Updating…
                       </span>
-                    ) : (
+                    ) : !compact ? (
                       <button
                         type="button"
                         role="switch"
@@ -160,9 +173,17 @@ export default function AssignmentsCards({
                           />
                         </span>
                       </button>
-                    ))}
+                    ) : null)}
                   </div>
 
+                  {compact ? (
+                    nameOnly ? null : (
+                    <div className="flex items-center gap-1.5 text-white/95 text-[11px] mt-1">
+                      <i className="ri-file-list-3-line text-white/80 shrink-0" />
+                      <span>{poCount} PO{poCount !== 1 ? "s" : ""}, {articleCount} Article{articleCount !== 1 ? "s" : ""}</span>
+                    </div>
+                    )
+                  ) : (
                   <div className={`space-y-1.5 text-white/95 flex-1 ${columnsPerRow === 5 ? "text-xs" : "text-sm"}`}>
                     <div className="flex items-center gap-2">
                       <i className="ri-scissors-line text-white/80" />
@@ -180,8 +201,9 @@ export default function AssignmentsCards({
                       </span>
                     </div>
                   </div>
+                  )}
 
-                  {!readOnly && (
+                  {!readOnly && !compact && (
                     <div className={`flex items-center justify-end gap-1.5 border-t border-gray-400/40 ${columnsPerRow === 5 ? "mt-2 pt-2" : "mt-4 pt-3"}`}>
                       <button
                         type="button"

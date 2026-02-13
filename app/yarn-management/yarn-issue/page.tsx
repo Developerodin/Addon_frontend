@@ -1,11 +1,19 @@
 "use client";
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import Cookies from "js-cookie";
+import {
+  getTopItemsAssignments,
+  updateAssignmentItemYarnIssueStatus,
+  type MachineOrderAssignmentTopItems,
+  type PopulatedOrderRef,
+  type PopulatedArticleRef,
+} from "@/shared/services/machineOrderAssignmentService";
+import AssignmentsCards from "@/app/catalog/needle-configuration/components/AssignmentsCards";
 
 type RequirementStatus = "Not Issued" | "Partially Issued" | "Issued";
 
@@ -293,15 +301,29 @@ const getAccessToken = (): string | null => {
 
 const ORDERS_PAGE_SIZE = 10;
 
+/** Machine label for display (code or name) */
+function machineLabel(a: MachineOrderAssignmentTopItems): string {
+  const m = a.machine;
+  if (typeof m === "object" && m) {
+    return (m as { machineCode?: string; name?: string; id?: string }).machineCode ?? (m as { name?: string }).name ?? (m as { id?: string }).id ?? "—";
+  }
+  return typeof m === "string" ? m : "—";
+}
+
 const YarnIssuePage = () => {
   const { hasSubPermission, isLoading } = useNavigation();
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
-  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
   const [ordersTotalPages, setOrdersTotalPages] = useState(1);
   const [ordersTotalResults, setOrdersTotalResults] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [machineAssignments, setMachineAssignments] = useState<MachineOrderAssignmentTopItems[]>([]);
+  const [machineAssignmentsLoading, setMachineAssignmentsLoading] = useState(true);
+  const [selectedMachineAssignmentId, setSelectedMachineAssignmentId] = useState<string | null>(null);
+  const [selectedMachineAssignment, setSelectedMachineAssignment] = useState<MachineOrderAssignmentTopItems | null>(null);
+  const [orderSelectOpen, setOrderSelectOpen] = useState(true);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [activeRequirementId, setActiveRequirementId] = useState<string | null>(null);
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -320,6 +342,7 @@ const YarnIssuePage = () => {
   const [submittingTransaction, setSubmittingTransaction] = useState(false);
   const [showScanIssuePanel, setShowScanIssuePanel] = useState(false);
   const [showActivityLogPanel, setShowActivityLogPanel] = useState(false);
+  const [completingYarnIssue, setCompletingYarnIssue] = useState(false);
   const [yarnTransactions, setYarnTransactions] = useState<YarnTransaction[]>([]);
   const [allYarnTransactions, setAllYarnTransactions] = useState<YarnTransaction[]>([]); // For order status calculations
   const [transactionsLoading, setTransactionsLoading] = useState(false);
@@ -406,65 +429,105 @@ const YarnIssuePage = () => {
     fetchTransactions();
   }, [hasPermission, showActivityLogPanel, startDate, endDate]);
 
-  // Fetch production orders (paginated)
+  // Fetch top-items (machines with active PO items) – single API, all data included
   useEffect(() => {
-    const fetchOrders = async () => {
-      setOrdersLoading(true);
+    const fetchTopItems = async () => {
+      setMachineAssignmentsLoading(true);
       try {
-        const token = getAccessToken();
-        const response = await fetch(
-          `${API_BASE_URL}/production/orders?page=${ordersPage}&limit=${ORDERS_PAGE_SIZE}&sortBy=createdAt&populate=articles`,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch production orders");
-        }
-
-        const data = await response.json();
-        const apiOrders: ApiProductionOrder[] = data.results || [];
-        const total = data.totalResults ?? data.total ?? apiOrders.length;
-        setOrdersTotalResults(total);
-        setOrdersTotalPages(
-          data.totalPages ?? Math.max(1, Math.ceil(total / ORDERS_PAGE_SIZE))
-        );
-
-        // Transform API orders to match our interface
-        // Preserve existing BOM data if orders are being refetched
-        setOrders((prevOrders) => {
-          const transformedOrders: ProductionOrder[] = apiOrders.map((order) => {
-            const existingOrder = prevOrders.find((o) => o.id === order.id);
-            return {
-              id: order.id,
-              orderNumber: order.orderNumber,
-              buyer: order.orderNote || "N/A",
-              floor: order.currentFloor || "N/A",
-              styleCode: existingOrder?.styleCode || "",
-              scheduledDate: order.createdAt || new Date().toISOString(),
-              notes: order.orderNote,
-              bom: existingOrder?.bom || [],
-              articles: order.articles || [],
-            };
-          });
-          return transformedOrders;
-        });
+        const list = await getTopItemsAssignments();
+        setMachineAssignments(list);
+        setOrdersTotalResults(list.length);
+        setOrdersTotalPages(1);
       } catch (error) {
-        console.error("Error fetching orders:", error);
-        toast.error("Failed to load production orders");
+        console.error("Error fetching top-items:", error);
+        toast.error("Failed to load machines");
+        setMachineAssignments([]);
       } finally {
-        setOrdersLoading(false);
+        setMachineAssignmentsLoading(false);
       }
     };
 
     if (hasPermission) {
-      fetchOrders();
+      fetchTopItems();
     }
-  }, [hasPermission, ordersPage]);
+  }, [hasPermission]);
+
+  /** Build orders + articles from top-items assignment (no extra API calls – use data as received). */
+  const loadOrdersForMachine = useCallback((assignment: MachineOrderAssignmentTopItems) => {
+    const items = assignment.productionOrderItems ?? [];
+    if (items.length === 0) {
+      setOrders([]);
+      setSelectedOrderId(null);
+      setSelectedArticleId(null);
+      setSelectedMachineAssignmentId(null);
+      setSelectedMachineAssignment(null);
+      return;
+    }
+    setSelectedMachineAssignmentId(assignment.id);
+    setSelectedMachineAssignment(assignment);
+
+    const orderMap = new Map<string, { order: PopulatedOrderRef; articles: { article: PopulatedArticleRef; item: (typeof items)[0] }[] }>();
+    for (const item of items) {
+      const po = item.productionOrder;
+      const art = item.article;
+      const orderId = typeof po === "string" ? po : (po?.id ?? po?._id ?? "");
+      const orderObj = typeof po === "object" ? po : null;
+      const articleObj = typeof art === "object" ? art : null;
+      if (!orderId || !articleObj) continue;
+      if (!orderMap.has(orderId)) {
+        orderMap.set(orderId, {
+          order: orderObj ?? ({} as PopulatedOrderRef),
+          articles: [],
+        });
+      }
+      orderMap.get(orderId)!.articles.push({ article: articleObj, item });
+    }
+
+    const builtOrders: ProductionOrder[] = [];
+    orderMap.forEach((value, orderId) => {
+      const { order, articles } = value;
+      const firstItem = articles[0]?.item;
+      const orderNumber = order?.orderNumber ?? firstItem?.orderNumber ?? "";
+      builtOrders.push({
+        id: orderId,
+        orderNumber,
+        buyer: order?.orderNote ?? "N/A",
+        floor: order?.currentFloor ?? "N/A",
+        styleCode: "",
+        scheduledDate: order?.createdAt ?? new Date().toISOString(),
+        notes: order?.orderNote,
+        bom: [],
+        articles: articles.map(({ article, item: it }) => ({
+          id: article?.id ?? article?._id ?? "",
+          _id: article?._id,
+          articleNumber: article?.articleNumber ?? it?.articleNumber ?? "",
+          plannedQuantity: article?.plannedQuantity ?? 0,
+          linkingType: (article?.linkingType as any) ?? "Auto Linking",
+          priority: (article?.priority as any) ?? "Medium",
+          status: (article?.status as any) ?? "Pending",
+          machineId: undefined,
+          remarks: article?.remarks,
+        })),
+      });
+    });
+
+    setOrders(builtOrders);
+    const first = builtOrders[0];
+    if (first?.id) {
+      setSelectedOrderId(first.id);
+      setSelectedArticleId(first.articles?.[0]?.id ?? null);
+    } else {
+      setSelectedOrderId(null);
+      setSelectedArticleId(null);
+    }
+  }, []);
+
+  // Default: select first machine and its first order when machines have loaded
+  useEffect(() => {
+    if (!machineAssignmentsLoading && machineAssignments.length > 0 && selectedMachineAssignmentId === null) {
+      loadOrdersForMachine(machineAssignments[0]);
+    }
+  }, [machineAssignmentsLoading, machineAssignments, selectedMachineAssignmentId, loadOrdersForMachine]);
 
   // Fetch product details for a single article
   const fetchArticleBOM = async (
@@ -790,9 +853,10 @@ const YarnIssuePage = () => {
     if (!selectedOrderId || !filteredOrders.some((order) => order.id === selectedOrderId)) {
       const firstOrder = filteredOrders[0];
       setSelectedOrderId(firstOrder.id);
-      // Auto-select "All" if articles are available
       if (firstOrder.articles && firstOrder.articles.length > 0) {
-        setSelectedArticleId("all");
+        setSelectedArticleId(firstOrder.articles[0].id);
+      } else {
+        setSelectedArticleId(null);
       }
     }
   }, [filteredOrders, selectedOrderId]);
@@ -886,6 +950,50 @@ const YarnIssuePage = () => {
 
     return data;
   }, [selectedOrder, sortField, sortDirection, allYarnTransactions]);
+
+  /** True when a single article is selected and every BOM requirement for it is fully issued. */
+  const allBomIssuedForCurrentArticle = useMemo(() => {
+    if (!selectedOrder || !selectedArticleId || selectedArticleId === "all" || !selectedOrder.bom?.length) return false;
+    return selectedOrder.bom.every((r) =>
+      getRequirementStatus(r, allYarnTransactions, selectedOrder.orderNumber) === "Issued"
+    );
+  }, [selectedOrder, selectedArticleId, allYarnTransactions]);
+
+  /** Assignment item id for current order+article (for PATCH yarn-issue-status). */
+  const assignmentItemIdForCurrent = useMemo(() => {
+    if (!selectedMachineAssignment || !selectedOrderId || !selectedArticleId || selectedArticleId === "all") return null;
+    const items = selectedMachineAssignment.productionOrderItems ?? [];
+    const match = items.find((i) => {
+      const poId = typeof i.productionOrder === "string" ? i.productionOrder : (i.productionOrder?.id ?? i.productionOrder?._id);
+      const artId = typeof i.article === "string" ? i.article : (i.article?.id ?? i.article?._id);
+      return String(poId) === String(selectedOrderId) && String(artId) === String(selectedArticleId);
+    });
+    return match?.itemId ?? match?.id ?? null;
+  }, [selectedMachineAssignment, selectedOrderId, selectedArticleId]);
+
+  const canMarkYarnIssueCompleted = Boolean(
+    allBomIssuedForCurrentArticle && assignmentItemIdForCurrent && selectedMachineAssignment?.id
+  );
+
+  const handleMarkYarnIssueCompleted = useCallback(async () => {
+    if (!canMarkYarnIssueCompleted || !selectedMachineAssignment?.id || !assignmentItemIdForCurrent) return;
+    setCompletingYarnIssue(true);
+    try {
+      await updateAssignmentItemYarnIssueStatus(
+        selectedMachineAssignment.id,
+        assignmentItemIdForCurrent,
+        "Completed"
+      );
+      toast.success("Yarn issue marked as Completed");
+      const list = await getTopItemsAssignments();
+      setMachineAssignments(list);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to update yarn issue status";
+      toast.error(msg);
+    } finally {
+      setCompletingYarnIssue(false);
+    }
+  }, [canMarkYarnIssueCompleted, selectedMachineAssignment?.id, assignmentItemIdForCurrent]);
 
   const SortIcon = ({ field }: { field: YarnSortField }) => {
     if (sortField !== field) {
@@ -1204,114 +1312,44 @@ const YarnIssuePage = () => {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 p-[10px] pt-0">
           <div className="xl:col-span-1 flex flex-col border border-gray-200 rounded overflow-hidden bg-gray-50/30">
             <div className="p-[10px] border-b border-gray-200 bg-white">
-              <h2 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Production Orders</h2>
+              <h2 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Machines (with active PO items)</h2>
             </div>
-            <div className="p-[10px] flex-1 min-h-0">
+            <div className="p-[10px] flex-1 min-h-0 overflow-auto">
               <div className="relative mb-3">
                 <input
                   type="text"
                   className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
-                  placeholder="Search order, buyer, floor..."
+                  placeholder="Search machine..."
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                 />
                 <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
               </div>
-
-              {filteredOrders.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <i className="ri-inbox-line text-4xl text-gray-300 mb-2"></i>
-                  <p className="text-[11px] text-gray-500">No production orders need yarn issuance.</p>
+              {machineAssignmentsLoading ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-600 border-t-transparent mb-2" />
+                  <p className="text-[11px] text-gray-500">Loading machines...</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto min-h-[200px]">
-                  <table className="w-full border-collapse border border-gray-200">
-                    <thead>
-                      <tr className="bg-gray-50/30">
-                        <th className="pl-[10px] pr-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order</th>
-                        <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Floor</th>
-                        <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Date</th>
-                        <th className="px-1.5 py-2 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Issued</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white">
-                      {filteredOrders.map((order) => {
-                        const issuedTotals = getOrderTotals(order, allYarnTransactions);
-                        return (
-                          <tr
-                            key={order.id}
-                            className={`cursor-pointer transition-colors ${
-                              selectedOrder?.id === order.id ? "bg-purple-50 hover:bg-purple-100/50" : "hover:bg-gray-50/50"
-                            }`}
-                            onClick={() => setSelectedOrderId(order.id)}
-                          >
-                            <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{order.orderNumber}</td>
-                            <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{order.floor}</td>
-                            <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(order.scheduledDate).toLocaleDateString()}</td>
-                            <td className="px-1.5 py-2 text-right pr-[10px] text-[12px] font-medium text-gray-700 border border-gray-200">{issuedTotals.issued.toFixed(2)} / {(issuedTotals.required / 1000).toFixed(2)} kg</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {ordersTotalPages > 1 && (
-                <div className="flex items-center justify-between gap-2 mt-2 px-1">
-                  <p className="text-[10px] text-gray-500">
-                    {ordersTotalResults > 0
-                      ? `Showing ${(ordersPage - 1) * ORDERS_PAGE_SIZE + 1}–${Math.min(ordersPage * ORDERS_PAGE_SIZE, ordersTotalResults)} of ${ordersTotalResults}`
-                      : "No orders"}
-                  </p>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedOrderId(null);
-                        setOrdersPage((p) => Math.max(1, p - 1));
-                      }}
-                      disabled={ordersPage <= 1}
-                      className="px-2 py-1 text-[11px] font-bold text-gray-600 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 rounded hover:bg-gray-50 disabled:hover:bg-transparent transition-colors"
-                    >
-                      Prev
-                    </button>
-                    {Array.from({ length: Math.min(5, ordersTotalPages) }, (_, i) => {
-                      let pageNum: number;
-                      if (ordersTotalPages <= 5) pageNum = i + 1;
-                      else if (ordersPage <= 3) pageNum = i + 1;
-                      else if (ordersPage >= ordersTotalPages - 2) pageNum = ordersTotalPages - 4 + i;
-                      else pageNum = ordersPage - 2 + i;
-                      return (
-                        <button
-                          key={pageNum}
-                          type="button"
-                          onClick={() => {
-                            setSelectedOrderId(null);
-                            setOrdersPage(pageNum);
-                          }}
-                          className={`min-w-[28px] px-2 py-1 text-[11px] font-bold rounded border transition-colors ${
-                            ordersPage === pageNum
-                              ? "bg-purple-600 text-white border-purple-600"
-                              : "text-gray-600 border-gray-200 hover:bg-gray-100"
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedOrderId(null);
-                        setOrdersPage((p) => Math.min(ordersTotalPages, p + 1));
-                      }}
-                      disabled={ordersPage >= ordersTotalPages}
-                      className="px-2 py-1 text-[11px] font-bold text-gray-600 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 rounded hover:bg-gray-50 disabled:hover:bg-transparent transition-colors"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
+                <AssignmentsCards
+                  rows={searchTerm.trim()
+                    ? machineAssignments.filter((a) =>
+                        machineLabel(a).toLowerCase().includes(searchTerm.trim().toLowerCase())
+                      )
+                    : machineAssignments}
+                  page={1}
+                  limit={machineAssignments.length || 20}
+                  totalResults={searchTerm.trim() ? machineAssignments.filter((a) =>
+                    machineLabel(a).toLowerCase().includes(searchTerm.trim().toLowerCase())
+                  ).length : machineAssignments.length}
+                  totalPages={1}
+                  isLoading={false}
+                  onPageChange={() => {}}
+                  readOnly
+                  compact
+                  nameOnly
+                  onCardClick={(a) => loadOrdersForMachine(a)}
+                />
               )}
             </div>
           </div>
@@ -1320,19 +1358,70 @@ const YarnIssuePage = () => {
           {!selectedOrder ? (
             <div className="border border-gray-200 rounded overflow-hidden bg-white p-[10px]">
               <div className="flex flex-col items-center justify-center py-16 text-center text-gray-500">
-                <i className="ri-archive-line text-5xl text-gray-300 mb-4"></i>
-                <p className="text-[11px]">Select a production order to view its yarn requirements.</p>
+                <i className="ri-settings-3-line text-5xl text-gray-300 mb-4"></i>
+                <p className="text-[11px]">Select a machine to view its orders, articles and yarn requirements.</p>
               </div>
             </div>
           ) : (
             <>
+              {/* Order select – expandable section with order cards */}
+              <div className="border border-gray-200 rounded overflow-hidden bg-white">
+                <button
+                  type="button"
+                  onClick={() => setOrderSelectOpen((o) => !o)}
+                  className="w-full p-[10px] flex justify-between items-center border-b border-gray-100 bg-gray-50/50 hover:bg-gray-50 text-left"
+                >
+                  <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Select Order</h3>
+                  <span className="text-gray-500 text-sm">
+                    {selectedOrder?.orderNumber ?? "—"} · {filteredOrders.length} order{filteredOrders.length !== 1 ? "s" : ""}
+                  </span>
+                  <i className={`ri-arrow-down-s-line text-lg text-gray-500 transition-transform ${orderSelectOpen ? "rotate-180" : ""}`} />
+                </button>
+                {orderSelectOpen && (
+                  <div className="p-[10px] border-b border-gray-100">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
+                      {filteredOrders.map((order) => {
+                        const issuedTotals = getOrderTotals(order, allYarnTransactions);
+                        const isSelected = selectedOrderId === order.id;
+                        return (
+                          <button
+                            key={order.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedOrderId(order.id);
+                              setSelectedArticleId(order?.articles?.[0]?.id ?? null);
+                            }}
+                            className={`text-left rounded-lg border-2 p-2.5 transition-all ${
+                              isSelected
+                                ? "border-purple-500 bg-purple-50 shadow-sm ring-1 ring-purple-200"
+                                : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50/50"
+                            }`}
+                          >
+                            <div className="text-[12px] font-bold text-gray-900 truncate">{order.orderNumber}</div>
+                            <div className="text-[10px] text-gray-500 mt-0.5 truncate">{order.buyer} · {order.floor}</div>
+                            <div className="text-[10px] text-gray-600 mt-1 font-medium">
+                              {issuedTotals.issued.toFixed(2)} / {(issuedTotals.required / 1000).toFixed(2)} kg
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="border border-gray-200 rounded overflow-hidden bg-white">
                 <div className="p-[10px] flex justify-between items-start gap-4 border-b border-gray-100">
-                  <div>
+                  <div className="min-w-0 flex-1">
+                    {selectedMachineAssignment && (
+                      <p className="text-[10px] font-medium text-purple-600 uppercase tracking-wider mb-0.5">
+                        Machine: {machineLabel(selectedMachineAssignment)}
+                      </p>
+                    )}
                     <h2 className="text-sm font-bold text-gray-800">{selectedOrder.orderNumber}</h2>
                     <p className="text-[11px] text-gray-500 mt-0.5">{selectedOrder.buyer} • {selectedOrder.floor}</p>
                   </div>
-                  <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
+                  <div className="text-[11px] text-gray-500 flex items-center gap-1.5 shrink-0">
                     <i className="ri-calendar-check-line"></i>
                     {new Date(selectedOrder.scheduledDate).toLocaleDateString()}
                   </div>
@@ -1470,6 +1559,31 @@ const YarnIssuePage = () => {
                             </tbody>
                           </table>
                         )}
+                      </div>
+                      <div className="p-[10px] border-t border-gray-100 flex items-center justify-between gap-4 bg-gray-50/50">
+                        <p className="text-[11px] text-gray-600">
+                          {allBomIssuedForCurrentArticle
+                            ? "All yarn issued for this article. You can mark yarn issue as completed."
+                            : "Issue all BOM yarns above to enable marking yarn issue completed."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleMarkYarnIssueCompleted}
+                          disabled={!canMarkYarnIssueCompleted || completingYarnIssue}
+                          className="inline-flex items-center gap-2 rounded-lg border border-transparent px-4 py-2 text-[11px] font-bold text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-400 bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1"
+                        >
+                          {completingYarnIssue ? (
+                            <>
+                              <span className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
+                              Updating…
+                            </>
+                          ) : (
+                            <>
+                              <i className="ri-check-double-line text-sm" />
+                              Mark yarn issue completed
+                            </>
+                          )}
+                        </button>
                       </div>
                     </div>
                   )}
