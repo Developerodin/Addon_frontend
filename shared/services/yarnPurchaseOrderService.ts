@@ -487,6 +487,17 @@ class YarnPurchaseOrderService {
       method: 'DELETE',
     });
   }
+
+  /** Delete a saved lot from the system. Removes box, cones and stored data for the lot. */
+  async deleteLot(poNumber: string, lotNumber: string): Promise<void> {
+    if (!poNumber?.trim() || !lotNumber?.trim()) {
+      throw new Error('PO number and lot number are required');
+    }
+    return this.makeRequest<void>('/lot', {
+      method: 'DELETE',
+      body: JSON.stringify({ poNumber: poNumber.trim(), lotNumber: lotNumber.trim() }),
+    });
+  }
 }
 
 const yarnPurchaseOrderService = new YarnPurchaseOrderService();

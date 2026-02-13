@@ -739,7 +739,6 @@ const AddOrderPage = () => {
                           <th className="w-32 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Linking</th>
                           <th className="w-24 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                           <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine</th>
-                          <th className="w-20 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Queue #</th>
                           <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                           <th className="w-16 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                         </tr>
@@ -826,19 +825,6 @@ const AddOrderPage = () => {
                                 </span>
                                 <i className="ri-arrow-down-s-line text-gray-500 shrink-0" />
                               </button>
-                            </td>
-                            <td className="px-2 py-2">
-                              {article.machineId ? (
-                                <NumericInput
-                                  className="form-control form-control-sm w-full text-xs py-1 px-2 h-8"
-                                  value={article.queuePriority}
-                                  onChange={(value) => handleArticleChange(index, 'queuePriority', value >= 1 ? value : undefined)}
-                                  placeholder="1"
-                                  allowDecimals={false}
-                                />
-                              ) : (
-                                <span className="text-xs text-gray-400">—</span>
-                              )}
                             </td>
                             <td className="px-2 py-2">
                               <input

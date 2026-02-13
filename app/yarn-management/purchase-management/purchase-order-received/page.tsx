@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1421,6 +1422,13 @@ const PurchaseOrderReceivedPage = () => {
           order={orderForGoodsReceived}
           onSubmit={handleGoodsReceivedSubmit}
           isSubmitting={isSubmittingGoodsReceived}
+          onLotDeleted={async () => {
+            if (!orderForGoodsReceived?.id) return;
+            const fullOrderDetails = await yarnPurchaseOrderService.getPurchaseOrderById(orderForGoodsReceived.id);
+            setOrderForGoodsReceived(mapAPIOrderToComponent(fullOrderDetails));
+            setRawOrderDataForGoodsReceived(fullOrderDetails);
+            await fetchPurchaseOrders();
+          }}
         />
       )}
     </>
@@ -1855,6 +1863,8 @@ interface GoodsReceivedModalProps {
   order: PurchaseOrder;
   onSubmit: (payload: UpdatePurchaseOrderWithReceivedLotsPayload) => Promise<void>;
   isSubmitting: boolean;
+  /** Called after a saved lot is deleted via API; parent should refetch order and refresh list */
+  onLotDeleted?: () => Promise<void>;
 }
 
 const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
@@ -1862,7 +1872,8 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   onClose,
   order,
   onSubmit,
-  isSubmitting
+  isSubmitting,
+  onLotDeleted
 }) => {
   const [lots, setLots] = useState<ReceivedLotDetail[]>([
     {
@@ -1878,6 +1889,9 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   const [originalLots, setOriginalLots] = useState<Map<string, ReceivedLotDetail>>(new Map());
   // Store raw input values as strings to allow typing "0" and "0.5"
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
+  // Pending delete confirmation (lot index) - in-app dialog since window.confirm may not show
+  const [deleteConfirmLotIndex, setDeleteConfirmLotIndex] = useState<number | null>(null);
+  const [isDeletingLot, setIsDeletingLot] = useState(false);
 
   // Helper function to check if a lot is saved (exists in original lots)
   const isLotSaved = (lotNumber: string): boolean => {
@@ -1887,6 +1901,8 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setDeleteConfirmLotIndex(null);
+      setIsDeletingLot(false);
       // Load existing data if available, otherwise reset form
       if (order.receivedLotDetails && order.receivedLotDetails.length > 0) {
         // Create a map of original lots by lotNumber for quick lookup
@@ -1942,15 +1958,29 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   const removeLot = (index: number) => {
     const lot = lots[index];
     if (!lot) return;
-    
-    // Check if this lot is saved (exists in original lots)
-    if (isLotSaved(lot.lotNumber)) {
-      toast.error('Cannot remove a saved lot. Saved lots can only be viewed.');
-      return;
-    }
-    
+
     if (lots.length > 1) {
       setLots(lots.filter((_, i) => i !== index));
+      if (lot.lotNumber && isLotSaved(lot.lotNumber)) {
+        setOriginalLots(prev => {
+          const next = new Map(prev);
+          next.delete(lot.lotNumber.trim().toUpperCase());
+          return next;
+        });
+      }
+      setRawInputValues(prev => {
+        const next: Record<string, string> = {};
+        Object.entries(prev).forEach(([key, value]) => {
+          const m = key.match(/^lot-(\d+)-(.*)$/);
+          if (m) {
+            const i = parseInt(m[1], 10);
+            const rest = m[2];
+            if (i < index) next[key] = value;
+            else if (i > index) next[`lot-${i - 1}-${rest}`] = value;
+          } else next[key] = value;
+        });
+        return next;
+      });
     }
   };
 
@@ -2355,6 +2385,30 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                     <i className="ri-add-line text-xs"></i>
                     Add Lot
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const unsavedCount = lots.filter(l => !isLotSaved(l.lotNumber)).length;
+                      if (unsavedCount === 0) {
+                        toast.error('No lots to delete. Saved lots cannot be removed.');
+                        return;
+                      }
+                      if (typeof window !== 'undefined' && !window.confirm(`Delete all ${unsavedCount} unsaved lot(s)?`)) return;
+                      const after = lots.filter(l => isLotSaved(l.lotNumber));
+                      setLots(after.length > 0 ? after : [{
+                        lotNumber: '',
+                        numberOfCones: 0,
+                        totalWeight: 0,
+                        numberOfBoxes: 0,
+                        poItems: [],
+                        status: 'lot_pending'
+                      }]);
+                    }}
+                    className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                    title="Delete all unsaved lots"
+                  >
+                    <i className="ri-delete-bin-line text-base"></i>
+                  </button>
                 </div>
               </div>
 
@@ -2362,7 +2416,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                 const lotIsSaved = isLotSaved(lot.lotNumber);
                 
                 return (
-                <div key={lotIndex} className={`border rounded-lg p-3 space-y-3 ${lotIsSaved ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
+                <div key={lotIndex} className={`border rounded-lg p-3 space-y-3 relative ${lotIsSaved ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <h5 className="text-xs font-semibold text-gray-800">Lot {lotIndex + 1}</h5>
@@ -2373,23 +2427,24 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                         </span>
                       )}
                     </div>
-                    {lots.length > 1 && !lotIsSaved && (
-                      <button
-                        type="button"
-                        onClick={() => removeLot(lotIndex)}
-                        className="flex items-center gap-1 px-2 py-1 bg-red-50 text-red-600 text-[10px] font-bold rounded border border-red-200 hover:bg-red-100 transition-colors"
-                        title="Remove Lot"
-                      >
-                        <i className="ri-delete-bin-line text-xs"></i>
-                        Remove
-                      </button>
-                    )}
-                    {lotIsSaved && (
-                      <span className="text-[10px] text-gray-500 italic">
-                        Cannot edit - saved lots are read-only
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (lotIsSaved) {
+                          setDeleteConfirmLotIndex(lotIndex);
+                          return;
+                        }
+                        setDeleteConfirmLotIndex(lotIndex);
+                      }}
+                      className="p-1.5 rounded transition-colors text-red-600 hover:bg-red-100 hover:text-red-700"
+                      title="Delete lot"
+                    >
+                      <i className="ri-delete-bin-line text-base"></i>
+                    </button>
                   </div>
+                  {lotIsSaved && (
+                    <span className="text-[10px] text-gray-500 italic block -mt-1">Cannot edit - saved lots are read-only</span>
+                  )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
@@ -2695,6 +2750,68 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
               })}
             </div>
           </div>
+
+          {/* Delete lot confirmation - portaled to body so it always shows (modal transform breaks fixed positioning) */}
+          {deleteConfirmLotIndex !== null && lots[deleteConfirmLotIndex] && typeof document !== "undefined"
+            ? createPortal(
+                (() => {
+                  const lot = lots[deleteConfirmLotIndex];
+                  const saved = isLotSaved(lot.lotNumber);
+                  const lotLabel = (lot.lotNumber || "").trim() || `Lot ${deleteConfirmLotIndex + 1}`;
+                  const poLabel = order.orderNumber || "this order";
+                  const handleConfirmDelete = async () => {
+                    if (saved) {
+                      setIsDeletingLot(true);
+                      try {
+                        await yarnPurchaseOrderService.deleteLot(poLabel, lot.lotNumber.trim());
+                        toast.success(`Lot ${lotLabel} has been removed from the system.`);
+                        removeLot(deleteConfirmLotIndex);
+                        setDeleteConfirmLotIndex(null);
+                        await onLotDeleted?.();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Failed to delete lot");
+                      } finally {
+                        setIsDeletingLot(false);
+                      }
+                    } else {
+                      removeLot(deleteConfirmLotIndex);
+                      setDeleteConfirmLotIndex(null);
+                    }
+                  };
+                  return (
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" onClick={() => !isDeletingLot && setDeleteConfirmLotIndex(null)} role="dialog" aria-modal="true" aria-labelledby="delete-lot-title">
+                      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 space-y-3" onClick={e => e.stopPropagation()}>
+                        <p id="delete-lot-title" className="text-sm text-gray-800">
+                          {saved
+                            ? `The entire box, cones and stored data for lot "${lotLabel}" (PO ${poLabel}) will be removed from the system. Are you sure you want to delete this lot?`
+                            : `Do you want to delete lot "${lotLabel}" from PO ${poLabel}? This will remove the entire lot (cones, weight, boxes) and clear the form data.`}
+                        </p>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmLotIndex(null)}
+                            disabled={isDeletingLot}
+                            className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleConfirmDelete}
+                            disabled={isDeletingLot}
+                            className="px-3 py-1.5 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {isDeletingLot ? <i className="ri-loader-4-line animate-spin text-xs" /> : null}
+                            Yes, delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })(),
+                document.body
+              )
+            : null}
 
           {/* Footer */}
           <div className="bg-gray-50 px-4 py-3 flex justify-end gap-2 flex-shrink-0 border-t border-gray-200">
