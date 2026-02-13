@@ -16,6 +16,10 @@ export interface StorageSlot {
 
 export interface StorageSlotsResponse {
   results: StorageSlot[];
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+  totalResults?: number;
 }
 
 export interface BoxInSlot {
@@ -187,11 +191,33 @@ class StorageSlotService {
     }
   }
 
-  async getStorageSlots(zone?: string): Promise<StorageSlotsResponse> {
-    const endpoint = zone ? `/slots?zone=${zone}` : "/slots";
-    return this.makeRequest<StorageSlotsResponse>(endpoint, {
+  /**
+   * Fetch storage slots with optional zone and pagination.
+   * @param zone - e.g. "LT" for long-term
+   * @param page - 1-based page number
+   * @param limit - slots per page (e.g. 200)
+   */
+  async getStorageSlots(
+    zone?: string,
+    page: number = 1,
+    limit: number = 200
+  ): Promise<StorageSlotsResponse> {
+    const params = new URLSearchParams();
+    if (zone) params.set("zone", zone);
+    params.set("page", String(page));
+    params.set("limit", String(limit));
+    const endpoint = `/slots?${params.toString()}`;
+    const data = await this.makeRequest<StorageSlotsResponse>(endpoint, {
       method: "GET",
     });
+    const results = data.results ?? [];
+    return {
+      results,
+      page: data.page ?? page,
+      limit: data.limit ?? limit,
+      totalPages: data.totalPages ?? Math.max(1, Math.ceil((data.totalResults ?? results.length) / (data.limit ?? limit))),
+      totalResults: data.totalResults ?? results.length,
+    };
   }
 
   async getSlotDetailsByBarcode(barcode: string): Promise<SlotDetailsResponse> {

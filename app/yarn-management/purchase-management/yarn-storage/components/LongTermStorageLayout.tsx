@@ -90,12 +90,22 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     zone?: string;
   }>>([]);
 
-  // Fetch storage slots from API
-  const fetchStorageSlots = async () => {
+  // Pagination for storage layout (default 200 per page, total e.g. 800 → 4 pages)
+  const [storagePage, setStoragePage] = useState(1);
+  const [storageLimit, setStorageLimit] = useState(200);
+  const [storageTotalPages, setStorageTotalPages] = useState(1);
+  const [storageTotalResults, setStorageTotalResults] = useState(0);
+
+  const PAGE_SIZE_OPTIONS = [50, 100, 200, 500];
+
+  // Fetch storage slots from API with pagination
+  const fetchStorageSlots = async (page: number = storagePage, limit: number = storageLimit) => {
     try {
       setIsLoadingSlots(true);
-      const response = await storageSlotService.getStorageSlots("LT");
+      const response = await storageSlotService.getStorageSlots("LT", page, limit);
       setStorageSlots(response.results || []);
+      setStorageTotalPages(response.totalPages ?? 1);
+      setStorageTotalResults(response.totalResults ?? response.results?.length ?? 0);
     } catch (error) {
       console.error("Failed to fetch storage slots:", error);
       toast.error("Failed to load storage slots");
@@ -105,8 +115,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   };
 
   useEffect(() => {
-    fetchStorageSlots();
-  }, []);
+    fetchStorageSlots(storagePage, storageLimit);
+  }, [storagePage, storageLimit]);
 
   // Auto-focus rack code input when allocate modal opens
   useEffect(() => {
@@ -1083,18 +1093,19 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
       {/* 2D Grid Layout */}
       <div className="box">
-        <div className="box-header flex justify-between items-center">
-          <h3 className="box-title">
-            Storage Layout
-            {isLoadingSlots ? (
-              <span className="ml-2 text-sm text-gray-500">Loading...</span>
-            ) : (
-              <span className="ml-2 text-sm text-gray-500">
-                ({racks.length} slots)
-              </span>
-            )}
-          </h3>
-          <div className="flex gap-2 items-center flex-wrap">
+        <div className="box-header flex flex-col gap-3">
+          <div className="flex justify-between items-center flex-wrap">
+            <h3 className="box-title">
+              Storage Layout
+              {isLoadingSlots ? (
+                <span className="ml-2 text-sm text-gray-500">Loading...</span>
+              ) : (
+                <span className="ml-2 text-sm text-gray-500">
+                  ({racks.length} slots on this page · {storageTotalResults} total)
+                </span>
+              )}
+            </h3>
+            <div className="flex gap-2 items-center flex-wrap">
             <div className="flex gap-2 text-xs">
               <div className="flex items-center gap-1">
                 <div className="w-4 h-4 bg-green-50 border border-green-200 rounded"></div>
@@ -1131,7 +1142,53 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               <i className="ri-printer-line me-1"></i>
               Print Barcode
             </button>
+            </div>
           </div>
+          {/* Pagination: per-page + page nav */}
+          {!isLoadingSlots && storageTotalResults > 0 && (
+            <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-gray-200">
+              <span className="text-sm text-gray-600">
+                Showing {(storagePage - 1) * storageLimit + 1}–{Math.min(storagePage * storageLimit, storageTotalResults)} of {storageTotalResults} slots
+              </span>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Per page:</label>
+                <select
+                  value={storageLimit}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setStorageLimit(val);
+                    setStoragePage(1);
+                  }}
+                  className="text-sm border border-gray-300 rounded px-2 py-1"
+                >
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setStoragePage((p) => Math.max(1, p - 1))}
+                  disabled={storagePage <= 1}
+                  className="ti-btn ti-btn-light text-xs px-2 py-1 disabled:opacity-50"
+                >
+                  <i className="ri-arrow-left-s-line"></i>
+                </button>
+                <span className="text-sm text-gray-600 px-2">
+                  Page {storagePage} of {storageTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStoragePage((p) => Math.min(storageTotalPages, p + 1))}
+                  disabled={storagePage >= storageTotalPages}
+                  className="ti-btn ti-btn-light text-xs px-2 py-1 disabled:opacity-50"
+                >
+                  <i className="ri-arrow-right-s-line"></i>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <div className="box-body">
           {isLoadingSlots ? (
