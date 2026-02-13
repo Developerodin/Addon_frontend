@@ -166,6 +166,8 @@ const YarnQCPage = () => {
   
   const [startDate, setStartDate] = useState<string>(getDefaultStartDate());
   const [endDate, setEndDate] = useState<string>(getDefaultEndDate());
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Fetch purchase orders with multiple statuses from API
   const fetchPurchaseOrders = async () => {
@@ -213,8 +215,14 @@ const YarnQCPage = () => {
       const uniqueOrders = allOrders.filter((order, index, self) => 
         index === self.findIndex((o) => (o._id || o.id) === (order._id || order.id))
       );
+
+      // Filter orders to only show those with at least one lot having status "lot_qc_pending"
+      const ordersWithQCPendingLots = uniqueOrders.filter((order) => {
+        const receivedLotDetails = order.receivedLotDetails || [];
+        return receivedLotDetails.some((lot: any) => lot.status === "lot_qc_pending");
+      });
       
-      const mappedOrders = uniqueOrders.map(mapAPIOrderToComponent);
+      const mappedOrders = ordersWithQCPendingLots.map(mapAPIOrderToComponent);
       setOrders(mappedOrders);
     } catch (error) {
       console.error('Failed to fetch purchase orders:', error);
@@ -334,9 +342,6 @@ const YarnQCPage = () => {
       </div>
     );
   }
-
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredAndSortedOrders.length / itemsPerPage);

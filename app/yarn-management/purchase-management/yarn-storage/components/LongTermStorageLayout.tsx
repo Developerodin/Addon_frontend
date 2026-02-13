@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
 import JsBarcode from "jsbarcode";
@@ -59,6 +59,11 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const [transferSourceRack, setTransferSourceRack] = useState<RackLocation | null>(null);
   const [transferType, setTransferType] = useState<"LT_TO_LT" | "LT_TO_ST">("LT_TO_LT");
   const [transferBoxId, setTransferBoxId] = useState<string | undefined>(undefined);
+  const rackCodeInputRef = useRef<HTMLInputElement>(null);
+  const [alreadyStoredBoxInfo, setAlreadyStoredBoxInfo] = useState<{
+    boxId: string;
+    storageLocation: string;
+  } | null>(null);
 
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
@@ -102,6 +107,17 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   useEffect(() => {
     fetchStorageSlots();
   }, []);
+
+  // Auto-focus rack code input when allocate modal opens
+  useEffect(() => {
+    if (showAllocateModal && rackCodeInputRef.current) {
+      // Use setTimeout to ensure modal is fully rendered
+      setTimeout(() => {
+        rackCodeInputRef.current?.focus();
+        rackCodeInputRef.current?.select();
+      }, 100);
+    }
+  }, [showAllocateModal]);
 
   // Map storage slots to RackLocation format
   const racks = useMemo(() => {
@@ -287,6 +303,9 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       return;
     }
 
+    // Clear previous already stored box info
+    setAlreadyStoredBoxInfo(null);
+
     setIsLoadingBox(true);
     try {
       console.log("Fetching box by barcode:", trimmedBarcode);
@@ -300,13 +319,20 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       // Validate box
       if (!mappedBox.qcApproved) {
         toast.error("Box is not QC approved");
+        setIsLoadingBox(false);
         return;
       }
 
       // Check if box is already stored
       if (mappedBox.status === "Stored" && boxDetails.storageLocation) {
-        // Box is already stored - open transfer modal
+        // Box is already stored - show info message and open transfer modal
         const currentStorageLocation = boxDetails.storageLocation;
+
+        // Set already stored box info to display message
+        setAlreadyStoredBoxInfo({
+          boxId: boxDetails.boxId || trimmedBarcode,
+          storageLocation: currentStorageLocation,
+        });
 
         // Find the source rack from the storage location
         const sourceRack = racks.find((r) => r.barcode === currentStorageLocation);
@@ -324,11 +350,15 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
             // Box is in short-term storage - should use ShortTermStorage component
             toast.error("Box is in short-term storage. Please use Short-Term Storage tab for transfers.");
           } else {
-            toast.error("Box storage location is invalid");
+            // Box is stored but location format doesn't match LT- or ST-
+            // Still show the info message
+            toast.info(`Box is already stored at ${currentStorageLocation}`);
           }
         } else {
-          toast.error(`Source rack not found for location: ${currentStorageLocation}`);
+          // Rack not found but box is stored - still show the info message
+          toast.info(`Box is already stored at ${currentStorageLocation}`);
         }
+        setIsLoadingBox(false);
         return;
       }
 
@@ -395,6 +425,9 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
     // Reset state
     setSelectedBox(null);
+
+    // Refocus barcode scanner input after successful storage
+    focusBarcodeScanner();
   };
 
   // Handle allocate confirmation from modal
@@ -456,6 +489,9 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       setShowAllocateModal(false);
       setStorageRackCode("");
       setSelectedBox(null);
+
+      // Refocus barcode scanner input after successful allocation
+      focusBarcodeScanner();
     } catch (error) {
       console.error("Failed to allocate box:", error);
       toast.error(
@@ -495,6 +531,17 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
   const getRackBox = (rack: RackLocation) => {
     return boxes.find((b) => b.rackLocation?.id === rack.id);
+  };
+
+  // Helper function to refocus barcode scanner input
+  const focusBarcodeScanner = () => {
+    setTimeout(() => {
+      const barcodeInput = document.querySelector('input[placeholder*="Scan"], input[placeholder*="barcode"], input[placeholder*="Barcode"]') as HTMLInputElement;
+      if (barcodeInput && !barcodeInput.disabled) {
+        barcodeInput.focus();
+        barcodeInput.select();
+      }
+    }, 200);
   };
 
   const handleRackClick = async (rack: RackLocation) => {
@@ -596,6 +643,10 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       if (onRefresh) {
         onRefresh();
       }
+
+      // Clear already stored box info and refocus scanner after successful transfer
+      setAlreadyStoredBoxInfo(null);
+      focusBarcodeScanner();
 
       toast.success("Data refreshed successfully");
     } catch (error) {
@@ -994,12 +1045,38 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               <span className="text-sm text-gray-600">Loading box details...</span>
             </div>
           ) : (
-            <BarcodeScanner
-              onScan={handleBoxScan}
-              label="Scan Box Barcode"
-              placeholder="Scan QC-approved box barcode"
-              disabled={isLoadingBox}
-            />
+            <>
+              <BarcodeScanner
+                onScan={handleBoxScan}
+                label="Scan Box Barcode"
+                placeholder="Scan QC-approved box barcode"
+                disabled={isLoadingBox}
+              />
+              {alreadyStoredBoxInfo && (
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <i className="ri-information-line text-blue-600 text-lg mt-0.5"></i>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-blue-900 mb-1">
+                        Box Already Stored
+                      </p>
+                      <p className="text-xs text-blue-700">
+                        Box <span className="font-semibold">{alreadyStoredBoxInfo.boxId}</span> is already stored at rack location:{" "}
+                        <span className="font-semibold font-mono">{alreadyStoredBoxInfo.storageLocation}</span>
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAlreadyStoredBoxInfo(null)}
+                      className="text-blue-400 hover:text-blue-600 transition-colors"
+                      title="Dismiss"
+                    >
+                      <i className="ri-close-line text-lg"></i>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -1258,6 +1335,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           setShowTransferModal(false);
           setTransferSourceRack(null);
           setTransferBoxId(undefined);
+          setAlreadyStoredBoxInfo(null); // Clear already stored box info when modal closes
         }}
         transferType={transferType}
         sourceRack={transferSourceRack}
@@ -1401,6 +1479,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                   Storage Rack Code <span className="text-red-500">*</span>
                 </label>
                 <input
+                  ref={rackCodeInputRef}
                   type="text"
                   className="form-control"
                   placeholder="Enter storage rack barcode"

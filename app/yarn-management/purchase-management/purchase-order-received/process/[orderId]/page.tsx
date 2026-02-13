@@ -217,28 +217,32 @@ const ProcessOrderPage = () => {
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '50mmx70mm',
-    paperWidth: 812, // 4 inches at 203 DPI
-    paperHeight: 1218, // 6 inches at 203 DPI
-    labelsPerPage: 2, // Number of labels to print on single sheet (1-6)
-    columnsPerRow: 2,
-    firstLabelTopMargin: 0, // Top margin for first label only
-    supplierFontSize: 27,
-    detailsFontSize: 30,
+    paperSize: '50mm * 70mm' as '4x6' | '6x4' | '1.96x2.75' | '50mm * 70mm' | '50mm * 25mm',
+    paperWidth: 398,  // 50mm approx
+    paperHeight: 558, // 70mm approx
+    labelsPerPage: 1,
+    columnsPerRow: 1,
+    firstLabelTopMargin: 20,
+    supplierFontSize: 22,
+    detailsFontSize: 22,
     boxIdFontSize: 22,
+    rackCodeFontSize: 40,
+    zoneFontSize: 30,
     barcodeHeight: 100,
     barcodeWidth: 3,
-    qrCodeSize: 5, // For QR code on box labels
+    qrCodeSize: 5,
     supplierYPos: 30,
     boxIdYPos: 65,
     yarnYPos: 120,
     lotYPos: 160,
     shadeYPos: 200,
-    barcodeYPos: 260,
+    barcodeYPos: 300,
     footerYPos: 400,
     orientation: 'vertical' as 'horizontal' | 'vertical',
   });
   const [isTestPrint, setIsTestPrint] = useState(false);
+  // When set, modal prints only this lot; when { type: 'all' }, prints all boxes
+  const [printModalContext, setPrintModalContext] = useState<{ type: 'all' } | { type: 'lot'; lotNumber: string; lotBoxes: YarnBox[] } | null>(null);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -1166,56 +1170,198 @@ const ProcessOrderPage = () => {
     };
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mmx70mm') => {
-    let newSettings = { ...printSettings };
+  /** Get paper size in mm for browser print preview (like LongTermStorageLayout) */
+  const getPaperSizeMm = (): { paperW: number; paperH: number } => {
+    const isSmall = printSettings.paperSize === '50mm * 25mm';
+    let paperW = 101.6; // 4"
+    let paperH = 152.4; // 6"
 
-    if (size === '4x6') {
-      newSettings = {
-        ...newSettings,
-        paperSize: '4x6',
-        paperWidth: 812, // 4 inches * 203 DPI
-        paperHeight: 1218, // 6 inches * 203 DPI
-        labelsPerPage: 2,
-        firstLabelTopMargin: 0,
-      };
-    } else if (size === '6x4') {
-      newSettings = {
-        ...newSettings,
-        paperSize: '6x4',
-        paperWidth: 1218, // 6 inches * 203 DPI
-        paperHeight: 812, // 4 inches * 203 DPI
-        labelsPerPage: 1, // Usually one label per page for landscape 6x4
-        firstLabelTopMargin: 0,
-      };
-    } else if (size === '50mmx70mm') {
-      // 50mm * 8 dots/mm = 400 dots
-      // 70mm * 8 dots/mm = 560 dots
-      newSettings = {
-        ...newSettings,
-        paperSize: '50mmx70mm',
-        paperWidth: 400,
-        paperHeight: 560,
-        labelsPerPage: 1,
-        columnsPerRow: 1, // Single column for 50mm paper
-        barcodeHeight: 100,
-        barcodeYPos: 50,
-        detailsFontSize: 20, // Reduced to 20px as requested
-        boxIdFontSize: 20,
-        supplierFontSize: 20,
-        qrCodeSize: 5,
-        orientation: 'vertical', // Default to vertical for 50x70
-        firstLabelTopMargin: 0,
-      };
+    if (isSmall) { paperW = 50; paperH = 25; }
+    else if (printSettings.paperSize === '6x4') { paperW = 152.4; paperH = 101.6; }
+    else if (printSettings.paperSize === '1.96x2.75' || printSettings.paperSize === '50mm * 70mm') { paperW = 50; paperH = 70; }
+
+    return { paperW, paperH };
+  };
+
+  /**
+   * Build browser print preview HTML (LongTermStorageLayout-style: @page, mm layout, auto window.print()).
+   * This matches the 'storage' behavior: direct print, no toolbar, auto-close.
+   */
+  const getBrowserPrintPreviewHTML = (
+    boxesWithLot: Array<{ box: YarnBox; lotLabel: string }>,
+    title: string
+  ): string => {
+    if (boxesWithLot.length === 0) return '';
+    const { paperW, paperH } = getPaperSizeMm();
+    const isSmall = printSettings.paperSize === '50mm * 25mm';
+    const isVertical = printSettings.orientation === 'vertical';
+
+    const cols = printSettings.columnsPerRow ?? 1;
+    const labelsPerPage = printSettings.labelsPerPage ?? 1;
+    const rowsPerPage = Math.ceil(labelsPerPage / cols);
+    const labelW = paperW / cols;
+    const labelH = paperH / rowsPerPage;
+
+    let idx = 0;
+    const labelHtml = (box: YarnBox, lotLabel: string) => {
+      const details = getBoxPrintDetails(box);
+      const uniqueId = `bc-${idx++}`;
+      return `
+        <div class="label">
+          <div class="content">
+            <div class="code">${(box.boxId || '').replace(/</g, '&lt;')}</div>
+            <div class="supplier">${(order?.supplier || '-').replace(/</g, '&lt;')}</div>
+            <div class="details">
+              Yarn: ${(details.yarnName || '-').replace(/</g, '&lt;')}<br/>
+              Lot: ${(lotLabel || '-').replace(/</g, '&lt;')} | Shade: ${(details.shadeCode || '-').replace(/</g, '&lt;')}
+            </div>
+            <div class="barcode"><svg id="${uniqueId}"></svg></div>
+          </div>
+        </div>`;
+    };
+
+    let pagesHtml = '';
+    for (let i = 0; i < boxesWithLot.length; i += labelsPerPage) {
+      pagesHtml += '<div class="page">';
+      for (let j = 0; j < labelsPerPage && (i + j) < boxesWithLot.length; j++) {
+        const { box, lotLabel } = boxesWithLot[i + j];
+        pagesHtml += labelHtml(box, lotLabel);
+      }
+      pagesHtml += '</div>';
     }
 
-    setPrintSettings(newSettings);
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Browser Print - Box Labels</title>
+          <style>
+            @page { size: ${paperW}mm ${paperH}mm; margin: 0; }
+            body { margin: 0; padding: 0; font-family: sans-serif; -webkit-print-color-adjust: exact; }
+            .page {
+              width: ${paperW}mm;
+              height: ${paperH}mm;
+              position: relative;
+              page-break-after: always;
+              overflow: hidden;
+            }
+            .label {
+              width: ${labelW}mm;
+              height: ${labelH}mm;
+              float: left;
+              box-sizing: border-box;
+              padding: 1.5mm;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              border: 0.1mm dotted #eee;
+              overflow: hidden;
+            }
+            @media print { .label { border: none; } }
+            .content {
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              align-items: center;
+              text-align: center;
+              width: 100%;
+              height: 100%;
+              ${isVertical ? `
+                transform: rotate(-90deg);
+                width: ${labelH}mm;
+                height: ${labelW}mm;
+              ` : ''}
+            }
+            .code { font-weight: bold; font-size: ${isSmall ? '14pt' : '22pt'}; margin-bottom: 1mm; line-height: 1.1; }
+            .supplier { font-size: ${isSmall ? '8pt' : '12pt'}; color: #666; margin-bottom: 1mm; white-space: nowrap; font-weight: normal; }
+            .details { font-size: ${isSmall ? '10pt' : '16pt'}; margin-bottom: 2mm; white-space: normal; font-weight: normal; }
+            .barcode { width: 100%; max-height: 45%; display: flex; justify-content: center; align-items: center; }
+            svg { width: 90%; height: auto; max-height: 100%; }
+          </style>
+        </head>
+        <body>
+          ${pagesHtml}
+          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+          <script>
+            window.onload = function() {
+              const boxes = ${JSON.stringify(boxesWithLot.map(b => ({ barcode: b.box.barcode }))).replace(/<\/script>/g, '<\\/script>')};
+              boxes.forEach((b, idx) => {
+                const el = document.getElementById('bc-' + idx);
+                if (el && b.barcode) {
+                  JsBarcode(el, b.barcode, {
+                    format: "CODE128",
+                    width: 2,
+                    height: ${isSmall ? 40 : 60},
+                    displayValue: true,
+                    fontSize: ${isSmall ? 10 : 14},
+                    margin: 0
+                  });
+                }
+              });
+              setTimeout(() => { window.print(); window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+  };
+
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '1.96x2.75' | '50mm * 70mm' | '50mm * 25mm') => {
+    if (size === '4x6') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '4x6',
+        paperWidth: 812,
+        paperHeight: 1218,
+        orientation: 'horizontal',
+      });
+    } else if (size === '6x4') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '6x4',
+        paperWidth: 1218,
+        paperHeight: 812,
+        orientation: 'horizontal',
+      });
+    } else if (size === '1.96x2.75' || size === '50mm * 70mm') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: size,
+        paperWidth: 398,  // 1.96 inches × 203 DPI
+        paperHeight: 558, // 2.75 inches × 203 DPI
+        labelsPerPage: 1,
+        columnsPerRow: 1,
+        orientation: 'vertical',
+        firstLabelTopMargin: 20,
+        rackCodeFontSize: 40,
+        barcodeHeight: 100,
+        detailsFontSize: 22,
+        supplierFontSize: 22,
+        barcodeWidth: 3,
+        barcodeYPos: 300,
+        footerYPos: 400,
+      });
+
+    } else if (size === '50mm * 25mm') {
+      setPrintSettings({
+        ...printSettings,
+        paperSize: '50mm * 25mm',
+        paperWidth: 406,  // 2 inches
+        paperHeight: 203, // 1 inch
+        labelsPerPage: 1,
+        columnsPerRow: 1,
+        barcodeHeight: 40,
+        barcodeWidth: 2,
+        orientation: 'horizontal',
+      });
+    }
   };
 
   const handleOrientationChange = (orientation: 'horizontal' | 'vertical') => {
     let newWidth = printSettings.paperWidth;
     let newHeight = printSettings.paperHeight;
 
-    if (printSettings.paperSize === '50mmx70mm') {
+    if (printSettings.paperSize === '50mm * 70mm' || printSettings.paperSize === '1.96x2.75') {
       newWidth = orientation === 'horizontal' ? 560 : 400; // 70mm vs 50mm
       newHeight = orientation === 'horizontal' ? 400 : 560; // 50mm vs 70mm
     } else {
@@ -1241,8 +1387,17 @@ const ProcessOrderPage = () => {
       toast.error('No boxes available to print');
       return;
     }
+    setPrintModalContext({ type: 'all' });
+    setShowPrintSettingsModal(true);
+  };
 
-    // Show print settings modal first
+  const openPrintModalForLot = (lotNumber: string, lotBoxes: YarnBox[]) => {
+    setIsTestPrint(false);
+    if (!order || lotBoxes.length === 0) {
+      toast.error('No boxes available to print for this lot');
+      return;
+    }
+    setPrintModalContext({ type: 'lot', lotNumber, lotBoxes });
     setShowPrintSettingsModal(true);
   };
 
@@ -1252,6 +1407,7 @@ const ProcessOrderPage = () => {
   };
 
   const executePrintWithSettings = async () => {
+    const context = printModalContext;
     setShowPrintSettingsModal(false);
 
     // If Test Print
@@ -1302,7 +1458,8 @@ const ProcessOrderPage = () => {
       return;
     }
 
-    if (!order || boxes.length === 0) {
+    const boxesToPrint = context?.type === 'lot' ? context.lotBoxes : boxes;
+    if (!order || boxesToPrint.length === 0) {
       toast.error('No boxes available to print');
       return;
     }
@@ -1387,7 +1544,7 @@ const ProcessOrderPage = () => {
       }
 
       // Prepare box labels for printing (QR code encodes box barcode; same details as before)
-      const conesToPrint = boxes
+      const conesToPrint = boxesToPrint
         .filter((box) => box.barcode)
         .map((box) => {
           const details = getBoxPrintDetails(box);
@@ -1396,7 +1553,7 @@ const ProcessOrderPage = () => {
             boxId: box.boxId,
             yarnName: details.yarnName,
             shadeCode: details.shadeCode,
-            lotNumber: box.lotNumber || '',
+            lotNumber: context?.type === 'lot' ? context.lotNumber : (box.lotNumber || ''),
             supplierName: order.supplier || '',
             poNumber: order.orderNumber || '',
           };
@@ -1410,7 +1567,8 @@ const ProcessOrderPage = () => {
       }
 
       const pageCount = Math.ceil(conesToPrint.length / printSettings.labelsPerPage);
-      toast.loading(`Printing ${conesToPrint.length} label(s) on ${pageCount} page(s) (${printSettings.labelsPerPage} labels/page) to ${defaultPrinter.name}...`);
+      const scopeLabel = context?.type === 'lot' ? ` for Lot ${context.lotNumber}` : '';
+      toast.loading(`Printing ${conesToPrint.length} label(s) on ${pageCount} page(s) (${printSettings.labelsPerPage} labels/page) to ${defaultPrinter.name}${scopeLabel}...`);
 
       // Match cone page: pass only customSettings so printCones uses getDefault() internally (same path as working cone print)
       const result = await printCones(conesToPrint, {
@@ -1420,7 +1578,8 @@ const ProcessOrderPage = () => {
       toast.dismiss();
 
       if (result.success) {
-        toast.success(`Successfully printed ${result.printed} label(s)`, { duration: 3000 });
+        const scopeMsg = context?.type === 'lot' ? ` for Lot ${context.lotNumber}` : '';
+        toast.success(`Successfully printed ${result.printed} label(s)${scopeMsg}`, { duration: 3000 });
       } else {
         toast.error(result.error || 'Failed to print labels', { duration: 5000 });
         if (result.error) console.error('Print error:', result.error);
@@ -1447,255 +1606,45 @@ const ProcessOrderPage = () => {
     }
   };
 
-  // Legacy browser print function (kept as fallback)
+  /** Open browser print preview (LongTermStorageLayout-style: @page, mm layout, preview only with Print/Close). */
   const handlePrintAllBarcodesBrowser = () => {
     if (!order || boxes.length === 0) {
       toast.error('No boxes available to print');
       return;
     }
-
-    // Create a print-friendly HTML with all box QR codes grouped by lot
+    const boxesWithLot: Array<{ box: YarnBox; lotLabel: string }> = [];
+    boxesByLot.sortedLots.forEach((lotNumber) => {
+      boxesByLot.grouped[lotNumber].forEach((box) => boxesWithLot.push({ box, lotLabel: lotNumber }));
+    });
+    boxesByLot.unassigned.forEach((box) => boxesWithLot.push({ box, lotLabel: '—' }));
+    const html = getBrowserPrintPreviewHTML(boxesWithLot, order.orderNumber || 'Box Labels');
+    if (!html) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       toast.error('Please allow popups to print labels');
       return;
     }
-
-    const boxesForQr: { id: string; barcode: string }[] = [];
-    const qrId = () => 'qr-' + boxesForQr.length;
-
-    const renderBoxLabel = (box: YarnBox, lotLabel: string) => {
-      const details = getBoxPrintDetails(box);
-      const id = qrId();
-      boxesForQr.push({ id, barcode: box.barcode });
-      return `
-        <div class="barcode-item">
-          <div class="box-header-info">
-            <div class="barcode-label">Box ID</div>
-            <div class="box-info" style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">${box.boxId}</div>
-          </div>
-          <div class="barcode-section">
-            <div class="barcode-label">QR Code</div>
-            <div class="barcode-value">
-              <canvas id="${id}"></canvas>
-            </div>
-          </div>
-          <div class="box-details-section">
-            <div class="detail-row">
-              <span class="detail-label">Supplier:</span>
-              <span class="detail-value">${order!.supplier || '-'}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Yarn Name:</span>
-              <span class="detail-value">${details.yarnName}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Shade Number:</span>
-              <span class="detail-value">${details.shadeCode}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Yarn Colour:</span>
-              <span class="detail-value">${details.yarnColour}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Shade Name:</span>
-              <span class="detail-value">${details.shadeName}</span>
-            </div>
-            <div class="detail-row lot-info">
-              <span class="detail-label">Lot:</span>
-              <span class="detail-value">${lotLabel}</span>
-            </div>
-          </div>
-        </div>
-      `;
-    };
-
-    const lotSections = boxesByLot.sortedLots.map((lotNumber) => {
-      const lotBoxes = boxesByLot.grouped[lotNumber];
-      return `
-        <div class="lot-section" style="page-break-after: always; margin-bottom: 40px;">
-          <h3 class="lot-header" style="background: #f0f0f0; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
-            <i class="ri-box-3-line"></i> Lot Number: ${lotNumber} (${lotBoxes.length} boxes)
-          </h3>
-          <div class="barcode-container">
-            ${lotBoxes.map((box) => renderBoxLabel(box, lotNumber)).join('')}
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    const unassignedSection = boxesByLot.unassigned.length > 0 ? `
-      <div class="lot-section" style="page-break-after: always; margin-bottom: 40px;">
-        <h3 class="lot-header" style="background: #fff3cd; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
-          <i class="ri-error-warning-line"></i> Unassigned Boxes (${boxesByLot.unassigned.length} boxes)
-        </h3>
-        <div class="barcode-container">
-          ${boxesByLot.unassigned.map((box) => renderBoxLabel(box, '—')).join('')}
-        </div>
-      </div>
-    ` : '';
-
-    const barcodeHTML = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Print Barcodes - ${order.orderNumber}</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              padding: 20px;
-            }
-            .header-info {
-              background: #e9ecef;
-              padding: 15px;
-              margin-bottom: 20px;
-              border-radius: 5px;
-            }
-            .lot-section {
-              margin-bottom: 40px;
-            }
-            .lot-header {
-              background: #f0f0f0;
-              padding: 15px;
-              margin-bottom: 20px;
-              border-radius: 5px;
-              font-size: 18px;
-              font-weight: bold;
-            }
-            .barcode-container {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 25px;
-              margin-top: 20px;
-            }
-            .barcode-item {
-              border: 2px solid #ddd;
-              padding: 20px;
-              text-align: center;
-              page-break-inside: avoid;
-              min-height: 400px;
-              display: flex;
-              flex-direction: column;
-              justify-content: space-between;
-              background: #fff;
-              border-radius: 8px;
-            }
-            .box-header-info {
-              margin-bottom: 12px;
-            }
-            .barcode-label {
-              font-size: 11px;
-              color: #666;
-              margin-bottom: 5px;
-              font-weight: 600;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-            }
-            .barcode-section {
-              margin: 15px 0;
-            }
-            .barcode-value {
-              font-family: 'Courier New', monospace;
-              margin: 10px 0;
-              padding: 15px;
-              background: #f5f5f5;
-              border: 1px dashed #ccc;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              border-radius: 4px;
-            }
-            .barcode-value canvas {
-              max-width: 100%;
-              height: auto;
-            }
-            .box-details-section {
-              margin-top: 15px;
-              padding-top: 15px;
-              border-top: 1px solid #e0e0e0;
-              text-align: left;
-            }
-            .detail-row {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 8px;
-              font-size: 13px;
-            }
-            .detail-row:last-child {
-              margin-bottom: 0;
-            }
-            .detail-label {
-              font-weight: 600;
-              color: #555;
-              min-width: 100px;
-            }
-            .detail-value {
-              color: #333;
-              font-weight: 500;
-              text-align: right;
-              flex: 1;
-              word-break: break-word;
-            }
-            .detail-row.lot-info {
-              margin-top: 10px;
-              padding-top: 10px;
-              border-top: 1px solid #e0e0e0;
-              font-weight: 600;
-            }
-            .box-info {
-              font-size: 13px;
-              color: #333;
-            }
-            @media print {
-              .barcode-container {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 20px;
-              }
-              .barcode-item {
-                min-height: 420px;
-                padding: 18px;
-              }
-              .lot-section {
-                page-break-after: always;
-              }
-              .lot-section:last-child {
-                page-break-after: auto;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header-info">
-            <h2 style="margin: 0 0 10px 0;">Box Labels (QR) - ${order.orderNumber}</h2>
-            <p style="margin: 0;">PO Number: ${order.purchaseOrderNumber} | Supplier: ${order.supplier} | Total Boxes: ${boxes.length}</p>
-          </div>
-          ${lotSections}
-          ${unassignedSection}
-        <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"><\/script>
-        <script>
-          var boxesForQr = ${JSON.stringify(boxesForQr)};
-          window.onload = function() {
-            var loaded = 0;
-            if (boxesForQr.length === 0) { window.print(); window.close(); return; }
-            boxesForQr.forEach(function(item) {
-              var canvas = document.getElementById(item.id);
-              if (canvas) {
-                QRCode.toCanvas(canvas, item.barcode, { margin: 0, width: 120, color: { dark: '#000000', light: '#ffffff' } }, function(err) {
-                  loaded++;
-                  if (loaded === boxesForQr.length) setTimeout(function() { window.print(); window.close(); }, 500);
-                });
-              } else { loaded++; }
-            });
-          };
-        <\/script>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(barcodeHTML);
+    printWindow.document.write(html);
     printWindow.document.close();
-    toast.success(`${boxes.length} box label(s) ready to print (grouped by lot)`);
+    toast.success('Print preview opened. It will auto-print and close.');
+  };
+
+  const handlePrintLotBarcodesBrowser = (lotNumber: string, lotBoxes: YarnBox[]) => {
+    if (!order || lotBoxes.length === 0) {
+      toast.error('No boxes available to print for this lot');
+      return;
+    }
+    const boxesWithLot = lotBoxes.map((box) => ({ box, lotLabel: lotNumber }));
+    const html = getBrowserPrintPreviewHTML(boxesWithLot, `Lot ${lotNumber}`);
+    if (!html) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print barcodes');
+      return;
+    }
+    printWindow.document.write(html);
+    printWindow.document.close();
+    toast.success('Print preview opened. It will auto-print and close.');
   };
 
   // Show loading state while permissions are being loaded
@@ -2029,349 +1978,6 @@ const ProcessOrderPage = () => {
               {/* Render boxes grouped by lot */}
               {boxesByLot.sortedLots.map((lotNumber) => {
                 const lotBoxes = boxesByLot.grouped[lotNumber];
-                const handlePrintLotBarcodes = async () => {
-                  if (!order || lotBoxes.length === 0) {
-                    toast.error('No boxes available to print');
-                    return;
-                  }
-
-                  try {
-                    // Check script status first
-                    if (!isQZLoaded()) {
-                      toast.error('QZ Tray script not loaded. Please wait a moment and try again.');
-                      return;
-                    }
-
-                    // Check connection status - same method as HTML test file
-                    const isActive = typeof window !== 'undefined' &&
-                      typeof window.qz !== 'undefined' &&
-                      window.qz.websocket &&
-                      window.qz.websocket.isActive() === true;
-
-                    if (!isActive) {
-                      // Connect to QZ Tray
-                      toast.loading('Connecting to QZ Tray...');
-
-                      // Add timeout for connection
-                      const connectionPromise = connectQZ();
-                      const timeoutPromise = new Promise<{ isConnected: false; error: string }>((resolve) => {
-                        setTimeout(() => {
-                          resolve({
-                            isConnected: false,
-                            error: 'Connection timeout. Please ensure QZ Tray is running and try again.'
-                          });
-                        }, 10000); // 10 second timeout
-                      });
-
-                      const connection = await Promise.race([connectionPromise, timeoutPromise]);
-
-                      if (!connection.isConnected) {
-                        toast.dismiss();
-                        const errorMessage = connection.error || 'QZ Tray is not running. Please install and start QZ Tray from https://qz.io/download/';
-
-                        // Enhanced error handling for certificate issues
-                        if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('denied')) {
-                          toast.error(
-                            `🔒 Certificate Approval Required\n\nWhen the security prompt appears:\n1. Click "Allow"\n2. ✅ CHECK "Remember this decision" (CRITICAL!)\n3. Click "Allow" again\n\n${errorMessage.split('\n\n🔧')[1] || 'If prompt keeps appearing, check the console for detailed instructions.'}`,
-                            {
-                              duration: 10000,
-                              style: { maxWidth: '550px', whiteSpace: 'pre-line', fontSize: '13px' }
-                            }
-                          );
-                        } else if (errorMessage.includes('timeout') || errorMessage.includes('not running')) {
-                          toast.error(
-                            `QZ Tray Connection Failed\n\n${errorMessage}\n\n🔧 Troubleshooting:\n1. Ensure QZ Tray is installed and running\n2. Check if QZ Tray icon is in system tray/menu bar\n3. Restart QZ Tray if needed\n4. Try again or use browser print as fallback`,
-                            {
-                              duration: 8000,
-                              style: { maxWidth: '500px', whiteSpace: 'pre-line' }
-                            }
-                          );
-                        } else {
-                          toast.error(errorMessage, { duration: 6000 });
-                        }
-                        console.error('QZ Tray connection error:', errorMessage);
-                        return;
-                      }
-                    }
-
-                    // Get default printer
-                    toast.loading('Detecting printer...');
-                    const defaultPrinter = await getDefaultPrinter();
-
-                    if (!defaultPrinter) {
-                      toast.dismiss();
-                      toast.error(
-                        'No printer found\n\nPlease set a default printer in your system settings:\n• Windows: Settings → Printers & scanners\n• macOS: System Preferences → Printers & Scanners\n• Linux: System Settings → Printers',
-                        {
-                          duration: 6000,
-                          style: { maxWidth: '400px', whiteSpace: 'pre-line' }
-                        }
-                      );
-                      return;
-                    }
-
-                    // Prepare box labels for this lot (QR code = box barcode)
-                    const conesToPrint = lotBoxes.map((box) => {
-                      const details = getBoxPrintDetails(box);
-                      return {
-                        barcode: box.barcode,
-                        boxId: box.boxId,
-                        yarnName: details.yarnName,
-                        shadeCode: details.shadeCode,
-                        lotNumber: lotNumber,
-                        supplierName: order.supplier || '',
-                        poNumber: order.orderNumber || '',
-                      };
-                    });
-
-                    const pageCount = Math.ceil(conesToPrint.length / printSettings.labelsPerPage);
-                    toast.loading(`Printing ${conesToPrint.length} label(s) on ${pageCount} page(s) for ${lotNumber}...`);
-                    const result = await printCones(conesToPrint, {
-                      customSettings: getBoxConePrintSettings(),
-                    });
-
-                    toast.dismiss();
-
-                    if (result.success) {
-                      toast.success(`${result.printed} box label(s) printed for ${lotNumber}`, { duration: 3000 });
-                    } else {
-                      toast.error(result.error || `Failed to print labels for ${lotNumber}`, { duration: 5000 });
-                      if (result.error) console.error('Print error:', result.error);
-                    }
-                  } catch (error) {
-                    toast.dismiss();
-                    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred while printing';
-
-                    // Check if it's a certificate/connection error
-                    if (errorMessage.includes('certificate') || errorMessage.includes('trust') || errorMessage.includes('untrusted') || errorMessage.includes('WebSocket')) {
-                      toast.error(
-                        `Print Failed: Connection Issue\n\n${errorMessage}\n\n💡 Try:\n1. Ensure QZ Tray is running\n2. Use HTTPS URL (not HTTP)\n3. Accept certificate when prompted\n4. Use browser print as fallback`,
-                        {
-                          duration: 8000,
-                          style: { maxWidth: '500px', whiteSpace: 'pre-line' }
-                        }
-                      );
-                    } else {
-                      toast.error(`Print failed: ${errorMessage}`, { duration: 5000 });
-                    }
-                    console.error('Print error:', error);
-                  }
-                };
-
-                // Legacy browser print function (kept as fallback)
-                const handlePrintLotBarcodesBrowser = () => {
-                  if (!order || lotBoxes.length === 0) {
-                    toast.error('No boxes available to print');
-                    return;
-                  }
-
-                  const printWindow = window.open('', '_blank');
-                  if (!printWindow) {
-                    toast.error('Please allow popups to print barcodes');
-                    return;
-                  }
-
-                  const barcodeHTML = `
-                      <!DOCTYPE html>
-                      <html>
-                        <head>
-                          <title>Print Barcodes - ${order.orderNumber} - ${lotNumber}</title>
-                          <style>
-                            body {
-                              font-family: Arial, sans-serif;
-                              padding: 20px;
-                            }
-                            .header-info {
-                              background: #e9ecef;
-                              padding: 15px;
-                              margin-bottom: 20px;
-                              border-radius: 5px;
-                            }
-                            .lot-header {
-                              background: #f0f0f0;
-                              padding: 15px;
-                              margin-bottom: 20px;
-                              border-radius: 5px;
-                              font-size: 18px;
-                              font-weight: bold;
-                            }
-                            .barcode-container {
-                              display: grid;
-                              grid-template-columns: repeat(2, 1fr);
-                              gap: 25px;
-                              margin-top: 20px;
-                            }
-                            .barcode-item {
-                              border: 2px solid #ddd;
-                              padding: 20px;
-                              text-align: center;
-                              page-break-inside: avoid;
-                              min-height: 400px;
-                              display: flex;
-                              flex-direction: column;
-                              justify-content: space-between;
-                              background: #fff;
-                              border-radius: 8px;
-                            }
-                            .box-header-info {
-                              margin-bottom: 12px;
-                            }
-                            .barcode-label {
-                              font-size: 11px;
-                              color: #666;
-                              margin-bottom: 5px;
-                              font-weight: 600;
-                              text-transform: uppercase;
-                              letter-spacing: 0.5px;
-                            }
-                            .barcode-section {
-                              margin: 15px 0;
-                            }
-                            .barcode-value {
-                              font-family: 'Courier New', monospace;
-                              margin: 10px 0;
-                              padding: 15px;
-                              background: #f5f5f5;
-                              border: 1px dashed #ccc;
-                              display: flex;
-                              justify-content: center;
-                              align-items: center;
-                              border-radius: 4px;
-                            }
-                            .barcode-value canvas {
-                              max-width: 100%;
-                              height: auto;
-                            }
-                            .box-details-section {
-                              margin-top: 15px;
-                              padding-top: 15px;
-                              border-top: 1px solid #e0e0e0;
-                              text-align: left;
-                            }
-                            .detail-row {
-                              display: flex;
-                              justify-content: space-between;
-                              align-items: center;
-                              margin-bottom: 8px;
-                              font-size: 13px;
-                            }
-                            .detail-row:last-child {
-                              margin-bottom: 0;
-                            }
-                            .detail-label {
-                              font-weight: 600;
-                              color: #555;
-                              min-width: 100px;
-                            }
-                            .detail-value {
-                              color: #333;
-                              font-weight: 500;
-                              text-align: right;
-                              flex: 1;
-                              word-break: break-word;
-                            }
-                            .detail-row.lot-info {
-                              margin-top: 10px;
-                              padding-top: 10px;
-                              border-top: 1px solid #e0e0e0;
-                              font-weight: 600;
-                            }
-                            .box-info {
-                              font-size: 13px;
-                              color: #333;
-                            }
-                            @media print {
-                              .barcode-container {
-                                grid-template-columns: repeat(2, 1fr);
-                                gap: 20px;
-                              }
-                              .barcode-item {
-                                min-height: 420px;
-                                padding: 18px;
-                              }
-                            }
-                          </style>
-                        </head>
-                        <body>
-                          <div class="header-info">
-                            <h2 style="margin: 0 0 10px 0;">Box Labels (QR) - ${order.orderNumber}</h2>
-                            <p style="margin: 0;">PO Number: ${order.purchaseOrderNumber} | Supplier: ${order.supplier}</p>
-                          </div>
-                          <div class="lot-header">
-                            <i class="ri-box-3-line"></i> Lot Number: ${lotNumber} (${lotBoxes.length} boxes)
-                          </div>
-                          <div class="barcode-container">
-                            ${lotBoxes.map((box, idx) => {
-                    const details = getBoxPrintDetails(box);
-                    const qrId = 'qr-lot-' + idx;
-                    return `
-                                <div class="barcode-item">
-                                  <div class="box-header-info">
-                                    <div class="barcode-label">Box ID</div>
-                                    <div class="box-info" style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">${box.boxId}</div>
-                                  </div>
-                                  <div class="barcode-section">
-                                    <div class="barcode-label">QR Code</div>
-                                    <div class="barcode-value">
-                                      <canvas id="${qrId}"></canvas>
-                                    </div>
-                                  </div>
-                                  <div class="box-details-section">
-                                    <div class="detail-row">
-                                      <span class="detail-label">Supplier:</span>
-                                      <span class="detail-value">${order.supplier || '-'}</span>
-                                    </div>
-                                    <div class="detail-row">
-                                      <span class="detail-label">Yarn Name:</span>
-                                      <span class="detail-value">${details.yarnName}</span>
-                                    </div>
-                                    <div class="detail-row">
-                                      <span class="detail-label">Shade Number:</span>
-                                      <span class="detail-value">${details.shadeCode}</span>
-                                    </div>
-                                    <div class="detail-row">
-                                      <span class="detail-label">Yarn Colour:</span>
-                                      <span class="detail-value">${details.yarnColour}</span>
-                                    </div>
-                                    <div class="detail-row">
-                                      <span class="detail-label">Shade Name:</span>
-                                      <span class="detail-value">${details.shadeName}</span>
-                                    </div>
-                                    <div class="detail-row lot-info">
-                                      <span class="detail-label">Lot:</span>
-                                      <span class="detail-value">${lotNumber}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              `;
-                  }).join('')}
-                          </div>
-                        <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"><\/script>
-                        <script>
-                          var lotBoxesForQr = ${JSON.stringify(lotBoxes.map((box, i) => ({ id: 'qr-lot-' + i, barcode: box.barcode })))};
-                          window.onload = function() {
-                            var loaded = 0;
-                            if (lotBoxesForQr.length === 0) { window.print(); window.close(); return; }
-                            lotBoxesForQr.forEach(function(item) {
-                              var canvas = document.getElementById(item.id);
-                              if (canvas) {
-                                QRCode.toCanvas(canvas, item.barcode, { margin: 0, width: 120, color: { dark: '#000000', light: '#ffffff' } }, function(err) {
-                                  loaded++;
-                                  if (loaded === lotBoxesForQr.length) setTimeout(function() { window.print(); window.close(); }, 500);
-                                });
-                              } else { loaded++; }
-                            });
-                          };
-                        <\/script>
-                        </body>
-                      </html>
-                    `;
-
-                  printWindow.document.write(barcodeHTML);
-                  printWindow.document.close();
-                  toast.success(`${lotBoxes.length} box label(s) ready to print for ${lotNumber}`);
-                };
-
                 const isLotCompleted = areAllBoxesInLotCompleted(lotBoxes);
 
                 const lotStatus = getLotStatus(lotNumber);
@@ -2404,19 +2010,9 @@ const ProcessOrderPage = () => {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <button
                           type="button"
-                          onClick={handlePrintLotBarcodes}
-                          disabled={!qzStatus.connected || !qzStatus.printer}
-                          className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm ${qzStatus.connected && qzStatus.printer
-                            ? 'bg-purple-600 text-white hover:bg-purple-700'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            }`}
-                          title={
-                            !qzStatus.connected
-                              ? 'QZ Tray not connected'
-                              : !qzStatus.printer
-                                ? 'No printer detected'
-                                : `Print barcodes for ${lotNumber}`
-                          }
+                          onClick={() => openPrintModalForLot(lotNumber, lotBoxes)}
+                          className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors shadow-sm bg-purple-600 text-white hover:bg-purple-700"
+                          title={`Open print options for Lot ${lotNumber} (QZ Tray or browser)`}
                         >
                           <i className="ri-printer-line text-xs"></i>
                           Print
@@ -3286,9 +2882,16 @@ const ProcessOrderPage = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Print Settings</h3>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Print Settings</h3>
+                {printModalContext?.type === 'lot' && (
+                  <p className="text-sm text-purple-600 font-medium mt-0.5">
+                    Lot: {printModalContext.lotNumber} ({printModalContext.lotBoxes.length} {printModalContext.lotBoxes.length === 1 ? 'box' : 'boxes'})
+                  </p>
+                )}
+              </div>
               <button
-                onClick={() => setShowPrintSettingsModal(false)}
+                onClick={() => { setShowPrintSettingsModal(false); setPrintModalContext(null); }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <i className="ri-close-line text-2xl"></i>
@@ -3332,9 +2935,9 @@ const ProcessOrderPage = () => {
                         <input
                           type="radio"
                           name="paperSize"
-                          value="50mmx70mm"
-                          checked={printSettings.paperSize === '50mmx70mm'}
-                          onChange={() => handlePaperSizeChange('50mmx70mm')}
+                          value="50mm * 70mm"
+                          checked={printSettings.paperSize === '50mm * 70mm'}
+                          onChange={() => handlePaperSizeChange('50mm * 70mm')}
                           className="w-4 h-4 text-purple-600 focus:ring-purple-500"
                         />
                         <span className="ml-2 text-sm text-gray-700">50mm × 70mm</span>
@@ -3424,7 +3027,7 @@ const ProcessOrderPage = () => {
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Font Sizes</h4>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {printSettings.paperSize !== '50mmx70mm' && (
+                  {printSettings.paperSize !== '50mm * 70mm' && (
                     <>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3457,7 +3060,7 @@ const ProcessOrderPage = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {printSettings.paperSize === '50mmx70mm' ? 'Text Font Size (Shade | Lot)' : 'Details Font Size (Box, Yarn, Lot, Shade)'}
+                      {printSettings.paperSize === '50mm * 70mm' ? 'Text Font Size (Shade | Lot)' : 'Details Font Size (Box, Yarn, Lot, Shade)'}
                     </label>
                     <input
                       type="number"
@@ -3506,7 +3109,7 @@ const ProcessOrderPage = () => {
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Y-Positions (Vertical Spacing)</h4>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {printSettings.paperSize !== '50mmx70mm' && (
+                  {printSettings.paperSize !== '50mm * 70mm' && (
                     <>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3614,15 +3217,17 @@ const ProcessOrderPage = () => {
               <div className="pt-4 border-t border-gray-200">
                 <button
                   onClick={() => setPrintSettings({
-                    paperSize: '4x6',
-                    paperWidth: 812,
-                    paperHeight: 1218,
-                    labelsPerPage: 2,
-                    columnsPerRow: 2,
-                    firstLabelTopMargin: 0,
-                    supplierFontSize: 27,
-                    detailsFontSize: 30,
+                    paperSize: '50mm * 70mm',
+                    paperWidth: 398,
+                    paperHeight: 558,
+                    labelsPerPage: 1,
+                    columnsPerRow: 1,
+                    firstLabelTopMargin: 20,
+                    supplierFontSize: 22,
+                    detailsFontSize: 22,
                     boxIdFontSize: 22,
+                    rackCodeFontSize: 40,
+                    zoneFontSize: 30,
                     barcodeHeight: 100,
                     barcodeWidth: 3,
                     qrCodeSize: 5,
@@ -3631,7 +3236,7 @@ const ProcessOrderPage = () => {
                     yarnYPos: 120,
                     lotYPos: 160,
                     shadeYPos: 200,
-                    barcodeYPos: 260,
+                    barcodeYPos: 300,
                     footerYPos: 400,
                     orientation: 'vertical',
                   })}
@@ -3645,7 +3250,22 @@ const ProcessOrderPage = () => {
 
             <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
               <button
-                onClick={() => setShowPrintSettingsModal(false)}
+                onClick={() => {
+                  setShowPrintSettingsModal(false);
+                  if (printModalContext?.type === 'lot') {
+                    handlePrintLotBarcodesBrowser(printModalContext.lotNumber, printModalContext.lotBoxes);
+                  } else {
+                    handlePrintAllBarcodesBrowser();
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-md transition-colors mr-auto"
+                title="Open print preview in a new window (no QZ Tray required)"
+              >
+                <i className="ri-window-line mr-2"></i>
+                Browser Print (Auto)
+              </button>
+              <button
+                onClick={() => { setShowPrintSettingsModal(false); setPrintModalContext(null); }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors"
               >
                 Cancel
