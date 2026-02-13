@@ -1040,8 +1040,6 @@ export const generateZPLCone = (
       const supplierLines = wrapText(supplierLabel, maxCharsVert);
       for (const line of supplierLines) {
         zpl += `^FO${curX},${xStart}^A0R,${supplierFontSize},${supplierFontSize}^FB${rowLen},1,0,L^FD${line}^FS\n`;
-        // Bold effect by overprinting with 1-dot offset
-        zpl += `^FO${curX + 1},${xStart}^A0R,${supplierFontSize},${supplierFontSize}^FB${rowLen},1,0,L^FD${line}^FS\n`;
         curX += step;
       }
 
@@ -1049,8 +1047,6 @@ export const generateZPLCone = (
       const nameLines = wrapText(fullName, maxCharsVert);
       for (const line of nameLines) {
         zpl += `^FO${curX},${xStart}^A0R,${yarnFontSize},${yarnFontSize}^FB${rowLen},1,0,L^FD${line}^FS\n`;
-        // Bold effect
-        zpl += `^FO${curX + 1},${xStart}^A0R,${yarnFontSize},${yarnFontSize}^FB${rowLen},1,0,L^FD${line}^FS\n`;
         curX += step;
       }
 
@@ -1090,8 +1086,6 @@ export const generateZPLCone = (
     const supplierLines = wrapText(supplierLabel, maxChars);
     for (const line of supplierLines) {
       zpl += `^FO${labelMargin},${curY}^A0N,${supplierFontSize},${supplierFontSize}^FB${contentWidth},1,0,L^FD${line}^FS\n`;
-      // Bolding (overprint)
-      zpl += `^FO${labelMargin + 1},${curY}^A0N,${supplierFontSize},${supplierFontSize}^FB${contentWidth},1,0,L^FD${line}^FS\n`;
       curY += supplierFontSize + 12;
     }
     curY += 6;
@@ -1102,8 +1096,6 @@ export const generateZPLCone = (
       const nameLines = wrapText(fullName, maxChars);
       for (const line of nameLines) {
         zpl += `^FO${labelMargin},${curY}^A0N,${yarnFontSize},${yarnFontSize}^FB${contentWidth},1,0,L^FD${line}^FS\n`;
-        // Bolding (overprint)
-        zpl += `^FO${labelMargin + 1},${curY}^A0N,${yarnFontSize},${yarnFontSize}^FB${contentWidth},1,0,L^FD${line}^FS\n`;
         curY += yarnFontSize + 12;
       }
     }
@@ -1134,7 +1126,6 @@ export const generateZPLCone = (
     // Helper for Bold/Darker text (double printing)
     const printBold = (text: string, x: number, y: number, font: number, fieldData: string) => {
       zpl += `^FO${x},${y}^A0N,${font},${font}^FD${fieldData}^FS\n`;
-      zpl += `^FO${x + 1},${y}^A0N,${font},${font}^FD${fieldData}^FS\n`; // Horizontal bold
     };
 
     // 1. Yarn Name (title) - Darkened (Bold)
@@ -1783,11 +1774,11 @@ export const printCones = async (
 
       const qrCodeSize = options.customSettings.qrCodeSize ?? 6;
       const titleFontSize = options.customSettings.titleFontSize ?? 25;
-      const detailsFontSize = options.customSettings.detailsFontSize ?? 20;
+      const detailsFontSize = options.customSettings.detailsFontSize ?? 22;
       const boxIdFontSize = options.customSettings.boxIdFontSize ?? 22;
-      const yarnFontSize = options.customSettings.yarnFontSize ?? 25;
-      const supplierFontSize = options.customSettings.supplierFontSize ?? 17;
-      const shadeLotFontSize = options.customSettings.shadeLotFontSize ?? 20;
+      const yarnFontSize = options.customSettings.yarnFontSize ?? 22;
+      const supplierFontSize = options.customSettings.supplierFontSize ?? 22;
+      const shadeLotFontSize = options.customSettings.shadeLotFontSize ?? 22;
 
       const labelsPerSheet = rowsPerPage * columnsPerRow;
 
