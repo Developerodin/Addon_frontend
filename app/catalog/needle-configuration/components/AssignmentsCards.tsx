@@ -72,6 +72,8 @@ export interface AssignmentsCardsProps {
   compact?: boolean;
   /** When true with compact, show only machine name (no PO/article count). */
   nameOnly?: boolean;
+  /** When false, card area does not trigger onCardClick; only icon buttons do. Default true. */
+  cardClickable?: boolean;
 }
 
 export default function AssignmentsCards({
@@ -94,6 +96,7 @@ export default function AssignmentsCards({
   columnsPerRow,
   compact = false,
   nameOnly = false,
+  cardClickable = true,
 }: AssignmentsCardsProps) {
   if (isLoading) {
     return (
@@ -136,11 +139,11 @@ export default function AssignmentsCards({
             return (
               <div
                 key={row.id}
-                role={readOnly && onCardClick ? "button" : undefined}
-                tabIndex={readOnly && onCardClick ? 0 : undefined}
-                onClick={readOnly && onCardClick ? () => onCardClick(row) : undefined}
-                onKeyDown={readOnly && onCardClick ? (e) => { if (e.key === "Enter" || e.key === " ") onCardClick(row); } : undefined}
-                className={`rounded-lg shadow-md overflow-hidden border border-white/10 min-w-0 ${compact ? "rounded-lg transition-[filter] hover:brightness-110" : "rounded-xl transition-transform hover:scale-[1.02]"} ${readOnly && onCardClick ? "cursor-pointer" : ""}`}
+                role={readOnly && onCardClick && cardClickable ? "button" : undefined}
+                tabIndex={readOnly && onCardClick && cardClickable ? 0 : undefined}
+                onClick={readOnly && onCardClick && cardClickable ? () => onCardClick(row) : undefined}
+                onKeyDown={readOnly && onCardClick && cardClickable ? (e) => { if (e.key === "Enter" || e.key === " ") onCardClick(row); } : undefined}
+                className={`rounded-lg shadow-md overflow-hidden border border-white/10 min-w-0 ${compact ? "rounded-lg transition-[filter] hover:brightness-110" : "rounded-xl transition-transform hover:scale-[1.02]"} ${readOnly && onCardClick && cardClickable ? "cursor-pointer" : ""}`}
                 style={{ background: CARD_BG }}
               >
                 <div className={`text-white flex flex-col ${compact ? "p-2.5 min-h-0" : `p-3 ${columnsPerRow === 5 ? "min-h-[140px]" : "min-h-[200px]"}`}`}>

@@ -242,6 +242,7 @@ export default function MachineViewTab({ onOpenEditModal }: MachineViewTabProps)
         onPageChange={setPage}
         readOnly
         columnsPerRow={5}
+        cardClickable={false}
         onPencilClick={onOpenEditModal}
         onCardClick={async (a) => {
           setPoDetailsAssignment(a);
