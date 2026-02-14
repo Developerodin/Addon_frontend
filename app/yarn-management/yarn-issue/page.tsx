@@ -843,10 +843,14 @@ const YarnIssuePage = () => {
     });
   }, [orders, searchTerm]);
 
+  // Sync selection to filtered orders. Don't clear selection when orders are empty (initial load race);
+  // only clear when we had orders but they're all filtered out (e.g. by search).
   useEffect(() => {
     if (!filteredOrders.length) {
-      setSelectedOrderId(null);
-      setSelectedArticleId(null);
+      if (orders.length > 0) {
+        setSelectedOrderId(null);
+        setSelectedArticleId(null);
+      }
       return;
     }
 
@@ -859,7 +863,7 @@ const YarnIssuePage = () => {
         setSelectedArticleId(null);
       }
     }
-  }, [filteredOrders, selectedOrderId]);
+  }, [filteredOrders, selectedOrderId, orders.length]);
 
   const selectedOrder = useMemo(
     () => filteredOrders.find((order) => order.id === selectedOrderId) ?? null,

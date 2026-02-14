@@ -39,6 +39,7 @@ const StyleCodesPage = () => {
   const [totalResults, setTotalResults] = useState(0)
   const [filters, setFilters] = useState<Filters>({ search: '', status: '' })
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
 
   const visibleCount = useMemo(() => rows.length, [rows])
@@ -151,6 +152,7 @@ const StyleCodesPage = () => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    setIsImporting(true)
     try {
       const data = await file.arrayBuffer()
       const workbook = XLSX.read(data, { type: 'array' })
@@ -184,6 +186,8 @@ const StyleCodesPage = () => {
     } catch (error) {
       console.error('Import failed', error)
       toast.error('Import failed')
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -236,10 +240,20 @@ const StyleCodesPage = () => {
           <button
             type="button"
             onClick={handleImportClick}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50"
+            disabled={isImporting}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            <i className="ri-upload-cloud-line"></i>
-            Import
+            {isImporting ? (
+              <>
+                <div className="animate-spin h-3.5 w-3.5 border-2 border-gray-400 border-t-transparent rounded-full" />
+                Importing…
+              </>
+            ) : (
+              <>
+                <i className="ri-upload-cloud-line"></i>
+                Import
+              </>
+            )}
           </button>
           <input
             ref={importInputRef}
@@ -258,7 +272,17 @@ const StyleCodesPage = () => {
         </div>
       </div>
 
-      <div className="box">
+      <div className="box relative">
+        {isImporting && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 rounded-lg">
+            <div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-200 border-t-purple-600 mb-3" />
+            <p className="text-sm font-semibold text-gray-700">Importing Excel…</p>
+            <p className="text-xs text-gray-500 mt-1">Uploading and processing your file</p>
+            <div className="mt-4 w-64 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div className="h-full w-1/3 bg-purple-600 rounded-full animate-pulse" />
+            </div>
+          </div>
+        )}
         <div className="box-header flex items-center justify-between">
           <h3 className="box-title">Style Code List</h3>
           <div className="flex items-center gap-2 text-sm text-gray-500">
