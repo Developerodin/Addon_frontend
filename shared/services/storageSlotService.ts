@@ -22,6 +22,15 @@ export interface StorageSlotsResponse {
   totalResults?: number;
 }
 
+export interface AddRacksResponse {
+  sectionCode: string;
+  zoneCode: string;
+  shelvesAdded: number;
+  shelfRange: { start: number; end: number };
+  insertedSlots: number;
+  alreadyPresentSlots: number;
+}
+
 export interface BoxInSlot {
   _id: string;
   tearweight: number;
@@ -229,6 +238,23 @@ class StorageSlotService {
   async getSlotHistory(storageLocation: string): Promise<StorageHistoryResponse> {
     return this.makeRequest<StorageHistoryResponse>(`/slots/${storageLocation}/history`, {
       method: "GET",
+    });
+  }
+
+  /** Add racks to a section. POST /storage/slots/add-racks */
+  async addRacks(params: {
+    storageType: "longterm" | "shortterm" | "LT" | "ST";
+    sectionCode: string;
+    numberOfRacksToAdd: number;
+  }): Promise<AddRacksResponse> {
+    const body = {
+      storageType: params.storageType,
+      sectionCode: params.sectionCode,
+      numberOfRacksToAdd: params.numberOfRacksToAdd,
+    };
+    return this.makeRequest<AddRacksResponse>("/slots/add-racks", {
+      method: "POST",
+      body: JSON.stringify(body),
     });
   }
 }
