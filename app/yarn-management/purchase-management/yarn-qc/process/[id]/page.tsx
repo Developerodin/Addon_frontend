@@ -166,6 +166,7 @@ const ProcessQCOrderPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMediaItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isApprovingAll, setIsApprovingAll] = useState(false);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -389,6 +390,46 @@ const ProcessQCOrderPage = () => {
     return orderData.receivedLotDetails.every(lot => lot.status !== 'lot_qc_pending');
   };
 
+  // Check if there are any lots pending QC (for showing QC Approve All button)
+  const hasPendingLots = order?.receivedLotDetails?.some(lot => lot.status === 'lot_qc_pending') ?? false;
+
+  // Handle QC Approve All
+  const handleQcApproveAll = async () => {
+    if (!orderId || !order) return;
+    if (!user?.id || !user?.email) {
+      toast.error('User information not available. Please login again.');
+      return;
+    }
+    if (!hasPendingLots) {
+      toast.error('No lots pending QC.');
+      return;
+    }
+
+    setIsApprovingAll(true);
+    try {
+      await yarnPurchaseOrderService.qcApproveAll(orderId, {
+        updated_by: {
+          username: user.email || (user as any).username || '',
+          user_id: user.id,
+        },
+        notes: 'QC approved all lots',
+        remarks: 'All lots passed',
+      });
+      toast.success('All lots QC approved successfully');
+      const updatedApiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+      setOrder(mapAPIOrderToReceivedOrder(updatedApiOrder));
+      toast.success('All lots QC completed! Redirecting...');
+      setTimeout(() => {
+        router.push('/yarn-management/purchase-management/yarn-qc');
+      }, 1500);
+    } catch (error) {
+      console.error('QC Approve All failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to QC approve all lots');
+    } finally {
+      setIsApprovingAll(false);
+    }
+  };
+
   // Handle submit QC
   const handleSubmitQC = async () => {
     if (!scannedBox) {
@@ -582,6 +623,27 @@ const ProcessQCOrderPage = () => {
                 {order.purchaseOrderNumber}
               </span>
             </div>
+            {order.receivedLotDetails && order.receivedLotDetails.length > 0 && hasPendingLots && (
+              <button
+                type="button"
+                onClick={handleQcApproveAll}
+                disabled={isApprovingAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-[11px] font-bold rounded hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                title="QC approve all lots at once"
+              >
+                {isApprovingAll ? (
+                  <>
+                    <i className="ri-loader-4-line animate-spin text-xs"></i>
+                    Approving...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-check-double-line text-xs"></i>
+                    QC Approve All
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Order Details Grid */}

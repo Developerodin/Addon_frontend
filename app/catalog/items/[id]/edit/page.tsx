@@ -315,8 +315,14 @@ const EditProductPage = () => {
           const hasOptionValues = Array.isArray(cat.optionValues) && cat.optionValues.length > 0;
           const hasOptions = Array.isArray(cat.options) && cat.options.length > 0;
           
-          // Transform options to optionValues format if needed
-          let optionValues = hasOptionValues ? cat.optionValues : [];
+          // Transform options to optionValues format if needed; ensure each option has _id (from id or _id)
+          let optionValues = hasOptionValues
+            ? (cat.optionValues || []).map((opt: any) => ({
+                _id: opt._id || opt.id,
+                name: opt.name,
+                sortOrder: opt.sortOrder ?? 0
+              }))
+            : [];
           
           // If only options is available, convert to optionValues format
           if (!hasOptionValues && hasOptions) {
@@ -431,7 +437,9 @@ const EditProductPage = () => {
       for (const cat of attributeCategories) {
         const raw = prev.attributes[cat.name] ?? prev.attributes[cat.id];
         if (raw == null || raw === '') continue;
-        const option = cat.optionValues?.find((o: any) => String(o._id) === String(raw) || o.name === raw);
+        const option = cat.optionValues?.find((o: any) =>
+          String(o._id || o.id) === String(raw) || o.name === raw
+        );
         next[cat.name] = option ? option.name : String(raw);
       }
       return { ...prev, attributes: next };
@@ -839,8 +847,10 @@ const EditProductPage = () => {
         attrsFiltered
           .map(([key, valueName]) => {
             const category = attributeCategories.find(c => c.name === key || c.id === key);
-            const option = category?.optionValues?.find((o: any) => o.name === valueName || String(o._id) === String(valueName));
-            return [key, option ? option._id : valueName];
+            const option = category?.optionValues?.find((o: any) =>
+              o.name === valueName || String(o._id || o.id) === String(valueName)
+            );
+            return [key, option ? (option._id || (option as any).id) : valueName];
           })
           .filter(([, v]) => v)
       );
@@ -1451,7 +1461,12 @@ const EditProductPage = () => {
                   const renderAttributeField = (category: AttributeCategory) => {
                     const valueById = formData.attributes[category.id] || '';
                     const valueByName = formData.attributes[category.name] || '';
-                    const currentValue = valueById || valueByName;
+                    const rawValue = valueById || valueByName;
+                    // Resolve ID to option name so select shows correct option (options use value={option.name})
+                    const optionValues = category.optionValues || [];
+                    const currentValue = !rawValue ? '' : (optionValues.find((o: any) => o.name === rawValue)
+                      ? rawValue
+                      : (optionValues.find((o: any) => String(o._id || o.id) === String(rawValue))?.name ?? rawValue));
                     const isNeedlesRequired = category.name.toLowerCase() === 'needles' && (
                       isProduction || (isFinal && shouldShowAttributeForFinal(category.name, isFinal)) ||
                       (isDesign && shouldShowAttribute(category.name, isDesign)) || (!isDesign && !isFinal && !isProduction)
@@ -1467,7 +1482,7 @@ const EditProductPage = () => {
                           <option value="">Select {category.name}</option>
                           {category.optionValues?.length ? (
                             category.optionValues.map((option) => (
-                              <option key={option._id} value={option.name}>{option.name}</option>
+                              <option key={option._id || (option as any).id} value={option.name}>{option.name}</option>
                             ))
                           ) : (
                             <option value="" disabled>No options available</option>

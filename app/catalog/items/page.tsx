@@ -12,6 +12,7 @@ import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 import { styleCodeService } from '@/shared/services/styleCodeService';
+import productService, { ProductBulkRow } from '@/shared/services/productService';
 
 interface StyleCode {
   styleCode?: string;
@@ -97,6 +98,7 @@ const ProductListPage = () => {
   const bomFileInputRef = useRef<HTMLInputElement>(null);
   const processesFileInputRef = useRef<HTMLInputElement>(null);
   const styleCodesFileInputRef = useRef<HTMLInputElement>(null);
+  const processExcelFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchProducts();
@@ -2082,6 +2084,116 @@ const ProductListPage = () => {
     }
   };
 
+  /** Process Excel: export via GET /v1/products/bulk-export → download Excel */
+  const handleProcessExcelExport = async () => {
+    try {
+      setExportProgress(0);
+      setIsLoading(true);
+      const rows = await productService.bulkExport();
+      setExportProgress(50);
+      const wb = XLSX.utils.book_new();
+      const cols = ['id', 'name', 'knittingCode', 'factoryCode', 'Needles', 'styleCodeId1', 'styleCodeId2', 'styleCodeId3', 'styleCodeId4', 'styleCodeId5', 'styleCodeId6', 'styleCodeId7', 'styleCodeId8', 'styleCodeId9', 'styleCodeId10'];
+      const exportData = rows.map((r: ProductBulkRow) => {
+        const row: Record<string, string> = {};
+        const src = r as unknown as Record<string, unknown>;
+        cols.forEach(c => {
+          const val = c === 'Needles' && src['attributes'] && typeof src['attributes'] === 'object'
+            ? (src['attributes'] as Record<string, unknown>)['Needles']
+            : src[c];
+          row[c] = val != null ? String(val) : '';
+        });
+        return row;
+      });
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Products');
+      const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, `process_excel_products_${new Date().toISOString().split('T')[0]}.xlsx`);
+      setExportProgress(100);
+      setTimeout(() => { setExportProgress(null); toast.success('Process Excel export completed.'); }, 400);
+    } catch (error: any) {
+      setExportProgress(null);
+      toast.error(error?.message || 'Process Excel export failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /** Process Excel Import: parse Excel → build payload (same shape as PATCH edit: attributes.Needles, styleCodeId1…10) → POST /v1/products/bulk-upsert */
+  const handleProcessExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImportProgress(0);
+    const loadingToast = toast.loading('Process Excel: importing...');
+    try {
+      const data = new Uint8Array(await file.arrayBuffer());
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets['Products'] || workbook.Sheets[workbook.SheetNames[0]];
+      if (!sheet) {
+        toast.dismiss(loadingToast);
+        toast.error('No sheet found in the Excel file.');
+        setImportProgress(null);
+        return;
+      }
+      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+      const getVal = (r: Record<string, unknown>, key: string) => {
+        const v = r[key];
+        if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+        const lower = key.toLowerCase();
+        const k = Object.keys(r).find(x => x.trim().toLowerCase() === lower);
+        return k != null && r[k] != null && String(r[k]).trim() !== '' ? String(r[k]).trim() : '';
+      };
+      const products = raw.map(row => {
+        const name = getVal(row, 'name');
+        if (!name || name.trim() === '') return null;
+        const product: Record<string, unknown> = {
+          name: name.trim(),
+        };
+        const id = getVal(row, 'id');
+        if (id) product.id = id;
+        const knittingCode = getVal(row, 'knittingCode');
+        if (knittingCode) product.knittingCode = knittingCode;
+        const factoryCode = getVal(row, 'factoryCode');
+        if (factoryCode) product.factoryCode = factoryCode;
+        const Needles = getVal(row, 'Needles');
+        if (Needles) {
+          product.attributes = { Needles };
+        }
+        for (let i = 1; i <= 10; i++) {
+          const val = getVal(row, `styleCodeId${i}`);
+          if (val) product[`styleCodeId${i}`] = val;
+        }
+        return product;
+      }).filter((p): p is Record<string, unknown> => p != null) as unknown as ProductBulkRow[];
+      if (products.length === 0) {
+        toast.dismiss(loadingToast);
+        toast.error('No valid product rows (name required).');
+        setImportProgress(null);
+        return;
+      }
+      setImportProgress(50);
+      const result = await productService.bulkUpsert(products, 50);
+      setImportProgress(100);
+      setTimeout(() => {
+        setImportProgress(null);
+        toast.dismiss(loadingToast);
+        const r = result.results;
+        const created = r.created ?? 0;
+        const updated = r.updated ?? 0;
+        const failed = r.failed ?? 0;
+        if (failed === 0) toast.success(`Process Excel: ${created} created, ${updated} updated.`);
+        else toast.success(`Process Excel: ${created} created, ${updated} updated, ${failed} failed.`);
+        if (r.errors?.length) toast.error(r.errors.slice(0, 3).map((err: any) => err.error || err.productName).join('; '));
+        fetchProducts();
+      }, 500);
+    } catch (err: any) {
+      setImportProgress(null);
+      toast.dismiss(loadingToast);
+      toast.error(err?.message || 'Process Excel import failed.');
+    }
+  };
+
   function getPagination(currentPage: number, totalPages: number) {
     const pages = [];
     if (totalPages <= 7) {
@@ -2237,6 +2349,13 @@ const ProductListPage = () => {
                   accept=".xlsx,.xls"
                   onChange={handleImportByStyleCodes}
                 />
+                <input
+                  type="file"
+                  ref={processExcelFileInputRef}
+                  className="hidden"
+                  accept=".xlsx,.xls"
+                  onChange={handleProcessExcelImport}
+                />
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
@@ -2296,6 +2415,13 @@ const ProductListPage = () => {
               </button>
               {showMoreExports && (
                 <div className="flex flex-wrap gap-2 mt-2 w-full">
+                  <span className="text-[11px] font-bold text-gray-500 self-center mr-1">Process Excel:</span>
+                  <button type="button" onClick={handleProcessExcelExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold rounded hover:bg-amber-100" disabled={isLoading}>
+                    <i className="ri-download-2-line text-xs"></i> Process Excel Export
+                  </button>
+                  <button type="button" onClick={() => processExcelFileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold rounded hover:bg-amber-100" disabled={isLoading}>
+                    <i className="ri-file-excel-2-line text-xs"></i> Process Excel Import
+                  </button>
                   <button type="button" onClick={handleExportByAttributes} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-600 border border-sky-100 text-[11px] font-bold rounded hover:bg-sky-100" disabled={isLoading}>
                     <i className="ri-download-2-line text-xs"></i> Export by Attributes
                   </button>

@@ -478,6 +478,28 @@ class YarnPurchaseOrderService {
     });
   }
 
+  /**
+   * QC approve all lots for a purchase order.
+   * PATCH /:purchaseOrderId/qc-approve-all
+   */
+  async qcApproveAll(
+    purchaseOrderId: string,
+    payload: {
+      updated_by: { username: string; user_id: string };
+      notes?: string;
+      remarks?: string;
+    }
+  ): Promise<any> {
+    if (!purchaseOrderId) {
+      throw new Error('Purchase Order ID is required');
+    }
+
+    return this.makeRequest<any>(`/${purchaseOrderId}/qc-approve-all`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
   async deletePurchaseOrder(purchaseOrderId: string): Promise<void> {
     if (!purchaseOrderId) {
       throw new Error('Purchase Order ID is required');
