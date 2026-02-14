@@ -6,7 +6,8 @@ import axios from 'axios';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import HelpIcon from '@/shared/components/HelpIcon';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
-import { styleCodeService } from '@/shared/services/styleCodeService';
+import { styleCodeService, StyleCode } from '@/shared/services/styleCodeService';
+import { StyleCodeSelectModal } from '@/app/catalog/style-codes/components/StyleCodeSelectModal';
 import { RawMaterialBomTable, RawMaterialBomItem } from '@/app/catalog/items/components/RawMaterialBomTable';
 import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
@@ -166,6 +167,10 @@ const AddProductPage = () => {
   const [modalTotalYarnResults, setModalTotalYarnResults] = useState(0);
   const [isModalLoading, setIsModalLoading] = useState(false);
   const [rawMaterialRows, setRawMaterialRows] = useState<RawMaterialBomItem[]>([]);
+
+  // Style code select modal
+  const [styleCodeModalOpen, setStyleCodeModalOpen] = useState(false);
+  const [styleCodeModalIndex, setStyleCodeModalIndex] = useState<number | null>(null);
 
   useEffect(() => {
     // Generate software code on component mount
@@ -463,6 +468,22 @@ const AddProductPage = () => {
     }
   };
 
+  const handleStyleCodeSelectFromModal = (sc: StyleCode) => {
+    if (styleCodeModalIndex === null) return;
+    const newStyleCodes = [...styleCodes];
+    newStyleCodes[styleCodeModalIndex] = {
+      styleCodeId: sc.id,
+      styleCode: sc.styleCode,
+      eanCode: sc.eanCode,
+      mrp: sc.mrp,
+      brand: sc.brand,
+      pack: sc.pack,
+    };
+    setStyleCodes(newStyleCodes);
+    setStyleCodeModalOpen(false);
+    setStyleCodeModalIndex(null);
+  };
+
   // Handle image upload
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -624,10 +645,16 @@ const AddProductPage = () => {
         attr => !['brand', 'pack'].includes(attr.name.toLowerCase())
       );
 
+      // Send attributes as attribute name -> option value ID (backend expects IDs e.g. Needles: "144")
       productData.attributes = Object.fromEntries(
         allowedAttributes
-          .map(attr => [attr.name, formData[attr.name.toLowerCase()]])
-          .filter(([_, value]) => value)
+          .map(attr => {
+            const valueName = formData[attr.name.toLowerCase()];
+            if (!valueName) return null;
+            const option = attr.optionValues.find((o: any) => o.name === valueName || String(o._id) === String(valueName));
+            return [attr.name, option ? option._id : valueName];
+          })
+          .filter((e): e is [string, string] => !!e && !!e[1])
       );
 
       // BOM, rawMaterials and Processes for production users and non-design/non-final/non-production users
@@ -913,19 +940,13 @@ const AddProductPage = () => {
                                     <div>
                                       <label className="form-label">Style Code *</label>
                                       <input
-                                        list={`styleCodeList-${index}`}
-                                        className="form-control"
+                                        type="text"
+                                        className="form-control cursor-pointer"
                                         value={styleCodeItem.styleCode}
-                                        onChange={(e) => handleStyleCodeInput(index, e.target.value)}
-                                        placeholder="Type to search..."
+                                        readOnly
+                                        onClick={() => { setStyleCodeModalIndex(index); setStyleCodeModalOpen(true); }}
+                                        placeholder="Click to browse style codes..."
                                       />
-                                      <datalist id={`styleCodeList-${index}`}>
-                                        {styleCodeOptions.map((opt) => (
-                                          <option key={opt.styleCodeId} value={opt.styleCode}>
-                                            {opt.styleCode}
-                                          </option>
-                                        ))}
-                                      </datalist>
                                     </div>
                                     <div>
                                       <label className="form-label">EAN Code</label>
@@ -1090,9 +1111,11 @@ const AddProductPage = () => {
                                             <label className="form-label">Style Code *</label>
                                             <input
                                               type="text"
-                                              className="form-control"
+                                              className="form-control cursor-pointer"
                                               value={styleCodeItem.styleCode}
-                                              onChange={(e) => handleStyleCodeChange(index, 'styleCode', e.target.value)}
+                                              readOnly
+                                              onClick={() => { setStyleCodeModalIndex(index); setStyleCodeModalOpen(true); }}
+                                              placeholder="Click to browse style codes..."
                                               required
                                             />
                                           </div>
@@ -1626,6 +1649,11 @@ const AddProductPage = () => {
         </div>
       </form>
 
+      <StyleCodeSelectModal
+        open={styleCodeModalOpen}
+        onClose={() => { setStyleCodeModalOpen(false); setStyleCodeModalIndex(null); }}
+        onSelect={handleStyleCodeSelectFromModal}
+      />
     </div>
   );
 };

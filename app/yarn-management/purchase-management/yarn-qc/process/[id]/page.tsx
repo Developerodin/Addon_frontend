@@ -379,6 +379,16 @@ const ProcessQCOrderPage = () => {
     }
   };
 
+  // Helper function to check if all lots are QC approved
+  const areAllLotsApproved = (orderData: ReceivedOrder | null): boolean => {
+    if (!orderData || !orderData.receivedLotDetails || orderData.receivedLotDetails.length === 0) {
+      return false;
+    }
+    
+    // Check if all lots have status other than 'lot_qc_pending'
+    return orderData.receivedLotDetails.every(lot => lot.status !== 'lot_qc_pending');
+  };
+
   // Handle submit QC
   const handleSubmitQC = async () => {
     if (!scannedBox) {
@@ -449,10 +459,47 @@ const ProcessQCOrderPage = () => {
       
       toast.success(`QC ${qcStatus === 'QC Accepted' ? 'accepted' : 'rejected'} successfully`);
       
-      // Navigate back after a short delay
-      setTimeout(() => {
-        router.push('/yarn-management/purchase-management/yarn-qc');
-      }, 1500);
+      // Refetch order to get updated lot statuses
+      try {
+        const updatedApiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+        const updatedMappedOrder = mapAPIOrderToReceivedOrder(updatedApiOrder);
+        setOrder(updatedMappedOrder);
+        
+        // Check if all lots are approved
+        const allLotsApproved = areAllLotsApproved(updatedMappedOrder);
+        
+        if (allLotsApproved) {
+          // All lots are approved, navigate back after a short delay
+          toast.success('All lots QC completed! Redirecting...');
+          setTimeout(() => {
+            router.push('/yarn-management/purchase-management/yarn-qc');
+          }, 1500);
+        } else {
+          // Not all lots are approved, stay on page and reset form
+          const pendingLots = updatedMappedOrder.receivedLotDetails?.filter(lot => lot.status === 'lot_qc_pending').length || 0;
+          toast.success(`QC updated. ${pendingLots} lot(s) remaining for QC.`);
+          
+          // Reset form for next scan
+          setScannedBox(null);
+          setBarcodeScanValue('');
+          setQcStatus('');
+          setQcNotes('');
+          setQcBy('');
+          setUploadedMedia([]);
+        }
+      } catch (refetchError) {
+        console.error('Failed to refetch order:', refetchError);
+        // Even if refetch fails, reset form and stay on page
+        setScannedBox(null);
+        setBarcodeScanValue('');
+        setQcStatus('');
+        setQcNotes('');
+        setQcBy('');
+        setUploadedMedia([]);
+        toast.success('QC updated. Please continue scanning remaining boxes.');
+      }
+      
+      setIsSubmitting(false);
     } catch (error) {
       console.error('Failed to update QC status:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to update QC status');

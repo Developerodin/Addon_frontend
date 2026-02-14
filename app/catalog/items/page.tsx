@@ -14,9 +14,11 @@ import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogSe
 import { styleCodeService } from '@/shared/services/styleCodeService';
 
 interface StyleCode {
-  styleCode: string;
-  eanCode: string;
-  mrp: number;
+  styleCode?: string;
+  eanCode?: string;
+  mrp?: number;
+  id?: string;
+  styleCodeId?: string;
 }
 
 interface Product {
@@ -265,21 +267,40 @@ const ProductListPage = () => {
   // Helper function to get allowed fields based on user type
   const getAllowedFields = () => {
     if (isProduction) {
-      return ['ID', 'Factory Code'];
+      return ['ID', 'Factory Code', 'Needles'];
     } else if (isFinal) {
-      return ['ID', 'Description'];
+      return ['ID', 'Description', 'Needles'];
     } else if (isDesign) {
-      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Knitting Code', 'Vendor Code'];
+      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Knitting Code', 'Vendor Code', 'Needles'];
     } else {
-      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Knitting Code', 'Vendor Code', 'Factory Code', 'Description'];
+      return ['ID', 'Name', 'Category', 'Software Code', 'Internal Code', 'Knitting Code', 'Vendor Code', 'Factory Code', 'Description', 'Needles'];
     }
   };
 
+  // Helper: resolve style code item to ID (product.styleCodes can be ID strings or objects)
+  const getStyleCodeId = (item: any, lookup: Array<{ id: string; styleCode: string; eanCode: string; mrp: number }>): string => {
+    if (typeof item === 'string' && item.trim()) return item.trim();
+    const id = item?.id ?? item?.styleCodeId ?? item?._id;
+    if (id) return String(id);
+    const code = item?.styleCode?.toString().trim();
+    if (code) {
+      const found = lookup.find(sc => sc.styleCode === code || sc.id === code);
+      if (found) return found.id;
+    }
+    return '';
+  };
+
   // Helper function to build export data object with only allowed fields
-  const buildExportData = (product: Product, categoryNameMapping: Record<string, string>) => {
+  const buildExportData = (
+    product: Product,
+    categoryNameMapping: Record<string, string>,
+    options?: { styleCodeLookup: Array<{ id: string; styleCode: string; eanCode: string; mrp: number }>; attributeValueIdToName: Record<string, string> }
+  ) => {
     const allowedFields = getAllowedFields();
     const exportObj: Record<string, any> = {};
-    
+    const lookup = options?.styleCodeLookup ?? [];
+    const attrValueToName = options?.attributeValueIdToName ?? {};
+
     allowedFields.forEach(field => {
       switch(field) {
         case 'ID':
@@ -289,7 +310,6 @@ const ProductListPage = () => {
           exportObj['Name'] = product.name;
           break;
         case 'Category':
-          // Handle category as string or object
           const categoryId = typeof product.category === 'object' && product.category !== null 
             ? product.category.id 
             : product.category;
@@ -313,21 +333,26 @@ const ProductListPage = () => {
         case 'Description':
           exportObj['Description'] = product.description;
           break;
+        case 'Needles':
+          const needlesKey = product.attributes && Object.keys(product.attributes).find(k => k.toLowerCase() === 'needles');
+          const needlesVal = needlesKey ? product.attributes![needlesKey] : '';
+          exportObj['Needles'] = (needlesVal && attrValueToName[needlesVal]) ? attrValueToName[needlesVal] : (needlesVal || '');
+          break;
       }
     });
-    
-    // Add style codes as numbered columns (only for non-production users, limit to 3 columns to match template)
-    if (!isProduction && product.styleCodes && product.styleCodes.length > 0) {
-      // Limit to only first 3 style codes to match template structure
-      const styleCodesToExport = product.styleCodes.slice(0, 3);
-      styleCodesToExport.forEach((styleCode, index) => {
+
+    // Add style code columns for non-production: only Style Code ID 1, 2, 3... (no EAN/MRP/name to avoid confusion)
+    if (!isProduction) {
+      const list = product.styleCodes || [];
+      const count = list.length === 0 ? 1 : list.length;
+      for (let index = 0; index < count; index++) {
         const num = index + 1;
-        exportObj[`Style Code ${num}`] = styleCode.styleCode || '';
-        exportObj[`EAN Code ${num}`] = styleCode.eanCode || '';
-        exportObj[`MRP ${num}`] = styleCode.mrp || 0;
-      });
+        const item = list[index];
+        const id = item != null ? getStyleCodeId(item, lookup) : '';
+        exportObj[`Style Code ID ${num}`] = id || '';
+      }
     }
-    
+
     return exportObj;
   };
 
@@ -361,28 +386,42 @@ const ProductListPage = () => {
       // Continue animation while fetching categories
       const progressTimer2 = animateProgress(25, 45, 400);
       
-      // Fetch all categories to create reverse mapping
-      const categoriesResponse = await axios.get(`${API_BASE_URL}/categories?page=1&limit=10000`);
+      // Fetch all categories and product-attributes in parallel for mapping
+      const [categoriesResponse, attributesResponse] = await Promise.all([
+        axios.get(`${API_BASE_URL}/categories?page=1&limit=10000`),
+        axios.get(`${API_BASE_URL}/product-attributes?page=1&limit=10000`)
+      ]);
       const allCategories = categoriesResponse.data.results || [];
+      const allAttributes = attributesResponse.data.results || [];
       clearInterval(progressTimer2);
       setExportProgress(50);
-      
+
       // Create reverse mapping from category ID to category name
       const categoryNameMapping: Record<string, string> = {};
       allCategories.forEach((category: any) => {
         categoryNameMapping[category.id] = category.name;
       });
+      // Attribute value ID -> display name (for Needles and other attributes in export)
+      const attributeValueIdToName: Record<string, string> = {};
+      allAttributes.forEach((attr: any) => {
+        (attr.optionValues || []).forEach((value: any) => {
+          const valueId = value.id || value._id || value.valueId;
+          if (valueId && (value.name != null || value.value != null)) {
+            attributeValueIdToName[String(valueId)] = value.name ?? value.value ?? '';
+          }
+        });
+      });
       setExportProgress(60);
-      
+
       const wb = XLSX.utils.book_new();
+      const exportOptions = { styleCodeLookup, attributeValueIdToName };
 
       // Create Products sheet with only user-appropriate fields
       const exportData = productsToExport.map((product, index) => {
         if (index % 100 === 0) {
-          // Update progress during data processing
           setExportProgress(60 + Math.floor((index / productsToExport.length) * 10));
         }
-        return buildExportData(product, categoryNameMapping);
+        return buildExportData(product, categoryNameMapping, exportOptions);
       });
       setExportProgress(70);
       
@@ -816,54 +855,27 @@ const ProductListPage = () => {
       const wb = XLSX.utils.book_new();
       const allowedFields = getAllowedFields();
 
-      // Build template data based on user type
+      // Build template with fixed column order so Style Code ID, Needles always visible where applicable
       const buildTemplateRow = (exampleNum: number) => {
         const row: Record<string, any> = {};
-        
-        if (allowedFields.includes('ID')) {
-          row['ID'] = exampleNum === 1 ? '680c7a2bc30d1e00643b84e8' : '68246cc23d04e20065d3d60a';
-        }
-        if (allowedFields.includes('Name')) {
-          row['Name'] = `Example Product ${exampleNum}`;
-        }
-        if (allowedFields.includes('Category')) {
-          row['Category'] = exampleNum === 1 ? 'Electronics' : 'Clothing';
-        }
-        if (allowedFields.includes('Software Code')) {
-          row['Software Code'] = exampleNum === 1 ? 'PRD-M9XTTW8I-85T1C' : 'PRD-MANS85IE-BW0YJ';
-        }
-        if (allowedFields.includes('Internal Code')) {
-          row['Internal Code'] = exampleNum === 1 ? '123' : 'INT-67890';
-        }
-        if (allowedFields.includes('Knitting Code')) {
-          row['Knitting Code'] = exampleNum === 1 ? 'KNIT-123' : 'KNIT-67890';
-        }
-        if (allowedFields.includes('Vendor Code')) {
-          row['Vendor Code'] = exampleNum === 1 ? '456' : 'VEN-67890';
-        }
-        if (allowedFields.includes('Factory Code')) {
-          row['Factory Code'] = exampleNum === 1 ? '789' : 'FAC-67890';
-        }
-        if (allowedFields.includes('Description')) {
-          row['Description'] = exampleNum === 1 ? 'Example product description' : 'Another example product';
-        }
-        
-        // Add style code columns (for non-production users)
+        // Base fields in consistent order
+        if (allowedFields.includes('ID')) row['ID'] = exampleNum === 1 ? '680c7a2bc30d1e00643b84e8' : '68246cc23d04e20065d3d60a';
+        if (allowedFields.includes('Name')) row['Name'] = `Example Product ${exampleNum}`;
+        if (allowedFields.includes('Category')) row['Category'] = exampleNum === 1 ? 'Electronics' : 'Clothing';
+        if (allowedFields.includes('Software Code')) row['Software Code'] = exampleNum === 1 ? 'PRD-M9XTTW8I-85T1C' : 'PRD-MANS85IE-BW0YJ';
+        if (allowedFields.includes('Internal Code')) row['Internal Code'] = exampleNum === 1 ? '123' : 'INT-67890';
+        if (allowedFields.includes('Knitting Code')) row['Knitting Code'] = exampleNum === 1 ? 'KNIT-123' : 'KNIT-67890';
+        if (allowedFields.includes('Vendor Code')) row['Vendor Code'] = exampleNum === 1 ? '456' : 'VEN-67890';
+        if (allowedFields.includes('Factory Code')) row['Factory Code'] = exampleNum === 1 ? '789' : 'FAC-67890';
+        if (allowedFields.includes('Description')) row['Description'] = exampleNum === 1 ? 'Example product description' : 'Another example product';
+        // Needles: pass option value ID (e.g. "144") - same as API expects attributes: { Needles: "144" }
+        if (allowedFields.includes('Needles')) row['Needles'] = exampleNum === 1 ? '144' : '145';
+        // Style codes: only Style Code ID 1, 2, 3... (no EAN/MRP columns)
         if (!isProduction) {
-          // Add 3 style code entries as examples (users can copy-paste if they need more)
-          row['Style Code 1'] = exampleNum === 1 ? 'STY-12345' : 'STY-67890';
-          row['EAN Code 1'] = exampleNum === 1 ? '1234567890123' : '9876543210987';
-          row['MRP 1'] = exampleNum === 1 ? 299.99 : 199.99;
-          
-          row['Style Code 2'] = exampleNum === 1 ? 'STY-12346' : 'STY-67891';
-          row['EAN Code 2'] = exampleNum === 1 ? '1234567890124' : '9876543210988';
-          row['MRP 2'] = exampleNum === 1 ? 349.99 : 249.99;
-          
-          row['Style Code 3'] = exampleNum === 1 ? 'STY-12347' : 'STY-67892';
-          row['EAN Code 3'] = exampleNum === 1 ? '1234567890125' : '9876543210989';
-          row['MRP 3'] = exampleNum === 1 ? 399.99 : 299.99;
+          row['Style Code ID 1'] = exampleNum === 1 ? '6990090b7cd417242c5e848f' : '';
+          row['Style Code ID 2'] = '';
+          row['Style Code ID 3'] = '';
         }
-        
         return row;
       };
 
@@ -874,61 +886,25 @@ const ProductListPage = () => {
 
       // Add instructions sheet with user-specific requirements
       const getRequiredFields = () => {
-        if (isProduction) return 'Factory Code';
-        if (isFinal) return 'Description, and at least one Style Code entry (Style Code 1, EAN Code 1, MRP 1)';
+        if (isProduction) return 'Factory Code (Needles optional)';
+        if (isFinal) return 'Description, and at least one Style Code ID (Style Code ID 1, 2, 3...)';
         if (isDesign) return 'Name, Category, Internal Code, Vendor Code';
-        return 'Name, and at least one Style Code entry (Style Code 1, EAN Code 1, MRP 1)';
+        return 'Name, and at least one Style Code ID (Style Code ID 1, 2, 3...)';
       };
 
       const instructionsTemplate = [
-        {
-          'Instructions': 'How to use this template:',
-          '': ''
-        },
-        {
-          'Instructions': '1. The Products sheet contains product information fields based on your user role.',
-          '': ''
-        },
-        {
-          'Instructions': `2. Required fields: ${getRequiredFields()}`,
-          '': ''
-        },
-        {
-          'Instructions': '3. Category must be the exact name of a category from your system (not ID).',
-          '': ''
-        },
-        {
-          'Instructions': '4. The system will automatically map category names to their IDs.',
-          '': ''
-        },
-        {
-          'Instructions': '5. ID field: Leave empty for new products, include ID for updating existing products.',
-          '': ''
-        },
-        {
-          'Instructions': '6. Software Code: Leave empty for new products (auto-generated), include for updates.',
-          '': ''
-        },
-        {
-          'Instructions': '7. Only fill in the fields visible in this template based on your user role.',
-          '': ''
-        },
-        {
-          'Instructions': '8. If a category name is not found, the product will be created without a category.',
-          '': ''
-        },
-        {
-          'Instructions': '9. Style Codes: Use numbered columns (Style Code 1, EAN Code 1, MRP 1, Style Code 2, EAN Code 2, MRP 2, etc.) to add multiple style codes per product.',
-          '': ''
-        },
-        {
-          'Instructions': '10. Each style code entry requires Style Code, EAN Code, and MRP (all three must be provided for each entry).',
-          '': ''
-        },
-        {
-          'Instructions': '11. You can add unlimited style codes by continuing the numbering (Style Code 3, EAN Code 3, MRP 3, etc.).',
-          '': ''
-        }
+        { 'Instructions': 'How to use this template:', '': '' },
+        { 'Instructions': '0. Style Code ID 1, 2, 3…: fill only the style code IDs from the Style Code master. Needles = option value ID (e.g. 144).', '': '' },
+        { 'Instructions': '1. The Products sheet contains product information fields based on your user role.', '': '' },
+        { 'Instructions': `2. Required fields: ${getRequiredFields()}`, '': '' },
+        { 'Instructions': '3. Category must be the exact name of a category from your system (not ID).', '': '' },
+        { 'Instructions': '4. The system will automatically map category names to their IDs.', '': '' },
+        { 'Instructions': '5. ID field: Leave empty for new products, include ID for updating existing products.', '': '' },
+        { 'Instructions': '6. Software Code: Leave empty for new products (auto-generated), include for updates.', '': '' },
+        { 'Instructions': '7. Only fill in the fields visible in this template based on your user role.', '': '' },
+        { 'Instructions': '8. If a category name is not found, the product will be created without a category.', '': '' },
+        { 'Instructions': '9. Style Codes: Use Style Code ID 1, Style Code ID 2, etc. with IDs from the Style Code master. Fill only the ID – no other columns needed.', '': '' },
+        { 'Instructions': '11. Needles: Use the Needles option value ID (e.g. 144). Backend expects attributes: { Needles: "144" }. You can use ID or option name; system resolves name to ID on import.', '': '' }
       ];
       const wsInstructions = XLSX.utils.json_to_sheet(instructionsTemplate);
       XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
@@ -1281,45 +1257,30 @@ const ProductListPage = () => {
           if (!productsSheet) {
             throw new Error('Products sheet not found in the Excel file');
           }
-          const productsData = XLSX.utils.sheet_to_json<any>(productsSheet);
+          const rawProductsData = XLSX.utils.sheet_to_json<any>(productsSheet, { defval: '' });
+          // Normalize rows: trim header keys so "Name ", " Style Code ID 1 " etc. match expected keys
+          const productsData = rawProductsData.map((row: any) => {
+            const normalized: Record<string, any> = {};
+            Object.keys(row).forEach(k => {
+              const key = (k && typeof k === 'string') ? k.trim() : k;
+              if (key) normalized[key] = row[k];
+            });
+            return normalized;
+          });
           console.log('Parsed products data:', productsData);
 
-          // Helper function to check if at least one style code entry exists
-          const hasStyleCodeEntry = (row: any): boolean => {
-            const styleCode1 = row['Style Code 1']?.toString().trim();
-            const eanCode1 = row['EAN Code 1']?.toString().trim();
-            const mrp1 = row['MRP 1'];
-            return !!(styleCode1 && eanCode1 && mrp1 !== undefined && mrp1 !== null);
+          const getRowVal = (row: any, key: string) => {
+            const val = row[key];
+            if (val !== undefined && val !== null) return val;
+            const keyLower = key.toLowerCase();
+            const foundKey = Object.keys(row).find(k => k.trim().toLowerCase() === keyLower);
+            return foundKey != null ? row[foundKey] : undefined;
           };
 
-          // Validate required fields based on user type
-          const getRequiredFields = () => {
-            if (isProduction) return ['Factory Code'];
-            if (isFinal) return ['Description'];
-            if (isDesign) return ['Name', 'Category', 'Internal Code', 'Vendor Code'];
-            return ['Name'];
-          };
-
-          const requiredFields = getRequiredFields();
-          
-          // Filter out rows without required fields
-          const validProducts = productsData.filter((row: any) => {
-            const hasRequiredFields = requiredFields.every(field => row[field] && row[field].toString().trim() !== '');
-            
-            // For final users and other users (non-design, non-production), also check for at least one style code
-            if (!isProduction && !isDesign) {
-              return hasRequiredFields && hasStyleCodeEntry(row);
-            }
-            
-            return hasRequiredFields;
-          });
-
+          // Use all rows from the sheet; no front-end validation for Name or style codes (backend may validate).
+          const validProducts = productsData;
           if (validProducts.length === 0) {
-            let requiredFieldsStr = requiredFields.join(', ');
-            if (!isProduction && !isDesign) {
-              requiredFieldsStr += ', and at least one Style Code entry (Style Code 1, EAN Code 1, MRP 1)';
-            }
-            toast.error(`No valid products found in the Excel file. Please ensure ${requiredFieldsStr} are provided.`);
+            toast.error('No rows found in the Excel file.');
             setImportProgress(null);
             toast.dismiss(loadingToast);
             return;
@@ -1327,125 +1288,125 @@ const ProductListPage = () => {
 
           setImportProgress(25);
 
-          // Fetch all categories to create mapping
-          const categoriesResponse = await axios.get(`${API_BASE_URL}/categories?page=1&limit=10000`);
+          // Fetch categories, style codes, and product-attributes for mapping
+          const [categoriesResponse, styleCodesListRes, attributesResponse] = await Promise.all([
+            axios.get(`${API_BASE_URL}/categories?page=1&limit=10000`),
+            styleCodeService.list({ limit: 5000, sortBy: 'styleCode:asc' }),
+            axios.get(`${API_BASE_URL}/product-attributes?page=1&limit=10000`)
+          ]);
           const allCategories = categoriesResponse.data.results || [];
-          
-          // Create mapping from category name to category ID
+          const styleCodesList = (styleCodesListRes as any)?.results ?? (styleCodesListRes as any) ?? [];
+          const styleCodeLookupList = Array.isArray(styleCodesList) ? styleCodesList.map((sc: any) => ({
+            id: sc.id ?? sc._id ?? '',
+            styleCode: (sc.styleCode ?? '').toString().trim().toLowerCase(),
+            eanCode: sc.eanCode ?? '',
+            mrp: sc.mrp ?? 0
+          })) : [];
+          const allAttributes = attributesResponse?.data?.results || [];
+
           const categoryMapping: Record<string, string> = {};
           allCategories.forEach((category: any) => {
             categoryMapping[category.name.toLowerCase()] = category.id;
           });
-
-          console.log('Category mapping created:', categoryMapping);
+          const styleCodeToIdMap: Record<string, string> = {};
+          styleCodeLookupList.forEach((sc: { id: string; styleCode: string }) => {
+            if (sc.styleCode && sc.id) styleCodeToIdMap[sc.styleCode] = sc.id;
+          });
+          // Needles: resolve name or id from Excel -> option value ID (backend expects e.g. Needles: "144")
+          const needlesToIdMap: Record<string, string> = {};
+          const needlesAttr = allAttributes.find((a: any) => (a.name || '').toLowerCase() === 'needles');
+          if (needlesAttr && Array.isArray(needlesAttr.optionValues)) {
+            needlesAttr.optionValues.forEach((opt: any) => {
+              const id = String(opt.id || opt._id || opt.valueId || '');
+              const name = (opt.name || opt.value || '').toString().trim();
+              if (id) {
+                needlesToIdMap[name.toLowerCase()] = id;
+                needlesToIdMap[id] = id;
+              }
+            });
+          }
 
           setImportProgress(50);
 
-          // Helper function to extract style codes from numbered columns
-          const extractStyleCodes = (row: any): StyleCode[] => {
-            const styleCodes: StyleCode[] = [];
+          // Extract style code IDs: prefer "Style Code ID 1", else resolve "Style Code 1" via master lookup (use getRowVal so export/template column names match)
+          const extractStyleCodeIds = (row: any): string[] => {
+            const ids: string[] = [];
             let index = 1;
-            
-            // Keep looking for numbered columns until we find no more
             while (true) {
+              const idKey = `Style Code ID ${index}`;
+              const idVal = String(getRowVal(row, idKey) ?? '').trim();
+              if (idVal) {
+                ids.push(idVal);
+                index++;
+                continue;
+              }
               const styleCodeKey = `Style Code ${index}`;
-              const eanCodeKey = `EAN Code ${index}`;
-              const mrpKey = `MRP ${index}`;
-              
-              const styleCode = row[styleCodeKey]?.toString().trim();
-              const eanCode = row[eanCodeKey]?.toString().trim();
-              const mrpValue = row[mrpKey];
-              
-              // If we don't find any of the columns for this index, stop
-              if (!styleCode && !eanCode && mrpValue === undefined) {
-                break;
-              }
-              
-              // Only add if we have at least style code and ean code
-              if (styleCode && eanCode) {
-                const mrp = mrpValue !== undefined && mrpValue !== null 
-                  ? (typeof mrpValue === 'string' ? parseFloat(mrpValue) : Number(mrpValue))
-                  : 0;
-                
-                if (!isNaN(mrp) && mrp >= 0) {
-                  styleCodes.push({
-                    styleCode,
-                    eanCode,
-                    mrp
-                  });
-                }
-              }
-              
+              const styleCodeVal = String(getRowVal(row, styleCodeKey) ?? '').trim();
+              if (!styleCodeVal) break;
+              const resolvedId = styleCodeToIdMap[styleCodeVal.toLowerCase()];
+              if (resolvedId) ids.push(resolvedId);
               index++;
+              if (index > 20) break;
             }
-            
-            return styleCodes;
+            return ids;
           };
 
-          // Transform data for bulk import with category name mapping - only include allowed fields
+          // Transform data for bulk import - use getRowVal for all fields so export/template column names match (trim + case-insensitive)
           const transformedProducts = validProducts.map((row: any) => {
-            const productId = row['ID'] && row['ID'].toString().trim() !== '' ? row['ID'].toString() : undefined;
+            const idVal = getRowVal(row, 'ID');
+            const productId = idVal !== undefined && idVal !== null && String(idVal).trim() !== '' ? String(idVal).trim() : undefined;
             const productData: any = {
               id: productId, // For updates
             };
 
-            // Extract style codes from numbered columns (for non-production users)
-            const styleCodes = !isProduction ? extractStyleCodes(row) : [];
+            // styleCodes: array of IDs e.g. ["6990090b7cd417242c5e848f"]
+            const styleCodeIds = !isProduction ? extractStyleCodeIds(row) : [];
+            // attributes: { Needles: "144" } - pass option value ID
+            const needlesVal = String(getRowVal(row, 'Needles') ?? '').trim();
+            if (needlesVal) {
+              productData.attributes = productData.attributes || {};
+              const needlesId = needlesToIdMap[needlesVal.toLowerCase()] || needlesToIdMap[needlesVal] || needlesVal;
+              productData.attributes['Needles'] = needlesId;
+            }
 
             // Only include fields allowed for this user type
             if (isProduction) {
-              productData.factoryCode = row['Factory Code']?.toString() || '';
+              productData.factoryCode = String(getRowVal(row, 'Factory Code') ?? '').trim() || '';
             } else if (isFinal) {
-              productData.description = row['Description']?.toString() || '';
-              // Add style codes if available
-              if (styleCodes.length > 0) {
-                productData.styleCodes = styleCodes;
-              }
+              productData.description = String(getRowVal(row, 'Description') ?? '').trim() || '';
+              if (styleCodeIds.length > 0) productData.styleCodes = styleCodeIds;
             } else if (isDesign) {
-              const categoryName = row['Category'] || '';
+              const categoryName = String(getRowVal(row, 'Category') ?? '').trim();
               let categoryId = '';
-              
-              if (categoryName && categoryName.toString().trim() !== '') {
-                const mappedCategoryId = categoryMapping[categoryName.toString().toLowerCase()];
-                if (mappedCategoryId) {
-                  categoryId = mappedCategoryId;
-                } else {
-                  console.warn(`Category "${categoryName}" not found in the system`);
-                }
+              if (categoryName) {
+                const mappedCategoryId = categoryMapping[categoryName.toLowerCase()];
+                if (mappedCategoryId) categoryId = mappedCategoryId;
+                else console.warn(`Category "${categoryName}" not found in the system`);
               }
-
-              productData.name = row['Name']?.toString() || '';
-              productData.softwareCode = row['Software Code']?.toString() || undefined;
-              productData.internalCode = row['Internal Code']?.toString() || '';
-              productData.knittingCode = row['Knitting Code']?.toString() || '';
-              productData.vendorCode = row['Vendor Code']?.toString() || '';
+              productData.name = String(getRowVal(row, 'Name') ?? '').trim() || '';
+              productData.softwareCode = (() => { const v = getRowVal(row, 'Software Code'); return v !== undefined && v !== null && String(v).trim() !== '' ? String(v).trim() : undefined; })();
+              productData.internalCode = String(getRowVal(row, 'Internal Code') ?? '').trim() || '';
+              productData.knittingCode = String(getRowVal(row, 'Knitting Code') ?? '').trim() || '';
+              productData.vendorCode = String(getRowVal(row, 'Vendor Code') ?? '').trim() || '';
               productData.category = categoryId;
+              if (styleCodeIds.length > 0) productData.styleCodes = styleCodeIds;
             } else {
-              // Other users: All fields
-              const categoryName = row['Category'] || '';
+              const categoryName = String(getRowVal(row, 'Category') ?? '').trim();
               let categoryId = '';
-              
-              if (categoryName && categoryName.toString().trim() !== '') {
-                const mappedCategoryId = categoryMapping[categoryName.toString().toLowerCase()];
-                if (mappedCategoryId) {
-                  categoryId = mappedCategoryId;
-                } else {
-                  console.warn(`Category "${categoryName}" not found in the system`);
-                }
+              if (categoryName) {
+                const mappedCategoryId = categoryMapping[categoryName.toLowerCase()];
+                if (mappedCategoryId) categoryId = mappedCategoryId;
+                else console.warn(`Category "${categoryName}" not found in the system`);
               }
-
-              productData.name = row['Name']?.toString() || '';
-              productData.internalCode = row['Internal Code']?.toString() || '';
-              productData.knittingCode = row['Knitting Code']?.toString() || '';
-              productData.vendorCode = row['Vendor Code']?.toString() || '';
-              productData.factoryCode = row['Factory Code']?.toString() || '';
-              productData.description = row['Description']?.toString() || '';
+              productData.name = String(getRowVal(row, 'Name') ?? '').trim() || '';
+              productData.internalCode = String(getRowVal(row, 'Internal Code') ?? '').trim() || '';
+              productData.knittingCode = String(getRowVal(row, 'Knitting Code') ?? '').trim() || '';
+              productData.vendorCode = String(getRowVal(row, 'Vendor Code') ?? '').trim() || '';
+              productData.factoryCode = String(getRowVal(row, 'Factory Code') ?? '').trim() || '';
+              productData.description = String(getRowVal(row, 'Description') ?? '').trim() || '';
               productData.category = categoryId;
-              productData.softwareCode = row['Software Code']?.toString() || undefined;
-              // Add style codes if available
-              if (styleCodes.length > 0) {
-                productData.styleCodes = styleCodes;
-              }
+              productData.softwareCode = (() => { const v = getRowVal(row, 'Software Code'); return v !== undefined && v !== null && String(v).trim() !== '' ? String(v).trim() : undefined; })();
+              if (styleCodeIds.length > 0) productData.styleCodes = styleCodeIds;
             }
 
             return productData;

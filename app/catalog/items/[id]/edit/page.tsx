@@ -5,7 +5,8 @@ import axios from 'axios';
 import Seo from '@/shared/layout-components/seo/seo';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
-import { styleCodeService } from '@/shared/services/styleCodeService';
+import { styleCodeService, StyleCode } from '@/shared/services/styleCodeService';
+import { StyleCodeSelectModal } from '@/app/catalog/style-codes/components/StyleCodeSelectModal';
 import { RawMaterialBomTable, RawMaterialBomItem } from '@/app/catalog/items/components/RawMaterialBomTable';
 import { rawMaterialService } from '@/shared/services/rawMaterialService';
 import { useSelector } from 'react-redux';
@@ -124,6 +125,10 @@ const EditProductPage = () => {
   const [modalTotalYarnPages, setModalTotalYarnPages] = useState(1);
   const [modalTotalYarnResults, setModalTotalYarnResults] = useState(0);
   const [isModalLoading, setIsModalLoading] = useState(false);
+
+  // Style code select modal
+  const [styleCodeModalOpen, setStyleCodeModalOpen] = useState(false);
+  const [styleCodeModalIndex, setStyleCodeModalIndex] = useState<number | null>(null);
 
   const [formData, setFormData] = useState<Product>({
     id: '',
@@ -580,6 +585,24 @@ const EditProductPage = () => {
     });
   };
 
+  const handleStyleCodeSelectFromModal = (sc: StyleCode) => {
+    if (styleCodeModalIndex === null) return;
+    setFormData(prev => {
+      const newStyleCodes = [...(prev.styleCodes || [{ styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }])];
+      newStyleCodes[styleCodeModalIndex] = {
+        styleCodeId: sc.id,
+        styleCode: sc.styleCode,
+        eanCode: sc.eanCode,
+        mrp: sc.mrp,
+        brand: sc.brand,
+        pack: sc.pack,
+      };
+      return { ...prev, styleCodes: newStyleCodes };
+    });
+    setStyleCodeModalOpen(false);
+    setStyleCodeModalIndex(null);
+  };
+
   const addProcess = () => {
     setFormData(prev => ({
       ...prev,
@@ -810,9 +833,16 @@ const EditProductPage = () => {
         allowedAttributes = formData.attributes;
       }
       
-      // Strip Brand and Pack from product-level attributes (they live in style codes now)
+      // Send attributes as attribute name -> option value ID (backend expects IDs e.g. Needles: "144")
+      const attrsFiltered = Object.entries(allowedAttributes).filter(([key]) => !['brand', 'pack'].includes(key.toLowerCase()));
       productData.attributes = Object.fromEntries(
-        Object.entries(allowedAttributes).filter(([key]) => !['brand', 'pack'].includes(key.toLowerCase()))
+        attrsFiltered
+          .map(([key, valueName]) => {
+            const category = attributeCategories.find(c => c.name === key || c.id === key);
+            const option = category?.optionValues?.find((o: any) => o.name === valueName || String(o._id) === String(valueName));
+            return [key, option ? option._id : valueName];
+          })
+          .filter(([, v]) => v)
       );
 
       // BOM, rawMaterials and Processes for production users and non-design/non-final/non-production users
@@ -1002,18 +1032,14 @@ const EditProductPage = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                   <div>
                                     <label className="form-label">Style Code *</label>
-                                    <select
-                                      className="form-control"
-                                      value={styleCodeItem.styleCodeId || ''}
-                                      onChange={(e) => handleStyleCodeSelect(index, e.target.value)}
-                                    >
-                                      <option value="">Select Style Code</option>
-                                      {styleCodeOptions.map((opt) => (
-                                        <option key={opt.styleCodeId} value={opt.styleCodeId}>
-                                          {opt.styleCode}
-                                        </option>
-                                      ))}
-                                    </select>
+                                    <input
+                                      type="text"
+                                      className="form-control cursor-pointer"
+                                      value={styleCodeItem.styleCode}
+                                      readOnly
+                                      onClick={() => { setStyleCodeModalIndex(index); setStyleCodeModalOpen(true); }}
+                                      placeholder="Click to browse style codes..."
+                                    />
                                   </div>
                                   <div>
                                     <label className="form-label">EAN Code *</label>
@@ -1203,19 +1229,13 @@ const EditProductPage = () => {
                                       <div>
                                         <label className="form-label">Style Code *</label>
                                         <input
-                                          list={`styleCodeList-edit-${index}`}
-                                          className="form-control"
+                                          type="text"
+                                          className="form-control cursor-pointer"
                                           value={styleCodeItem.styleCode}
-                                          onChange={(e) => handleStyleCodeInput(index, e.target.value)}
-                                          placeholder="Type to search..."
+                                          readOnly
+                                          onClick={() => { setStyleCodeModalIndex(index); setStyleCodeModalOpen(true); }}
+                                          placeholder="Click to browse style codes..."
                                         />
-                                        <datalist id={`styleCodeList-edit-${index}`}>
-                                          {styleCodeOptions.map((opt) => (
-                                            <option key={opt.styleCodeId} value={opt.styleCode}>
-                                              {opt.styleCode}
-                                            </option>
-                                          ))}
-                                        </datalist>
                                       </div>
                                       <div>
                                         <label className="form-label">EAN Code *</label>
@@ -1773,6 +1793,12 @@ const EditProductPage = () => {
           </div>
         </div>
       </div>
+
+      <StyleCodeSelectModal
+        open={styleCodeModalOpen}
+        onClose={() => { setStyleCodeModalOpen(false); setStyleCodeModalIndex(null); }}
+        onSelect={handleStyleCodeSelectFromModal}
+      />
     </div>
   );
 };
