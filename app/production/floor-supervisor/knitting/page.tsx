@@ -4,16 +4,42 @@ import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import TransferModal from "@/shared/components/production/TransferModal";
-import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
+import { productionService, ProductionOrder, FloorOrderFilters, type Article } from "@/shared/services/productionService";
 import { getNextFloor, FloorType } from "@/shared/utils/productionUtils";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import MachineViewTab from "./components/MachineViewTab";
-
+import {
+  OrderStatus,
+  updateAssignmentItemStatus,
+  updateAssignmentItemYarnIssueStatus,
+  type MachineOrderAssignment,
+  type OrderStatusType,
+  type ProductionOrderItem,
+} from "@/shared/services/machineOrderAssignmentService";
 type KnittingTab = "orders" | "machine-view";
 
+const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
+  OrderStatus.PENDING,
+  OrderStatus.IN_PROGRESS,
+  OrderStatus.COMPLETED,
+  OrderStatus.ON_HOLD,
+  OrderStatus.CANCELLED,
+];
+
+/** Only first-priority item can be In Progress / Completed; others get Pending, On Hold, Cancelled only. */
+function getStatusOptionsForItem(idx: number, currentStatus?: OrderStatusType): OrderStatusType[] {
+  if (idx === 0) return ORDER_STATUS_OPTIONS;
+  const restricted: OrderStatusType[] = [OrderStatus.PENDING, OrderStatus.ON_HOLD, OrderStatus.CANCELLED];
+  const current = currentStatus ?? OrderStatus.PENDING;
+  if (current === OrderStatus.IN_PROGRESS || current === OrderStatus.COMPLETED) {
+    return [current, ...restricted.filter((s) => s !== current)];
+  }
+  return restricted;
+}
+
 const KnittingFloorSupervisorPage = () => {
-  const [activeTab, setActiveTab] = useState<KnittingTab>("orders");
+  const [activeTab, setActiveTab] = useState<KnittingTab>("machine-view");
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -42,6 +68,13 @@ const KnittingFloorSupervisorPage = () => {
   });
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  /** When set (e.g. 1), only articles before this index are editable in update modal (machine-edit: first row editable, rest read-only). */
+  const [updateModalReadOnlyFromIndex, setUpdateModalReadOnlyFromIndex] = useState<number | undefined>(undefined);
+  /** When update modal opened from machine view: assignment + items so we can call status/yarn APIs. */
+  const [updateModalAssignment, setUpdateModalAssignment] = useState<MachineOrderAssignment | null>(null);
+  const [updateModalAssignmentItems, setUpdateModalAssignmentItems] = useState<ProductionOrderItem[] | null>(null);
+  const [updatingStatusItemId, setUpdatingStatusItemId] = useState<string | null>(null);
+  const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
 
   // Load knitting floor orders from API
   const loadOrders = async () => {
@@ -137,6 +170,8 @@ const KnittingFloorSupervisorPage = () => {
   const handleUpdateOrder = (order: ProductionOrder) => {
     setSelectedOrder(order);
     setActiveUpdateTabIndex(0);
+    setUpdateModalAssignment(null);
+    setUpdateModalAssignmentItems(null);
     // Initialize update data with current values; M4 input starts empty (user enters increment)
     const initialData: {[key: string]: {completedQuantity: number, remarks: string, m4Quantity: number}} = {};
     order.articles.forEach(article => {
@@ -165,6 +200,102 @@ const KnittingFloorSupervisorPage = () => {
     setShowUpdateModal(false);
     setSelectedOrder(null);
     setUpdateData({});
+    setUpdateModalReadOnlyFromIndex(undefined);
+    setUpdateModalAssignment(null);
+    setUpdateModalAssignmentItems(null);
+    setUpdatingStatusItemId(null);
+    setUpdatingYarnItemId(null);
+  };
+
+  /** Open the same data-entry (update) modal from machine view: only priority orders, first editable, rest read-only. */
+  const handleOpenUpdateModalFromMachine = async (assignment: MachineOrderAssignment) => {
+    const items = (assignment.productionOrderItems ?? [])
+      .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
+      .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
+      .slice(0, 2);
+    if (items.length === 0) {
+      toast.error("No priority orders for this machine");
+      return;
+    }
+    const orderIds = [...new Set(items.map((i) => i.productionOrder))];
+    const orders: ProductionOrder[] = [];
+    for (const oid of orderIds) {
+      const res = await productionService.getOrder(oid);
+      if (res.success && res.data) orders.push(res.data);
+    }
+    const articles: Article[] = [];
+    for (const item of items) {
+      const order = orders.find((o) => o.id === item.productionOrder);
+      if (!order) continue;
+      const article = order.articles.find((a) => (a.id || a._id) === item.article);
+      if (article) articles.push(article);
+    }
+    if (articles.length === 0) {
+      toast.error("Could not load order/article data");
+      return;
+    }
+    const firstOrder = orders.find((o) => o.id === items[0].productionOrder);
+    if (!firstOrder) return;
+    const syntheticOrder: ProductionOrder = {
+      ...firstOrder,
+      id: firstOrder.id,
+      articles,
+    };
+    setSelectedOrder(syntheticOrder);
+    const initialData: { [key: string]: { completedQuantity: number; remarks: string; m4Quantity: number } } = {};
+    const firstArticleId = articles[0].id || articles[0]._id;
+    if (firstArticleId) {
+      initialData[firstArticleId] = {
+        completedQuantity: 0,
+        remarks: articles[0].remarks || "",
+        m4Quantity: 0,
+      };
+    }
+    setUpdateData(initialData);
+    setUpdateModalReadOnlyFromIndex(1);
+    setUpdateModalAssignment(assignment);
+    setUpdateModalAssignmentItems(items);
+    setShowUpdateModal(true);
+  };
+
+  /** Update item status from update modal (when opened from machine view). */
+  const handleModalItemStatusChange = async (itemId: string, newStatus: OrderStatusType) => {
+    if (!updateModalAssignment?.id || !itemId) return;
+    setUpdatingStatusItemId(itemId);
+    try {
+      const updated = await updateAssignmentItemStatus(updateModalAssignment.id, itemId, newStatus);
+      setUpdateModalAssignment(updated);
+      setUpdateModalAssignmentItems((prev) =>
+        prev?.map((p) => updated.productionOrderItems?.find((i) => (i.itemId ?? (i as any).id) === p.itemId) ?? p) ?? prev
+      );
+      toast.success("Status updated");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? "Failed to update status";
+      toast.error(msg);
+      alert(msg);
+    } finally {
+      setUpdatingStatusItemId(null);
+    }
+  };
+
+  /** Ask for yarn from update modal (when opened from machine view). */
+  const handleModalAskForYarn = async (itemId: string) => {
+    if (!updateModalAssignment?.id || !itemId) return;
+    setUpdatingYarnItemId(itemId);
+    try {
+      const updated = await updateAssignmentItemYarnIssueStatus(updateModalAssignment.id, itemId, "In Progress");
+      setUpdateModalAssignment(updated);
+      setUpdateModalAssignmentItems((prev) =>
+        prev?.map((p) => updated.productionOrderItems?.find((i) => (i.itemId ?? (i as any).id) === p.itemId) ?? p) ?? prev
+      );
+      toast.success("Yarn issue status set to In Progress");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? "Failed to update yarn status";
+      toast.error(msg);
+      alert(msg);
+    } finally {
+      setUpdatingYarnItemId(null);
+    }
   };
 
   const handleTransferArticle = (article: any) => {
@@ -490,7 +621,7 @@ const KnittingFloorSupervisorPage = () => {
         {/* Content: Orders tab or Machine view tab */}
         <div className="min-h-[300px]">
           {activeTab === "machine-view" ? (
-            <MachineViewTab />
+            <MachineViewTab onOpenEditModal={handleOpenUpdateModalFromMachine} />
           ) : (
             <>
           <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-100">
@@ -676,58 +807,193 @@ const KnittingFloorSupervisorPage = () => {
               </div>
             </div>
 
-            {/* Excel-like Table Form */}
+            {/* Main row 8 cols; second row = Remarks (full height) + Status / Yarn when from machine */}
             <div className="border border-gray-200 rounded overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-200">
+                <table className="w-full border-collapse border border-gray-200 text-[10px] table-fixed">
+                  <colgroup>
+                    <col className="w-[16%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[10%]" />
+                  </colgroup>
                   <thead className="bg-gray-50/80">
                     <tr>
-                      <th className="pl-2 pr-1 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 whitespace-nowrap">Article</th>
-                      <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Planned</th>
-                      <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received</th>
-                      <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transferred</th>
-                      <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Remaining</th>
-                      <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 bg-yellow-50">Knitting Completed *</th>
-                      <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 bg-red-50">M4 (Current)</th>
-                      <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 bg-red-50">M4 (Add)</th>
-                      <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Remarks</th>
+                      <th className="pl-1.5 pr-1 py-1 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 whitespace-nowrap">Article</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200">Planned</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200">Rcv</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200">Trf</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200">Rem</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200 bg-yellow-50">Knit Done *</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200 bg-red-50">M4</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200 bg-red-50">M4 +</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white">
                     {selectedOrder.articles.map((article, idx) => {
                       const articleId = article.id || article._id;
                       if (!articleId) return null;
+                      const assignmentItem = updateModalAssignmentItems?.[idx];
+                      const hasStatusYarn = Boolean(updateModalAssignment && assignmentItem?.itemId);
+                      const isReadOnly = updateModalReadOnlyFromIndex !== undefined && idx >= updateModalReadOnlyFromIndex;
                       const currentUpdateData = updateData[articleId] || { completedQuantity: 0, remarks: article.remarks || '', m4Quantity: 0 };
                       const currentM4FromArticle = article.floorQuantities?.knitting?.m4Quantity || 0;
+                      const completedQty = article.floorQuantities?.knitting?.completed ?? 0;
                       const plannedQty = article.plannedQuantity || 0;
                       const receivedQty = article.floorQuantities?.knitting?.received || 0;
                       const transferredQty = article.floorQuantities?.knitting?.transferred || 0;
                       const remainingQty = article.floorQuantities?.knitting?.remaining || 0;
-                      const isOverproduction = currentUpdateData.completedQuantity > plannedQty;
+                      const displayCompleted = isReadOnly ? completedQty : (currentUpdateData.completedQuantity || 0);
+                      const isOverproduction = displayCompleted > plannedQty;
                       return (
-                        <tr key={articleId} className="hover:bg-gray-50/50">
-                          <td className="pl-2 pr-1 py-2 border border-gray-200">
-                            <div className="text-[12px] font-bold text-gray-900">{article.articleNumber || `Article ${idx + 1}`}</div>
-                            <div className="text-[10px] text-gray-500">{article.linkingType || 'N/A'}</div>
-                          </td>
-                          <td className="px-1.5 py-2 text-center text-[12px] text-gray-700 border border-gray-200">{plannedQty.toLocaleString()}</td>
-                          <td className="px-1.5 py-2 text-center text-[12px] text-blue-600 font-medium border border-gray-200">{receivedQty.toLocaleString()}</td>
-                          <td className="px-1.5 py-2 text-center text-[12px] text-green-600 font-medium border border-gray-200">{transferredQty.toLocaleString()}</td>
-                          <td className="px-1.5 py-2 text-center text-[12px] text-orange-600 font-medium border border-gray-200">{remainingQty.toLocaleString()}</td>
-                          <td className="px-1.5 py-2 border border-gray-200 bg-yellow-50">
-                            <div className="flex flex-col gap-0.5">
-                              <NumericInput className="py-1 text-[11px] h-6 border border-gray-200 rounded focus:border-purple-300 w-full" value={currentUpdateData.completedQuantity} onChange={(v) => handleQuantityChange(articleId, v)} allowDecimals />
-                              {isOverproduction && <div className="text-[10px] text-orange-600 font-medium">+{currentUpdateData.completedQuantity - plannedQty}</div>}
-                            </div>
-                          </td>
-                          <td className="px-1.5 py-2 text-center text-[12px] text-red-700 font-medium border border-gray-200 bg-red-50">{currentM4FromArticle.toLocaleString()}</td>
-                          <td className="px-1.5 py-2 border border-gray-200 bg-red-50">
-                            <NumericInput className="py-1 text-[11px] h-6 border border-red-200 rounded focus:border-red-400 w-full" value={currentUpdateData.m4Quantity} onChange={(v) => handleM4QuantityChange(articleId, v)} placeholder="0" allowDecimals />
-                          </td>
-                          <td className="px-1.5 py-2 border border-gray-200">
-                            <textarea className="w-full text-[11px] py-1 px-2 h-6 border border-gray-200 rounded resize-none focus:ring-0 focus:border-purple-300" rows={1} placeholder="Remarks..." value={currentUpdateData.remarks} onChange={(e) => handleRemarksChange(articleId, e.target.value)} onFocus={(e) => { e.target.rows = 2; e.target.style.height = 'auto'; }} onBlur={(e) => { e.target.rows = 1; e.target.style.height = '1.5rem'; }} />
-                          </td>
-                        </tr>
+                        <React.Fragment key={articleId}>
+                          <tr className={isReadOnly ? "bg-gray-50/50" : "hover:bg-gray-50/50"}>
+                            <td className="pl-1.5 pr-1 py-1 border border-gray-200 overflow-hidden">
+                              <div className="text-[10px] font-bold text-gray-900 truncate" title={article.articleNumber}>{article.articleNumber || `Art ${idx + 1}`}</div>
+                              <div className="text-[9px] text-gray-500">{article.linkingType || "N/A"}</div>
+                              {article.knittingCode && (
+                                <div className="text-[9px] text-gray-500 truncate" title={article.knittingCode}>Knitting: {article.knittingCode}</div>
+                              )}
+                              {isReadOnly && <span className="text-[8px] text-gray-400 uppercase">Upcoming</span>}
+                            </td>
+                            <td className="px-1 py-1 text-center text-[10px] text-gray-700 border border-gray-200">{plannedQty.toLocaleString()}</td>
+                            <td className="px-1 py-1 text-center text-[10px] text-blue-600 font-medium border border-gray-200">{receivedQty.toLocaleString()}</td>
+                            <td className="px-1 py-1 text-center text-[10px] text-green-600 font-medium border border-gray-200">{transferredQty.toLocaleString()}</td>
+                            <td className="px-1 py-1 text-center text-[10px] text-orange-600 font-medium border border-gray-200">{remainingQty.toLocaleString()}</td>
+                            <td className="px-1 py-1 border border-gray-200 bg-yellow-50 min-w-0">
+                              {isReadOnly ? (
+                                <span className="text-[10px] text-gray-700">{completedQty.toLocaleString()}{isOverproduction ? ` (+${completedQty - plannedQty})` : ""}</span>
+                              ) : (
+                                <div className="flex flex-col gap-0.5">
+                                  <NumericInput className="py-0.5 text-[10px] h-5 border border-gray-200 rounded focus:border-purple-300 w-full min-w-0" value={currentUpdateData.completedQuantity} onChange={(v) => handleQuantityChange(articleId, v)} allowDecimals />
+                                  {isOverproduction && <div className="text-[9px] text-orange-600">+{currentUpdateData.completedQuantity - plannedQty}</div>}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-1 py-1 text-center text-[10px] text-red-700 font-medium border border-gray-200 bg-red-50">{currentM4FromArticle.toLocaleString()}</td>
+                            <td className="px-1 py-1 border border-gray-200 bg-red-50 min-w-0">
+                              {isReadOnly ? (
+                                <span className="text-[10px] text-gray-500">—</span>
+                              ) : (
+                                <NumericInput className="py-0.5 text-[10px] h-5 border border-red-200 rounded focus:border-red-400 w-full min-w-0" value={currentUpdateData.m4Quantity} onChange={(v) => handleM4QuantityChange(articleId, v)} placeholder="0" allowDecimals />
+                              )}
+                            </td>
+                          </tr>
+                          {/* Next row: Remarks (takes height) + Status / Yarn when from machine */}
+                          <tr className={isReadOnly ? "bg-gray-50/50" : "bg-gray-50/30"}>
+                            <td colSpan={8} className="p-2 border border-gray-200 align-top">
+                              <div className="flex flex-wrap items-start gap-4">
+                                <div className="flex-1 min-w-[200px]">
+                                  <label className="block text-[10px] font-semibold text-gray-600 mb-1">Remarks</label>
+                                  {isReadOnly ? (
+                                    <div className="min-h-[56px] py-2 px-2 text-[11px] text-gray-700 bg-white border border-gray-200 rounded" title={article.remarks || ""}>
+                                      {article.remarks || "—"}
+                                    </div>
+                                  ) : (
+                                    <textarea
+                                      className="w-full min-h-[56px] py-2 px-2 text-[11px] border border-gray-200 rounded focus:ring-1 focus:ring-purple-300 focus:border-purple-300 resize-y"
+                                      rows={3}
+                                      placeholder="Add remarks..."
+                                      value={currentUpdateData.remarks}
+                                      onChange={(e) => handleRemarksChange(articleId, e.target.value)}
+                                    />
+                                  )}
+                                </div>
+                                {updateModalAssignment && updateModalAssignmentItems && (
+                                  <div className="flex flex-wrap items-center gap-3 shrink-0">
+                                    <div>
+                                      <label className="block text-[10px] font-semibold text-gray-600 mb-1">Status</label>
+                                      {hasStatusYarn ? (() => {
+                                        const currentStatus = assignmentItem?.status ?? OrderStatus.PENDING;
+                                        const isPending = currentStatus === OrderStatus.PENDING;
+                                        const isInProgress = currentStatus === OrderStatus.IN_PROGRESS;
+                                        const isDisabled = updatingStatusItemId === assignmentItem?.itemId;
+                                        if (isPending) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.IN_PROGRESS)}
+                                              disabled={isDisabled}
+                                              className="min-w-[140px] text-[11px] py-2 px-3 h-9 rounded-lg font-medium bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60"
+                                            >
+                                              Mark In Progress
+                                            </button>
+                                          );
+                                        }
+                                        if (isInProgress) {
+                                          return (
+                                            <div className="flex flex-wrap gap-1.5">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.COMPLETED)}
+                                                disabled={isDisabled}
+                                                className="text-[11px] py-2 px-3 h-9 rounded-lg font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                                              >
+                                                Completed
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.ON_HOLD)}
+                                                disabled={isDisabled}
+                                                className="text-[11px] py-2 px-3 h-9 rounded-lg font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60"
+                                              >
+                                                On Hold
+                                              </button>
+                                            </div>
+                                          );
+                                        }
+                                        return (
+                                          <span className="text-[11px] font-medium text-gray-600 py-2 block">{currentStatus}</span>
+                                        );
+                                      })() : (
+                                        <span className="text-[11px] text-gray-400 py-2 block">—</span>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-semibold text-gray-600 mb-1">Yarn issue</label>
+                                      {hasStatusYarn ? (() => {
+                                        const yarnStatus = assignmentItem?.yarnIssueStatus ? String(assignmentItem.yarnIssueStatus) : "";
+                                        const isInProgressOrCompleted = yarnStatus === "In Progress" || yarnStatus === "Completed";
+                                        if (isInProgressOrCompleted) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              disabled
+                                              className="min-w-[120px] text-[11px] py-2 px-3 h-9 rounded-lg font-medium bg-green-600 text-white cursor-not-allowed opacity-90"
+                                            >
+                                              {yarnStatus}
+                                            </button>
+                                          );
+                                        }
+                                        if (idx <= 1) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleModalAskForYarn(assignmentItem!.itemId!)}
+                                              disabled={updatingYarnItemId === assignmentItem?.itemId}
+                                              className="min-w-[120px] text-[11px] py-2 px-3 h-9 rounded-lg font-medium bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60"
+                                            >
+                                              Ask for yarn
+                                            </button>
+                                          );
+                                        }
+                                        return (
+                                          <span className="text-[11px] text-gray-500 py-2 block">{yarnStatus || "Not Started"}</span>
+                                        );
+                                      })() : (
+                                        <span className="text-[11px] text-gray-400 py-2 block">—</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
