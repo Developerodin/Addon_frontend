@@ -486,33 +486,31 @@ const PurchasePage = () => {
         taxRowHtml = `<tr><td>IGST 5%</td><td>........</td><td>0.00</td><td>0.00</td></tr>`;
       }
 
-      // Replace supplier information
-      htmlTemplate = htmlTemplate.replace(/PURCHASE INVOICE/g, 'PURCHASE ORDER');
-      htmlTemplate = htmlTemplate.replace(
-        /<b>Valson Polyester Pvt Ltd<\/b><br>[\s\S]*?<b>E-Mail :<\/b>/g,
-        `<b>${supplierName}</b><br>${supplierAddress}<br>${supplierLocation}<br><br><b>GST No:</b> ${supplierGST}<br><b>Contact Person :</b> ${supplierContactName}<br><b>Contact No:</b> ${supplierContactNumber}<br><b>E-Mail :</b> ${supplierEmail}`
-      );
-
       // Replace invoice details
       const invoiceDate = formatDate(orderDate);
-      htmlTemplate = htmlTemplate.replace(/<b>PO No :<\/b><br>P\/25-26\/00478/g, `<b>PO No :</b><br>${poNumber}`);
-      htmlTemplate = htmlTemplate.replace(/<b>Dated :<\/b><br>30-10-2025/g, `<b>Dated :</b><br>${invoiceDate}`);
-      htmlTemplate = htmlTemplate.replace(/<b>Delivery Note :<\/b><br>/g, `<b>Delivery Note :</b><br>${dispatchNumber}`);
-      htmlTemplate = htmlTemplate.replace(/<b>Mode\/Terms of Payment :<\/b><br>/g, `<b>Mode/Terms of Payment :</b><br>Credit`);
+      const deliveryDate = packlistDetails?.estimatedDeliveryDate ? formatDate(packlistDetails.estimatedDeliveryDate) : 'N/A';
 
-      // Clear specific redundant values (right side)
-      htmlTemplate = htmlTemplate.replace(/<b>Suppliers Ref :<\/b><br>/g, `<b>Suppliers Ref :</b><br>N/A`);
-      htmlTemplate = htmlTemplate.replace(/<b>Other References\/PO No :<\/b><br>/g, `<b>Other References/PO No :</b><br>`);
-      htmlTemplate = htmlTemplate.replace(/<b>Buyers Order No :<\/b><br>/g, `<b>Buyers Order No :</b><br>`);
-      htmlTemplate = htmlTemplate.replace(/<b>Despatch Document No :<\/b><br>/g, `<b>Despatch Document No :</b><br>`);
-      htmlTemplate = htmlTemplate.replace(/<b>Delivery Note Date :<\/b><br>/g, `<b>Delivery Note Date :</b><br>`);
+      htmlTemplate = htmlTemplate.replace(/<span id="po-no">.*?<\/span>/g, `<span id="po-no">${poNumber}</span>`);
+      htmlTemplate = htmlTemplate.replace(/<span id="po-date">.*?<\/span>/g, `<span id="po-date">${invoiceDate}</span>`);
+      htmlTemplate = htmlTemplate.replace(/<span id="delivery-date">.*?<\/span>/g, `<span id="delivery-date">${deliveryDate}</span>`);
+      htmlTemplate = htmlTemplate.replace(/<span id="credit-days">.*?<\/span>/g, `<span id="credit-days">30</span>`);
 
-      // Replace consignee details
-      htmlTemplate = htmlTemplate.replace(/<b>GST No:<\/b><br>/g, `<b>GST No:</b> 27AAACA8827A1ZZ`);
-      htmlTemplate = htmlTemplate.replace(/<b>Contact No:<\/b>/g, `<b>Contact No:</b>`);
-      htmlTemplate = htmlTemplate.replace(/<b>E-Mail:<\/b>/g, `<b>E-Mail :</b> designer1@gmail.com`);
+      // Replace Vendor Details
+      let vendorHtml = `
+        <b style="font-size: 13px;">${supplierName}</b><br>
+        ${supplierAddress}<br>
+        ${supplierLocation}<br><br>
+        <b>STATE :</b> <span id="vendor-state">${supplierState || 'N/A'}</span><br>
+        <b>Party GST No :</b> <span id="vendor-gst">${supplierGST}</span><br>
+        <b>Contact Person :</b> <span id="vendor-contact">${supplierContactName || supplierData?.contactPerson || supplierContactNumber}</span><br>
+        <b>Email Id :</b> <span id="vendor-email">${supplierEmail !== 'N/A' ? supplierEmail : (supplierData?.email || 'N/A')}</span>
+      `;
+      htmlTemplate = htmlTemplate.replace(/<div id="vendor-details"[\s\S]*?>[\s\S]*?<\/div>/, `<div id="vendor-details" style="line-height: 1.4;">${vendorHtml}</div>`);
 
-      // Generate items rows - replace the example rows
+      // Consignee/Addon details are mostly fixed in template, but we can update if needed.
+      // For now, they match the image provided.
+
+      // Generation of items rows...
       let itemsHtml = '';
       orderItems.forEach((item: any, index: number) => {
         const yarnName = item.yarnName || item.yarn?.yarnName || 'N/A';
@@ -522,7 +520,7 @@ const PurchasePage = () => {
         const rate = item.rate || 0;
         const amount = quantity * rate;
 
-        itemsHtml += `<tr><td>${index + 1}</td><td>${shadeCode}</td><td>${yarnName}${sizeCount !== 'N/A' ? ' - ' + sizeCount : ''}</td><td>${quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>KGS</td><td>${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`;
+        itemsHtml += `<tr><td>${index + 1}</td><td>${shadeCode}</td><td>${yarnName}${sizeCount !== 'N/A' ? ' - ' + sizeCount : ''}</td><td>${quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>${rate.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td><td>${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`;
       });
 
       // Replace the example product rows
@@ -535,7 +533,6 @@ const PurchasePage = () => {
       const totalQuantity = orderItems.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
       htmlTemplate = htmlTemplate.replace(/190\.5700/g, `${totalQuantity.toLocaleString('en-IN', { maximumFractionDigits: 4 })}`);
       htmlTemplate = htmlTemplate.replace(/72,988\.30/g, `${subTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
-      htmlTemplate = htmlTemplate.replace(/<td colspan="5">SHIPPING<\/td>\s*<td>572\.00<\/td>/g, `<td colspan="5">SHIPPING</td><td>0.00</td>`);
 
       // Update taxRowHtml to include real taxable value
       if (isSameState && orderItems.length > 0) {

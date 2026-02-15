@@ -137,53 +137,73 @@
 
 <body>
   <div class="invoice-box">
+    <!-- Company Header Block -->
+    <div style="text-align: center; border-bottom: 2px solid #000; padding: 8px 5px; margin-bottom: 0;">
+      <div style="font-size: 24px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 6px; color: #000;">ADDON
+        HOLDINGS PRIVATE LIMITED</div>
+      <div style="font-size: 10px; line-height: 1.3; color: #000;">
+        <b>Address :</b> Bldg.No.B-7/GF, Asmeeta Textile Park, Addl.Kalyan Bhiwandi MIDC Indl. Area, Village Kone,
+        Taluka Bhiwandi, Dist. Thane - 421311.<br>
+        <b>H.O:</b> 501- 502, Simba Commercial Premises, Off Western Express Highway, Near Virwani Indl Estate, Goregaon
+        (E), Mumbai - 400 063.<br>
+        <div style="margin-top: 3px;">
+          <b>Contact Number -</b> +91-2522-297432 &nbsp;&nbsp;|&nbsp;&nbsp;
+          <b>GST -</b> 27AAACA8827A1ZZ &nbsp;&nbsp;|&nbsp;&nbsp;
+          <b>Email ID -</b> designer1@addbr.com
+        </div>
+      </div>
+    </div>
 
-    <!-- Header -->
-    <div class="header-title">PURCHASE ORDER</div>
+    <!-- Header Title -->
+    <div
+      style="text-align: center; padding: 6px 0; border-bottom: 2px solid #000; font-size: 15px; font-weight: bold; letter-spacing: 2px; text-transform: uppercase;">
+      PURCHASE ORDER
+    </div>
 
     <table class="main-table">
+      <!-- PO Information Row -->
       <tr>
-        <td style="width: 50%;">
-          <b>Valson Polyester Pvt Ltd</b><br>
-          Survey No 24/6/2, 24/7 & 24/8/1, Demni Village,<br>
-          Dadra - 396193<br><br>
-          <b>GST No:</b> 26AAACV4941Q1ZS<br>
-          <b>Contact Person :</b><br>
-          <b>Contact No:</b><br>
-          <b>E-Mail :</b>
-          <div style="border-top:2px solid #000; margin-top:8px; padding-top:6px;">
-            <b>Consignee:</b><br>
-            <b>ADDON HOLDINGS PRIVATE LIMITED</b><br>
-            B/7, GF Asmeeta Textile Park Addl Kalyan,<br>
-            Bhiwandi MIDC Area, Village Kon, Bhiwandi, Pin - 421302 MAHARASHTRA<br>
-            <b>GST No:</b><br>
-            <b>Contact No:</b> 02522-297432<br>
-            <b>E-Mail:</b>
+        <td style="width: 50%; padding: 0;">
+          <div style="padding: 1px 6px;">
+            <b>PURCHASE ORDER NO :</b> <span id="po-no">P/25-26/00478</span>
+          </div>
+          <div style="padding: 1px 6px;">
+            <b>PURCHASE ORDER DATE :</b> <span id="po-date">30-10-2025</span>
           </div>
         </td>
         <td style="width: 50%; padding: 0;">
-          <table style="width: 100%; border-collapse: collapse; height: 100%;">
-            <tr>
-              <td style="border:2px solid #000; padding:6px; width: 50%;"><b>PO No :</b><br>P/25-26/00478</td>
-              <td style="border:2px solid #000; padding:6px; width: 50%;"><b>Dated :</b><br>30-10-2025</td>
-            </tr>
-            <tr>
-              <td style="border:2px solid #000; padding:6px;"><b>Delivery Note :</b><br></td>
-              <td style="border:2px solid #000; padding:6px;"><b>Mode/Terms of Payment :</b><br></td>
-            </tr>
-            <tr>
-              <td style="border:2px solid #000; padding:6px;"><b>Suppliers Ref :</b><br></td>
-              <td style="padding:6px; border-left: 2px solid #000; border-bottom: 2px solid #000;"></td>
-            </tr>
-            <tr>
-              <td style="padding:6px; border: none;"></td>
-              <td style="padding:6px; border: none;"></td>
-            </tr>
-            <tr>
-              <td style="padding:6px; border: none;"></td>
-              <td style="padding:6px; border: none;"></td>
-            </tr>
-          </table>
+          <div style="padding: 1px 6px;">
+            <b>Delivery Date :</b> <span id="delivery-date">N/A</span>
+          </div>
+          <div style="padding: 1px 6px;">
+            <b>Credit Days :</b> <span id="credit-days">30</span>
+          </div>
+        </td>
+      </tr>
+      <!-- Names and Addresses Row -->
+      <tr>
+        <td style="width: 50%; padding: 6px;">
+          <div style="font-weight: bold; margin-bottom: 6px; font-size: 13px;">VENDOR NAME &
+            ADDRESS</div>
+          <div id="vendor-details" style="line-height: 1.4;">
+            <b style="font-size: 13px;">Valson Polyester Pvt Ltd</b><br>
+            Survey No 24/6/2, 24/7 & 24/8/1, Demni Village,<br>
+            Dadra - 396193<br><br>
+            <b>STATE :</b> <span id="vendor-state">Dadra & Nagar Haveli</span><br>
+            <b>Party GST No :</b> <span id="vendor-gst">26AAACV4941Q1ZS</span><br>
+            <b>Contact Person :</b> <span id="vendor-contact">N/A</span><br>
+            <b>Email Id :</b> <span id="vendor-email">N/A</span>
+          </div>
+        </td>
+        <td style="width: 50%; padding: 6px;">
+          <div id="addon-details" style="line-height: 1.4;">
+            <b style="font-size: 13px;">Addon Holding Pvt Ltd</b><br>
+            Bldg.No.B-7/GF, Asmeeta Textile Park, Addl.Kalyan Bhiwandi MIDC Indl. Area Village Kone, Taluka Bhiwandi,
+            Dist. Thane - 421 311.<br>
+            <b>GST No:-</b> 27AAACA8827A1ZZ<br><br>
+            <b>STATE :</b> MAHARASHTRA<br>
+            <b>Tel. No. :</b> 02522-297432
+          </div>
         </td>
       </tr>
     </table>
@@ -194,8 +214,8 @@
         <th>SR. No</th>
         <th>COLOR</th>
         <th>DESCRIPTION OF GOODS</th>
-        <th>QTY</th>
-        <th>PER</th>
+        <th>QTY/KG</th>
+        <th>RATE</th>
         <th>AMOUNT</th>
       </tr>
       <tr>
@@ -203,7 +223,7 @@
         <td>N/A</td>
         <td>70/1 Nylon - Burnt Orange - Valson (VNY813)</td>
         <td>41.17</td>
-        <td>KGS</td>
+        <td>0.00</td>
         <td>15,768.11</td>
       </tr>
       <tr>
@@ -211,7 +231,7 @@
         <td>N/A</td>
         <td>70/1 Nylon - Lt. Green - Valson (VNY8130)</td>
         <td>34.255</td>
-        <td>KGS</td>
+        <td>0.00</td>
         <td>13,119.66</td>
       </tr>
       <tr>
@@ -219,7 +239,7 @@
         <td>N/A</td>
         <td>70/1 Nylon - Pista Green Mel - Valson (VNY8)</td>
         <td>39.01</td>
-        <td>KGS</td>
+        <td>0.00</td>
         <td>14,940.83</td>
       </tr>
       <tr>
@@ -227,7 +247,7 @@
         <td>N/A</td>
         <td>70/1 Nylon - Dk. Purple - Valson (VNY8132)</td>
         <td>36.795</td>
-        <td>KGS</td>
+        <td>0.00</td>
         <td>14,092.48</td>
       </tr>
       <tr>
@@ -235,7 +255,7 @@
         <td>N/A</td>
         <td>70/1 Nylon - Lime Yellow - Valson (VNY8131)</td>
         <td>39.34</td>
-        <td>KGS</td>
+        <td>0.00</td>
         <td>15,067.22</td>
       </tr>
       <tr class="summary-row">
@@ -244,14 +264,6 @@
         <td>190.5700</td>
         <td></td>
         <td>72,988.30</td>
-      </tr>
-      <tr class="summary-row">
-        <td colspan="5">SHIPPING</td>
-        <td>572.00</td>
-      </tr>
-      <tr class="summary-row">
-        <td colspan="5">Round Off Minus</td>
-        <td>---</td>
       </tr>
     </table>
 
