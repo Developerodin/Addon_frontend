@@ -5,22 +5,32 @@ import Seo from '@/shared/layout-components/seo/seo';
 import { toast, Toaster } from 'react-hot-toast';
 import Image from 'next/image';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import * as XLSX from 'xlsx';
 
 interface AttributeValue {
-  id: number;
+  id?: number;
+  _id?: string;
   name: string;
   image: string | null;
   sortOrder: number;
 }
 
 interface Attribute {
-  id: number;
+  id: number | string;
   name: string;
   type: string;
   attributeType?: string; // 'Manufacturing' | 'Warehouse'
   sortOrder: number;
   optionValues: AttributeValue[];
 }
+
+type OptionValueForm = {
+  name: string;
+  image: File | null;
+  sortOrder: number;
+  id?: number;
+  _id?: string;
+};
 
 const EditAttributePage = ({ params }: { params: { id: string } }) => {
   const router = useRouter();
@@ -32,7 +42,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
     type: 'select',
     attributeType: 'Manufacturing' as string,
     sortOrder: 0,
-    optionValues: [] as { name: string; image: File | null; sortOrder: number }[]
+    optionValues: [] as OptionValueForm[]
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -68,7 +78,9 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
           optionValues: data.optionValues.map((value: AttributeValue) => ({
             name: value.name,
             image: null,
-            sortOrder: value.sortOrder
+            sortOrder: value.sortOrder,
+            id: value.id,
+            _id: value._id
           }))
         });
       } catch (err) {
@@ -110,7 +122,7 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
       ...prev,
       optionValues: [
         ...prev.optionValues,
-        { name: '', image: null, sortOrder: prev.optionValues.length }
+        { name: '', image: null, sortOrder: prev.optionValues.length } as OptionValueForm
       ]
     }));
   };
@@ -165,6 +177,25 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
       setIsSaving(false);
     }
   };
+
+  const handleExportNeedlesOptionValues = () => {
+    const rows = formData.optionValues.map((opt) => {
+      const id = opt._id ?? (opt.id != null ? String(opt.id) : '');
+      return {
+        Name: opt.name,
+        ID: id,
+        'Sort Order': opt.sortOrder,
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Option Values');
+    const filename = `needles-option-values-${params.id}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    toast.success('Option values exported to Excel');
+  };
+
+  const isNeedlesAttribute = attribute?.name?.toLowerCase() === "needles";
 
   if (isLoading) {
     return (
@@ -269,51 +300,68 @@ const EditAttributePage = ({ params }: { params: { id: string } }) => {
 
               {/* Option Values */}
               <div>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium">Option Values</h3>
-                  <button
-                    type="button"
-                    className="ti-btn ti-btn-primary ti-btn-sm"
-                    onClick={handleAddOption}
-                    disabled={isSaving}
-                  >
-                    <i className="ri-add-line me-2"></i> Add Option
-                  </button>
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <h3 className="text-lg font-medium shrink-0">Option Values</h3>
+                  <div className="flex flex-wrap items-center gap-3 min-w-0">
+                    {isNeedlesAttribute && (
+                      <button
+                        type="button"
+                        className="ti-btn ti-btn-secondary shrink-0"
+                        onClick={handleExportNeedlesOptionValues}
+                        disabled={isSaving}
+                      >
+                        <i className="ri-download-line me-2"></i>
+                        Export to Excel
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="ti-btn ti-btn-primary shrink-0"
+                      onClick={handleAddOption}
+                      disabled={isSaving}
+                    >
+                      <i className="ri-add-line me-2"></i>
+                      Add Option
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
                   {formData.optionValues.map((option, index) => (
-                    <div key={index} className="flex items-start space-x-4 p-4 border rounded-lg">
-                      <div className="flex-grow grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="form-label">Name</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            value={option.name}
-                            onChange={(e) => handleOptionChange(index, 'name', e.target.value)}
-                            required
-                            disabled={isSaving}
-                          />
-                        </div>
-                        <div>
-                          <label className="form-label">Sort Order</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            value={option.sortOrder}
-                            onChange={(e) => handleOptionChange(index, 'sortOrder', parseInt(e.target.value))}
-                            disabled={isSaving}
-                          />
-                        </div>
+                    <div
+                      key={index}
+                      className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-4 items-end p-4 border rounded-lg"
+                    >
+                      <div className="min-w-0">
+                        <label className="form-label">Name</label>
+                        <input
+                          type="text"
+                          className="form-control w-full"
+                          value={option.name}
+                          onChange={(e) => handleOptionChange(index, 'name', e.target.value)}
+                          required
+                          disabled={isSaving}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <label className="form-label">Sort Order</label>
+                        <input
+                          type="number"
+                          className="form-control w-full"
+                          value={option.sortOrder}
+                          onChange={(e) => handleOptionChange(index, 'sortOrder', parseInt(e.target.value))}
+                          disabled={isSaving}
+                        />
                       </div>
                       <button
                         type="button"
-                        className="ti-btn ti-btn-danger ti-btn-sm mt-6"
+                        className="ti-btn ti-btn-danger shrink-0"
                         onClick={() => handleRemoveOption(index)}
                         disabled={isSaving}
+                        title="Remove option"
                       >
-                        <i className="ri-delete-bin-line"></i>
+                        <i className="ri-delete-bin-line me-1"></i>
+                        Remove
                       </button>
                     </div>
                   ))}

@@ -870,8 +870,8 @@ const ProductListPage = () => {
         if (allowedFields.includes('Vendor Code')) row['Vendor Code'] = exampleNum === 1 ? '456' : 'VEN-67890';
         if (allowedFields.includes('Factory Code')) row['Factory Code'] = exampleNum === 1 ? '789' : 'FAC-67890';
         if (allowedFields.includes('Description')) row['Description'] = exampleNum === 1 ? 'Example product description' : 'Another example product';
-        // Needles: pass option value ID (e.g. "144") - same as API expects attributes: { Needles: "144" }
-        if (allowedFields.includes('Needles')) row['Needles'] = exampleNum === 1 ? '144' : '145';
+        // Needles: pass option value name (string from masters); backend expects e.g. attributes.Needles: "7 GG"
+        if (allowedFields.includes('Needles')) row['Needles'] = exampleNum === 1 ? '7 GG' : '10 GG';
         // Style codes: only Style Code ID 1, 2, 3... (no EAN/MRP columns)
         if (!isProduction) {
           row['Style Code ID 1'] = exampleNum === 1 ? '6990090b7cd417242c5e848f' : '';
@@ -896,7 +896,7 @@ const ProductListPage = () => {
 
       const instructionsTemplate = [
         { 'Instructions': 'How to use this template:', '': '' },
-        { 'Instructions': '0. Style Code ID 1, 2, 3…: fill only the style code IDs from the Style Code master. Needles = option value ID (e.g. 144).', '': '' },
+        { 'Instructions': '0. Style Code ID 1, 2, 3…: fill only the style code IDs from the Style Code master. Needles = option value name from masters (e.g. "7 GG"); you can use ID or name, system passes the name string to backend.', '': '' },
         { 'Instructions': '1. The Products sheet contains product information fields based on your user role.', '': '' },
         { 'Instructions': `2. Required fields: ${getRequiredFields()}`, '': '' },
         { 'Instructions': '3. Category must be the exact name of a category from your system (not ID).', '': '' },
@@ -906,7 +906,7 @@ const ProductListPage = () => {
         { 'Instructions': '7. Only fill in the fields visible in this template based on your user role.', '': '' },
         { 'Instructions': '8. If a category name is not found, the product will be created without a category.', '': '' },
         { 'Instructions': '9. Style Codes: Use Style Code ID 1, Style Code ID 2, etc. with IDs from the Style Code master. Fill only the ID – no other columns needed.', '': '' },
-        { 'Instructions': '11. Needles: Use the Needles option value ID (e.g. 144). Backend expects attributes: { Needles: "144" }. You can use ID or option name; system resolves name to ID on import.', '': '' }
+        { 'Instructions': '11. Needles: Use the Needles option value name from the attribute master (e.g. "7 GG"). Backend expects attributes.Needles as string from masters. You can use ID or option name in Excel; system passes the resolved name string on import.', '': '' }
       ];
       const wsInstructions = XLSX.utils.json_to_sheet(instructionsTemplate);
       XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
@@ -1314,17 +1314,18 @@ const ProductListPage = () => {
           styleCodeLookupList.forEach((sc: { id: string; styleCode: string }) => {
             if (sc.styleCode && sc.id) styleCodeToIdMap[sc.styleCode] = sc.id;
           });
-          // Needles: resolve name or id from Excel -> option value ID (backend expects e.g. Needles: "144")
-          const needlesToIdMap: Record<string, string> = {};
+          // Needles: resolve Excel value (id or name) -> option value name (backend expects string from masters e.g. Needles: "7 GG")
+          const needlesToNameMap: Record<string, string> = {};
           const needlesAttr = allAttributes.find((a: any) => (a.name || '').toLowerCase() === 'needles');
           if (needlesAttr && Array.isArray(needlesAttr.optionValues)) {
             needlesAttr.optionValues.forEach((opt: any) => {
               const id = String(opt.id || opt._id || opt.valueId || '');
               const name = (opt.name || opt.value || '').toString().trim();
-              if (id) {
-                needlesToIdMap[name.toLowerCase()] = id;
-                needlesToIdMap[id] = id;
+              if (name) {
+                needlesToNameMap[name.toLowerCase()] = name;
+                needlesToNameMap[name] = name;
               }
+              if (id) needlesToNameMap[id] = name || id;
             });
           }
 
@@ -1363,12 +1364,12 @@ const ProductListPage = () => {
 
             // styleCodes: array of IDs e.g. ["6990090b7cd417242c5e848f"]
             const styleCodeIds = !isProduction ? extractStyleCodeIds(row) : [];
-            // attributes: { Needles: "144" } - pass option value ID
+            // attributes: { Needles: "7 GG" } - pass option value name (string from masters)
             const needlesVal = String(getRowVal(row, 'Needles') ?? '').trim();
             if (needlesVal) {
               productData.attributes = productData.attributes || {};
-              const needlesId = needlesToIdMap[needlesVal.toLowerCase()] || needlesToIdMap[needlesVal] || needlesVal;
-              productData.attributes['Needles'] = needlesId;
+              const needlesName = needlesToNameMap[needlesVal.toLowerCase()] || needlesToNameMap[needlesVal] || needlesVal;
+              productData.attributes['Needles'] = needlesName;
             }
 
             // Only include fields allowed for this user type

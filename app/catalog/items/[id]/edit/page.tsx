@@ -841,7 +841,7 @@ const EditProductPage = () => {
         allowedAttributes = formData.attributes;
       }
       
-      // Send attributes as attribute name -> option value ID (backend expects IDs e.g. Needles: "144")
+      // Send attributes as attribute name -> option value name (string from masters; backend accepts e.g. Needles: "7 GG")
       const attrsFiltered = Object.entries(allowedAttributes).filter(([key]) => !['brand', 'pack'].includes(key.toLowerCase()));
       productData.attributes = Object.fromEntries(
         attrsFiltered
@@ -850,7 +850,7 @@ const EditProductPage = () => {
             const option = category?.optionValues?.find((o: any) =>
               o.name === valueName || String(o._id || o.id) === String(valueName)
             );
-            return [key, option ? (option._id || (option as any).id) : valueName];
+            return [key, option ? option.name : valueName];
           })
           .filter(([, v]) => v)
       );

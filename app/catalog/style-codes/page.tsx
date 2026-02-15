@@ -40,6 +40,7 @@ const StyleCodesPage = () => {
   const [filters, setFilters] = useState<Filters>({ search: '', status: '' })
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
 
   const visibleCount = useMemo(() => rows.length, [rows])
@@ -141,6 +142,62 @@ const StyleCodesPage = () => {
     toast.success('Template downloaded')
   }
 
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
+      const exportLimit = 500
+      let allRows: StyleCode[] = []
+      let currentPage = 1
+      let totalToFetch = 1
+
+      do {
+        const resp = await styleCodeService.list({
+          styleCode: filters.search || undefined,
+          eanCode: filters.search || undefined,
+          brand: filters.search || undefined,
+          pack: filters.search || undefined,
+          status: filters.status || undefined,
+          sortBy: 'styleCode:asc',
+          limit: exportLimit,
+          page: currentPage,
+        })
+        const results = resp.results || []
+        allRows = allRows.concat(results)
+        totalToFetch = resp.totalResults ?? allRows.length
+        if (results.length < exportLimit || allRows.length >= totalToFetch) break
+        currentPage += 1
+      } while (allRows.length < totalToFetch)
+
+      if (allRows.length === 0) {
+        toast.error('No style codes to export')
+        return
+      }
+
+      const exportRows = allRows.map((row) => ({
+        id: row.id,
+        styleCode: row.styleCode,
+        eanCode: row.eanCode,
+        mrp: row.mrp ?? 0,
+        brand: row.brand ?? '',
+        pack: row.pack ?? '',
+        status: row.status ?? 'active',
+      }))
+      const ws = XLSX.utils.json_to_sheet(exportRows)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Style Codes')
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([wbout], { type: 'application/octet-stream' })
+      const filename = `style-codes-export-${new Date().toISOString().slice(0, 10)}.xlsx`
+      saveAs(blob, filename)
+      toast.success(`Exported all ${allRows.length} style code(s)`)
+    } catch (error) {
+      console.error('Export failed', error)
+      toast.error('Export failed')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const parseStatus = (value: any): 'active' | 'inactive' => {
     const v = String(value || '').toLowerCase()
     return v === 'inactive' ? 'inactive' : 'active'
@@ -239,6 +296,24 @@ const StyleCodesPage = () => {
           </button>
           <button
             type="button"
+            onClick={() => void handleExport()}
+            disabled={isExporting}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isExporting ? (
+              <>
+                <div className="animate-spin h-3.5 w-3.5 border-2 border-gray-400 border-t-transparent rounded-full" />
+                Exporting…
+              </>
+            ) : (
+              <>
+                <i className="ri-file-excel-2-line"></i>
+                Export
+              </>
+            )}
+          </button>
+          <button
+            type="button"
             onClick={handleImportClick}
             disabled={isImporting}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-70 disabled:cursor-not-allowed"
@@ -292,7 +367,7 @@ const StyleCodesPage = () => {
               onChange={(e) => handleLimitChange(Number(e.target.value))}
               className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1 focus:ring-0 focus:border-gray-300"
             >
-              {[10, 20, 50, 100, 200].map((option) => (
+              {[10, 20, 50, 100].map((option) => (
                 <option key={option} value={option}>{option}/page</option>
               ))}
             </select>

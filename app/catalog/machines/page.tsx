@@ -45,11 +45,23 @@ interface MachinesResponse {
   totalResults: number;
 }
 
+/** Number of needle config slots in Excel (at least 2; supports import/export of multiple configs) */
+const NEEDLE_CONFIG_SLOTS = 5;
+
 interface ExcelRow {
   'ID'?: string;
   'Machine Code': string;
   'Machine Number': string;
-  'Needle Config'?: string;
+  'Needles Config 1'?: string;
+  'Needles Config Cutoff 1'?: number | string;
+  'Needles Config 2'?: string;
+  'Needles Config Cutoff 2'?: number | string;
+  'Needles Config 3'?: string;
+  'Needles Config Cutoff 3'?: number | string;
+  'Needles Config 4'?: string;
+  'Needles Config Cutoff 4'?: number | string;
+  'Needles Config 5'?: string;
+  'Needles Config Cutoff 5'?: number | string;
   'Model': string;
   'Floor': string;
   'Installation Date': string;
@@ -350,35 +362,36 @@ const MachinesPage = () => {
       if (!response.ok) throw new Error('Failed to fetch all machines for export');
       const data = await response.json();
       const exportSource = Array.isArray(data.results) ? data.results : [];
-      const formatNeedleConfig = (config: NeedleSizeConfigItem[] | undefined) => {
-        if (!config?.length) return '';
-        return config.map(c => `${c.needleSize} (${c.cutoffQuantity})`).join(', ');
-      };
-      const exportData = exportSource.map((machine: Machine) => ({
-        'ID': getMachineId(machine),
-        'Machine Code': machine.machineCode,
-        'Machine Number': machine.machineNumber,
-        'Needle Config': formatNeedleConfig(machine.needleSizeConfig),
-        'Model': machine.model,
-        'Floor': machine.floor,
-        'Installation Date': machine.installationDate ? new Date(machine.installationDate).toLocaleDateString() : '',
-        'Maintenance Requirement': machine.maintenanceRequirement,
-        'Status': machine.status,
-        'Assigned Supervisor': machine.assignedSupervisor ? machine.assignedSupervisor.name : '',
-        'Capacity Per Shift': machine.capacityPerShift || 0,
-        'Capacity Per Day': machine.capacityPerDay || 0,
-        'Last Maintenance Date': machine.lastMaintenanceDate ? new Date(machine.lastMaintenanceDate).toLocaleDateString() : '',
-        'Next Maintenance Date': machine.nextMaintenanceDate ? new Date(machine.nextMaintenanceDate).toLocaleDateString() : '',
-        'Maintenance Notes': machine.maintenanceNotes || '',
-        'Company': machine.company || '',
-        'Machine Type': machine.machineType || ''
-      }));
+      const config = (machine: Machine): NeedleSizeConfigItem[] => machine.needleSizeConfig ?? [];
+      const exportData = exportSource.map((machine: Machine) => {
+        const base: Record<string, string | number> = {
+          'ID': getMachineId(machine),
+          'Machine Code': machine.machineCode,
+          'Machine Number': machine.machineNumber,
+          'Model': machine.model,
+          'Floor': machine.floor,
+          'Installation Date': machine.installationDate ? new Date(machine.installationDate).toLocaleDateString() : '',
+          'Maintenance Requirement': machine.maintenanceRequirement,
+          'Status': machine.status,
+          'Assigned Supervisor': machine.assignedSupervisor ? machine.assignedSupervisor.name : '',
+          'Capacity Per Shift': machine.capacityPerShift || 0,
+          'Capacity Per Day': machine.capacityPerDay || 0,
+          'Last Maintenance Date': machine.lastMaintenanceDate ? new Date(machine.lastMaintenanceDate).toLocaleDateString() : '',
+          'Next Maintenance Date': machine.nextMaintenanceDate ? new Date(machine.nextMaintenanceDate).toLocaleDateString() : '',
+          'Maintenance Notes': machine.maintenanceNotes || '',
+          'Company': machine.company || '',
+          'Machine Type': machine.machineType || ''
+        };
+        for (let s = 1; s <= NEEDLE_CONFIG_SLOTS; s++) {
+          const c = config(machine)[s - 1];
+          base[`Needles Config ${s}`] = c?.needleSize ?? '';
+          base[`Needles Config Cutoff ${s}`] = c != null ? c.cutoffQuantity : 0;
+        }
+        return base;
+      });
       const ws = XLSX.utils.json_to_sheet(exportData);
-      ws['!cols'] = [
-        { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, 
-        { wch: 15 }, { wch: 20 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, 
-        { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }
-      ];
+      const numCols = 5 + NEEDLE_CONFIG_SLOTS * 2 + 11; // ID, Code, Number, (5 config pairs), Model, Floor, ...
+      ws['!cols'] = Array.from({ length: numCols }, () => ({ wch: 15 }));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Machines');
       const fileName = `machines_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -397,106 +410,71 @@ const MachinesPage = () => {
     const loadingToast = toast.loading('Importing machines...');
     try {
       const reader = new FileReader();
-      reader.onload = async (e) => {
+      reader.onload = async (ev) => {
         try {
-          const data = e.target?.result;
-          const workbook = XLSX.read(data, { type: 'array' });
+          setImportProgress(20);
+          const data = ev.target?.result;
+          const workbook = XLSX.read(data, { type: 'array', dateNF: 'yyyy-mm-dd' });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet) as ExcelRow[];
-          let successCount = 0;
-          let errorCount = 0;
-          
-          // Fetch all machines for upsert by machine code
-          const allResponse = await fetch(`${API_BASE_URL}/machines?page=1&limit=100000`);
-          const allData = allResponse.ok ? await allResponse.json() : { results: [] };
-          const allMachines: Machine[] = allData.results || [];
-          
-          const parseNeedleConfig = (str: string | undefined): NeedleSizeConfigItem[] => {
-            if (!str?.trim()) return [];
-            return str.split(',').map(part => {
-              const match = part.trim().match(/^(.+?)\s*\((\d+)\)\s*$/);
-              if (match) return { needleSize: match[1].trim(), cutoffQuantity: parseInt(match[2], 10) || 0 };
-              const single = part.trim();
-              if (single) return { needleSize: single, cutoffQuantity: 0 };
-              return null;
-            }).filter((x): x is NeedleSizeConfigItem => x !== null);
-          };
-          for (let i = 0; i < jsonData.length; i++) {
-            const row = jsonData[i];
-            try {
-              const needleConfig = parseNeedleConfig(row['Needle Config']);
-              const machineData: Record<string, unknown> = {
-                machineCode: row['Machine Code'],
-                machineNumber: row['Machine Number'],
-                model: row['Model'],
-                floor: row['Floor'],
-                installationDate: parseDate(row['Installation Date']),
-                maintenanceRequirement: row['Maintenance Requirement'],
-                status: (row['Status']?.toString() === 'Active') ? 'Active' : 
-                       (row['Status']?.toString() === 'Under Maintenance') ? 'Under Maintenance' : 'Idle',
-                assignedSupervisor: row['Assigned Supervisor'] || undefined,
-                capacityPerShift: row['Capacity Per Shift'] ? Number(row['Capacity Per Shift']) : undefined,
-                capacityPerDay: row['Capacity Per Day'] ? Number(row['Capacity Per Day']) : undefined,
-                lastMaintenanceDate: parseDate(row['Last Maintenance Date']),
-                nextMaintenanceDate: parseDate(row['Next Maintenance Date']),
-                maintenanceNotes: row['Maintenance Notes'] || undefined,
-                company: row['Company'] || undefined,
-                machineType: row['Machine Type'] || undefined
-              };
-              if (needleConfig.length > 0) machineData.needleSizeConfig = needleConfig;
-              
-              let machineId = row['ID'];
-              if (!machineId) {
-                // Try to find by machine code
-                const found = allMachines.find(m => m.machineCode === machineData.machineCode);
-                if (found) machineId = getMachineId(found);
-              }
-              
-              const body = JSON.stringify(machineData);
-              if (machineId) {
-                // Update existing
-                const patchResponse = await fetch(`${API_BASE_URL}/machines/${machineId}`, {
-                  method: 'PATCH',
-                  headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                  },
-                  body,
-                });
-                if (!patchResponse.ok) throw new Error();
-                successCount++;
-              } else {
-                // Create new
-                const postResponse = await fetch(`${API_BASE_URL}/machines`, {
-                  method: 'POST',
-                  headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                  },
-                  body,
-                });
-                if (!postResponse.ok) throw new Error();
-                successCount++;
-              }
-            } catch (error) {
-              errorCount++;
-            }
-            setImportProgress(Math.round(((i + 1) / jsonData.length) * 100));
+          const rows = XLSX.utils.sheet_to_json(worksheet, {
+            defval: '',
+            raw: false,
+            dateNF: 'yyyy-mm-dd',
+          }) as ExcelRow[];
+          const machines = rows.filter(
+            (r) => (r['Machine Code'] != null && String(r['Machine Code']).trim() !== '') ||
+                   (r['Machine Number'] != null && String(r['Machine Number']).trim() !== '')
+          );
+          if (machines.length === 0) {
+            setImportProgress(null);
+            toast.error('No valid rows found. Each row must have Machine Code or Machine Number.', { id: loadingToast });
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
           }
+          setImportProgress(40);
+          const response = await fetch(`${API_BASE_URL}/machines/bulk-import`, {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ machines, batchSize: 50 }),
+          });
+          const result = await response.json().catch(() => ({}));
           if (fileInputRef.current) fileInputRef.current.value = '';
-          setImportProgress(null);
+          setImportProgress(100);
           toast.dismiss(loadingToast);
-          if (successCount > 0) toast.success(`Successfully imported/updated ${successCount} machines`);
-          if (errorCount > 0) toast.error(`Failed to import/update ${errorCount} machines`);
-          fetchMachines();
-        } catch (error) {
+
+          if (!response.ok) {
+            toast.error(result.message || 'Bulk import failed');
+            fetchMachines(currentPage, itemsPerPage, searchQuery);
+            return;
+          }
+
+          const created = result?.data?.created ?? 0;
+          const updated = result?.data?.updated ?? 0;
+          const failed = result?.data?.failed ?? 0;
+          const errors = (result?.data?.errors ?? []) as { row?: number; message?: string; machineCode?: string }[];
+
+          if (failed > 0 && errors.length > 0) {
+            const first = errors.slice(0, 3).map((err) =>
+              `Row ${err.row ?? '?'}: ${err.message ?? 'Error'}${err.machineCode ? ` (${err.machineCode})` : ''}`
+            ).join('; ');
+            toast.error(`${result.message ?? 'Import completed with errors.'} ${first}${errors.length > 3 ? '…' : ''}`);
+          } else if (failed > 0) {
+            toast.error(result.message ?? `Imported with errors: ${created} created, ${updated} updated, ${failed} failed.`);
+          } else {
+            const parts: string[] = [];
+            if (created > 0) parts.push(`${created} created`);
+            if (updated > 0) parts.push(`${updated} updated`);
+            toast.success(result.message ?? (parts.length ? parts.join(', ') + '.' : 'Import completed.'));
+          }
+          fetchMachines(currentPage, itemsPerPage, searchQuery);
+        } catch (err) {
           setImportProgress(null);
           toast.error('Failed to process import file', { id: loadingToast });
         }
       };
       reader.readAsArrayBuffer(file);
-    } catch (error) {
+    } catch (err) {
       setImportProgress(null);
       toast.error('Failed to import machines', { id: loadingToast });
     }

@@ -645,14 +645,14 @@ const AddProductPage = () => {
         attr => !['brand', 'pack'].includes(attr.name.toLowerCase())
       );
 
-      // Send attributes as attribute name -> option value ID (backend expects IDs e.g. Needles: "144")
+      // Send attributes as attribute name -> option value name (string from masters; backend accepts e.g. Needles: "7 GG")
       productData.attributes = Object.fromEntries(
         allowedAttributes
           .map(attr => {
             const valueName = formData[attr.name.toLowerCase()];
             if (!valueName) return null;
             const option = attr.optionValues.find((o: any) => o.name === valueName || String(o._id) === String(valueName));
-            return [attr.name, option ? option._id : valueName];
+            return [attr.name, option ? option.name : valueName];
           })
           .filter((e): e is [string, string] => !!e && !!e[1])
       );

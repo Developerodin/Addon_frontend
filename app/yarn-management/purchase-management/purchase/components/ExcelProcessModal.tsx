@@ -41,6 +41,7 @@ const HEADER_MAP: Record<string, string> = {
   lotnumber: "lot",
   shadeno: "shadeNo",
   shade: "shadeNo",
+  shadecode: "shadeNo",
   netweight: "netWeight",
   netwt: "netWeight",
   noofcones: "noOfCones",
@@ -56,6 +57,11 @@ const HEADER_MAP: Record<string, string> = {
   yarntype: "yarnType",
 };
 
+/** Expected format description for user-facing errors */
+const EXPECTED_FORMAT_MSG =
+  "This process expects a RECEIVING/BAGS DETAILS Excel with columns: Lot, Shade No (or Shade Code), Net Weight, No of Cones, Count/Size, Colour, Brand. " +
+  "PO details or order-item files (with only Item, Quantity, Rate, etc.) cannot be used here.";
+
 function parseExcelToRows(file: File): Promise<ExcelRow[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -68,19 +74,30 @@ function parseExcelToRows(file: File): Promise<ExcelRow[]> {
         const sheet = workbook.Sheets[sheetName];
         const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
         if (rawRows.length < 2) {
-          reject(new Error("Excel has no data rows."));
+          reject(
+            new Error(
+              "Excel has no data rows (or only a header). " + EXPECTED_FORMAT_MSG
+            )
+          );
           return;
         }
-        const headerKeywords = ["lot", "shade", "net", "weight", "cones", "count", "colour", "color", "brand", "recvd", "yarn"];
-        const looksLikeHeader = (row: any[]): boolean => {
-          if (!row || row.length === 0) return false;
-          const rowStr = row.map((c) => String(c ?? "").toLowerCase()).join(" ");
-          return headerKeywords.some((kw) => rowStr.includes(kw));
+        // Build colMap for a candidate row (to check if it has required columns)
+        const buildColMapForRow = (row: any[]): Record<string, number> => {
+          const map: Record<string, number> = {};
+          (row || []).forEach((h: any, idx: number) => {
+            const key = HEADER_MAP[normalizeHeader(String(h ?? "").trim())];
+            if (key && map[key] === undefined) map[key] = idx;
+          });
+          return map;
         };
+        // Only treat a row as header if it has BOTH Lot and Shade No as column headers.
+        // This avoids mistaking a title row like "Po details yarn loft..." (contains "lot") for the header.
         let headerRowIndex = -1;
         for (let r = 0; r < Math.min(10, rawRows.length); r++) {
           const row = rawRows[r] as any[];
-          if (looksLikeHeader(row)) {
+          if (!row || row.length === 0) continue;
+          const candidateMap = buildColMapForRow(row);
+          if (candidateMap.lot !== undefined && candidateMap.shadeNo !== undefined) {
             headerRowIndex = r;
             break;
           }
@@ -93,6 +110,26 @@ function parseExcelToRows(file: File): Promise<ExcelRow[]> {
           const key = HEADER_MAP[normalizeHeader(h)];
           if (key && colMap[key] === undefined) colMap[key] = idx;
         });
+
+        if (colMap.lot === undefined) {
+          reject(
+            new Error(
+              "Required column 'Lot' (or Lot No) not found. If row 1 is a title (e.g. 'Po details yarn loft...'), the next row must be the header with columns: Lot, Shade No, Net Weight, etc. " +
+                EXPECTED_FORMAT_MSG
+            )
+          );
+          return;
+        }
+        if (colMap.shadeNo === undefined) {
+          reject(
+            new Error(
+              "Required column 'Shade No' (or Shade Code / Shade) not found. If row 1 is a title, the next row must be the header with Lot and Shade No. " +
+                EXPECTED_FORMAT_MSG
+            )
+          );
+          return;
+        }
+
         const rows: ExcelRow[] = [];
         const dataStartIndex = headerRowIndex + 1;
         for (let i = dataStartIndex; i < rawRows.length; i++) {
@@ -199,7 +236,11 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
       console.log("[ExcelProcess] Excel parsed", { rowCount: rows.length, firstRow: rows[0] });
 
       if (rows.length === 0) {
-        toast.error("No valid rows found in Excel (need Lot and SHADE NO columns)");
+        const msg =
+          "No valid rows found. Each row must have both Lot and Shade No (or Shade Code) filled. " +
+          EXPECTED_FORMAT_MSG;
+        toast.error("No valid rows in Excel");
+        window.alert(msg);
         setIsSubmitting(false);
         return;
       }
@@ -271,8 +312,13 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
       }
 
       if (poGroups.size === 0) {
+        const msg =
+          "Could not match any Excel rows to the selected PO items. " +
+          "Check that Shade No / Shade Code and yarn names in the Excel match the PO line items. " +
+          "If your file is a PO details (order) file, use a receiving/bags details Excel instead.";
         console.log("[ExcelProcess] No rows matched to any selected PO");
-        toast.error("Could not match any rows to PO items. Check shade codes and yarn names.");
+        toast.error("No rows matched to selected POs");
+        window.alert(msg);
         setIsSubmitting(false);
         return;
       }
@@ -345,8 +391,10 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
       handleClose();
       onSuccess?.();
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to process Excel";
       console.error("[ExcelProcess] Error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to process Excel");
+      toast.error("Excel process failed");
+      window.alert("Excel process failed:\n\n" + message);
     } finally {
       setIsSubmitting(false);
     }
