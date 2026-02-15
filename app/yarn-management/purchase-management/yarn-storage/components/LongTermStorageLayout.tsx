@@ -99,6 +99,15 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     zone?: string;
   }>>([]);
 
+  // Add Racks drawer (right-side)
+  const [showAddRacksDrawer, setShowAddRacksDrawer] = useState(false);
+  const [addRacksForm, setAddRacksForm] = useState({
+    storageType: "longterm" as "longterm" | "shortterm",
+    sectionCode: "B7-02",
+    numberOfRacksToAdd: 12,
+  });
+  const [isAddingRacks, setIsAddingRacks] = useState(false);
+
   // Pagination for storage layout (default 200 per page, total e.g. 800 → 4 pages)
   const [storagePage, setStoragePage] = useState(1);
   const [storageLimit, setStorageLimit] = useState(200);
@@ -126,6 +135,32 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   useEffect(() => {
     fetchStorageSlots(storagePage, storageLimit);
   }, [storagePage, storageLimit]);
+
+  const handleAddRacksSubmit = async () => {
+    const num = addRacksForm.numberOfRacksToAdd;
+    if (num < 1 || num > 50) {
+      toast.error("Number of racks must be between 1 and 50");
+      return;
+    }
+    setIsAddingRacks(true);
+    try {
+      await storageSlotService.addRacks({
+        storageType: addRacksForm.storageType,
+        sectionCode: addRacksForm.sectionCode,
+        numberOfRacksToAdd: num,
+      });
+      toast.success("Racks Added Successfully");
+      setShowAddRacksDrawer(false);
+      fetchStorageSlots(storagePage, storageLimit);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add racks");
+    } finally {
+      setIsAddingRacks(false);
+    }
+  };
+
+  const LT_SECTIONS = ["B7-02", "B7-03", "B7-04", "B7-05"];
+  const ST_SECTIONS = ["B7-01"];
 
   // Auto-focus rack code input when allocate modal opens
   useEffect(() => {
@@ -186,55 +221,54 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     return mappedRacks;
   }, [storageSlots, boxes, propsRacks]);
 
-  // Row index -> (sectionCode, shelfNumber) so multiple sections get separate rows (fixes 48 vs 192)
+  // Row index -> (sectionCode, shelfNumber). Only include (section, shelf) that exist on
+  // this page so we don't get empty "No Rack" rows (e.g. page 2 has shelves 51-100, not 1-100).
   const rowToSectionShelf = useMemo(() => {
     if (storageSlots.length === 0) return [];
-    const bySection = new Map<string, number>();
+    const seen = new Set<string>();
+    const out: { sectionCode: string; shelfNumber: number }[] = [];
     storageSlots.forEach((s) => {
       const section = s.sectionCode ?? "";
-      const max = bySection.get(section) ?? 0;
-      if (s.shelfNumber > max) bySection.set(section, s.shelfNumber);
-    });
-    const sections = Array.from(bySection.keys()).sort();
-    const out: { sectionCode: string; shelfNumber: number }[] = [];
-    sections.forEach((sectionCode) => {
-      const maxShelf = bySection.get(sectionCode) ?? 0;
-      for (let shelf = 1; shelf <= maxShelf; shelf++) {
-        out.push({ sectionCode, shelfNumber: shelf });
+      const key = `${section}\t${s.shelfNumber}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push({ sectionCode: section, shelfNumber: s.shelfNumber });
       }
+    });
+    out.sort((a, b) => {
+      const c = (a.sectionCode ?? "").localeCompare(b.sectionCode ?? "");
+      return c !== 0 ? c : a.shelfNumber - b.shelfNumber;
     });
     return out;
   }, [storageSlots]);
 
-  // Grid dimensions: one row per (section, shelf), columns = floors (4)
+  // Grid dimensions: one row per (section, shelf), columns = floors. Use only current page
+  // data so we don't create extra empty "No Rack" rows (e.g. from preferences.gridRows).
   const gridDimensions = useMemo(() => {
     if (storageSlots.length > 0 && rowToSectionShelf.length > 0) {
       const maxFloor = Math.max(...storageSlots.map((s) => s.floorNumber), 0);
       return {
-        rows: Math.max(rowToSectionShelf.length, preferences.gridRows),
-        columns: Math.max(maxFloor, preferences.gridColumns),
+        rows: rowToSectionShelf.length,
+        columns: maxFloor,
       };
     }
     if (storageSlots.length > 0) {
       const maxShelf = Math.max(...storageSlots.map((s) => s.shelfNumber), 0);
       const maxFloor = Math.max(...storageSlots.map((s) => s.floorNumber), 0);
       return {
-        rows: Math.max(maxShelf, preferences.gridRows),
-        columns: Math.max(maxFloor, preferences.gridColumns),
+        rows: maxShelf,
+        columns: maxFloor,
       };
     }
     return {
       rows: preferences.gridRows,
       columns: preferences.gridColumns,
     };
-  }, [storageSlots, preferences, rowToSectionShelf]);
+  }, [storageSlots, preferences.gridRows, preferences.gridColumns, rowToSectionShelf]);
 
-  // Organize racks into grid: row = (section, shelf), col = floor (so all 192 slots show)
+  // Organize racks into grid: row = (section, shelf), col = floor (so all 192 slots show).
+  // When loading (e.g. page change), keep previous grid to avoid flash of "No storage slots found".
   const rackGrid = useMemo(() => {
-    if (isLoadingSlots) {
-      return [];
-    }
-
     const grid: (RackLocation | null)[][] = [];
     for (let row = 0; row < gridDimensions.rows; row++) {
       grid[row] = [];
@@ -253,7 +287,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       }
     }
     return grid;
-  }, [racks, gridDimensions, isLoadingSlots, rowToSectionShelf]);
+  }, [racks, gridDimensions, rowToSectionShelf]);
 
   // Fetch slot details for all racks (including available ones that might have data)
   useEffect(() => {
@@ -1129,6 +1163,15 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
             </div>
             <button
               type="button"
+              onClick={() => setShowAddRacksDrawer(true)}
+              className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+              title="Add racks to a section"
+            >
+              <i className="ri-add-line me-1"></i>
+              Add Racks
+            </button>
+            <button
+              type="button"
               onClick={handleDownloadRackExcel}
               className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
               title="Download rack data as Excel"
@@ -1193,8 +1236,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
             </div>
           )}
         </div>
-        <div className="box-body">
-          {isLoadingSlots ? (
+        <div className="box-body relative">
+          {isLoadingSlots && rackGrid.length === 0 ? (
             <div className="flex justify-center items-center py-12">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -1358,6 +1401,14 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                   })
                 )}
               </div>
+              {isLoadingSlots && rackGrid.length > 0 && (
+                <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 flex items-center justify-center z-10 rounded-lg">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-600 border-t-transparent" />
+                    <p className="text-sm font-medium text-gray-600">Loading page...</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1881,6 +1932,97 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Add Racks drawer (right-side) */}
+      {showAddRacksDrawer && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={() => setShowAddRacksDrawer(false)}
+            aria-hidden
+          />
+          <div
+            className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right overflow-hidden"
+          >
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+              <h3 className="text-base font-bold text-gray-800">Add Racks</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddRacksDrawer(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
+              >
+                <i className="ri-close-line text-xl" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Storage type</label>
+                <select
+                  value={addRacksForm.storageType}
+                  onChange={(e) => {
+                    const v = e.target.value as "longterm" | "shortterm";
+                    setAddRacksForm((prev) => ({
+                      ...prev,
+                      storageType: v,
+                      sectionCode: v === "shortterm" ? "B7-01" : "B7-02",
+                    }));
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                >
+                  <option value="longterm">Long-term (LT)</option>
+                  <option value="shortterm">Short-term (ST)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+                <select
+                  value={addRacksForm.sectionCode}
+                  onChange={(e) => setAddRacksForm((prev) => ({ ...prev, sectionCode: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                >
+                  {(addRacksForm.storageType === "shortterm" ? ST_SECTIONS : LT_SECTIONS).map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Number of racks to add (1–50)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={addRacksForm.numberOfRacksToAdd}
+                  onChange={(e) => setAddRacksForm((prev) => ({
+                    ...prev,
+                    numberOfRacksToAdd: Math.min(50, Math.max(1, Number(e.target.value) || 1)),
+                  }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 shrink-0">
+              <button
+                type="button"
+                onClick={handleAddRacksSubmit}
+                disabled={isAddingRacks}
+                className="w-full ti-btn ti-btn-primary py-2 flex items-center justify-center gap-2"
+              >
+                {isAddingRacks ? (
+                  <>
+                    <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                    Adding…
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-add-line" />
+                    Add
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

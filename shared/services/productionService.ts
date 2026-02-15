@@ -36,6 +36,7 @@ export interface Article {
   currentFloor: string;
   machineId?: string | any; // Can be string or populated object
   remarks?: string;
+  knittingCode?: string;
   quantityFromPreviousFloor?: number;
   m1Quantity: number;
   m2Quantity: number;
@@ -70,6 +71,7 @@ export interface CreateOrderRequest {
     priority: 'Urgent' | 'High' | 'Medium' | 'Low';
     machineId?: string;
     remarks?: string;
+    knittingCode?: string;
   }[];
   orderNote?: string;
   customerId?: string;
@@ -261,6 +263,7 @@ class ProductionService {
       currentFloor: article.currentFloor,
       machineId: article.machineId,
       remarks: article.remarks,
+      knittingCode: article.knittingCode,
       quantityFromPreviousFloor: article.quantityFromPreviousFloor,
       m1Quantity: article.m1Quantity,
       m2Quantity: article.m2Quantity,

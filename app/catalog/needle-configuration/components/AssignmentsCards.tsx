@@ -64,12 +64,16 @@ export interface AssignmentsCardsProps {
   readOnly?: boolean;
   /** Optional card click handler (e.g. for read-only view to open PO details modal). */
   onCardClick?: (a: AssignmentRow) => void;
+  /** Optional: when provided with readOnly, clicking pencil icon on card triggers this (e.g. edit). */
+  onPencilClick?: (a: AssignmentRow) => void;
   /** When set (e.g. 5), use this many columns on xl and consistent card sizing. */
   columnsPerRow?: number;
   /** Compact cards: smaller size, hide active needle and needle options (e.g. for yarn-issue). */
   compact?: boolean;
   /** When true with compact, show only machine name (no PO/article count). */
   nameOnly?: boolean;
+  /** When false, card area does not trigger onCardClick; only icon buttons do. Default true. */
+  cardClickable?: boolean;
 }
 
 export default function AssignmentsCards({
@@ -88,9 +92,11 @@ export default function AssignmentsCards({
   onReset,
   readOnly = false,
   onCardClick,
+  onPencilClick,
   columnsPerRow,
   compact = false,
   nameOnly = false,
+  cardClickable = true,
 }: AssignmentsCardsProps) {
   if (isLoading) {
     return (
@@ -133,18 +139,38 @@ export default function AssignmentsCards({
             return (
               <div
                 key={row.id}
-                role={readOnly && onCardClick ? "button" : undefined}
-                tabIndex={readOnly && onCardClick ? 0 : undefined}
-                onClick={readOnly && onCardClick ? () => onCardClick(row) : undefined}
-                onKeyDown={readOnly && onCardClick ? (e) => { if (e.key === "Enter" || e.key === " ") onCardClick(row); } : undefined}
-                className={`rounded-lg shadow-md overflow-hidden border border-white/10 min-w-0 ${compact ? "rounded-lg transition-[filter] hover:brightness-110" : "rounded-xl transition-transform hover:scale-[1.02]"} ${readOnly && onCardClick ? "cursor-pointer" : ""}`}
+                role={readOnly && onCardClick && cardClickable ? "button" : undefined}
+                tabIndex={readOnly && onCardClick && cardClickable ? 0 : undefined}
+                onClick={readOnly && onCardClick && cardClickable ? () => onCardClick(row) : undefined}
+                onKeyDown={readOnly && onCardClick && cardClickable ? (e) => { if (e.key === "Enter" || e.key === " ") onCardClick(row); } : undefined}
+                className={`rounded-lg shadow-md overflow-hidden border border-white/10 min-w-0 ${compact ? "rounded-lg transition-[filter] hover:brightness-110" : "rounded-xl transition-transform hover:scale-[1.02]"} ${readOnly && onCardClick && cardClickable ? "cursor-pointer" : ""}`}
                 style={{ background: CARD_BG }}
               >
                 <div className={`text-white flex flex-col ${compact ? "p-2.5 min-h-0" : `p-3 ${columnsPerRow === 5 ? "min-h-[140px]" : "min-h-[200px]"}`}`}>
                   <div className={`flex items-start justify-between gap-2 ${compact ? "" : "mb-2"}`}>
-                    <h3 className={`font-bold truncate drop-shadow-sm text-white ${compact ? "text-sm" : columnsPerRow === 5 ? "text-sm" : "text-lg"}`}>
+                    <h3 className={`font-bold truncate drop-shadow-sm text-white flex-1 min-w-0 ${compact ? "text-sm" : columnsPerRow === 5 ? "text-sm" : "text-lg"}`}>
                       {machineLabel(row)}
                     </h3>
+                    {readOnly && onCardClick && !compact && (
+                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => onPencilClick?.(row)}
+                          className="flex items-center justify-center rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors w-7 h-7"
+                          title="Edit"
+                        >
+                          <i className="ri-pencil-line text-sm" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onCardClick(row)}
+                          className="flex items-center justify-center rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors w-7 h-7"
+                          title="Settings / PO details"
+                        >
+                          <i className="ri-settings-3-line text-sm" />
+                        </button>
+                      </div>
+                    )}
                     {!readOnly && !compact && (isToggling ? (
                       <span className="flex items-center gap-1 text-xs text-white/90 shrink-0">
                         <span className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />

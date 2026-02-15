@@ -30,6 +30,8 @@ interface Article {
   productId?: string;
   /** Needle size from product's Needles attribute (for filtering machines) */
   needleSizeFromProduct?: string;
+  /** From product API (e.g. FL-AXCR26217-Pique-Black); sent in create order payload */
+  knittingCode?: string;
   bom?: ProductBOM[];
 }
 
@@ -319,6 +321,8 @@ const AddOrderPage = () => {
           ? needlesValueIdToName[String(needlesRaw)] ?? String(needlesRaw)
           : undefined;
 
+      const knittingCode = fullProduct.knittingCode ?? undefined;
+
       // Update article with factory code and product details
       setFormData(prev => ({
         ...prev,
@@ -329,6 +333,7 @@ const AddOrderPage = () => {
                 articleNumber: product.factoryCode,
                 productId: productId,
                 needleSizeFromProduct,
+                knittingCode,
                 bom: normalizedBOM
               }
             : article
@@ -490,7 +495,8 @@ const AddOrderPage = () => {
           linkingType: article.linkingType,
           priority: article.priority,
           machineId: article.machineId || undefined,
-          remarks: article.remarks
+          remarks: article.remarks,
+          knittingCode: article.knittingCode
         })),
         orderNote: formData.orderNote || undefined
       };
@@ -764,6 +770,11 @@ const AddOrderPage = () => {
                                   <i className="ri-search-line text-xs"></i>
                                 </button>
                               </div>
+                              {article.knittingCode && (
+                                <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={article.knittingCode}>
+                                  Knitting: {article.knittingCode}
+                                </div>
+                              )}
                               {errors[`article_${index}_articleNumber`] && (
                                 <div className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_articleNumber`]}</div>
                               )}
