@@ -397,9 +397,12 @@ const AddBrandPage = () => {
         yarnDetails: formData.yarnDetails.length
           ? formData.yarnDetails.map<SupplierYarnDetail>((detail) => {
               const yarnName = detail.yarnName.trim() || yarnCatalogMap[detail.yarnCatalogId]?.yarnName?.trim() || '';
+              const selectedColor = detail.color ? yarnColorOptions.find((c) => c.id === detail.color) : undefined;
               const normalizedDetail: SupplierYarnDetail = {
                 yarnName,
                 color: detail.color,
+                ...(selectedColor?.name && { colorName: selectedColor.name }),
+                ...(selectedColor?.pantoneName && { pantoneName: selectedColor.pantoneName }),
               };
               if (detail.yarnCatalogId?.trim()) {
                 normalizedDetail.yarnCatalogId = detail.yarnCatalogId.trim();
@@ -758,20 +761,30 @@ const AddBrandPage = () => {
                               <label className="form-label">
                                 Color <span className="text-red-500">*</span>
                               </label>
-                              <select
-                                value={detail.color}
-                                onChange={(e) => handleYarnDetailChange(index, 'color', e.target.value)}
-                                className="form-select"
-                                required
-                                disabled={isLoadingOptions || yarnColorOptions.length === 0}
-                              >
-                                <option value="">Select color</option>
-                                {yarnColorOptions.map((color) => (
-                                  <option key={color.id} value={color.id}>
-                                    {color.name}
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="flex flex-col gap-1">
+                                <select
+                                  value={detail.color}
+                                  onChange={(e) => handleYarnDetailChange(index, 'color', e.target.value)}
+                                  className="form-select"
+                                  required
+                                  disabled={isLoadingOptions || yarnColorOptions.length === 0}
+                                >
+                                  <option value="">Select color</option>
+                                  {yarnColorOptions.map((color) => (
+                                    <option key={color.id} value={color.id}>
+                                      {color.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {detail.color && (() => {
+                                  const selectedColor = yarnColorOptions.find((c) => c.id === detail.color);
+                                  return selectedColor?.pantoneName ? (
+                                    <span className="text-xs text-gray-500">
+                                      Pantone: {selectedColor.pantoneName}
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </div>
                             </div>
                             <div>
                               <label className="form-label">Shade Number</label>

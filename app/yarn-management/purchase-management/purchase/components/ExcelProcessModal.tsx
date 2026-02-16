@@ -15,7 +15,12 @@ interface ExcelRow {
   colour?: string;
   brand?: string;
   recvdDate?: string;
+  /** Excel "Yarn Type" → matches backend yarn type name (e.g. Cotton, Bamboo) */
   yarnType?: string;
+  /** Excel "Yarn Subtype" → matches backend yarn subtype (e.g. Compact, Combed Melange) */
+  yarnSubtype?: string;
+  poNumber?: string;
+  _excelRowIndex?: number;
 }
 
 interface ExcelProcessModalProps {
@@ -26,13 +31,22 @@ interface ExcelProcessModalProps {
   poOptions: Array<{ orderNumber: string; id: string }>;
 }
 
+interface ErrorDrawerContent {
+  title: string;
+  message: string;
+  unmatchedRows?: Array<{ line: number; shadeNo: string; countSize: string; yarnType: string; yarnSubtype: string; colour: string }>;
+  totalUnmatched?: number;
+  maxShown?: number;
+}
+
 const normalizeHeader = (h: string): string => {
   return (h || "")
     .toString()
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "")
-    .replace(/[_-]/g, "");
+    .replace(/[_-]/g, "")
+    .replace(/\//g, ""); // "COUNT/SIZE" -> "countsize" so it maps to countSize
 };
 
 const HEADER_MAP: Record<string, string> = {
@@ -40,6 +54,7 @@ const HEADER_MAP: Record<string, string> = {
   lotno: "lot",
   lotnumber: "lot",
   shadeno: "shadeNo",
+  shadenumber: "shadeNo",
   shade: "shadeNo",
   shadecode: "shadeNo",
   netweight: "netWeight",
@@ -51,10 +66,14 @@ const HEADER_MAP: Record<string, string> = {
   size: "countSize",
   colour: "colour",
   color: "colour",
+  pantonename: "colour",
   brand: "brand",
+  brandaspersystem: "brand",
   recvddate: "recvdDate",
   receiveddate: "recvdDate",
   yarntype: "yarnType",
+  yarnsubtype: "yarnSubtype",
+  ponumber: "poNumber",
 };
 
 /** Expected format description for user-facing errors */
@@ -151,7 +170,12 @@ function parseExcelToRows(file: File): Promise<ExcelRow[]> {
           if (colMap.brand !== undefined) r.brand = String(row[colMap.brand] ?? "").trim();
           if (colMap.recvdDate !== undefined) r.recvdDate = String(row[colMap.recvdDate] ?? "").trim();
           if (colMap.yarnType !== undefined) r.yarnType = String(row[colMap.yarnType] ?? "").trim();
-          if (r.lot && r.shadeNo) rows.push(r);
+          if (colMap.yarnSubtype !== undefined) r.yarnSubtype = String(row[colMap.yarnSubtype] ?? "").trim();
+          if (colMap.poNumber !== undefined) r.poNumber = String(row[colMap.poNumber] ?? "").trim();
+          if (r.lot && r.shadeNo) {
+            r._excelRowIndex = i + 1;
+            rows.push(r);
+          }
         }
         console.log("[ExcelProcess] parseExcelToRows done", { totalRows: rows.length, colMap });
         resolve(rows);
@@ -177,6 +201,7 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [errorDrawer, setErrorDrawer] = useState<ErrorDrawerContent | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -192,8 +217,11 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
     setSelectedOrderIds([]);
     setSearchTerm("");
     setExcelFile(null);
+    setErrorDrawer(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
+  const closeErrorDrawer = () => setErrorDrawer(null);
 
   const handleClose = () => {
     reset();
@@ -236,11 +264,32 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
       console.log("[ExcelProcess] Excel parsed", { rowCount: rows.length, firstRow: rows[0] });
 
       if (rows.length === 0) {
-        const msg =
-          "No valid rows found. Each row must have both Lot and Shade No (or Shade Code) filled. " +
-          EXPECTED_FORMAT_MSG;
         toast.error("No valid rows in Excel");
-        window.alert(msg);
+        setErrorDrawer({
+          title: "No valid rows in Excel",
+          message: "No valid rows found. Each row must have both Lot and Shade No (or Shade Code) filled. " + EXPECTED_FORMAT_MSG,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const normalizePoForCompare = (s: string | undefined) =>
+        (s ?? "").trim().toUpperCase().replace(/\s+/g, "").replace(/-/g, "");
+      const selectedPoNorm = new Set(
+        poOptions.filter((p) => selectedOrderIds.includes(p.id)).map((p) => normalizePoForCompare(p.orderNumber))
+      );
+      const rowsForSelectedPo = rows.filter((r) => {
+        if (!r.poNumber) return true;
+        return selectedPoNorm.has(normalizePoForCompare(r.poNumber));
+      });
+
+      if (rowsForSelectedPo.length === 0) {
+        toast.error("No rows for selected PO");
+        setErrorDrawer({
+          title: "No rows for selected PO",
+          message: "No Excel rows belong to the selected PO(s). " +
+            (rows.some((r) => r.poNumber) ? "Use the 'Po number' column to match the selected PO (e.g. PO-2026-895)." : "Add a 'Po number' column and set it to the selected PO, or ensure your rows match the selected PO."),
+        });
         setIsSubmitting(false);
         return;
       }
@@ -276,31 +325,119 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
         return [count, colour, shade, type].filter(Boolean).join("-") || "Unknown";
       };
 
+      /** Normalize for strict match: trim, lowercase, strip all whitespace (so "8780340 / X" matches "8780340/X") */
+      const n = (s: string | undefined) =>
+        (typeof s === "string" ? s : s != null ? String(s) : "")
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, "");
+
+      /** Normalize count/size so "20's" and "20s" match (strip apostrophe). */
+      const nCountSize = (s: string | undefined) => n(s).replace(/'/g, "");
+
+      /** Normalize shade so "8590196 / YS26410-C" (master) and "8590196/YS26410-C" (Excel) match. Strip all whitespace. */
+      const nShade = (s: string | undefined): string =>
+        (typeof s === "string" ? s : s != null ? String(s) : "")
+          .trim()
+          .toLowerCase()
+          .replace(/[\s\u00A0]+/g, "");
+
+      /** Backend yarn type name (e.g. Cotton, Bamboo) from item.yarn.yarnType.name */
+      const getItemYarnTypeName = (item: any): string => {
+        const raw = (item as any).yarn?.yarnType?.name ?? (item as any).yarnType?.name;
+        return typeof raw === "string" ? raw : "";
+      };
+
+      /** Backend yarn subtype (e.g. Compact, Combed Melange). */
+      const getItemSubtype = (item: any): string => {
+        const raw = item.yarnSubtype ?? item.yarn?.subtype ?? item.yarn?.yarnSubtype;
+        if (typeof raw === "string") return raw;
+        if (raw && typeof raw === "object" && typeof (raw as any).subtype === "string") return (raw as any).subtype;
+        return "";
+      };
+
+      /** Normalized subtype: allow "Compact Melange" in Excel to match "Combed Melange" in system. */
+      const nSubtype = (s: string | undefined): string => {
+        const v = n(s);
+        if (v === "compactmelange") return "combedmelange";
+        return v;
+      };
+
+      /** All normalized colour strings for PO item: colour name + pantoneName + colorCode. Excel colour can match any of these. */
+      const getItemColourVariants = (item: any): string[] => {
+        const raw = [
+          (item as any).colour,
+          (item as any).color,
+          (item as any).pantoneName,
+          (item as any).yarn?.colour,
+          (item as any).yarn?.color,
+          (item as any).yarn?.colorFamily?.name,
+          (item as any).yarn?.colorFamily?.colorCode,
+        ].filter((v) => v != null && String(v).trim() !== "");
+        return [...new Set(raw.map((v) => n(v)))];
+      };
+
       const resolveMatch = (r: ExcelRow): POItemWithMeta | null => {
-        const shadeNo = (r.shadeNo || "").trim().toLowerCase();
-        const yarnNameForMatch = buildYarnName(r).toLowerCase();
+        const excelShade = nShade(r.shadeNo);
+        const excelCountSize = nCountSize(r.countSize);
+        const excelYarnType = n(r.yarnType);
+        const excelYarnSubtype = nSubtype(r.yarnSubtype);
+        const excelSubtypeOnly = nSubtype(r.yarnType);
+        const excelColourRaw = n(r.colour);
+        const excelColour = excelColourRaw.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+        const hasSubtypeColumn = (r.yarnSubtype ?? "").trim() !== "";
 
         for (const { poItem, poNumber } of allPoItems) {
-          const itemShade = (poItem.shadeCode || poItem.shade_code || poItem.shadeNo || "").trim().toLowerCase();
-          const itemYarn = (poItem.yarnName || poItem.yarn?.yarnName || poItem.yarn?.name || "").trim().toLowerCase();
           const itemId = poItem._id || poItem.id;
           if (!itemId) continue;
 
-          if (!shadeNo && !itemShade && itemYarn && yarnNameForMatch && itemYarn.includes(yarnNameForMatch)) return { poItem, poNumber };
-          if (itemShade === shadeNo) return { poItem, poNumber };
-          if (itemShade && shadeNo && (itemShade.includes(shadeNo) || shadeNo.includes(itemShade))) return { poItem, poNumber };
-          if (itemYarn && yarnNameForMatch && itemYarn.includes(yarnNameForMatch)) return { poItem, poNumber };
+          const itemShade = nShade(poItem.shadeCode ?? poItem.shade_code ?? poItem.shadeNo);
+          const itemCountSize = nCountSize(poItem.sizeCount ?? poItem.size_count ?? poItem.countSize);
+          const itemYarnType = n(getItemYarnTypeName(poItem));
+          const itemSubtype = nSubtype(getItemSubtype(poItem));
+          const itemColourVariants = getItemColourVariants(poItem);
+          const colourMatch = excelColour ? itemColourVariants.includes(excelColour) : true;
+
+          const shadeMatch = excelShade === itemShade;
+          const countSizeMatch = excelCountSize === itemCountSize;
+          const typeMatch = hasSubtypeColumn ? (!excelYarnType || excelYarnType === itemYarnType) : true;
+          const subtypeMatch = hasSubtypeColumn
+            ? (!excelYarnSubtype || excelYarnSubtype === itemSubtype)
+            : excelSubtypeOnly === itemSubtype;
+
+          if (shadeMatch && countSizeMatch && typeMatch && subtypeMatch && colourMatch) return { poItem, poNumber };
+        }
+
+        // Fallback: match by shade + count/size + colour only (ignore yarn type/subtype when Excel has them wrong)
+        for (const { poItem, poNumber } of allPoItems) {
+          const itemId = poItem._id || poItem.id;
+          if (!itemId) continue;
+          const itemShade = nShade(poItem.shadeCode ?? poItem.shade_code ?? poItem.shadeNo);
+          const itemCountSize = nCountSize(poItem.sizeCount ?? poItem.size_count ?? poItem.countSize);
+          const itemColourVariants = getItemColourVariants(poItem);
+          const colourMatch = excelColour ? itemColourVariants.includes(excelColour) : true;
+          if (excelShade === itemShade && excelCountSize === itemCountSize && colourMatch) return { poItem, poNumber };
         }
         return null;
       };
 
-      // Group Excel rows by matched PO
-      // Structure: poNumber -> lotNumber -> group of Excel rows
+      // Group Excel rows by matched PO; track unmatched for error report
       const poGroups = new Map<string, Map<string, ExcelRow[]>>();
+      const unmatchedRows: Array<{ line: number; shadeNo: string; countSize: string; yarnType: string; yarnSubtype: string; colour: string }> = [];
 
-      for (const r of rows) {
+      for (const r of rowsForSelectedPo) {
         const match = resolveMatch(r);
-        if (!match) continue;
+        if (!match) {
+          unmatchedRows.push({
+            line: r._excelRowIndex ?? 0,
+            shadeNo: r.shadeNo ?? "",
+            countSize: r.countSize ?? "",
+            yarnType: r.yarnType ?? "",
+            yarnSubtype: r.yarnSubtype ?? "",
+            colour: r.colour ?? "",
+          });
+          continue;
+        }
 
         const { poNumber } = match;
         const lot = (r.lot || "LOT").trim();
@@ -311,19 +448,24 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
         lotMap.get(lot)!.push(r);
       }
 
-      if (poGroups.size === 0) {
-        const msg =
-          "Could not match any Excel rows to the selected PO items. " +
-          "Check that Shade No / Shade Code and yarn names in the Excel match the PO line items. " +
-          "If your file is a PO details (order) file, use a receiving/bags details Excel instead.";
-        console.log("[ExcelProcess] No rows matched to any selected PO");
-        toast.error("No rows matched to selected POs");
-        window.alert(msg);
+      if (poGroups.size === 0 || unmatchedRows.length > 0) {
+        const isNone = poGroups.size === 0;
+        console.log("[ExcelProcess] Validation failed – errors in drawer", { unmatchedRows: unmatchedRows.length, noMatch: isNone });
+        toast.error(isNone ? "No rows matched" : "Fix errors in Excel – process not run");
+        setErrorDrawer({
+          title: isNone ? "No rows matched" : "Fix errors to process",
+          message: isNone
+            ? "Could not match any Excel rows to the selected PO items. Each row must match a PO line item on: Shade No, Count/Size, Yarn Type, Yarn Subtype, Colour. Fix the rows below in Excel and re-upload. Process API will not be called until all rows match."
+            : `${unmatchedRows.length} row(s) did not match any PO line item. Fix the rows below in Excel and re-upload. Process API will not be called until everything is correct.`,
+          unmatchedRows: unmatchedRows.slice(0, 50),
+          totalUnmatched: unmatchedRows.length,
+          maxShown: 50,
+        });
         setIsSubmitting(false);
         return;
       }
 
-      // Build payload items array
+      // All rows matched – build payload and call process API
       const payloadItems: YarnReceivingProcessPayload["items"] = [];
 
       for (const [poNumber, lotMap] of Array.from(poGroups.entries())) {
@@ -394,7 +536,10 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
       const message = error instanceof Error ? error.message : "Failed to process Excel";
       console.error("[ExcelProcess] Error:", error);
       toast.error("Excel process failed");
-      window.alert("Excel process failed:\n\n" + message);
+      setErrorDrawer({
+        title: "Excel process failed",
+        message,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -532,6 +677,87 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Error drawer from right */}
+      {errorDrawer && (
+        <>
+          <div
+            className="fixed inset-0 z-[60] bg-black/40 transition-opacity"
+            onClick={closeErrorDrawer}
+            aria-hidden
+          />
+          <div className="excel-process-error-drawer fixed top-0 right-0 bottom-0 z-[61] w-full max-w-md bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-red-50">
+              <h3 className="text-sm font-bold text-red-800">{errorDrawer.title}</h3>
+              <button
+                type="button"
+                onClick={closeErrorDrawer}
+                className="p-1.5 text-red-600 hover:bg-red-100 rounded transition-colors"
+              >
+                <i className="ri-close-line text-xl" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <p className="text-xs text-gray-700 leading-relaxed">{errorDrawer.message}</p>
+              {errorDrawer.unmatchedRows && errorDrawer.unmatchedRows.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-700 mb-2">
+                    Rows that did not match ({errorDrawer.totalUnmatched ?? errorDrawer.unmatchedRows.length}
+                    {errorDrawer.totalUnmatched && (errorDrawer.maxShown ?? 0) < errorDrawer.totalUnmatched
+                      ? ` shown, first ${errorDrawer.maxShown ?? 50}`
+                      : ""}
+                    ):
+                  </p>
+                  <div className="border border-gray-200 rounded overflow-hidden">
+                    <table className="w-full text-[10px]">
+                      <thead>
+                        <tr className="bg-gray-100 text-gray-600 font-semibold">
+                          <th className="text-left py-1.5 px-2 border-b border-gray-200">Row</th>
+                          <th className="text-left py-1.5 px-2 border-b border-gray-200">Shade No</th>
+                          <th className="text-left py-1.5 px-2 border-b border-gray-200">Count/Size</th>
+                          <th className="text-left py-1.5 px-2 border-b border-gray-200">Yarn Type</th>
+                          <th className="text-left py-1.5 px-2 border-b border-gray-200">Yarn Subtype</th>
+                          <th className="text-left py-1.5 px-2 border-b border-gray-200">Colour</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {errorDrawer.unmatchedRows.map((u, idx) => (
+                          <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-1.5 px-2 font-medium">{u.line}</td>
+                            <td className="py-1.5 px-2">{u.shadeNo || "–"}</td>
+                            <td className="py-1.5 px-2">{u.countSize || "–"}</td>
+                            <td className="py-1.5 px-2">{u.yarnType || "–"}</td>
+                            <td className="py-1.5 px-2">{u.yarnSubtype ?? "–"}</td>
+                            <td className="py-1.5 px-2">{u.colour || "–"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+              <button
+                type="button"
+                onClick={closeErrorDrawer}
+                className="w-full px-3 py-2 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <style dangerouslySetInnerHTML={{ __html: `
+            .excel-process-error-drawer {
+              animation: excelProcessDrawerIn 0.2s ease-out;
+            }
+            @keyframes excelProcessDrawerIn {
+              from { transform: translateX(100%); }
+              to { transform: translateX(0); }
+            }
+          `}} />
+        </>
+      )}
     </div>
   );
 };

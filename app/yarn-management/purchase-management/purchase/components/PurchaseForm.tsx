@@ -835,6 +835,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         return {
           shadeCode: item.shadeCode || "",
           countSize: item.sizeCountName || item.sizeCount || "",
+          yarnType: yarnTypeName,
           yarnSubtype: yarnSubtypeName,
           rate: item.rate || 0,
           quantity: item.qty || 0,
@@ -883,17 +884,25 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         const gstAmount = (baseAmount * r.gst) / 100;
         const excelShadeCode = r.shadeCode?.trim() || "";
         const excelCountSize = r.countSize?.trim() || "";
+        const excelYarnType = r.yarnType?.trim() || "";
         const excelYarnSubtype = r.yarnSubtype?.trim() || "";
         const normalizedShadeCode = normalizeShadeToken(excelShadeCode);
         const normalizedCountSize = normalizeCountToken(excelCountSize);
+        const normalizedYarnType = normalizeText(excelYarnType);
         const normalizedYarnSubtype = normalizeText(excelYarnSubtype);
 
-        // Find strict match based on shade code and count size.
+        // Find strict match based on shade code, count size, yarn type, and yarn subtype.
         const strictMatch = options.find((o) => {
           const optionShadeCode = normalizeShadeToken(o.shadeCode || "");
           const shadeMatch =
             !normalizedShadeCode || optionShadeCode === normalizedShadeCode;
           if (!shadeMatch) return false;
+          if (normalizedYarnType) {
+            const optionYarnType = normalizeText(o.yarnTypeName || "");
+            if (!optionYarnType || optionYarnType !== normalizedYarnType) {
+              return false;
+            }
+          }
           if (normalizedYarnSubtype) {
             const optionYarnSubtype = normalizeText(o.yarnSubtypeName || "");
             if (!optionYarnSubtype || optionYarnSubtype !== normalizedYarnSubtype) {
@@ -908,11 +917,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         });
 
         // Fallback: if strict match fails but shade code uniquely identifies a yarn, use it.
-        // This handles cases where Excel count-size text format differs from supplier metadata.
         const shadeMatchedOptions = options.filter((o) => {
           const optionShadeCode = normalizeShadeToken(o.shadeCode || "");
           if (!Boolean(normalizedShadeCode) || optionShadeCode !== normalizedShadeCode) {
             return false;
+          }
+          if (normalizedYarnType) {
+            const optionYarnType = normalizeText(o.yarnTypeName || "");
+            if (optionYarnType !== normalizedYarnType) return false;
           }
           if (!normalizedYarnSubtype) return true;
           const optionYarnSubtype = normalizeText(o.yarnSubtypeName || "");

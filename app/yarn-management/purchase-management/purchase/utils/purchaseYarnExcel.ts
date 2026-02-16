@@ -1,7 +1,7 @@
 /**
  * Excel template and import for purchase order yarn items.
- * Columns: Shade Code, Count size, Yarn Subtype, Rate (empty in template), Quantity (empty), GST (5), Estimated Delivery Date (1 month forward).
- * Yarn Name is mapped automatically from shade code + count size + yarn subtype after import.
+ * Columns: Shade Code, Count size, Yarn Type, Yarn Subtype, Rate (empty in template), Quantity (empty), GST (5), Estimated Delivery Date (1 month forward).
+ * Yarn Name is mapped automatically from shade code + count size + yarn type + yarn subtype after import.
  */
 
 import * as XLSX from "xlsx";
@@ -10,6 +10,7 @@ export const YARN_ITEMS_TEMPLATE_SHEET = "Yarn Items";
 const TEMPLATE_HEADERS = [
   "Shade Code",
   "Count size",
+  "Yarn Type",
   "Yarn Subtype",
   "Rate",
   "Quantity",
@@ -20,6 +21,7 @@ const TEMPLATE_HEADERS = [
 export interface ParsedYarnRow {
   shadeCode: string;
   countSize: string;
+  yarnType: string;
   yarnSubtype: string;
   rate: number;
   quantity: number;
@@ -43,6 +45,7 @@ export function downloadYarnItemsTemplate(): void {
   const sampleRow = [
     "e.g. SC-001",
     "e.g. 40s",
+    "e.g. Cotton",
     "e.g. Compact",
     "", // Rate - empty
     "", // Quantity - empty
@@ -54,6 +57,7 @@ export function downloadYarnItemsTemplate(): void {
   ws["!cols"] = [
     { wch: 15 },
     { wch: 15 },
+    { wch: 12 },
     { wch: 14 },
     { wch: 10 },
     { wch: 10 },
@@ -77,6 +81,7 @@ export function downloadYarnItemsData(
     ...rows.map((row) => [
       row.shadeCode || "",
       row.countSize || "",
+      row.yarnType || "",
       row.yarnSubtype || "",
       row.rate ?? "",
       row.quantity ?? "",
@@ -88,6 +93,7 @@ export function downloadYarnItemsData(
   ws["!cols"] = [
     { wch: 15 },
     { wch: 15 },
+    { wch: 12 },
     { wch: 14 },
     { wch: 10 },
     { wch: 10 },
@@ -198,6 +204,9 @@ export function parseYarnItemsExcelFile(
           const countSize = str(
             get(row, ["count size", "countsize", "count_size", "count", "size"])
           );
+          const yarnType = str(
+            get(row, ["yarn type", "yarntype", "yarn_type", "type"])
+          );
           const yarnSubtype = str(
             get(row, ["yarn subtype", "yarnsubtype", "yarn_subtype", "subtype"])
           );
@@ -229,6 +238,7 @@ export function parseYarnItemsExcelFile(
           rows.push({
             shadeCode,
             countSize,
+            yarnType,
             yarnSubtype,
             rate,
             quantity,

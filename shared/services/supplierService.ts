@@ -21,6 +21,10 @@ export interface SupplierYarnDetail {
   yarnType?: string | SupplierYarnReference;
   yarnsubtype?: string | SupplierYarnReference;
   color: string | SupplierYarnReference;
+  /** Display name of the color (e.g. "Blue") */
+  colorName?: string;
+  /** Pantone name for the color (e.g. "BLUE") */
+  pantoneName?: string;
   shadeNumber?: string;
   tearweight?: string;
 }
