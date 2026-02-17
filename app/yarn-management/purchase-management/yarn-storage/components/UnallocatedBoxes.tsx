@@ -544,7 +544,6 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Number of Cones</th>
-                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order Qty</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received Date</th>
                       <th className="px-1.5 py-2 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
@@ -572,9 +571,6 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
                           </td>
                           <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.numberOfCones || "-"}
-                          </td>
-                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
-                            {box.orderQty || "-"}
                           </td>
                           <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.lotNumber || "-"}
