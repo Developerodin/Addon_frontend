@@ -376,6 +376,16 @@ const EditPurchasePage = () => {
           return item.selectedCatalog.id;
         }
 
+        // Prefer catalog id from the user's selected supplier yarn detail (keeps shade/catalog correct when multiple options share same name)
+        const detail = item.selectedYarnDetail as Record<string, unknown> | undefined;
+        const raw =
+          detail?.yarnCatalogId ?? detail?.yarnCatalog ?? detail?.catalogId ?? detail?.catalog;
+        if (raw != null) {
+          const id = typeof raw === "string" || typeof raw === "number"
+            ? String(raw)
+            : (raw as { id?: string; _id?: string })?.id ?? (raw as { id?: string; _id?: string })?._id;
+          if (id) return id;
+        }
         const detailId = extractYarnId(item.selectedYarnDetail);
         if (detailId) {
           return detailId;

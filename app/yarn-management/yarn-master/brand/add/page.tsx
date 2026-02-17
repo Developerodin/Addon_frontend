@@ -10,6 +10,7 @@ import supplierService, {
 } from '@/shared/services/supplierService';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 import yarnColorService, { YarnColor } from '@/shared/services/yarnColorService';
+import ColorPickerDrawer from '@/shared/components/ColorPickerDrawer';
 
 interface YarnDetailForm {
   yarnCatalogId: string;
@@ -65,7 +66,10 @@ const AddBrandPage = () => {
   const [modalTotalPages, setModalTotalPages] = useState(1);
   const [modalTotalResults, setModalTotalResults] = useState(0);
   const [isModalLoading, setIsModalLoading] = useState(false);
-  
+
+  /** Which yarn-detail row has the color picker drawer open (index in yarnDetails). */
+  const [colorDrawerDetailIndex, setColorDrawerDetailIndex] = useState<number | null>(null);
+
   const [formData, setFormData] = useState<BrandFormState>({
     brandName: '',
     contactPersonName: '',
@@ -762,20 +766,34 @@ const AddBrandPage = () => {
                                 Color <span className="text-red-500">*</span>
                               </label>
                               <div className="flex flex-col gap-1">
-                                <select
-                                  value={detail.color}
-                                  onChange={(e) => handleYarnDetailChange(index, 'color', e.target.value)}
-                                  className="form-select"
-                                  required
+                                <button
+                                  type="button"
+                                  onClick={() => !isLoadingOptions && yarnColorOptions.length > 0 && setColorDrawerDetailIndex(index)}
                                   disabled={isLoadingOptions || yarnColorOptions.length === 0}
+                                  className="ti-btn ti-btn-light flex items-center gap-2 w-full justify-start text-left"
                                 >
-                                  <option value="">Select color</option>
-                                  {yarnColorOptions.map((color) => (
-                                    <option key={color.id} value={color.id}>
-                                      {color.name}
-                                    </option>
-                                  ))}
-                                </select>
+                                  {detail.color ? (() => {
+                                    const selectedColor = yarnColorOptions.find((c) => c.id === detail.color);
+                                    const bg = selectedColor?.colorCode
+                                      ? (/^#/.test(selectedColor.colorCode) ? selectedColor.colorCode : `#${selectedColor.colorCode}`)
+                                      : '#e5e7eb';
+                                    return (
+                                      <>
+                                        <span
+                                          className="shrink-0 w-5 h-5 rounded border border-gray-300"
+                                          style={{ backgroundColor: bg }}
+                                        />
+                                        <span className="truncate">{selectedColor?.name || 'Select color'}</span>
+                                        {selectedColor?.pantoneName && (
+                                          <span className="text-xs text-gray-500 truncate">({selectedColor.pantoneName})</span>
+                                        )}
+                                      </>
+                                    );
+                                  })() : (
+                                    <span className="text-gray-500">Select color</span>
+                                  )}
+                                  <i className="ri-arrow-right-s-line ms-auto text-gray-400" />
+                                </button>
                                 {detail.color && (() => {
                                   const selectedColor = yarnColorOptions.find((c) => c.id === detail.color);
                                   return selectedColor?.pantoneName ? (
@@ -848,6 +866,21 @@ const AddBrandPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Color selection side drawer */}
+      <ColorPickerDrawer
+        isOpen={colorDrawerDetailIndex !== null}
+        onClose={() => setColorDrawerDetailIndex(null)}
+        colors={yarnColorOptions}
+        selectedColorId={colorDrawerDetailIndex !== null ? (formData.yarnDetails[colorDrawerDetailIndex]?.color ?? '') : ''}
+        onSelect={(colorId) => {
+          if (colorDrawerDetailIndex !== null) {
+            handleYarnDetailChange(colorDrawerDetailIndex, 'color', colorId);
+            setColorDrawerDetailIndex(null);
+          }
+        }}
+        title="Select Color"
+      />
 
       {/* Yarn Name Selection Modal */}
       {isYarnNameModalOpen && (
