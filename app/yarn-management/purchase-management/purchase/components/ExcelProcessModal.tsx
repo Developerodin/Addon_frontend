@@ -317,8 +317,11 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
 
       console.log("[ExcelProcess] Collected all PO items", { totalItems: allPoItems.length });
 
+      /** Count/size in system format (strip apostrophe: 30's → 30s) for payload sent to backend. */
+      const countSizeForPayload = (s: string | undefined) =>
+        (s ?? "").trim().replace(/'/g, "");
       const buildYarnName = (r: ExcelRow) => {
-        const count = r.countSize || "";
+        const count = countSizeForPayload(r.countSize);
         const colour = r.colour || "";
         const shade = r.shadeNo || "";
         const type = r.yarnType || "";
