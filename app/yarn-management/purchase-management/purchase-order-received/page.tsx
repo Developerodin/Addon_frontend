@@ -1236,12 +1236,9 @@ const PurchaseOrderReceivedPage = () => {
                                       toast.success('Boxes already exist for this order');
                                     }
 
-                                    // Navigate to process page with lot details as query params
-                                    console.log('Navigating to process page with lot details...');
-                                    const queryParams = new URLSearchParams({
-                                      lotData: JSON.stringify(processData)
-                                    });
-                                    router.push(`/yarn-management/purchase-management/purchase-order-received/process/${order.id}?${queryParams.toString()}`);
+                                    // Navigate to process page (lot data is fetched from API by orderId to avoid URL length limits)
+                                    console.log('Navigating to process page...');
+                                    router.push(`/yarn-management/purchase-management/purchase-order-received/process/${order.id}`);
                                   } catch (error) {
                                     console.error('Failed to process order:', error);
                                     toast.error(error instanceof Error ? error.message : 'Failed to process order');

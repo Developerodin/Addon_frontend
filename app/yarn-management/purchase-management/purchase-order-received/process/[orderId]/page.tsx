@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -164,7 +164,6 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
 const ProcessOrderPage = () => {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { hasSubPermission, isLoading } = useNavigation();
   const user = useSelector((state: any) => state.auth?.user);
   const orderId = params?.orderId as string;
@@ -258,19 +257,19 @@ const ProcessOrderPage = () => {
     console.log('Process page - params:', params);
   }, [hasPurchaseManagement, hasPurchaseOrderReceived, hasPermission, isLoading, orderId, params]);
 
-  // Read lot data from query params
+  // Derive lot data from fetched order (avoids passing large payload in URL which breaks in production)
   useEffect(() => {
-    const lotDataParam = searchParams?.get('lotData');
-    if (lotDataParam) {
-      try {
-        const parsed = JSON.parse(lotDataParam);
-        setLotData(parsed);
-        console.log('Process page - Lot data received:', parsed);
-      } catch (error) {
-        console.error('Failed to parse lot data:', error);
-      }
+    if (!order?.orderNumber || !order.receivedLotDetails?.length) return;
+    const details = order.receivedLotDetails
+      .filter((lot) => lot.lotNumber && lot.numberOfBoxes > 0)
+      .map((lot) => ({
+        lotNumber: lot.lotNumber.trim(),
+        numberOfBoxes: lot.numberOfBoxes,
+      }));
+    if (details.length > 0) {
+      setLotData({ poNumber: order.orderNumber, lotDetails: details });
     }
-  }, [searchParams]);
+  }, [order?.orderNumber, order?.receivedLotDetails]);
 
   // Reset selected status when modal opens
   useEffect(() => {

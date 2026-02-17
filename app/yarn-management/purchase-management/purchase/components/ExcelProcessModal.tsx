@@ -31,10 +31,30 @@ interface ExcelProcessModalProps {
   poOptions: Array<{ orderNumber: string; id: string }>;
 }
 
+/** One mismatch reason: field name, value in Excel, value on PO item */
+export interface MismatchReason {
+  field: string;
+  excelVal: string;
+  poVal: string;
+}
+
+/** For unmatched row: either no PO item with same shade+count, or candidate(s) with specific mismatches */
+export type UnmatchedRowMismatch =
+  | { noCandidate: true }
+  | { candidates: Array<{ poNumber: string; poItemSummary: string; mismatches: MismatchReason[] }> };
+
 interface ErrorDrawerContent {
   title: string;
   message: string;
-  unmatchedRows?: Array<{ line: number; shadeNo: string; countSize: string; yarnType: string; yarnSubtype: string; colour: string }>;
+  unmatchedRows?: Array<{
+    line: number;
+    shadeNo: string;
+    countSize: string;
+    yarnType: string;
+    yarnSubtype: string;
+    colour: string;
+    mismatchDetails?: UnmatchedRowMismatch;
+  }>;
   totalUnmatched?: number;
   maxShown?: number;
 }
@@ -338,12 +358,9 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
       /** Normalize count/size so "20's" and "20s" match (strip apostrophe). */
       const nCountSize = (s: string | undefined) => n(s).replace(/'/g, "");
 
-      /** Normalize shade so "8590196 / YS26410-C" (master) and "8590196/YS26410-C" (Excel) match. Strip all whitespace. */
+      /** Shade: strict exact match. Only trim + toLowerCase (no collapsing spaces) so same shade string is required. */
       const nShade = (s: string | undefined): string =>
-        (typeof s === "string" ? s : s != null ? String(s) : "")
-          .trim()
-          .toLowerCase()
-          .replace(/[\s\u00A0]+/g, "");
+        (typeof s === "string" ? s : s != null ? String(s) : "").trim().toLowerCase();
 
       /** Parse yarnName when API returns null for type/subtype/colour. Format: "20s-Dark Orange-Dk. Orange-Cotton/Compact" */
       const parseYarnName = (yarnName: string | undefined) => {
@@ -372,16 +389,12 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
         return parseYarnName((item as any).yarnName).subtype;
       };
 
-      /** Normalized subtype: allow "Compact Melange" in Excel to match "Combed Melange" in system. */
-      const nSubtype = (s: string | undefined): string => {
-        const v = n(s);
-        if (v === "compactmelange") return "combedmelange";
-        return v;
-      };
+      /** Normalize subtype same as general text (trim, lowercase, collapse spaces). Exact match only – no alias. */
+      const nSubtype = (s: string | undefined): string => n(s);
 
-      /** Strip trailing parenthetical (e.g. "Navy (New)" → "navy") so Excel "Navy (New)" matches PO "Navy (New)". */
-      const colourBase = (s: string) => s.replace(/\s*\([^)]*\)\s*$/g, "").trim();
-      /** All normalized colour strings for PO item: full form + base form (no trailing parens) so "Navy (New)" matches both "navy(new)" and "navy". */
+      /** Colour: exact match only. Full string normalized (trim, lowercase, collapse spaces) – do NOT strip parenthetical so "Navy (New)" does not match "Navy". */
+      const nColour = (s: string | undefined): string => n(s);
+      /** All normalized colour strings for PO item (full form only – no base/stripped form). */
       const getItemColourVariants = (item: any): string[] => {
         const raw = [
           (item as any).colour,
@@ -393,20 +406,16 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
           (item as any).yarn?.colorFamily?.colorCode,
           ...parseYarnName((item as any).yarnName).colourVariants,
         ].filter((v) => v != null && String(v).trim() !== "");
-        const normalized = raw.map((v) => n(v));
-        const withBase = normalized.flatMap((v) => (v ? [v, colourBase(v)] : []));
-        return [...new Set(withBase.filter(Boolean))];
+        return [...new Set(raw.map((v) => nColour(v)).filter(Boolean))];
       };
 
+      /** Strict match: shade, count/size, colour (exact full string), yarn type and subtype must match exactly; if either side has type/subtype the other must have same (missing = mismatch). */
       const resolveMatch = (r: ExcelRow): POItemWithMeta | null => {
         const excelShade = nShade(r.shadeNo);
         const excelCountSize = nCountSize(r.countSize);
         const excelYarnType = n(r.yarnType);
         const excelYarnSubtype = nSubtype(r.yarnSubtype);
-        const excelSubtypeOnly = nSubtype(r.yarnType);
-        const excelColourRaw = n(r.colour);
-        const excelColour = excelColourRaw.replace(/\s*\([^)]*\)\s*$/g, "").trim();
-        const hasSubtypeColumn = (r.yarnSubtype ?? "").trim() !== "";
+        const excelColour = nColour(r.colour);
 
         for (const { poItem, poNumber } of allPoItems) {
           const itemId = poItem._id || poItem.id;
@@ -417,29 +426,70 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
           const itemYarnType = n(getItemYarnTypeName(poItem));
           const itemSubtype = nSubtype(getItemSubtype(poItem));
           const itemColourVariants = getItemColourVariants(poItem);
-          const colourMatch = excelColour ? itemColourVariants.includes(excelColour) : true;
 
           const shadeMatch = excelShade === itemShade;
           const countSizeMatch = excelCountSize === itemCountSize;
-          const typeMatch = hasSubtypeColumn ? (!excelYarnType || excelYarnType === itemYarnType) : true;
-          const subtypeMatch = hasSubtypeColumn
-            ? (!excelYarnSubtype || excelYarnSubtype === itemSubtype)
-            : excelSubtypeOnly === itemSubtype;
+          const colourMatch = excelColour ? itemColourVariants.includes(excelColour) : true;
+          const typeMatch = excelYarnType === itemYarnType;
+          const subtypeMatch = excelYarnSubtype === itemSubtype;
 
           if (shadeMatch && countSizeMatch && typeMatch && subtypeMatch && colourMatch) return { poItem, poNumber };
         }
+        return null;
+      };
 
-        // Fallback: match by shade + count/size + colour only (ignore yarn type/subtype when Excel has them wrong)
+      /** For error reporting: find candidates (same shade+count) and list exact mismatches (field, excel value, PO value). */
+      const getMismatchDetails = (r: ExcelRow): UnmatchedRowMismatch => {
+        const excelShade = nShade(r.shadeNo);
+        const excelCountSize = nCountSize(r.countSize);
+        const excelYarnType = n(r.yarnType);
+        const excelYarnSubtype = nSubtype(r.yarnSubtype);
+        const excelColour = nColour(r.colour);
+        const candidates: Array<{ poNumber: string; poItemSummary: string; mismatches: MismatchReason[] }> = [];
+
         for (const { poItem, poNumber } of allPoItems) {
           const itemId = poItem._id || poItem.id;
           if (!itemId) continue;
           const itemShade = nShade(poItem.shadeCode ?? poItem.shade_code ?? poItem.shadeNo);
           const itemCountSize = nCountSize(poItem.sizeCount ?? poItem.size_count ?? poItem.countSize);
+          if (excelShade !== itemShade || excelCountSize !== itemCountSize) continue;
+
+          const itemYarnType = n(getItemYarnTypeName(poItem));
+          const itemSubtype = nSubtype(getItemSubtype(poItem));
           const itemColourVariants = getItemColourVariants(poItem);
+          const itemColourDisplay = itemColourVariants.length ? itemColourVariants.join(", ") : "(none)";
+
+          const mismatches: MismatchReason[] = [];
+          if (excelYarnType !== itemYarnType) {
+            mismatches.push({
+              field: "Yarn Type",
+              excelVal: (r.yarnType ?? "").trim() || "(missing in Excel)",
+              poVal: itemYarnType ? getItemYarnTypeName(poItem) : "(missing in PO item)",
+            });
+          }
+          if (excelYarnSubtype !== itemSubtype) {
+            mismatches.push({
+              field: "Yarn Subtype",
+              excelVal: (r.yarnSubtype ?? "").trim() || "(missing in Excel)",
+              poVal: itemSubtype ? getItemSubtype(poItem) : "(missing in PO item)",
+            });
+          }
           const colourMatch = excelColour ? itemColourVariants.includes(excelColour) : true;
-          if (excelShade === itemShade && excelCountSize === itemCountSize && colourMatch) return { poItem, poNumber };
+          if (!colourMatch) {
+            mismatches.push({
+              field: "Colour",
+              excelVal: (r.colour ?? "").trim() || "(missing in Excel)",
+              poVal: itemColourDisplay,
+            });
+          }
+          if (mismatches.length === 0) continue;
+          const poItemSummary =
+            [itemShade || "(no shade)", itemCountSize || "(no count)", itemYarnType || "(no type)", itemSubtype || "(no subtype)"].join(" / ");
+          candidates.push({ poNumber, poItemSummary, mismatches });
         }
-        return null;
+
+        if (candidates.length === 0) return { noCandidate: true };
+        return { candidates };
       };
 
       // Group Excel rows by matched PO; track unmatched for error report
@@ -456,6 +506,7 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
             yarnType: r.yarnType ?? "",
             yarnSubtype: r.yarnSubtype ?? "",
             colour: r.colour ?? "",
+            mismatchDetails: getMismatchDetails(r),
           });
           continue;
         }
@@ -474,10 +525,10 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
         console.log("[ExcelProcess] Validation failed – errors in drawer", { unmatchedRows: unmatchedRows.length, noMatch: isNone });
         toast.error(isNone ? "No rows matched" : "Fix errors in Excel – process not run");
         setErrorDrawer({
-          title: isNone ? "No rows matched" : "Fix errors to process",
+          title: isNone ? "No rows matched" : "Data mismatch – fix in Excel or PO",
           message: isNone
-            ? "Could not match any Excel rows to the selected PO items. Each row must match a PO line item on: Shade No, Count/Size, Yarn Type, Yarn Subtype, Colour. Fix the rows below in Excel and re-upload. Process API will not be called until all rows match."
-            : `${unmatchedRows.length} row(s) did not match any PO line item. Fix the rows below in Excel and re-upload. Process API will not be called until everything is correct.`,
+            ? "Could not match any Excel rows to the selected PO items. Each row must exactly match a PO line item on: Shade No, Count/Size, Yarn Type, Yarn Subtype, Colour (exact – e.g. 'Navy (New)' does not match 'Navy'). If a value is missing on Excel or PO, fix it so both sides match."
+            : `${unmatchedRows.length} row(s) did not exactly match any PO line item. See reasons below: fix either in Excel or in the PO so Shade, Count/Size, Colour, Yarn Type and Yarn Subtype match exactly. Process will not run until all rows match.`,
           unmatchedRows: unmatchedRows.slice(0, 50),
           totalUnmatched: unmatchedRows.length,
           maxShown: 50,
@@ -743,14 +794,43 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
                       </thead>
                       <tbody>
                         {errorDrawer.unmatchedRows.map((u, idx) => (
-                          <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="py-1.5 px-2 font-medium">{u.line}</td>
-                            <td className="py-1.5 px-2">{u.shadeNo || "–"}</td>
-                            <td className="py-1.5 px-2">{u.countSize || "–"}</td>
-                            <td className="py-1.5 px-2">{u.yarnType || "–"}</td>
-                            <td className="py-1.5 px-2">{u.yarnSubtype ?? "–"}</td>
-                            <td className="py-1.5 px-2">{u.colour || "–"}</td>
-                          </tr>
+                          <React.Fragment key={idx}>
+                            <tr className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="py-1.5 px-2 font-medium">{u.line}</td>
+                              <td className="py-1.5 px-2">{u.shadeNo || "–"}</td>
+                              <td className="py-1.5 px-2">{u.countSize || "–"}</td>
+                              <td className="py-1.5 px-2">{u.yarnType || "–"}</td>
+                              <td className="py-1.5 px-2">{u.yarnSubtype ?? "–"}</td>
+                              <td className="py-1.5 px-2">{u.colour || "–"}</td>
+                            </tr>
+                            {u.mismatchDetails && (
+                              <tr className="border-b border-gray-100 bg-amber-50/80">
+                                <td colSpan={6} className="py-1.5 px-2 text-[10px] text-gray-700">
+                                  {"noCandidate" in u.mismatchDetails ? (
+                                    <span>No PO line item with same Shade + Count/Size. Add a matching item on the PO or fix Excel.</span>
+                                  ) : (
+                                    <ul className="list-disc list-inside space-y-0.5">
+                                      {u.mismatchDetails.candidates.slice(0, 2).map((c, i) => (
+                                        <li key={i}>
+                                          <span className="font-medium">PO {c.poNumber}</span> – {c.poItemSummary}
+                                          <ul className="ml-3 mt-0.5 list-[circle] list-inside text-red-700">
+                                            {c.mismatches.map((m, j) => (
+                                              <li key={j}>
+                                                {m.field}: Excel &quot;{m.excelVal}&quot; vs PO &quot;{m.poVal}&quot; – fix in Excel or PO.
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </li>
+                                      ))}
+                                      {u.mismatchDetails.candidates.length > 2 && (
+                                        <li className="text-gray-500">+ {u.mismatchDetails.candidates.length - 2} more candidate(s)</li>
+                                      )}
+                                    </ul>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         ))}
                       </tbody>
                     </table>
