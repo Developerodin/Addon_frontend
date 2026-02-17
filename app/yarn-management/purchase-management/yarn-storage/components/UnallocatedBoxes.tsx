@@ -4,6 +4,7 @@ import { toast } from "react-hot-toast";
 import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
 import { PurchaseOrder } from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
+import PurchaseOrderSelectDrawer from "@/shared/components/PurchaseOrderSelectDrawer";
 
 interface UnallocatedBoxesProps {
   onBoxAllocate?: (orderId: string) => void;
@@ -35,6 +36,7 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
 
   const [startDate, setStartDate] = useState<string>(getDefaultStartDate());
   const [endDate, setEndDate] = useState<string>(getDefaultEndDate());
+  const [poDrawerOpen, setPoDrawerOpen] = useState(false);
 
   // Helper function to convert API status code to display format
   const convertStatusFromAPI = (statusCode: string): string => {
@@ -306,8 +308,6 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
   }, [selectedPO, orders]);
 
   // Use all orders for the dropdown (no filtering needed)
-  const filteredOrders = orders;
-
   // Handle allocate button click
   const handleAllocateClick = (boxId: string) => {
     setAllocatingBoxId(boxId);
@@ -479,7 +479,7 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
           </div>
         </div>
 
-        {/* PO Select Dropdown */}
+        {/* PO Select — opens drawer for search + pick (handles 300+ POs) */}
         <div className="mb-4">
           <label className="text-xs font-medium text-gray-700 mb-1.5 block">
             Select Purchase Order
@@ -490,25 +490,37 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
               <span className="text-xs text-gray-600">Loading orders...</span>
             </div>
           ) : (
-            <select
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-              value={selectedPO}
-              onChange={(e) => setSelectedPO(e.target.value)}
-            >
-              <option value="">-- Select a Purchase Order --</option>
-              {filteredOrders.map((order) => (
-                <option key={order.id} value={order.orderNumber}>
-                  {order.orderNumber} - {order.supplier} (₹{order.totalAmount.toLocaleString()})
-                </option>
-              ))}
-            </select>
-          )}
-          {filteredOrders.length === 0 && !isLoading && (
-            <p className="text-xs text-gray-500 mt-1.5">
-              No purchase orders found for the selected date range.
-            </p>
+            <>
+              <button
+                type="button"
+                onClick={() => orders.length > 0 && setPoDrawerOpen(true)}
+                disabled={orders.length === 0}
+                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300 text-left flex items-center justify-between gap-2 bg-white disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed hover:border-gray-300"
+              >
+                <span className="truncate">
+                  {selectedPO
+                    ? `${selectedPO}${orders.find((o) => o.orderNumber === selectedPO) ? ` · ${orders.find((o) => o.orderNumber === selectedPO)?.supplier}` : ""}`
+                    : "-- Select a Purchase Order --"}
+                </span>
+                <i className="ri-arrow-right-s-line text-gray-400 shrink-0" />
+              </button>
+              {orders.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1.5">
+                  No purchase orders found for the selected date range.
+                </p>
+              )}
+            </>
           )}
         </div>
+        <PurchaseOrderSelectDrawer
+          isOpen={poDrawerOpen}
+          onClose={() => setPoDrawerOpen(false)}
+          orders={orders}
+          selectedOrderNumber={selectedPO}
+          onSelect={setSelectedPO}
+          title="Select Purchase Order"
+          emptyMessage="No purchase orders found for the selected date range."
+        />
 
         {/* Boxes Table */}
         {selectedPO && (
