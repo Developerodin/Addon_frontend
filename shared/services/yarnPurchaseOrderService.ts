@@ -293,15 +293,17 @@ class YarnPurchaseOrderService {
       throw new Error('Order ID is required');
     }
 
-    if (!packlistDetails || packlistDetails.length === 0) {
-      throw new Error('At least one packlist detail is required');
+    if (!packlistDetails || !Array.isArray(packlistDetails)) {
+      throw new Error('Packlist details must be an array');
     }
 
-    // Combine notes from all entries (or use the first one)
-    const combinedNotes = packlistDetails
-      .map(d => d.notes)
-      .filter(Boolean)
-      .join('; ') || 'Update packing details';
+    // Combine notes from all entries (or use placeholder when empty)
+    const combinedNotes = packlistDetails.length > 0
+      ? packlistDetails
+        .map(d => d.notes)
+        .filter(Boolean)
+        .join('; ') || 'Update packing details'
+      : 'Packlist cleared';
 
     const payload: {
       notes?: string;

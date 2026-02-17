@@ -290,6 +290,7 @@ const PurchasePage = () => {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [detailedOrderData, setDetailedOrderData] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deletingPacklistIndex, setDeletingPacklistIndex] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
   const [isPrinting, setIsPrinting] = useState(false);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
@@ -755,6 +756,58 @@ const PurchasePage = () => {
       toast.error(error instanceof Error ? error.message : 'Failed to update packlist');
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  /** Delete a single packlist entry from the order (in details modal). */
+  const handleDeletePacklistEntry = async (order: PurchaseOrder, indexToDelete: number) => {
+    const arr = order.packListDetailsArray ?? (order.packlistDetails ? [order.packlistDetails] : []);
+    const confirmed = window.confirm(
+      arr.length <= 1
+        ? 'Remove the only packlist entry? The order will have no packlist details.'
+        : 'Remove this packlist entry? This will update the purchase order.'
+    );
+    if (!confirmed) return;
+
+    setDeletingPacklistIndex(indexToDelete);
+    try {
+      const remaining = arr
+        .filter((_, i) => i !== indexToDelete)
+        .map((entry) => ({
+          packingNumber: entry.packingNumber ?? '',
+          courierName: entry.courierName ?? '',
+          courierNumber: entry.courierNumber ?? '',
+          vehicleNumber: entry.vehicleNumber ?? '',
+          challanNumber: entry.challanNumber ?? '',
+          dispatchDate: typeof entry.dispatchDate === 'string' ? entry.dispatchDate : (entry.dispatchDate ? new Date(entry.dispatchDate).toISOString().split('T')[0] : ''),
+          estimatedDeliveryDate: typeof entry.estimatedDeliveryDate === 'string' ? entry.estimatedDeliveryDate : (entry.estimatedDeliveryDate ? new Date(entry.estimatedDeliveryDate).toISOString().split('T')[0] : ''),
+          numberOfBoxes: entry.numberOfBoxes ?? 0,
+          totalWeight: entry.totalWeight ?? 0,
+          notes: entry.notes ?? '',
+          poItems: (entry as any).poItems ?? [],
+          files: entry.files ?? [],
+        })) as PacklistDetails[];
+
+      const receivedLotDetails =
+        (order.status === 'goods partially received' && order.receivedLotDetails?.length)
+          ? order.receivedLotDetails
+          : undefined;
+
+      await yarnPurchaseOrderService.updatePurchaseOrderWithPacklist(order.id, remaining, receivedLotDetails);
+      toast.success('Packlist entry removed.');
+      const updated = await yarnPurchaseOrderService.getPurchaseOrderById(order.id) as any;
+      const packListData = updated.packListDetails ?? updated.packlistDetails;
+      const newArray = Array.isArray(packListData)
+        ? packListData.map((e: any) => ({ packingNumber: e.packingNumber ?? e.packing_number ?? '', courierName: e.courierName ?? e.courier_name ?? '', courierNumber: e.courierNumber ?? e.courier_number ?? '', vehicleNumber: e.vehicleNumber ?? e.vehicle_number ?? '', challanNumber: e.challanNumber ?? e.challan_number ?? '', dispatchDate: e.dispatchDate ?? e.dispatch_date ?? '', estimatedDeliveryDate: e.estimatedDeliveryDate ?? e.estimated_delivery_date ?? '', numberOfBoxes: e.numberOfBoxes ?? e.number_of_boxes ?? 0, totalWeight: e.totalWeight ?? e.total_weight ?? 0, notes: e.notes ?? '', files: e.files ?? [], poItems: e.poItems ?? [] }))
+        : packListData ? [{ packingNumber: packListData.packingNumber ?? packListData.packing_number ?? '', courierName: packListData.courierName ?? packListData.courier_name ?? '', courierNumber: packListData.courierNumber ?? packListData.courier_number ?? '', vehicleNumber: packListData.vehicleNumber ?? packListData.vehicle_number ?? '', challanNumber: packListData.challanNumber ?? packListData.challan_number ?? '', dispatchDate: packListData.dispatchDate ?? packListData.dispatch_date ?? '', estimatedDeliveryDate: packListData.estimatedDeliveryDate ?? packListData.estimated_delivery_date ?? '', numberOfBoxes: packListData.numberOfBoxes ?? packListData.number_of_boxes ?? 0, totalWeight: packListData.totalWeight ?? packListData.total_weight ?? 0, notes: packListData.notes ?? '', files: packListData.files ?? [], poItems: packListData.poItems ?? [] }] : [];
+      setDetailedOrderData(updated);
+      setSelectedOrder((prev) => (prev?.id === order.id ? { ...prev, ...updated, packListDetailsArray: newArray } : prev));
+      await fetchPurchaseOrders();
+    } catch (error) {
+      console.error('Failed to delete packlist entry:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to remove packlist entry');
+    } finally {
+      setDeletingPacklistIndex(null);
     }
   };
 
@@ -1614,6 +1667,19 @@ const PurchasePage = () => {
                                     <h4 className="text-xs font-semibold text-gray-800">
                                       Packlist Entry {index + 1}
                                     </h4>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePacklistEntry(selectedOrder, index)}
+                                      disabled={deletingPacklistIndex !== null}
+                                      className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Delete packlist entry"
+                                    >
+                                      {deletingPacklistIndex === index ? (
+                                        <i className="ri-loader-4-line text-sm animate-spin"></i>
+                                      ) : (
+                                        <i className="ri-delete-bin-line text-sm"></i>
+                                      )}
+                                    </button>
                                   </div>
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {packlistEntry.packingNumber && (
