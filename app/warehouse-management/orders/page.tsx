@@ -357,28 +357,20 @@ const OrdersPage = () => {
   ];
 
   return (
-    <div className="main-content">
+    <>
       <Seo title="Order Receiving & Consolidation" />
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex items-center justify-between">
-              <div>
-                <h1 className="box-title text-2xl font-semibold">Order Receiving & Consolidation</h1>
-                <p className="text-gray-600 mt-2">
-                  Manage all incoming orders from multiple sales channels.
-                </p>
-              </div>
-              <Link href="/warehouse-management/orders/add" className="ti-btn ti-btn-primary-full">
-                <i className="ri-add-line me-2"></i>
-                Add New Order
-              </Link>
-            </div>
-          </div>
+      {/* Actions in Orders tab */}
+      <div className="box !bg-transparent border-0 shadow-none mb-0">
+        <div className="box-header flex items-center justify-end">
+          <Link href="/warehouse-management/orders/add" className="ti-btn ti-btn-primary-full">
+            <i className="ri-add-line me-2"></i>
+            Add New Order
+          </Link>
+        </div>
+      </div>
 
-          {/* Notifications Section */}
+      {/* Notifications Section */}
           <NotificationsSection notifications={notifications} />
 
           {/* Order Dashboard with Tabs */}
@@ -516,8 +508,6 @@ const OrdersPage = () => {
               onUpdateWebsiteStatus={handleOpenStatusModal}
             />
           )}
-        </div>
-      </div>
 
       {/* Order Details Modal */}
       <OrderDetailsModal
@@ -536,7 +526,7 @@ const OrdersPage = () => {
         onClose={handleCloseStatusModal}
         onSubmit={handleWebsiteStatusUpdate}
       />
-    </div>
+    </>
   );
 };
 
