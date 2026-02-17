@@ -27,7 +27,9 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Attributes', label: 'Attributes' },
     { key: 'Style Codes', label: 'Style Codes' },
     { key: 'Machines', label: 'Machines' },
-    { key: 'Needle Configuration', label: 'Needle Configuration' }
+    { key: 'Needle Configuration', label: 'Needle Configuration' },
+    { key: 'Team Master', label: 'Team Master' },
+    { key: 'Containers Master', label: 'Containers Master' }
   ]
 
   const salesSections = [

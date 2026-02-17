@@ -14,6 +14,8 @@ export interface NavigationPermissions {
     'Style Codes': boolean;
     Machines: boolean;
     'Needle Configuration': boolean;
+    'Team Master': boolean;
+    'Containers Master': boolean;
   };
   Sales: {
     'All Sales': boolean;

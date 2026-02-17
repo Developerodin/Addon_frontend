@@ -875,8 +875,10 @@ const PurchaseOrderReceivedPage = () => {
       setOrderForGoodsReceived(null);
       setRawOrderDataForGoodsReceived(null);
     } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to update order';
       console.error('Failed to update order:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to update order');
+      toast.error(msg);
+      alert(msg);
     } finally {
       setIsSubmittingGoodsReceived(false);
     }
@@ -1892,6 +1894,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   // Pending delete confirmation (lot index) - in-app dialog since window.confirm may not show
   const [deleteConfirmLotIndex, setDeleteConfirmLotIndex] = useState<number | null>(null);
   const [isDeletingLot, setIsDeletingLot] = useState(false);
+  const [isDeletingAllLots, setIsDeletingAllLots] = useState(false);
 
   // Helper function to check if a lot is saved (exists in original lots)
   const isLotSaved = (lotNumber: string): boolean => {
@@ -1903,6 +1906,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     if (isOpen) {
       setDeleteConfirmLotIndex(null);
       setIsDeletingLot(false);
+      setIsDeletingAllLots(false);
       // Load existing data if available, otherwise reset form
       if (order.receivedLotDetails && order.receivedLotDetails.length > 0) {
         // Create a map of original lots by lotNumber for quick lookup
@@ -2109,23 +2113,26 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const showError = (message: string) => {
+      toast.error(message);
+      alert(message);
+    };
+
     // Check if any saved lots were modified
     for (let i = 0; i < lots.length; i++) {
       const lot = lots[i];
       if (isLotSaved(lot.lotNumber)) {
-        // This is a saved lot - check if it was modified
         const originalLot = originalLots.get(lot.lotNumber.trim().toUpperCase());
         if (originalLot) {
-          // Compare current lot with original to see if it was modified
-          const wasModified = 
+          const wasModified =
             lot.numberOfCones !== originalLot.numberOfCones ||
             lot.totalWeight !== originalLot.totalWeight ||
             lot.numberOfBoxes !== originalLot.numberOfBoxes ||
             lot.lotNumber.trim().toUpperCase() !== originalLot.lotNumber.trim().toUpperCase() ||
             JSON.stringify(lot.poItems) !== JSON.stringify(originalLot.poItems);
-          
+
           if (wasModified) {
-            toast.error(`Lot ${lot.lotNumber} is saved and cannot be modified. Saved lots can only be viewed.`);
+            showError(`Lot ${lot.lotNumber} is saved and cannot be modified. Saved lots can only be viewed.`);
             return;
           }
         }
@@ -2136,33 +2143,33 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     for (let i = 0; i < lots.length; i++) {
       const lot = lots[i];
       if (!lot.lotNumber.trim()) {
-        toast.error(`Lot ${i + 1}: Lot Number is required`);
+        showError(`Lot ${i + 1}: Lot Number is required`);
         return;
       }
       if (lot.numberOfCones <= 0) {
-        toast.error(`Lot ${i + 1}: Number of Cones must be greater than 0`);
+        showError(`Lot ${i + 1}: Number of Cones must be greater than 0`);
         return;
       }
       if (lot.totalWeight <= 0) {
-        toast.error(`Lot ${i + 1}: Total Weight must be greater than 0`);
+        showError(`Lot ${i + 1}: Total Weight must be greater than 0`);
         return;
       }
       if (lot.numberOfBoxes <= 0) {
-        toast.error(`Lot ${i + 1}: Number of Boxes must be greater than 0`);
+        showError(`Lot ${i + 1}: Number of Boxes must be greater than 0`);
         return;
       }
       if (lot.poItems.length === 0) {
-        toast.error(`Lot ${i + 1}: At least one PO Item is required`);
+        showError(`Lot ${i + 1}: At least one PO Item is required`);
         return;
       }
       for (let j = 0; j < lot.poItems.length; j++) {
         const poItem = lot.poItems[j];
         if (!poItem.poItem) {
-          toast.error(`Lot ${i + 1}, PO Item ${j + 1}: PO Item is required`);
+          showError(`Lot ${i + 1}, PO Item ${j + 1}: PO Item is required`);
           return;
         }
         if (poItem.receivedQuantity <= 0) {
-          toast.error(`Lot ${i + 1}, PO Item ${j + 1}: Received Quantity must be greater than 0`);
+          showError(`Lot ${i + 1}, PO Item ${j + 1}: Received Quantity must be greater than 0`);
           return;
         }
       }
@@ -2202,19 +2209,19 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     <div className={`fixed inset-0 z-50 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`}>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[51] bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${
           isOpen ? 'opacity-100' : 'opacity-0'
         }`}
         onClick={onClose}
       ></div>
 
-      {/* Side Modal */}
+      {/* Side Modal - z-[52] so it's above backdrop and receives clicks */}
       <div
-        className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
+        className={`fixed right-0 top-0 z-[52] h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <form onSubmit={handleSubmit} className="flex flex-col h-full">
+        <form onSubmit={handleSubmit} className="flex flex-col h-full" noValidate>
           {/* Header */}
           <div className="bg-primary text-white px-4 py-3 flex-shrink-0">
             <div className="flex items-center justify-between">
@@ -2387,27 +2394,50 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      const unsavedCount = lots.filter(l => !isLotSaved(l.lotNumber)).length;
-                      if (unsavedCount === 0) {
-                        toast.error('No lots to delete. Saved lots cannot be removed.');
-                        return;
+                    onClick={async () => {
+                      if (lots.length === 0) return;
+                      const totalCount = lots.length;
+                      const savedCount = lots.filter(l => isLotSaved(l.lotNumber)).length;
+                      if (typeof window !== 'undefined' && !window.confirm(`Delete all ${totalCount} lot(s)?${savedCount > 0 ? ` ${savedCount} saved lot(s) will be removed from the system via API.` : ''}`)) return;
+                      setIsDeletingAllLots(true);
+                      const poLabel = order.orderNumber || '';
+                      const currentLots = [...lots];
+                      try {
+                        for (let i = currentLots.length - 1; i >= 0; i--) {
+                          const lot = currentLots[i];
+                          if (lot.lotNumber?.trim() && isLotSaved(lot.lotNumber)) {
+                            await yarnPurchaseOrderService.deleteLot(poLabel, lot.lotNumber.trim());
+                          }
+                          currentLots.splice(i, 1);
+                          setOriginalLots(prev => {
+                            if (!lot.lotNumber?.trim()) return prev;
+                            const next = new Map(prev);
+                            next.delete(lot.lotNumber.trim().toUpperCase());
+                            return next;
+                          });
+                          setLots(currentLots.length > 0 ? [...currentLots] : [{
+                            lotNumber: '',
+                            numberOfCones: 0,
+                            totalWeight: 0,
+                            numberOfBoxes: 0,
+                            poItems: [],
+                            status: 'lot_pending'
+                          }]);
+                        }
+                        await onLotDeleted?.();
+                        toast.success('All lots deleted.');
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Failed to delete lots');
+                      } finally {
+                        setIsDeletingAllLots(false);
                       }
-                      if (typeof window !== 'undefined' && !window.confirm(`Delete all ${unsavedCount} unsaved lot(s)?`)) return;
-                      const after = lots.filter(l => isLotSaved(l.lotNumber));
-                      setLots(after.length > 0 ? after : [{
-                        lotNumber: '',
-                        numberOfCones: 0,
-                        totalWeight: 0,
-                        numberOfBoxes: 0,
-                        poItems: [],
-                        status: 'lot_pending'
-                      }]);
                     }}
-                    className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                    title="Delete all unsaved lots"
+                    disabled={isDeletingAllLots || lots.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete all lots (saved lots removed via API one by one)"
                   >
-                    <i className="ri-delete-bin-line text-base"></i>
+                    {isDeletingAllLots ? <i className="ri-loader-4-line animate-spin text-xs"></i> : <i className="ri-delete-bin-line text-xs"></i>}
+                    {isDeletingAllLots ? 'Deleting...' : 'Delete all lots'}
                   </button>
                 </div>
               </div>
@@ -2813,8 +2843,8 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
               )
             : null}
 
-          {/* Footer */}
-          <div className="bg-gray-50 px-4 py-3 flex justify-end gap-2 flex-shrink-0 border-t border-gray-200">
+          {/* Footer - relative z-10 so it stays above scrollable content */}
+          <div className="relative z-10 bg-gray-50 px-4 py-3 flex justify-end gap-2 flex-shrink-0 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
@@ -2825,7 +2855,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
             </button>
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isSubmitting}
             >
               {isSubmitting ? (

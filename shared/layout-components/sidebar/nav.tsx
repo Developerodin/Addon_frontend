@@ -10,6 +10,8 @@ const ProcessIcon = <i className="bx bx-cog side-menu__icon"></i>;
 const AttributeIcon = <i className="bx bx-list-ul side-menu__icon"></i>;
 const StyleCodeIcon = <i className="bx bx-purchase-tag side-menu__icon"></i>;
 const MachinesIcon = <i className="bx bx-cog side-menu__icon"></i>;
+const TeamMasterIcon = <i className="bx bx-group side-menu__icon"></i>;
+const ContainersMasterIcon = <i className="ri ri-archive-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const SalesIcon = <i className="bx bx-cart side-menu__icon"></i>;
 const StoresIcon = <i className="bx bx-store side-menu__icon"></i>;
 const AnalyticsIcon = <i className="bx bx-bar-chart side-menu__icon"></i>;
@@ -130,6 +132,22 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Needle Configuration",
+      },
+      {
+        icon: TeamMasterIcon,
+        path: "/catalog/team-master",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Team Master",
+      },
+      {
+        icon: ContainersMasterIcon,
+        path: "/catalog/containers-master",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Containers Master",
       },
       {
         icon: CataloguingIcon,

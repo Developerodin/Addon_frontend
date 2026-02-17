@@ -15,6 +15,8 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
     { path: '/catalog/attributes', permission: permissions.Catalog?.Attributes },
     { path: '/catalog/machines', permission: permissions.Catalog?.Machines },
     { path: '/catalog/needle-configuration', permission: permissions.Catalog?.['Needle Configuration'] },
+    { path: '/catalog/team-master', permission: permissions.Catalog?.['Team Master'] },
+    { path: '/catalog/containers-master', permission: permissions.Catalog?.['Containers Master'] },
     { path: '/sales/page', permission: permissions.Sales?.['All Sales'] },
     { path: '/sales/master', permission: permissions.Sales?.['Master Sales'] },
     { path: '/stores', permission: permissions.Stores },

@@ -15,6 +15,8 @@ interface NavigationPermissions {
     'Style Codes': boolean;
     Machines: boolean;
     'Needle Configuration': boolean;
+    'Team Master': boolean;
+    'Containers Master': boolean;
   };
   Sales: {
     'All Sales': boolean;
@@ -92,6 +94,8 @@ const defaultPermissions: NavigationPermissions = {
     'Style Codes': false,
     Machines: false,
     'Needle Configuration': false,
+    'Team Master': false,
+    'Containers Master': false,
   },
   Sales: {
     'All Sales': false,
