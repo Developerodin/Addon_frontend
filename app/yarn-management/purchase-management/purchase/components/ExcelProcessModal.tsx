@@ -342,18 +342,31 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
           .toLowerCase()
           .replace(/[\s\u00A0]+/g, "");
 
-      /** Backend yarn type name (e.g. Cotton, Bamboo) from item.yarn.yarnType.name */
-      const getItemYarnTypeName = (item: any): string => {
-        const raw = (item as any).yarn?.yarnType?.name ?? (item as any).yarnType?.name;
-        return typeof raw === "string" ? raw : "";
+      /** Parse yarnName when API returns null for type/subtype/colour. Format: "20s-Dark Orange-Dk. Orange-Cotton/Compact" */
+      const parseYarnName = (yarnName: string | undefined) => {
+        if (!yarnName || typeof yarnName !== "string") return { type: "", subtype: "", colourVariants: [] as string[] };
+        const parts = yarnName.trim().split("-");
+        const last = parts[parts.length - 1] ?? "";
+        const [type = "", subtype = ""] = last.includes("/") ? last.split("/") : [last, ""];
+        const colourFromName = parts.length >= 3 ? parts[2]?.trim() : "";
+        const labelFromName = parts.length >= 2 ? parts[1]?.trim() : "";
+        const colourVariants = [colourFromName, labelFromName].filter(Boolean);
+        return { type, subtype, colourVariants };
       };
 
-      /** Backend yarn subtype (e.g. Compact, Combed Melange). */
+      /** Backend yarn type name (e.g. Cotton, Bamboo) from item.yarn.yarnType.name or parsed from yarnName */
+      const getItemYarnTypeName = (item: any): string => {
+        const raw = (item as any).yarn?.yarnType?.name ?? (item as any).yarnType?.name;
+        if (typeof raw === "string" && raw.trim()) return raw;
+        return parseYarnName((item as any).yarnName).type;
+      };
+
+      /** Backend yarn subtype (e.g. Compact, Combed Melange) from item or parsed from yarnName */
       const getItemSubtype = (item: any): string => {
         const raw = item.yarnSubtype ?? item.yarn?.subtype ?? item.yarn?.yarnSubtype;
-        if (typeof raw === "string") return raw;
+        if (typeof raw === "string" && raw.trim()) return raw;
         if (raw && typeof raw === "object" && typeof (raw as any).subtype === "string") return (raw as any).subtype;
-        return "";
+        return parseYarnName((item as any).yarnName).subtype;
       };
 
       /** Normalized subtype: allow "Compact Melange" in Excel to match "Combed Melange" in system. */
@@ -363,7 +376,9 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
         return v;
       };
 
-      /** All normalized colour strings for PO item: colour name + pantoneName + colorCode. Excel colour can match any of these. */
+      /** Strip trailing parenthetical (e.g. "Navy (New)" → "navy") so Excel "Navy (New)" matches PO "Navy (New)". */
+      const colourBase = (s: string) => s.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+      /** All normalized colour strings for PO item: full form + base form (no trailing parens) so "Navy (New)" matches both "navy(new)" and "navy". */
       const getItemColourVariants = (item: any): string[] => {
         const raw = [
           (item as any).colour,
@@ -373,8 +388,11 @@ const ExcelProcessModal: React.FC<ExcelProcessModalProps> = ({
           (item as any).yarn?.color,
           (item as any).yarn?.colorFamily?.name,
           (item as any).yarn?.colorFamily?.colorCode,
+          ...parseYarnName((item as any).yarnName).colourVariants,
         ].filter((v) => v != null && String(v).trim() !== "");
-        return [...new Set(raw.map((v) => n(v)))];
+        const normalized = raw.map((v) => n(v));
+        const withBase = normalized.flatMap((v) => (v ? [v, colourBase(v)] : []));
+        return [...new Set(withBase.filter(Boolean))];
       };
 
       const resolveMatch = (r: ExcelRow): POItemWithMeta | null => {
