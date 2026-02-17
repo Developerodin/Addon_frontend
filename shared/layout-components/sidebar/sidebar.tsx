@@ -14,6 +14,12 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	const filteredMenuItems = useMenuItems();
 	const [menuitems, setMenuitems] = useState(filteredMenuItems || []);
 	const { isLoading } = useNavigation();
+	// Avoid hydration mismatch: server and first client paint may disagree on isLoading/menu.
+	// Render skeleton until mounted so server and client initial HTML match.
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => {
+		setMounted(true);
+	}, []);
 
 	const path = usePathname()	
 
@@ -956,8 +962,8 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 							</svg></div>
 
 							<ul className="main-menu" onClick={(e) => { e.stopPropagation(); Sideclick(); }}>
-								{isLoading ? (
-									// Loading skeleton
+								{(!mounted || isLoading) ? (
+									// Loading skeleton (keeps server/client HTML in sync to avoid hydration mismatch)
 									<>
 										<li className="slide">
 											<div className="side-menu__item animate-pulse">
