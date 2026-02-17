@@ -1271,15 +1271,18 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       }
 
       const options = buildSupplierYarnOptions();
+      // Match by yarn name; when item has shadeCode, prefer option with same shade so we don't overwrite user's selection
+      const itemShadeNorm = item.shadeCode?.trim().toLowerCase() || "";
       const match = options.find((option) => {
         const optionYarnName = option.displayName.trim().toLowerCase();
         const itemYarnName = item.yarnName.trim().toLowerCase();
-
-        if (itemYarnName && optionYarnName === itemYarnName) {
-          return true;
-        }
-
-        return false;
+        if (!itemYarnName || optionYarnName !== itemYarnName) return false;
+        if (itemShadeNorm && option.shadeCode?.trim().toLowerCase() !== itemShadeNorm) return false;
+        return true;
+      }) ?? options.find((option) => {
+        const optionYarnName = option.displayName.trim().toLowerCase();
+        const itemYarnName = item.yarnName.trim().toLowerCase();
+        return itemYarnName && optionYarnName === itemYarnName;
       });
 
       if (match) {
