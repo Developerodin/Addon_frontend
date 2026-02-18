@@ -1209,7 +1209,7 @@ const ProcessOrderPage = () => {
         <div class="label">
           <div class="content">
             <div class="code">${(box.boxId || '').replace(/</g, '&lt;')}</div>
-            <div class="supplier">${(order?.supplier || '-').replace(/</g, '&lt;')}</div>
+            <div class="supplier">${(order?.supplier || '-').split(' ').slice(0, 2).join(' ').replace(/</g, '&lt;')}</div>
             <div class="details">
               Yarn: ${(details.yarnName || '-').replace(/</g, '&lt;')}<br/>
               L: ${(lotLabel || '-').replace(/</g, '&lt;')}<br/>
@@ -1441,7 +1441,7 @@ const ProcessOrderPage = () => {
           yarnName: 'Test Yarn Name',
           shadeCode: 'TEST-SHADE',
           lotNumber: 'TEST-LOT',
-          supplierName: 'Test Supplier Name',
+          supplierName: 'Test Supplier',
           poNumber: 'PO-TEST-001',
         };
         const result = await printCones([dummyBox], {
@@ -1555,7 +1555,7 @@ const ProcessOrderPage = () => {
             yarnName: details.yarnName,
             shadeCode: details.shadeCode,
             lotNumber: context?.type === 'lot' ? context.lotNumber : (box.lotNumber || ''),
-            supplierName: order.supplier || '',
+            supplierName: (order.supplier || '').split(' ').slice(0, 2).join(' '),
             poNumber: order.orderNumber || '',
           };
         });
