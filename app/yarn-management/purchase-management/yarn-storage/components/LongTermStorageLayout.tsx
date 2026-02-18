@@ -552,10 +552,11 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       return;
     }
 
+    const rackCodeUpper = storageRackCode.trim().toUpperCase();
     setIsAllocating(true);
     try {
-      // Find rack by barcode
-      const rack = racks.find((r) => r.barcode === storageRackCode.trim());
+      // Find rack by barcode (case-insensitive)
+      const rack = racks.find((r) => r.barcode?.toUpperCase() === rackCodeUpper);
       if (!rack) {
         toast.error("Rack not found with the provided barcode");
         return;
@@ -572,7 +573,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       // Call API to update box storage location
       try {
         await yarnBoxService.updateYarnBox(boxId, {
-          storageLocation: storageRackCode.trim(),
+          storageLocation: rackCodeUpper,
           storedStatus: true,
         });
       } catch (apiError) {
@@ -586,7 +587,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       // Refresh only the affected rack after storing new box
       try {
         // Refresh only the rack details where box was stored (no need to refresh all slots)
-        const details = await storageSlotService.getSlotDetailsByBarcode(storageRackCode.trim());
+        const details = await storageSlotService.getSlotDetailsByBarcode(rackCodeUpper);
         setRackSlotDetails((prev) => {
           const newMap = new Map(prev);
           newMap.set(rack.id, details);
@@ -599,6 +600,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       } catch (error) {
         console.error("Failed to refresh data after storing box:", error);
       }
+
+      toast.success(`Box stored on this rack (${rackCodeUpper})`, { duration: 4000 });
 
       // Close modal and reset state
       setShowAllocateModal(false);
@@ -1892,13 +1895,14 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                 <input
                   ref={rackCodeInputRef}
                   type="text"
-                  className="form-control"
+                  className="form-control uppercase"
                   placeholder="Enter storage rack barcode"
                   value={storageRackCode}
-                  onChange={(e) => setStorageRackCode(e.target.value)}
+                  onChange={(e) => setStorageRackCode(e.target.value.toUpperCase())}
                   disabled={isAllocating}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !isAllocating) {
+                    if (e.key === "Enter" && !isAllocating && storageRackCode.trim()) {
+                      e.preventDefault();
                       handleAllocateConfirm();
                     }
                   }}
