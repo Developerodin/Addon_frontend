@@ -1878,71 +1878,92 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         </div>
       )}
 
-      {/* Allocate Box Modal - use form so Enter key works in production build */}
+      {/* Allocate Box Drawer - same as UnallocatedBoxes so rack scan + Enter confirms reliably */}
       {showAllocateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="box-header border-b border-gray-200 px-6 py-4">
-              <h3 className="box-title text-lg font-semibold">
-                Allocate Box to Storage
-              </h3>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!isAllocating && storageRackCode.trim()) {
-                  handleAllocateConfirm();
-                }
-              }}
-            >
-              <div className="box-body px-6 py-4">
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div
+            className="absolute inset-0 bg-black/60 transition-opacity"
+            onClick={handleModalClose}
+            aria-hidden="true"
+          />
+          <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out">
+            <div className="flex flex-col h-full">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
+                <div className="flex items-center gap-2">
+                  <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-800">
+                      Allocate Box to Storage
+                    </h3>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      Enter storage rack code to allocate box
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleModalClose}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  disabled={isAllocating}
+                >
+                  <i className="ri-close-line text-lg" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-3">
                 <div className="mb-4">
-                  <label className="form-label text-sm font-medium text-gray-700 mb-2 block">
+                  <label className="text-xs font-medium text-gray-700 mb-1.5 block">
                     Storage Rack Code <span className="text-red-500">*</span>
                   </label>
                   <input
                     ref={rackCodeInputRef}
                     type="text"
-                    className="form-control uppercase"
+                    className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300 uppercase"
                     placeholder="Enter storage rack barcode"
                     value={storageRackCode}
                     onChange={(e) => setStorageRackCode(e.target.value.toUpperCase())}
                     disabled={isAllocating}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !isAllocating && storageRackCode.trim()) {
+                        e.preventDefault();
+                        handleAllocateConfirm();
+                      }
+                    }}
                     autoFocus
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-[10px] text-gray-500 mt-1">
                     Enter the barcode of the storage rack location
                   </p>
                 </div>
               </div>
-              <div className="box-footer border-t border-gray-200 px-6 py-4 flex justify-end gap-2">
+              <div className="border-t border-gray-200 px-4 py-3 bg-gray-50 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={handleModalClose}
-                  className="ti-btn ti-btn-light"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
                   disabled={isAllocating}
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="ti-btn ti-btn-primary"
+                  type="button"
+                  onClick={handleAllocateConfirm}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
                   disabled={isAllocating || !storageRackCode.trim()}
                 >
-                {isAllocating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2 inline-block"></div>
-                    Allocating...
-                  </>
-                ) : (
-                  <>
-                    <i className="ri-check-line me-1"></i>
-                    Confirm
-                  </>
-                )}
-              </button>
+                  {isAllocating ? (
+                    <>
+                      <i className="ri-loader-4-line animate-spin text-xs" />
+                      Allocating...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-check-line text-xs" />
+                      Confirm
+                    </>
+                  )}
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
