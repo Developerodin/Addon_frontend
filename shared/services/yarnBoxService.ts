@@ -79,6 +79,7 @@ export interface YarnBoxQueryParams {
   po_number?: string;
   yarn_name?: string;
   cones_issued?: boolean;
+  stored_status?: boolean;
   page?: number;
   limit?: number;
 }

@@ -454,12 +454,16 @@ const KnittingFloorSupervisorPage = () => {
         const currentM4Quantity = article.floorQuantities?.knitting?.m4Quantity || 0;
         // Send previous M4 + new input combined to backend
         const m4QuantityToSend = currentM4Quantity + (update.m4Quantity ?? 0);
+        // Send previous weight + user-entered weight as cumulative weight
+        const previousWeight = article.floorQuantities?.knitting?.weight ?? 0;
+        const userEnteredWeight = weight != null && !Number.isNaN(weight) ? weight : 0;
+        const totalWeightToSend = previousWeight + userEnteredWeight;
 
         const progressData = {
           completedQuantity: update.completedQuantity,
           remarks: update.remarks,
           m4Quantity: m4QuantityToSend,
-          ...(weight != null && !Number.isNaN(weight) && { weight })
+          weight: totalWeightToSend
         };
           
           try {
@@ -857,6 +861,12 @@ const KnittingFloorSupervisorPage = () => {
               </div>
             </div>
 
+            {/* When from machine view, order can only be updated when first article is In Progress. */}
+            {selectedOrder && updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
+                Mark the article in progress to update the quantity or update the order.
+              </p>
+            )}
             {/* Main row 8 cols; second row = Remarks (full height) + Status / Yarn when from machine */}
             <div className="border border-gray-300 rounded overflow-hidden">
               <div className="overflow-x-auto">
@@ -900,6 +910,8 @@ const KnittingFloorSupervisorPage = () => {
                       const displayCompleted = isReadOnly ? completedQty : (currentUpdateData.completedQuantity || 0);
                       const isOverproduction = displayCompleted > plannedQty;
                       const isFirstReadOnly = isReadOnly && idx === updateModalReadOnlyFromIndex;
+                      /** When opened from machine view, first article must be In Progress before editing quantity/remarks or updating order. */
+                      const isLockedByPendingStatus = !isReadOnly && idx === 0 && (assignmentItem?.status ?? OrderStatus.PENDING) === OrderStatus.PENDING;
                       return (
                         <React.Fragment key={articleId}>
                           {/* Action buttons + Upcoming Article heading above first read-only article */}
@@ -907,8 +919,8 @@ const KnittingFloorSupervisorPage = () => {
                             <tr>
                               <td colSpan={8} className="p-3 border border-gray-300 bg-gray-50 align-top">
                                 <div className="flex justify-end gap-2 mb-3">
-                                  <button onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
-                                  <button type="button" disabled={!hasUpdateDataChanges} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                  <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
+                                  <button type="button" disabled={!hasUpdateDataChanges || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i className="ri-save-line text-xs"></i> Update Order
                                   </button>
                                 </div>
@@ -934,7 +946,7 @@ const KnittingFloorSupervisorPage = () => {
                                 <span className="text-[10px] text-gray-700">{completedQty.toLocaleString()}{isOverproduction ? ` (+${completedQty - plannedQty})` : ""}</span>
                               ) : (
                                 <div className="flex flex-col gap-0.5">
-                                  <NumericInput className="py-0.5 text-[10px] h-5 border border-gray-300 rounded focus:border-purple-500 focus:ring-1 focus:ring-purple-300 w-full min-w-0" value={currentUpdateData.completedQuantity} onChange={(v) => handleQuantityChange(articleId, v)} allowDecimals />
+                                  <NumericInput disabled={isLockedByPendingStatus} className="py-0.5 text-[10px] h-5 border border-gray-300 rounded focus:border-purple-500 focus:ring-1 focus:ring-purple-300 w-full min-w-0 disabled:bg-gray-100 disabled:cursor-not-allowed" value={currentUpdateData.completedQuantity} onChange={(v) => handleQuantityChange(articleId, v)} allowDecimals />
                                   {isOverproduction && <div className="text-[9px] text-orange-600">+{currentUpdateData.completedQuantity - plannedQty}</div>}
                                 </div>
                               )}
@@ -944,7 +956,7 @@ const KnittingFloorSupervisorPage = () => {
                               {isReadOnly ? (
                                 <span className="text-[10px] text-gray-500">—</span>
                               ) : (
-                                <NumericInput className="py-0.5 text-[10px] h-5 border border-red-300 rounded focus:border-red-400 w-full min-w-0" value={currentUpdateData.m4Quantity} onChange={(v) => handleM4QuantityChange(articleId, v)} placeholder="0" allowDecimals />
+                                <NumericInput disabled={isLockedByPendingStatus} className="py-0.5 text-[10px] h-5 border border-red-300 rounded focus:border-red-400 w-full min-w-0 disabled:bg-gray-100 disabled:cursor-not-allowed" value={currentUpdateData.m4Quantity} onChange={(v) => handleM4QuantityChange(articleId, v)} placeholder="0" allowDecimals />
                               )}
                             </td>
                           </tr>
@@ -960,13 +972,23 @@ const KnittingFloorSupervisorPage = () => {
                                     </div>
                                   ) : (
                                     <textarea
-                                      className="w-full min-h-[56px] py-2 px-2 text-[11px] border border-gray-300 rounded focus:ring-1 focus:ring-purple-400 focus:border-purple-500 resize-y"
+                                      disabled={isLockedByPendingStatus}
+                                      className="w-full min-h-[56px] py-2 px-2 text-[11px] border border-gray-300 rounded focus:ring-1 focus:ring-purple-400 focus:border-purple-500 resize-y disabled:bg-gray-100 disabled:cursor-not-allowed"
                                       rows={3}
                                       placeholder="Add remarks..."
                                       value={currentUpdateData.remarks}
                                       onChange={(e) => handleRemarksChange(articleId, e.target.value)}
                                     />
                                   )}
+                                  {(() => {
+                                    const weightTransferred = article.floorQuantities?.knitting?.weight;
+                                    if (weightTransferred == null) return null;
+                                    return (
+                                      <p className="text-[10px] text-gray-600 mt-1.5">
+                                        Weight transferred: <span className="font-semibold">{typeof weightTransferred === 'number' ? weightTransferred.toLocaleString() : String(weightTransferred)}</span>
+                                      </p>
+                                    );
+                                  })()}
                                 </div>
                                 {updateModalAssignment && updateModalAssignmentItems && !isReadOnly && (
                                   <div className="flex flex-wrap items-center gap-3 shrink-0">
@@ -979,14 +1001,17 @@ const KnittingFloorSupervisorPage = () => {
                                         const isDisabled = updatingStatusItemId === assignmentItem?.itemId;
                                         if (isPending) {
                                           return (
-                                            <button
-                                              type="button"
-                                              onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.IN_PROGRESS)}
-                                              disabled={isDisabled}
-                                              className="min-w-[140px] text-[11px] py-2 px-3 h-9 rounded-lg font-medium bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60"
-                                            >
-                                              Mark In Progress
-                                            </button>
+                                            <div className="space-y-1">
+
+                                              <button
+                                                type="button"
+                                                onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.IN_PROGRESS)}
+                                                disabled={isDisabled}
+                                                className="px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60"
+                                              >
+                                                Mark In Progress
+                                              </button>
+                                            </div>
                                           );
                                         }
                                         if (isInProgress) {
@@ -996,7 +1021,7 @@ const KnittingFloorSupervisorPage = () => {
                                                 type="button"
                                                 onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.COMPLETED)}
                                                 disabled={isDisabled}
-                                                className="text-[11px] py-2 px-3 h-9 rounded-lg font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                                                className="px-3 py-1.5 text-[11px] font-bold rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
                                               >
                                                 Completed
                                               </button>
@@ -1004,7 +1029,7 @@ const KnittingFloorSupervisorPage = () => {
                                                 type="button"
                                                 onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.ON_HOLD)}
                                                 disabled={isDisabled}
-                                                className="text-[11px] py-2 px-3 h-9 rounded-lg font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60"
+                                                className="px-3 py-1.5 text-[11px] font-bold rounded bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60"
                                               >
                                                 On Hold
                                               </button>
@@ -1012,10 +1037,10 @@ const KnittingFloorSupervisorPage = () => {
                                           );
                                         }
                                         return (
-                                          <span className="text-[11px] font-medium text-gray-600 py-2 block">{currentStatus}</span>
+                                          <span className="text-[11px] font-medium text-gray-600 py-1.5 block">{currentStatus}</span>
                                         );
                                       })() : (
-                                        <span className="text-[11px] text-gray-400 py-2 block">—</span>
+                                        <span className="text-[11px] text-gray-400 py-1.5 block">—</span>
                                       )}
                                     </div>
                                     <div>
@@ -1028,7 +1053,7 @@ const KnittingFloorSupervisorPage = () => {
                                             <button
                                               type="button"
                                               disabled
-                                              className="min-w-[120px] text-[11px] py-2 px-3 h-9 rounded-lg font-medium bg-green-600 text-white cursor-not-allowed opacity-90"
+                                              className="px-3 py-1.5 text-[11px] font-bold rounded bg-green-600 text-white cursor-not-allowed opacity-90"
                                             >
                                               {yarnStatus}
                                             </button>
@@ -1040,17 +1065,17 @@ const KnittingFloorSupervisorPage = () => {
                                               type="button"
                                               onClick={() => handleModalAskForYarn(assignmentItem!.itemId!)}
                                               disabled={updatingYarnItemId === assignmentItem?.itemId}
-                                              className="min-w-[120px] text-[11px] py-2 px-3 h-9 rounded-lg font-medium bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60"
+                                              className="px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60"
                                             >
                                               Ask for yarn
                                             </button>
                                           );
                                         }
                                         return (
-                                          <span className="text-[11px] text-gray-500 py-2 block">{yarnStatus || "Not Started"}</span>
+                                          <span className="text-[11px] text-gray-500 py-1.5 block">{yarnStatus || "Not Started"}</span>
                                         );
                                       })() : (
-                                        <span className="text-[11px] text-gray-400 py-2 block">—</span>
+                                        <span className="text-[11px] text-gray-400 py-1.5 block">—</span>
                                       )}
                                     </div>
                                   </div>
@@ -1070,7 +1095,7 @@ const KnittingFloorSupervisorPage = () => {
             {updateModalReadOnlyFromIndex === undefined && (
               <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-300">
                 <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
-                <button type="button" disabled={!hasUpdateDataChanges} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                <button type="button" disabled={!hasUpdateDataChanges || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   <i className="ri-save-line text-xs"></i> Update Order
                 </button>
               </div>

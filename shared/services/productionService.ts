@@ -50,7 +50,7 @@ export interface Article {
   createdAt?: string;
   updatedAt?: string;
   floorQuantities?: {
-    knitting: { received: number; completed: number; remaining: number; transferred: number; m4Quantity?: number; repairReceived?: number; repairFromFloor?: string };
+    knitting: { received: number; completed: number; remaining: number; transferred: number; m4Quantity?: number; weight?: number; repairReceived?: number; repairFromFloor?: string };
     linking: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
     checking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number; m2Transferred?: number; m2Remaining?: number; repairReceived?: number; repairFromFloor?: string };
     secondaryChecking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number; m2Transferred?: number; m2Remaining?: number; repairReceived?: number; repairFromFloor?: string };

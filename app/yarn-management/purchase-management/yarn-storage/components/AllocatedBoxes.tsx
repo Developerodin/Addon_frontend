@@ -18,6 +18,7 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
   const [selectedPO, setSelectedPO] = useState<string>("");
   const [boxes, setBoxes] = useState<YarnBox[]>([]);
   const [isLoadingBoxes, setIsLoadingBoxes] = useState(false);
+  const [unallocatingBoxId, setUnallocatingBoxId] = useState<string | null>(null);
 
   // Set default dates: one month ago to today
   const getDefaultStartDate = () => {
@@ -155,15 +156,34 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
     };
   };
 
-  // Fetch PO accepted orders
+  // Fetch POs that have at least one allocated (stored) box — show only these in dropdown
   const fetchAllocatedOrders = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params: any = {
-        status_code: "po_accepted",
-      };
+      // 1) Get all boxes that are allocated (stored)
+      const boxesRes = await yarnBoxService.getYarnBoxes({
+        stored_status: true,
+        limit: 5000,
+      });
+      const boxesData: YarnBox[] = Array.isArray(boxesRes)
+        ? boxesRes
+        : (boxesRes as any).results || [];
+      const allocatedBoxes = boxesData.filter(
+        (b: any) => b.storedStatus === true
+      );
+      const allocatedPoNumbers = new Set<string>(
+        allocatedBoxes.map(
+          (b: any) => (b.poNumber || b.po_number || "").trim()
+        ).filter(Boolean)
+      );
 
-      // Add date filters if provided
+      if (allocatedPoNumbers.size === 0) {
+        setOrders([]);
+        return;
+      }
+
+      // 2) Fetch POs in date range (no status filter) then keep only those with allocated boxes
+      const params: any = {};
       if (startDate) {
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
@@ -176,14 +196,12 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
       }
 
       const response = await yarnPurchaseOrderService.getPurchaseOrders(params);
-
-      // Handle both array and object with results property
       const ordersData = Array.isArray(response)
         ? response
-        : response.results || [];
-      
-      // Map API response to component format
-      const mappedOrders = ordersData.map(mapAPIOrderToComponent);
+        : (response as any).results || [];
+      const mappedOrders = ordersData
+        .map(mapAPIOrderToComponent)
+        .filter((o) => allocatedPoNumbers.has((o.orderNumber || "").trim()));
       setOrders(mappedOrders);
     } catch (error) {
       console.error("Failed to fetch allocated orders:", error);
@@ -247,6 +265,26 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
 
     fetchBoxes();
   }, [selectedPO]);
+
+  const handleUnallocate = useCallback(async (box: YarnBox) => {
+    const id = box._id || box.id;
+    if (!id) return;
+    setUnallocatingBoxId(id);
+    try {
+      await yarnBoxService.updateYarnBox(id, {
+        storedStatus: false,
+        storageLocation: "",
+      });
+      toast.success(`Box ${box.boxId || box.barcode} unallocated`);
+      setBoxes((prev) => prev.filter((b) => (b._id || b.id) !== id));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to unallocate box"
+      );
+    } finally {
+      setUnallocatingBoxId(null);
+    }
+  }, []);
 
   // Use all orders for the dropdown (no filtering needed)
   return (
@@ -320,9 +358,8 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
             <>
               <button
                 type="button"
-                onClick={() => orders.length > 0 && setPoDrawerOpen(true)}
-                disabled={orders.length === 0}
-                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300 text-left flex items-center justify-between gap-2 bg-white disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed hover:border-gray-300"
+                onClick={() => setPoDrawerOpen(true)}
+                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300 text-left flex items-center justify-between gap-2 bg-white hover:border-gray-300"
               >
                 <span className="truncate">
                   {selectedPO
@@ -331,9 +368,9 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
                 </span>
                 <i className="ri-arrow-right-s-line text-gray-400 shrink-0" />
               </button>
-              {orders.length === 0 && (
+              {orders.length === 0 && !isLoading && (
                 <p className="text-xs text-gray-500 mt-1.5">
-                  No purchase orders with PO Accepted status found for the selected date range.
+                  No allocated boxes found. Allocate boxes to storage first, then they will appear here when you select a PO.
                 </p>
               )}
             </>
@@ -346,7 +383,7 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
           selectedOrderNumber={selectedPO}
           onSelect={setSelectedPO}
           title="Select Purchase Order"
-          emptyMessage="No purchase orders with PO Accepted status found for the selected date range."
+          emptyMessage="No POs with allocated boxes for the selected date range."
         />
 
         {/* Boxes Table */}
@@ -386,6 +423,7 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Number of Cones</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received Date</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -423,6 +461,26 @@ const AllocatedBoxes: React.FC<AllocatedBoxesProps> = ({
                             {box.receivedDate
                               ? new Date(box.receivedDate).toLocaleDateString()
                               : "-"}
+                          </td>
+                          <td className="px-1.5 py-2 border border-gray-200">
+                            <button
+                              type="button"
+                              onClick={() => handleUnallocate(box)}
+                              disabled={unallocatingBoxId === (box._id || box.id)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {unallocatingBoxId === (box._id || box.id) ? (
+                                <>
+                                  <span className="animate-spin rounded-full h-2.5 w-2.5 border border-amber-600 border-t-transparent" />
+                                  Unallocating...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="ri-arrow-go-back-line text-xs" />
+                                  Unallocate
+                                </>
+                              )}
+                            </button>
                           </td>
                         </tr>
                       );
