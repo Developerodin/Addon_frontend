@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import {
   listMachineOrderAssignments,
@@ -39,6 +39,8 @@ export default function MachineViewTab({ onOpenEditModal }: MachineViewTabProps)
   const [updatingStatusItemId, setUpdatingStatusItemId] = useState<string | null>(null);
   const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
   const [yarnMenuOpenItemId, setYarnMenuOpenItemId] = useState<string | null>(null);
+  const [machineDrawerOpen, setMachineDrawerOpen] = useState(false);
+  const [machineSearch, setMachineSearch] = useState("");
 
   const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
     OrderStatus.PENDING,
@@ -177,41 +179,55 @@ export default function MachineViewTab({ onOpenEditModal }: MachineViewTabProps)
     }).catch(() => setMachines([]));
   }, []);
 
+  const filteredMachinesForDrawer = useMemo(() => {
+    const q = machineSearch.trim().toLowerCase();
+    if (!q) return machines;
+    return machines.filter(
+      (m) =>
+        (m.machineCode ?? "").toLowerCase().includes(q) ||
+        (m.name ?? "").toLowerCase().includes(q) ||
+        (m.id ?? "").toLowerCase().includes(q)
+    );
+  }, [machines, machineSearch]);
+
+  const selectedMachineLabel =
+    filterMachine === ""
+      ? "All machines"
+      : machines.find((m) => m.id === filterMachine)?.machineCode ??
+        machines.find((m) => m.id === filterMachine)?.name ??
+        "Selected";
+
   return (
     <>
-      <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-100">
+      <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-300">
         <button
           type="button"
           onClick={fetchList}
           disabled={isLoading}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50"
         >
           <i className={`ri-refresh-line text-xs ${isLoading ? "animate-spin" : ""}`} />
           Refresh
         </button>
-        <select
-          value={filterMachine}
-          onChange={(e) => setFilterMachine(e.target.value)}
-          className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 min-w-[140px]"
+        <button
+          type="button"
+          onClick={() => setMachineDrawerOpen(true)}
+          className="flex items-center justify-between gap-2 bg-white border border-gray-300 text-[11px] font-medium rounded px-3 py-1.5 min-w-[160px] hover:bg-gray-50 text-left"
         >
-          <option value="">All machines</option>
-          {machines.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.machineCode ?? m.name ?? m.id}
-            </option>
-          ))}
-        </select>
+          <span className="truncate">{selectedMachineLabel}</span>
+          <i className="ri-arrow-down-s-line text-gray-500 shrink-0" />
+        </button>
         <input
           type="text"
           value={filterNeedle}
           onChange={(e) => setFilterNeedle(e.target.value)}
           placeholder="Active needle"
-          className="bg-white border border-gray-200 pl-3 pr-3 py-1.5 text-[11px] rounded w-32 placeholder:text-gray-400"
+          className="bg-white border border-gray-300 pl-3 pr-3 py-1.5 text-[11px] rounded w-32 placeholder:text-gray-400"
         />
         <select
           value={filterActive === "" ? "" : filterActive ? "true" : "false"}
           onChange={(e) => setFilterActive(e.target.value === "" ? "" : e.target.value === "true")}
-          className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5"
+          className="bg-white border border-gray-300 text-[11px] font-medium rounded px-3 py-1.5"
         >
           <option value="">Status: All</option>
           <option value="true">Active</option>
@@ -223,7 +239,7 @@ export default function MachineViewTab({ onOpenEditModal }: MachineViewTabProps)
             setLimit(Number(e.target.value));
             setPage(1);
           }}
-          className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
+          className="bg-white border border-gray-300 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
         >
           <option value={10}>Show 10</option>
           <option value={20}>20</option>
@@ -231,6 +247,95 @@ export default function MachineViewTab({ onOpenEditModal }: MachineViewTabProps)
           <option value={100}>100</option>
         </select>
       </div>
+
+      {/* Machine select — side drawer with search */}
+      {machineDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          <div
+            className="absolute inset-0 z-0 bg-black/50"
+            onClick={() => {
+              setMachineDrawerOpen(false);
+              setMachineSearch("");
+            }}
+            aria-hidden
+          />
+          <div
+            className="relative z-10 ml-auto w-full max-w-md h-full bg-white shadow-xl flex flex-col border-l border-gray-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3 border-b border-gray-300 flex justify-between items-center shrink-0">
+              <h3 className="text-sm font-bold text-gray-800">Select machine</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setMachineDrawerOpen(false);
+                  setMachineSearch("");
+                }}
+                className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-300 rounded hover:bg-gray-100"
+              >
+                <i className="ri-close-line text-sm" />
+              </button>
+            </div>
+            <div className="p-3 border-b border-gray-300 shrink-0">
+              <input
+                type="text"
+                className="bg-white border border-gray-300 text-[11px] rounded px-3 py-1.5 w-full focus:ring-0 focus:border-purple-500 focus:ring-1 focus:ring-purple-300"
+                placeholder="Search by machine name or code..."
+                value={machineSearch}
+                onChange={(e) => setMachineSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <ul className="p-2 space-y-0.5">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterMachine("");
+                      setMachineDrawerOpen(false);
+                      setMachineSearch("");
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded text-[11px] font-medium transition-colors ${
+                      filterMachine === ""
+                        ? "bg-purple-100 text-purple-800 border border-purple-200"
+                        : "bg-gray-50 text-gray-700 border border-transparent hover:bg-gray-100"
+                    }`}
+                  >
+                    All machines
+                  </button>
+                </li>
+                {filteredMachinesForDrawer.map((m) => {
+                  const label = m.machineCode ?? m.name ?? m.id;
+                  const isSelected = filterMachine === m.id;
+                  return (
+                    <li key={m.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFilterMachine(m.id);
+                          setMachineDrawerOpen(false);
+                          setMachineSearch("");
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded text-[11px] font-medium transition-colors ${
+                          isSelected
+                            ? "bg-purple-100 text-purple-800 border border-purple-200"
+                            : "bg-gray-50 text-gray-700 border border-transparent hover:bg-gray-100"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {filteredMachinesForDrawer.length === 0 && machineSearch.trim() && (
+                <p className="p-4 text-[11px] text-gray-500 text-center">No machines match &quot;{machineSearch}&quot;</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <AssignmentsCards
         rows={rows}

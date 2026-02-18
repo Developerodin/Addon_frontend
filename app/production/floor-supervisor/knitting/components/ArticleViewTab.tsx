@@ -75,7 +75,7 @@ export default function ArticleViewTab({
         <div className="relative flex-1 min-w-[160px] max-w-[260px]">
           <input
             type="text"
-            className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
+            className="bg-white border border-gray-300 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-1 focus:ring-purple-300 focus:border-purple-500 w-full placeholder:text-gray-400 font-medium"
             placeholder="Search article, order..."
             value={articleSearch}
             onChange={(e) => setArticleSearch(e.target.value)}
@@ -87,38 +87,38 @@ export default function ArticleViewTab({
         </span>
       </div>
 
-      <div className="overflow-x-auto border border-gray-200 rounded">
-        <table className="w-full border-collapse border border-gray-200">
+      <div className="overflow-x-auto border border-gray-300 rounded">
+        <table className="w-full border-collapse border border-gray-300">
           <thead>
             <tr className="bg-gray-50/30">
-              <th className="pl-2 pr-1 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              <th className="pl-2 pr-1 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
                 Article
               </th>
-              <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
                 Order
               </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
                 Planned
               </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
                 Rcv
               </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
                 Done
               </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
                 Trf
               </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
                 Rem
               </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 bg-red-50">
+              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300 bg-red-50">
                 M4
               </th>
-              <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
                 Status
               </th>
-              <th className="px-1.5 py-2 text-right pr-2 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              <th className="px-1.5 py-2 text-right pr-2 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
                 Actions
               </th>
             </tr>
@@ -135,7 +135,7 @@ export default function ArticleViewTab({
               const key = (article.id ?? article._id) + "-" + order.id;
               return (
                 <tr key={key} className="hover:bg-gray-50/50 transition-colors group">
-                  <td className="pl-2 pr-1 py-2 border border-gray-200">
+                  <td className="pl-2 pr-1 py-2 border border-gray-300">
                     <div className="text-[12px] font-bold text-gray-900">{article.articleNumber ?? "—"}</div>
                     <div className="text-[10px] text-gray-500">{article.linkingType ?? "N/A"}</div>
                     {article.knittingCode && (
@@ -144,7 +144,7 @@ export default function ArticleViewTab({
                       </div>
                     )}
                   </td>
-                  <td className="px-1.5 py-2 border border-gray-200">
+                  <td className="px-1.5 py-2 border border-gray-300">
                     <div className="text-[12px] font-medium text-gray-800">{order.orderNumber ?? order.id}</div>
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${getStatusBadge(order.status)}`}>
                       {order.status}
@@ -153,37 +153,37 @@ export default function ArticleViewTab({
                       {order.priority}
                     </span>
                   </td>
-                  <td className="px-1.5 py-2 text-center text-[12px] text-gray-700 border border-gray-200">
+                  <td className="px-1.5 py-2 text-center text-[12px] text-gray-700 border border-gray-300">
                     {planned.toLocaleString()}
                   </td>
-                  <td className="px-1.5 py-2 text-center text-[12px] text-blue-600 font-medium border border-gray-200">
+                  <td className="px-1.5 py-2 text-center text-[12px] text-blue-600 font-medium border border-gray-300">
                     {received.toLocaleString()}
                   </td>
-                  <td className="px-1.5 py-2 text-center border border-gray-200">
+                  <td className="px-1.5 py-2 text-center border border-gray-300">
                     <span className="text-[12px] text-green-600 font-medium">{completed.toLocaleString()}</span>
                     {isOverproduction && (
                       <div className="text-[10px] text-orange-600">+{completed - planned}</div>
                     )}
                   </td>
-                  <td className="px-1.5 py-2 text-center text-[12px] text-green-600 font-medium border border-gray-200">
+                  <td className="px-1.5 py-2 text-center text-[12px] text-green-600 font-medium border border-gray-300">
                     {transferred.toLocaleString()}
                   </td>
-                  <td className="px-1.5 py-2 text-center text-[12px] text-orange-600 font-medium border border-gray-200">
+                  <td className="px-1.5 py-2 text-center text-[12px] text-orange-600 font-medium border border-gray-300">
                     {remaining.toLocaleString()}
                   </td>
-                  <td className="px-1.5 py-2 text-center border border-gray-200 bg-red-50">
+                  <td className="px-1.5 py-2 text-center border border-gray-300 bg-red-50">
                     {m4 > 0 ? (
                       <span className="text-[12px] text-red-600 font-medium">{m4.toLocaleString()}</span>
                     ) : (
                       <span className="text-gray-400">—</span>
                     )}
                   </td>
-                  <td className="px-1.5 py-2 border border-gray-200">
+                  <td className="px-1.5 py-2 border border-gray-300">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>
                       {order.status}
                     </span>
                   </td>
-                  <td className="px-1.5 py-2 text-right pr-2 border border-gray-200">
+                  <td className="px-1.5 py-2 text-right pr-2 border border-gray-300">
                     <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100">
                       <button
                         type="button"

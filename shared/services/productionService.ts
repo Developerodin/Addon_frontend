@@ -103,6 +103,7 @@ export interface UpdateArticleProgressRequest {
   m2Quantity?: number;
   m3Quantity?: number;
   m4Quantity?: number;
+  weight?: number;
   repairStatus?: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected';
   repairRemarks?: string;
   machineId?: string;

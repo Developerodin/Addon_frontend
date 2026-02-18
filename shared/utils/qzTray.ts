@@ -670,13 +670,12 @@ export const generateZPLDoubleLabel = (
         let curX = 40; // Top margin
         const step = 45;
 
-        const detailText = `L: ${lotNumber} | S: ${shadeCode}`;
-
         return `
           ^FO${curX},${yOffset}^A0R,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${rowLength},1,0,C^FDBox ID: ${boxId}^FS
           ^FO${curX + step},${yOffset}^A0R,${settings.supplierFontSize},${settings.supplierFontSize}^FB${rowLength},2,0,C^FD${supplier}^FS
           ^FO${curX + step * 2 + 10},${yOffset}^A0R,${settings.yarnFontSize},${settings.yarnFontSize}^FB${rowLength},2,0,C^FDYarn: ${yarnName}^FS
-          ^FO${curX + step * 3 + 20},${yOffset}^A0R,${settings.shadeLotFontSize},${settings.shadeLotFontSize}^FB${rowLength},1,0,C^FD${detailText}^FS
+          ^FO${curX + step * 3 + 20},${yOffset}^A0R,${settings.shadeLotFontSize},${settings.shadeLotFontSize}^FB${rowLength},1,0,C^FDL: ${lotNumber}^FS
+          ^FO${curX + step * 4 + 20},${yOffset}^A0R,${settings.shadeLotFontSize},${settings.shadeLotFontSize}^FB${rowLength},1,0,C^FDS: ${shadeCode}^FS
           ^BY${bWidth},2,${settings.barcodeHeight}
           ^FO${settings.paperWidth - settings.barcodeHeight - 30},${yOffset + bcMargin}^BCR,${settings.barcodeHeight},N,N,N^FD${barcodeValue}^FS`;
       }
@@ -691,14 +690,14 @@ export const generateZPLDoubleLabel = (
       const bcFullW = getBcW(bWidth);
       const bcX = 20 + Math.max(0, (contentWidth - bcFullW) / 2);
       let curY = yOffset + 30;
-
-      const detailText = `L: ${lotNumber} | S: ${shadeCode}`;
+      const lineH = settings.shadeLotFontSize + 8;
 
       return `
         ^FO20,${curY}^A0N,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${contentWidth},1,0,L^FDBox ID: ${boxId}^FS
         ^FO20,${curY + 40}^A0N,${settings.supplierFontSize},${settings.supplierFontSize}^FB${contentWidth},2,0,L^FD${supplier}^FS
         ^FO20,${curY + 90}^A0N,${settings.yarnFontSize},${settings.yarnFontSize}^FB${contentWidth},2,0,L^FDYarn: ${yarnName}^FS
-        ^FO20,${curY + 140}^A0N,${settings.shadeLotFontSize},${settings.shadeLotFontSize}^FB${contentWidth},1,0,L^FD${detailText}^FS
+        ^FO20,${curY + 140}^A0N,${settings.shadeLotFontSize},${settings.shadeLotFontSize}^FB${contentWidth},1,0,L^FDL: ${lotNumber}^FS
+        ^FO20,${curY + 140 + lineH}^A0N,${settings.shadeLotFontSize},${settings.shadeLotFontSize}^FB${contentWidth},1,0,L^FDS: ${shadeCode}^FS
         ^BY${bWidth},2,${settings.barcodeHeight}
         ^FO${bcX},${yOffset + settings.paperHeight - settings.barcodeHeight - 30}^BCN,${settings.barcodeHeight},N,N,N^FD${barcodeValue}^FS`;
     }
@@ -1050,8 +1049,9 @@ export const generateZPLCone = (
         curX += step;
       }
 
-      const lotShade = `L: ${lotNumber || '-'} | S: ${shadeCode || '-'}`;
-      zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FD${lotShade}^FS\n`;
+      zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDL: ${lotNumber || '-'}^FS\n`;
+      curX += step;
+      zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDS: ${shadeCode || '-'}^FS\n`;
 
       const qrYPos = yOffset + Math.max(0, Math.floor((labelHeight - qrW) / 2));
       zpl += `^FO${labelWidth - qrW - 30},${qrYPos}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
@@ -1101,9 +1101,10 @@ export const generateZPLCone = (
     }
     curY += 4;
 
-    // 4. Lot | Shade
-    const lotShadeText = `L: ${lotNumber || '-'} | S: ${shadeCode || '-'}`;
-    zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FD${lotShadeText}^FS\n`;
+    // 4. Lot and Shade on separate lines
+    zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDL: ${lotNumber || '-'}^FS\n`;
+    curY += shadeLotFontSize + 12;
+    zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDS: ${shadeCode || '-'}^FS\n`;
 
     if (isStandalone) zpl += `^XZ\n`;
     return zpl;

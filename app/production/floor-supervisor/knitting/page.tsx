@@ -55,7 +55,12 @@ const KnittingFloorSupervisorPage = () => {
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<any>(null);
   const [updateData, setUpdateData] = useState<{[key: string]: {completedQuantity: number, remarks: string, m4Quantity: number}}>({});
+  /** Snapshot when update modal opened – used to detect changes and disable Update Order until dirty. */
+  const [initialUpdateData, setInitialUpdateData] = useState<{[key: string]: {completedQuantity: number, remarks: string, m4Quantity: number}}>({});
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
+  /** Weight modal: shown when user clicks Update Order; capture weight then call update API. */
+  const [showWeightModal, setShowWeightModal] = useState(false);
+  const [weightInput, setWeightInput] = useState<string>('');
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [showLogsSection, setShowLogsSection] = useState(false);
   const [selectedLogArticleId, setSelectedLogArticleId] = useState<string>('');
@@ -186,6 +191,7 @@ const KnittingFloorSupervisorPage = () => {
       }
     });
     setUpdateData(initialData);
+    setInitialUpdateData(JSON.parse(JSON.stringify(initialData)));
     setShowUpdateModal(true);
   };
 
@@ -201,11 +207,14 @@ const KnittingFloorSupervisorPage = () => {
     setShowUpdateModal(false);
     setSelectedOrder(null);
     setUpdateData({});
+    setInitialUpdateData({});
     setUpdateModalReadOnlyFromIndex(undefined);
     setUpdateModalAssignment(null);
     setUpdateModalAssignmentItems(null);
     setUpdatingStatusItemId(null);
     setUpdatingYarnItemId(null);
+    setShowWeightModal(false);
+    setWeightInput('');
   };
 
   /** Open the same data-entry (update) modal from machine view: only priority orders, first editable, rest read-only. */
@@ -256,6 +265,7 @@ const KnittingFloorSupervisorPage = () => {
     setUpdateModalReadOnlyFromIndex(1);
     setUpdateModalAssignment(assignment);
     setUpdateModalAssignmentItems(items);
+    setInitialUpdateData(JSON.parse(JSON.stringify(initialData)));
     setShowUpdateModal(true);
   };
 
@@ -378,7 +388,30 @@ const KnittingFloorSupervisorPage = () => {
     }));
   };
 
-  const handleUpdateSubmit = async () => {
+  /** True if any editable article has different data than initial (so Update Order button should be enabled). */
+  const hasUpdateDataChanges = React.useMemo(() => {
+    if (!selectedOrder) return false;
+    const readOnlyFrom = updateModalReadOnlyFromIndex ?? selectedOrder.articles.length;
+    for (let idx = 0; idx < readOnlyFrom; idx++) {
+      const article = selectedOrder.articles[idx];
+      const articleId = article?.id || article?._id;
+      if (!articleId) continue;
+      const current = updateData[articleId];
+      const initial = initialUpdateData[articleId];
+      if (!current) continue;
+      const init = initial ?? { completedQuantity: 0, remarks: article.remarks ?? '', m4Quantity: 0 };
+      if (
+        current.completedQuantity !== init.completedQuantity ||
+        current.remarks !== init.remarks ||
+        current.m4Quantity !== init.m4Quantity
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }, [selectedOrder, updateData, initialUpdateData, updateModalReadOnlyFromIndex]);
+
+  const handleUpdateSubmit = async (weight?: number) => {
     if (!selectedOrder) return;
 
     console.log('Update button clicked');
@@ -425,7 +458,8 @@ const KnittingFloorSupervisorPage = () => {
         const progressData = {
           completedQuantity: update.completedQuantity,
           remarks: update.remarks,
-          m4Quantity: m4QuantityToSend
+          m4Quantity: m4QuantityToSend,
+          ...(weight != null && !Number.isNaN(weight) && { weight })
         };
           
           try {
@@ -531,7 +565,7 @@ const KnittingFloorSupervisorPage = () => {
     <div className="main-content !p-[10px]">
       <Seo title="Knitting Floor Supervisor Dashboard"/>
 
-      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+      <div className="bg-white shadow-sm border border-gray-300 overflow-hidden mx-0">
         <div className="p-[10px]">
           {/* Header - items page style (match supervisor) */}
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
@@ -570,7 +604,7 @@ const KnittingFloorSupervisorPage = () => {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
                 onClick={loadOrders}
                 disabled={isLoading}
                 title="Refresh Orders"
@@ -601,7 +635,7 @@ const KnittingFloorSupervisorPage = () => {
           </div>
 
           {/* Tabs: Orders | Machine view */}
-          <div className="flex border-b border-gray-200 mb-0">
+          <div className="flex border-b border-gray-300 mb-0">
             <button
               type="button"
               className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -640,23 +674,23 @@ const KnittingFloorSupervisorPage = () => {
             />
           ) : (
             <>
-          <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-100">
+          <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-300">
             <button
               type="button"
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${showFilters ? 'bg-purple-600 text-white border-purple-600' : 'bg-white border-gray-200 text-[#495057] hover:bg-gray-50'}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${showFilters ? 'bg-purple-600 text-white border-purple-600' : 'bg-white border-gray-300 text-[#495057] hover:bg-gray-50'}`}
               onClick={() => setShowFilters(!showFilters)}
             >
               <i className="ri-filter-3-line text-xs"></i> Filters {hasActiveFilters && <span className="ml-1">●</span>}
             </button>
             {hasActiveFilters && (
-              <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50" onClick={clearFilters}>
+              <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[11px] font-bold rounded hover:bg-gray-50" onClick={clearFilters}>
                 <i className="ri-close-line text-xs"></i> Clear
               </button>
             )}
             <div className="relative flex-1 min-w-[140px] max-w-[240px]">
               <input
                 type="text"
-                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
+                className="bg-white border border-gray-300 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-1 focus:ring-purple-300 focus:border-purple-500 w-full placeholder:text-gray-400 font-medium"
                 placeholder="Search order, article..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -664,7 +698,7 @@ const KnittingFloorSupervisorPage = () => {
               <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
             </div>
             <select
-              className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
+              className="bg-white border border-gray-300 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
               value={itemsPerPage}
               onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
             >
@@ -676,28 +710,28 @@ const KnittingFloorSupervisorPage = () => {
           </div>
 
           {showFilters && (
-            <div className="p-[10px] bg-gray-50 border-b border-gray-100 flex flex-wrap gap-2">
-              <select className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1.5" value={filters.status} onChange={(e) => handleFilterChange('status', e.target.value)}>
+            <div className="p-[10px] bg-gray-50 border-b border-gray-300 flex flex-wrap gap-2">
+              <select className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5" value={filters.status} onChange={(e) => handleFilterChange('status', e.target.value)}>
                 <option value="">All Status</option>
                 <option value="Pending">Pending</option>
                 <option value="In Progress">In Progress</option>
                 <option value="Completed">Completed</option>
                 <option value="On Hold">On Hold</option>
               </select>
-              <select className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1.5" value={filters.priority} onChange={(e) => handleFilterChange('priority', e.target.value)}>
+              <select className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5" value={filters.priority} onChange={(e) => handleFilterChange('priority', e.target.value)}>
                 <option value="">All Priorities</option>
                 <option value="Urgent">Urgent</option>
                 <option value="High">High</option>
                 <option value="Medium">Medium</option>
                 <option value="Low">Low</option>
               </select>
-              <select className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1.5" value={filters.linkingType} onChange={(e) => handleFilterChange('linkingType', e.target.value)}>
+              <select className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5" value={filters.linkingType} onChange={(e) => handleFilterChange('linkingType', e.target.value)}>
                 <option value="">All Types</option>
                 <option value="Auto Linking">Auto Linking</option>
                 <option value="Rosso Linking">Rosso Linking</option>
                 <option value="Hand Linking">Hand Linking</option>
               </select>
-              <input type="text" className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1.5 w-28" placeholder="Floor..." value={filters.floor} onChange={(e) => handleFilterChange('floor', e.target.value)} />
+              <input type="text" className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5 w-28" placeholder="Floor..." value={filters.floor} onChange={(e) => handleFilterChange('floor', e.target.value)} />
             </div>
           )}
 
@@ -718,30 +752,30 @@ const KnittingFloorSupervisorPage = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-200">
+              <table className="w-full border-collapse border border-gray-300">
                 <thead>
                   <tr className="bg-gray-50/30">
-                    <th className="pl-[10px] pr-1 py-2.5 w-10 border border-gray-200">
-                      <input type="checkbox" checked={selectAll} onChange={handleSelectAll} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                    <th className="pl-[10px] pr-1 py-2.5 w-10 border border-gray-300">
+                      <input type="checkbox" checked={selectAll} onChange={handleSelectAll} className="rounded border-gray-300 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
                     </th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Articles</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
-                    <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Order</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Articles</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Status</th>
+                    <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="pl-[10px] pr-1 py-2.5 border border-gray-200">
-                        <input type="checkbox" checked={selectedOrders.includes(order.id)} onChange={() => handleOrderSelect(order.id)} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                      <td className="pl-[10px] pr-1 py-2.5 border border-gray-300">
+                        <input type="checkbox" checked={selectedOrders.includes(order.id)} onChange={() => handleOrderSelect(order.id)} className="rounded border-gray-300 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
                       </td>
-                      <td className="px-1.5 py-2.5 border border-gray-200">
+                      <td className="px-1.5 py-2.5 border border-gray-300">
                         <div className="text-[12px] font-bold text-gray-900">{order.orderNumber || order.id}</div>
                         {order.orderNote && <span className="text-[10px] text-gray-500">({order.orderNote})</span>}
                         <div className="text-[10px] text-gray-500">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : (order.articles?.[0]?.createdAt ? new Date(order.articles[0].createdAt).toLocaleDateString() : 'N/A')}</div>
                       </td>
-                      <td className="px-1.5 py-2.5 border border-gray-200">
+                      <td className="px-1.5 py-2.5 border border-gray-300">
                         <div className="text-[12px] font-medium text-gray-600">{order.articles.length} Article{order.articles.length !== 1 ? 's' : ''} · Qty {order.articles.reduce((s, a) => s + (a.plannedQuantity || 0), 0).toLocaleString()}</div>
                         {order.articles.some(a => a.floorQuantities?.knitting) && (
                           <div className="text-[10px] text-blue-600 mt-0.5">
@@ -752,11 +786,11 @@ const KnittingFloorSupervisorPage = () => {
                           <div className="text-[10px] text-red-600">M4: {order.articles.reduce((s, a) => s + (a.floorQuantities?.knitting?.m4Quantity || 0), 0)}</div>
                         )}
                       </td>
-                      <td className="px-1.5 py-2.5 border border-gray-200">
+                      <td className="px-1.5 py-2.5 border border-gray-300">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>{order.status}</span>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ml-1 ${getPriorityBadge(order.priority)}`}>{order.priority}</span>
                       </td>
-                      <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                      <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-300">
                         <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100">
                           <button className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100" onClick={() => handleViewOrder(order)} title="View"><i className="ri-eye-line text-xs"></i></button>
                           <button className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100" onClick={() => handleUpdateOrder(order)} title="Update"><i className="ri-edit-line text-xs"></i></button>
@@ -770,7 +804,7 @@ const KnittingFloorSupervisorPage = () => {
           )}
 
           {!isLoading && orders.length > 0 && (
-            <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100">
+            <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-300">
               <div className="text-[11px] font-medium text-[#495057]">
                 Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
               </div>
@@ -808,7 +842,7 @@ const KnittingFloorSupervisorPage = () => {
             </div>
 
             {/* Order Summary */}
-            <div className="grid grid-cols-2 gap-2 mb-3 p-2 bg-gray-50 rounded border border-gray-100">
+            <div className="grid grid-cols-2 gap-2 mb-3 p-2 bg-gray-50 rounded border border-gray-300">
               <div>
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Priority</label>
                 <div className="mt-0.5">
@@ -824,9 +858,9 @@ const KnittingFloorSupervisorPage = () => {
             </div>
 
             {/* Main row 8 cols; second row = Remarks (full height) + Status / Yarn when from machine */}
-            <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="border border-gray-300 rounded overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-200 text-[10px] table-fixed">
+                <table className="w-full border-collapse border border-gray-300 text-[10px] table-fixed">
                   <colgroup>
                     <col className="w-[16%]" />
                     <col className="w-[8%]" />
@@ -839,14 +873,14 @@ const KnittingFloorSupervisorPage = () => {
                   </colgroup>
                   <thead className="bg-gray-50/80">
                     <tr>
-                      <th className="pl-1.5 pr-1 py-1 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 whitespace-nowrap">Article</th>
-                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200">Planned</th>
-                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200">Rcv</th>
-                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200">Trf</th>
-                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200">Rem</th>
-                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200 bg-yellow-50">Knit Done *</th>
-                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200 bg-red-50">M4</th>
-                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-200 bg-red-50">M4 +</th>
+                      <th className="pl-1.5 pr-1 py-1 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300 whitespace-nowrap">Article</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-300">Planned</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-300">Rcv</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-300">Trf</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-300">Rem</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-300 bg-yellow-50">Knit Done *</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-300 bg-red-50">M4</th>
+                      <th className="px-1 py-1 text-center text-[10px] font-bold text-[#495057] uppercase border border-gray-300 bg-red-50">M4 +</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white">
@@ -865,10 +899,25 @@ const KnittingFloorSupervisorPage = () => {
                       const remainingQty = article.floorQuantities?.knitting?.remaining || 0;
                       const displayCompleted = isReadOnly ? completedQty : (currentUpdateData.completedQuantity || 0);
                       const isOverproduction = displayCompleted > plannedQty;
+                      const isFirstReadOnly = isReadOnly && idx === updateModalReadOnlyFromIndex;
                       return (
                         <React.Fragment key={articleId}>
+                          {/* Action buttons + Upcoming Article heading above first read-only article */}
+                          {isFirstReadOnly && (
+                            <tr>
+                              <td colSpan={8} className="p-3 border border-gray-300 bg-gray-50 align-top">
+                                <div className="flex justify-end gap-2 mb-3">
+                                  <button onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
+                                  <button type="button" disabled={!hasUpdateDataChanges} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <i className="ri-save-line text-xs"></i> Update Order
+                                  </button>
+                                </div>
+                                <h4 className="text-[11px] font-bold text-gray-600 uppercase tracking-wide border-b border-gray-300 pb-1.5">Upcoming Article</h4>
+                              </td>
+                            </tr>
+                          )}
                           <tr className={isReadOnly ? "bg-gray-50/50" : "hover:bg-gray-50/50"}>
-                            <td className="pl-1.5 pr-1 py-1 border border-gray-200 overflow-hidden">
+                            <td className="pl-1.5 pr-1 py-1 border border-gray-300 overflow-hidden">
                               <div className="text-[10px] font-bold text-gray-900 truncate" title={article.articleNumber}>{article.articleNumber || `Art ${idx + 1}`}</div>
                               <div className="text-[9px] text-gray-500">{article.linkingType || "N/A"}</div>
                               {article.knittingCode && (
@@ -876,42 +925,42 @@ const KnittingFloorSupervisorPage = () => {
                               )}
                               {isReadOnly && <span className="text-[8px] text-gray-400 uppercase">Upcoming</span>}
                             </td>
-                            <td className="px-1 py-1 text-center text-[10px] text-gray-700 border border-gray-200">{plannedQty.toLocaleString()}</td>
-                            <td className="px-1 py-1 text-center text-[10px] text-blue-600 font-medium border border-gray-200">{receivedQty.toLocaleString()}</td>
-                            <td className="px-1 py-1 text-center text-[10px] text-green-600 font-medium border border-gray-200">{transferredQty.toLocaleString()}</td>
-                            <td className="px-1 py-1 text-center text-[10px] text-orange-600 font-medium border border-gray-200">{remainingQty.toLocaleString()}</td>
-                            <td className="px-1 py-1 border border-gray-200 bg-yellow-50 min-w-0">
+                            <td className="px-1 py-1 text-center text-[10px] text-gray-700 border border-gray-300">{plannedQty.toLocaleString()}</td>
+                            <td className="px-1 py-1 text-center text-[10px] text-blue-600 font-medium border border-gray-300">{receivedQty.toLocaleString()}</td>
+                            <td className="px-1 py-1 text-center text-[10px] text-green-600 font-medium border border-gray-300">{transferredQty.toLocaleString()}</td>
+                            <td className="px-1 py-1 text-center text-[10px] text-orange-600 font-medium border border-gray-300">{remainingQty.toLocaleString()}</td>
+                            <td className="px-1 py-1 border border-gray-300 bg-yellow-50 min-w-0">
                               {isReadOnly ? (
                                 <span className="text-[10px] text-gray-700">{completedQty.toLocaleString()}{isOverproduction ? ` (+${completedQty - plannedQty})` : ""}</span>
                               ) : (
                                 <div className="flex flex-col gap-0.5">
-                                  <NumericInput className="py-0.5 text-[10px] h-5 border border-gray-200 rounded focus:border-purple-300 w-full min-w-0" value={currentUpdateData.completedQuantity} onChange={(v) => handleQuantityChange(articleId, v)} allowDecimals />
+                                  <NumericInput className="py-0.5 text-[10px] h-5 border border-gray-300 rounded focus:border-purple-500 focus:ring-1 focus:ring-purple-300 w-full min-w-0" value={currentUpdateData.completedQuantity} onChange={(v) => handleQuantityChange(articleId, v)} allowDecimals />
                                   {isOverproduction && <div className="text-[9px] text-orange-600">+{currentUpdateData.completedQuantity - plannedQty}</div>}
                                 </div>
                               )}
                             </td>
-                            <td className="px-1 py-1 text-center text-[10px] text-red-700 font-medium border border-gray-200 bg-red-50">{currentM4FromArticle.toLocaleString()}</td>
-                            <td className="px-1 py-1 border border-gray-200 bg-red-50 min-w-0">
+                            <td className="px-1 py-1 text-center text-[10px] text-red-700 font-medium border border-gray-300 bg-red-50">{currentM4FromArticle.toLocaleString()}</td>
+                            <td className="px-1 py-1 border border-gray-300 bg-red-50 min-w-0">
                               {isReadOnly ? (
                                 <span className="text-[10px] text-gray-500">—</span>
                               ) : (
-                                <NumericInput className="py-0.5 text-[10px] h-5 border border-red-200 rounded focus:border-red-400 w-full min-w-0" value={currentUpdateData.m4Quantity} onChange={(v) => handleM4QuantityChange(articleId, v)} placeholder="0" allowDecimals />
+                                <NumericInput className="py-0.5 text-[10px] h-5 border border-red-300 rounded focus:border-red-400 w-full min-w-0" value={currentUpdateData.m4Quantity} onChange={(v) => handleM4QuantityChange(articleId, v)} placeholder="0" allowDecimals />
                               )}
                             </td>
                           </tr>
                           {/* Next row: Remarks (takes height) + Status / Yarn when from machine */}
                           <tr className={isReadOnly ? "bg-gray-50/50" : "bg-gray-50/30"}>
-                            <td colSpan={8} className="p-2 border border-gray-200 align-top">
+                            <td colSpan={8} className="p-2 border border-gray-300 align-top">
                               <div className="flex flex-wrap items-start gap-4">
                                 <div className="flex-1 min-w-[200px]">
                                   <label className="block text-[10px] font-semibold text-gray-600 mb-1">Remarks</label>
                                   {isReadOnly ? (
-                                    <div className="min-h-[56px] py-2 px-2 text-[11px] text-gray-700 bg-white border border-gray-200 rounded" title={article.remarks || ""}>
+                                    <div className="min-h-[56px] py-2 px-2 text-[11px] text-gray-700 bg-white border border-gray-300 rounded" title={article.remarks || ""}>
                                       {article.remarks || "—"}
                                     </div>
                                   ) : (
                                     <textarea
-                                      className="w-full min-h-[56px] py-2 px-2 text-[11px] border border-gray-200 rounded focus:ring-1 focus:ring-purple-300 focus:border-purple-300 resize-y"
+                                      className="w-full min-h-[56px] py-2 px-2 text-[11px] border border-gray-300 rounded focus:ring-1 focus:ring-purple-400 focus:border-purple-500 resize-y"
                                       rows={3}
                                       placeholder="Add remarks..."
                                       value={currentUpdateData.remarks}
@@ -919,7 +968,7 @@ const KnittingFloorSupervisorPage = () => {
                                     />
                                   )}
                                 </div>
-                                {updateModalAssignment && updateModalAssignmentItems && (
+                                {updateModalAssignment && updateModalAssignmentItems && !isReadOnly && (
                                   <div className="flex flex-wrap items-center gap-3 shrink-0">
                                     <div>
                                       <label className="block text-[10px] font-semibold text-gray-600 mb-1">Status</label>
@@ -1017,12 +1066,55 @@ const KnittingFloorSupervisorPage = () => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
-              <button onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={handleUpdateSubmit} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700">
-                <i className="ri-save-line text-xs"></i> Update Order
-              </button>
-            </div>
+            {/* When no read-only articles, show actions at bottom */}
+            {updateModalReadOnlyFromIndex === undefined && (
+              <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-300">
+                <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
+                <button type="button" disabled={!hasUpdateDataChanges} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <i className="ri-save-line text-xs"></i> Update Order
+                </button>
+              </div>
+            )}
+
+            {/* Weight capture modal – shown when user clicks Update Order; then call update API with weight */}
+            {showWeightModal && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40" onClick={() => setShowWeightModal(false)} aria-hidden>
+                <div className="bg-white rounded-lg shadow-xl border border-gray-300 w-full max-w-sm p-4 flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
+                  <p className="text-[12px] text-gray-700">
+                    Put article quantity on weight scale to capture weight.
+                  </p>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Weight</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      placeholder="Enter weight"
+                      value={weightInput}
+                      onChange={(e) => setWeightInput(e.target.value)}
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-[12px] focus:ring-1 focus:ring-purple-300 focus:border-purple-500"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button type="button" onClick={() => { setShowWeightModal(false); setWeightInput(''); }} className="px-3 py-1.5 text-[11px] font-bold text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const w = weightInput.trim() ? parseFloat(weightInput) : undefined;
+                        setShowWeightModal(false);
+                        setWeightInput('');
+                        handleUpdateSubmit(w);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+                    >
+                      <i className="ri-save-line text-xs"></i> Update
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
                 </>
               )}
 
@@ -1037,7 +1129,7 @@ const KnittingFloorSupervisorPage = () => {
             </div>
 
             {/* Order Summary */}
-            <div className="grid grid-cols-2 gap-2 mb-3 p-2 bg-gray-50 rounded border border-gray-100">
+            <div className="grid grid-cols-2 gap-2 mb-3 p-2 bg-gray-50 rounded border border-gray-300">
               <div>
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Priority</label>
                 <div className="mt-0.5">
@@ -1058,26 +1150,26 @@ const KnittingFloorSupervisorPage = () => {
                 <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wide">Article Details</h4>
                 <button
                   onClick={() => setShowLogsSection(!showLogsSection)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border ${showLogsSection ? 'bg-purple-600 text-white border-purple-600' : 'bg-white border-gray-200 text-[#495057] hover:bg-gray-50'}`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border ${showLogsSection ? 'bg-purple-600 text-white border-purple-600' : 'bg-white border-gray-300 text-[#495057] hover:bg-gray-50'}`}
                 >
                   <i className="ri-file-list-line text-xs"></i> {showLogsSection ? 'Hide Logs' : 'Logs'}
                 </button>
               </div>
 
-              <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="border border-gray-300 rounded overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-gray-200">
+                  <table className="w-full border-collapse border border-gray-300">
                     <thead className="bg-gray-50/80">
                       <tr>
-                        <th className="pl-2 pr-1 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Article</th>
-                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Planned</th>
-                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received</th>
-                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Completed</th>
-                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transferred</th>
-                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Remaining</th>
-                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 bg-red-50">M4</th>
-                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Progress</th>
-                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Remarks</th>
+                        <th className="pl-2 pr-1 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Article</th>
+                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Planned</th>
+                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Received</th>
+                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Completed</th>
+                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Transferred</th>
+                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Remaining</th>
+                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300 bg-red-50">M4</th>
+                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Progress</th>
+                        <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Remarks</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
@@ -1092,22 +1184,22 @@ const KnittingFloorSupervisorPage = () => {
                         const isOverproduction = completedQty > plannedQty;
                         return (
                           <tr key={article.id || article._id} className="hover:bg-gray-50/50">
-                            <td className="pl-2 pr-1 py-2 border border-gray-200">
+                            <td className="pl-2 pr-1 py-2 border border-gray-300">
                               <div className="text-[12px] font-bold text-gray-900">{article.articleNumber || `Article ${idx + 1}`}</div>
                               <div className="text-[10px] text-gray-500">{article.linkingType || 'N/A'}</div>
                               {article.priority && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${getPriorityBadge(article.priority)}`}>{article.priority}</span>}
                             </td>
-                            <td className="px-1.5 py-2 text-center text-[12px] text-gray-700 border border-gray-200">{plannedQty.toLocaleString()}</td>
-                            <td className="px-1.5 py-2 text-center text-[12px] text-blue-600 font-medium border border-gray-200">{receivedQty.toLocaleString()}</td>
-                            <td className="px-1.5 py-2 text-center border border-gray-200">
+                            <td className="px-1.5 py-2 text-center text-[12px] text-gray-700 border border-gray-300">{plannedQty.toLocaleString()}</td>
+                            <td className="px-1.5 py-2 text-center text-[12px] text-blue-600 font-medium border border-gray-300">{receivedQty.toLocaleString()}</td>
+                            <td className="px-1.5 py-2 text-center border border-gray-300">
                               <div className="text-[12px] text-green-600 font-medium">{completedQty.toLocaleString()}</div>
                               {isOverproduction && <div className="text-[10px] text-orange-600">+{completedQty - plannedQty}</div>}
                             </td>
-                            <td className="px-1.5 py-2 text-center text-[12px] text-green-600 font-medium border border-gray-200">{transferredQty.toLocaleString()}</td>
-                            <td className="px-1.5 py-2 text-center text-[12px] text-orange-600 font-medium border border-gray-200">{remainingQty.toLocaleString()}</td>
-                            <td className="px-1.5 py-2 text-center border border-gray-200 bg-red-50">{m4Qty > 0 ? <span className="text-[12px] text-red-600 font-medium">{m4Qty.toLocaleString()}</span> : <span className="text-gray-400">—</span>}</td>
-                            <td className="px-1.5 py-2 text-center text-[12px] font-medium border border-gray-200">{progress}%</td>
-                            <td className="px-1.5 py-2 text-[12px] border border-gray-200">{article.remarks ? <span className="max-w-xs truncate block" title={article.remarks}>{article.remarks}</span> : <span className="text-gray-400">—</span>}</td>
+                            <td className="px-1.5 py-2 text-center text-[12px] text-green-600 font-medium border border-gray-300">{transferredQty.toLocaleString()}</td>
+                            <td className="px-1.5 py-2 text-center text-[12px] text-orange-600 font-medium border border-gray-300">{remainingQty.toLocaleString()}</td>
+                            <td className="px-1.5 py-2 text-center border border-gray-300 bg-red-50">{m4Qty > 0 ? <span className="text-[12px] text-red-600 font-medium">{m4Qty.toLocaleString()}</span> : <span className="text-gray-400">—</span>}</td>
+                            <td className="px-1.5 py-2 text-center text-[12px] font-medium border border-gray-300">{progress}%</td>
+                            <td className="px-1.5 py-2 text-[12px] border border-gray-300">{article.remarks ? <span className="max-w-xs truncate block" title={article.remarks}>{article.remarks}</span> : <span className="text-gray-400">—</span>}</td>
                           </tr>
                         );
                       })}
@@ -1117,12 +1209,12 @@ const KnittingFloorSupervisorPage = () => {
               </div>
 
               {showLogsSection && (
-                <div className="border border-gray-200 rounded p-3 bg-gray-50/50">
+                <div className="border border-gray-300 rounded p-3 bg-gray-50/50">
                   <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
                     <h5 className="text-[11px] font-bold text-gray-800 uppercase tracking-wide">Article Logs {articleLogs.length > 0 && `(${articleLogs.length})`}</h5>
                     <div className="flex items-center gap-2">
                       <label className="text-[10px] font-medium text-gray-600">Article:</label>
-                      <select className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1.5 w-40" value={selectedLogArticleId} onChange={(e) => handleLogsArticleSelect(e.target.value)}>
+                      <select className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5 w-40" value={selectedLogArticleId} onChange={(e) => handleLogsArticleSelect(e.target.value)}>
                         <option value="">Choose...</option>
                         {selectedOrder.articles.map((article) => {
                           const articleId = article._id || article.id;
@@ -1140,7 +1232,7 @@ const KnittingFloorSupervisorPage = () => {
                   ) : selectedLogArticleId && articleLogs.length > 0 ? (
                     <div className="space-y-2 max-h-80 overflow-y-auto">
                       {articleLogs.map((log, index) => (
-                        <div key={log._id || log.id || index} className="border border-gray-200 rounded p-2 bg-white">
+                        <div key={log._id || log.id || index} className="border border-gray-300 rounded p-2 bg-white">
                           <div className="flex justify-between items-start gap-2 mb-1">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${log.action === 'Quality Inspection' ? 'bg-yellow-100 text-yellow-800' : log.action === 'Transferred to Branding' ? 'bg-purple-100 text-purple-800' : log.action === 'Transferred to Washing' ? 'bg-blue-100 text-blue-800' : log.action?.includes('M') ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{log.action || 'ACTION'}</span>
                             <span className="text-[10px] text-gray-500 shrink-0">{log.timestamp ? new Date(log.timestamp).toLocaleString() : log.createdAt ? new Date(log.createdAt).toLocaleString() : '—'}</span>
@@ -1167,8 +1259,8 @@ const KnittingFloorSupervisorPage = () => {
               )}
             </div>
 
-            <div className="flex justify-end mt-4 pt-3 border-t border-gray-100">
-              <button onClick={closeViewModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Close</button>
+            <div className="flex justify-end mt-4 pt-3 border-t border-gray-300">
+              <button onClick={closeViewModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Close</button>
             </div>
                 </>
               )}

@@ -1212,7 +1212,8 @@ const ProcessOrderPage = () => {
             <div class="supplier">${(order?.supplier || '-').replace(/</g, '&lt;')}</div>
             <div class="details">
               Yarn: ${(details.yarnName || '-').replace(/</g, '&lt;')}<br/>
-              Lot: ${(lotLabel || '-').replace(/</g, '&lt;')} | Shade: ${(details.shadeCode || '-').replace(/</g, '&lt;')}
+              L: ${(lotLabel || '-').replace(/</g, '&lt;')}<br/>
+              S: ${(details.shadeCode || '-').replace(/</g, '&lt;')}
             </div>
             <div class="barcode"><svg id="${uniqueId}"></svg></div>
           </div>
