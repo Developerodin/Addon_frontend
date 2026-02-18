@@ -879,10 +879,6 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
               value={box.numberOfCones !== undefined ? String(box.numberOfCones) : "-"}
             />
             <DetailItem label="Storage Location" value={box.storageLocation || "-"} />
-            <DetailItem
-              label="Order Quantity"
-              value={box.orderQty !== undefined ? String(box.orderQty) : "-"}
-            />
             <DetailItem label="Received Date" value={formatDateTime(box.receivedDate)} />
             <DetailItem label="Updated At" value={formatDateTime(box.updatedAt)} />
           </div>

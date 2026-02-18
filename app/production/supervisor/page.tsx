@@ -89,8 +89,11 @@ const ProductionSupervisorPage = () => {
         console.log('Orders loaded:', response.data.results);
         let filteredOrders = response.data.results;
         
-        // If we have a search query and no results from backend search, 
+        // If we have a search query and no results from backend search,
         // try client-side filtering by article numbers
+        let effectiveTotalPages = response.data.totalPages;
+        let effectiveTotalResults = response.data.totalResults ?? filteredOrders.length;
+
         if (searchQuery && filteredOrders.length === 0) {
           // Get all orders without search filter to do client-side filtering
           const allOrdersResponse = await productionService.getOrders({
@@ -102,22 +105,24 @@ const ProductionSupervisorPage = () => {
             sortBy: 'createdAt',
             populate: 'articles'
           });
-          
+
           if (allOrdersResponse.success) {
             // Filter orders that contain articles with matching article numbers
             filteredOrders = allOrdersResponse.data.results.filter(order => {
-              return order.articles.some(article => 
+              return order.articles.some(article =>
                 article.articleNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.id.toLowerCase().includes(searchQuery.toLowerCase())
               );
             });
+            effectiveTotalResults = filteredOrders.length;
+            effectiveTotalPages = Math.max(1, Math.ceil(filteredOrders.length / itemsPerPage));
           }
         }
-        
+
         setOrders(filteredOrders);
-        setTotalPages(response.data.totalPages);
-        setTotalResults(filteredOrders.length);
+        setTotalPages(effectiveTotalPages);
+        setTotalResults(effectiveTotalResults);
       } else {
         console.error('Failed to load orders:', response.error);
         toast.error('Failed to load orders');

@@ -63,6 +63,8 @@ interface Machine {
   model: string;
   floor: string;
   status: 'Active' | 'Under Maintenance' | 'Idle';
+  /** Active needle from machine/needle config (used for filtering when assignments API has no entry) */
+  activeNeedle?: string;
   needleSizeConfig?: { needleSize: string }[];
   needleSize?: string;
 }
@@ -162,16 +164,15 @@ const EditOrderContent = () => {
   const floorMatches = (floor: string) =>
     validProductionFloors.some((f) => floor?.toLowerCase().includes(f.toLowerCase()));
 
-  // Fetch machines: only those with valid floor AND active needle in needle configuration
+  // Fetch machines: only those with valid floor AND active needle (from assignments or machine document)
   const fetchMachines = async () => {
     try {
       setIsLoadingMachines(true);
       let activeMap = new Map<string, string>();
       try {
         activeMap = await getMachineActiveNeedleMap();
-        setMachineActiveNeedleMap(activeMap);
       } catch {
-        setMachineActiveNeedleMap(new Map());
+        // continue with empty map; we'll still use machine.activeNeedle from API
       }
 
       const response = await fetch(`${API_BASE_URL}/machines?page=1&limit=1000`, {
@@ -180,10 +181,18 @@ const EditOrderContent = () => {
       if (!response.ok) throw new Error('Failed to fetch machines');
       const data = await response.json();
       const machinesArray = Array.isArray(data.results) ? data.results : [];
+      machinesArray.forEach((machine: Machine) => {
+        const id = machine._id ?? machine.id;
+        const fromDoc = (machine.activeNeedle ?? '').toString().trim();
+        if (id && fromDoc) activeMap.set(String(id), fromDoc);
+      });
+      setMachineActiveNeedleMap(activeMap);
+
       const validMachines = machinesArray.filter((machine: Machine) => {
         const id = machine._id ?? machine.id;
         if (!id || !floorMatches(machine.floor)) return false;
-        return activeMap.has(String(id));
+        const needle = activeMap.get(String(id)) ?? (machine.activeNeedle ?? '').toString().trim();
+        return needle.length > 0;
       });
       setMachines(validMachines);
     } catch (error) {
@@ -339,9 +348,7 @@ const EditOrderContent = () => {
       const attrs = fullProduct.attributes || {};
       const needlesRaw = attrs.Needles ?? attrs.needles;
       const needleSizeFromProduct =
-        needlesRaw != null && needlesRaw !== ''
-          ? needlesValueIdToName[String(needlesRaw)] ?? String(needlesRaw)
-          : undefined;
+        needlesRaw != null && needlesRaw !== '' ? String(needlesRaw).trim() : undefined;
 
       setFormData(prev => ({
         ...prev,
@@ -365,9 +372,7 @@ const EditOrderContent = () => {
       const attrs = (product as Product).attributes || {};
       const needlesRaw = attrs.Needles ?? attrs.needles;
       const needleSizeFromProduct =
-        needlesRaw != null && needlesRaw !== ''
-          ? needlesValueIdToName[String(needlesRaw)] ?? String(needlesRaw)
-          : undefined;
+        needlesRaw != null && needlesRaw !== '' ? String(needlesRaw).trim() : undefined;
       setFormData(prev => ({
         ...prev,
         articles: prev.articles.map((article, index) => 
@@ -475,9 +480,7 @@ const EditOrderContent = () => {
               const attrs = fullProduct.attributes || {};
               const needlesRaw = attrs.Needles ?? attrs.needles;
               const needleSizeFromProduct =
-                needlesRaw != null && needlesRaw !== ''
-                  ? needlesMap[String(needlesRaw)] ?? String(needlesRaw)
-                  : undefined;
+                needlesRaw != null && needlesRaw !== '' ? String(needlesRaw).trim() : undefined;
 
               return {
                 id: article._id ?? article.id,
@@ -649,6 +652,20 @@ const EditOrderContent = () => {
     }
   };
 
+  /** Only Pending or On Hold items can have their machine changed. In Progress / Completed cannot. */
+  const canChangeMachineForArticle = (article: Article): boolean => {
+    const mid = typeof article.machineId === 'object' && article.machineId
+      ? (article.machineId as { id?: string }).id ?? (article.machineId as { _id?: string })._id
+      : article.machineId;
+    if (!orderId || !mid || !article.id) return true;
+    const assn = assignmentsByMachineId.get(String(mid));
+    const item = (assn?.productionOrderItems ?? []).find(
+      (i) => String(i.productionOrder) === String(orderId) && String(i.article) === String(article.id)
+    );
+    const status = (item?.status ?? 'Pending').toString().toLowerCase();
+    return status === 'pending' || status === 'on hold';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -683,7 +700,11 @@ const EditOrderContent = () => {
       
       if (response.success) {
         // Sync machine-order-assignments: update/add/remove this order's items per machine
-        const currentMachineIds = new Set(formData.articles.map((a) => a.machineId).filter(Boolean) as string[]);
+        const toMid = (m: string | object | undefined) =>
+          !m ? '' : typeof m === 'object' ? (m as { id?: string }).id ?? (m as { _id?: string })._id ?? '' : String(m);
+        const currentMachineIds = new Set(
+          formData.articles.map((a) => toMid(a.machineId)).filter(Boolean)
+        );
         const previousMachineIds = new Set<string>();
         assignmentsByMachineId.forEach((assn, mid) => {
           const hasThisOrder = (assn.productionOrderItems ?? []).some((i) => String(i.productionOrder) === String(orderId));
@@ -715,7 +736,7 @@ const EditOrderContent = () => {
           const currentItems = assn.productionOrderItems ?? [];
           const itemsWithoutThisOrder = currentItems.filter((i) => String(i.productionOrder) !== String(orderId));
           const newItems = formData.articles
-            .filter((a) => a.machineId === mid)
+            .filter((a) => toMid(a.machineId) === mid)
             .map((a, i) => ({
               productionOrder: orderId!,
               article: a.id,
@@ -1083,8 +1104,14 @@ const EditOrderContent = () => {
                                   setMachineSearchQuery('');
                                   setShowMachineModal(true);
                                 }}
-                                disabled={isLoadingMachines || !article.productId}
-                                title={!article.productId ? 'Select factory code first' : undefined}
+                                disabled={isLoadingMachines || !article.productId || !canChangeMachineForArticle(article)}
+                                title={
+                                  !article.productId
+                                    ? 'Select factory code first'
+                                    : !canChangeMachineForArticle(article)
+                                    ? 'Cannot change machine: item is In Progress or Completed. Only Pending/On Hold can be reassigned.'
+                                    : undefined
+                                }
                                 className="form-control form-control-sm w-full text-xs py-1 px-2 h-8 text-left bg-white border border-gray-300 rounded flex items-center justify-between gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 <span className="truncate">
@@ -1303,15 +1330,11 @@ const EditOrderContent = () => {
                     </div>
                   );
                 }
-                // Only show machines whose *active* needle (from Needle Configuration) matches the item's needle
+                // Show machines whose active needle matches the item's needle (any status: Idle, Active, etc.)
                 const machinesForNeedle = machines.filter((m) => {
                   const id = m._id ?? m.id;
-                  const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) ?? '' : '';
-                  if ((activeNeedle || '').trim() !== needleSize) return false;
-                  const config = m.needleSizeConfig || [];
-                  const hasInConfig = config.some((c) => (c.needleSize || '').trim() === needleSize);
-                  const hasSingle = (m.needleSize || '').trim() === needleSize;
-                  return hasInConfig || hasSingle;
+                  const activeNeedle = String((id ? machineActiveNeedleMap.get(String(id)) ?? '' : '') || (m.activeNeedle ?? '')).trim();
+                  return activeNeedle === needleSize;
                 });
                 const q = machineSearchQuery.trim().toLowerCase();
                 const filtered = q
@@ -1326,7 +1349,7 @@ const EditOrderContent = () => {
                 return filtered.length === 0 ? (
                   <div className="text-center py-8 px-4">
                     <p className="text-red-600 text-sm font-medium">
-                      No machine found for this item. Please check needle in item and needle available in machine.
+                      No machine found for needle “{needleSize}”. Check item Needles and machine active needle match.
                     </p>
                   </div>
                 ) : (
@@ -1338,31 +1361,38 @@ const EditOrderContent = () => {
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Active needle</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase"># POs</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Article #</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {filtered.map((machine) => {
                           const id = machine._id || machine.id;
-                          const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) : "";
+                          const activeNeedle = (id ? machineActiveNeedleMap.get(String(id)) : '') || (machine.activeNeedle ?? '').toString().trim();
                           const assn = id ? assignmentsByMachineId.get(String(id)) : null;
                           const items = assn?.productionOrderItems ?? [];
                           const poCount = new Set(items.map((i) => String(i.productionOrder ?? "")).filter(Boolean)).size;
                           const articleNumbers = items.map((i) => i.articleNumber || i.article || "—").join(", ");
+                          const selectMachine = () => {
+                            handleArticleChange(machineModalArticleIndex, "machineId", id ?? "");
+                            setShowMachineModal(false);
+                            setMachineModalArticleIndex(null);
+                            setMachineSearchQuery("");
+                          };
                           return (
-                            <tr
-                              key={id}
-                              onClick={() => {
-                                handleArticleChange(machineModalArticleIndex, "machineId", id ?? "");
-                                setShowMachineModal(false);
-                                setMachineModalArticleIndex(null);
-                                setMachineSearchQuery("");
-                              }}
-                              className="cursor-pointer hover:bg-purple-50 transition-colors"
-                            >
+                            <tr key={id} className="hover:bg-purple-50 transition-colors">
                               <td className="px-3 py-2 font-medium text-gray-900">{machine.machineCode}</td>
                               <td className="px-3 py-2 text-xs text-emerald-600 font-medium">{activeNeedle || "—"}</td>
                               <td className="px-3 py-2 text-xs text-gray-600">{poCount}</td>
                               <td className="px-3 py-2 text-xs text-gray-600 max-w-[200px] truncate" title={articleNumbers}>{articleNumbers || "—"}</td>
+                              <td className="px-3 py-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); selectMachine(); }}
+                                  className="px-2 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700"
+                                >
+                                  Select
+                                </button>
+                              </td>
                             </tr>
                           );
                         })}

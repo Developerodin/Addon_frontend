@@ -8,9 +8,11 @@ import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, CreateOrderRequest } from "@/shared/services/productionService";
 import {
   getMachineActiveNeedleMap,
+  listMachineOrderAssignments,
   getAssignmentByMachineId,
   addProductionOrderItemsToAssignment,
   OrderStatus,
+  type MachineOrderAssignment,
 } from "@/shared/services/machineOrderAssignmentService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
@@ -63,6 +65,8 @@ interface Machine {
   model: string;
   floor: string;
   status: 'Active' | 'Under Maintenance' | 'Idle';
+  /** Active needle from machine/needle config (used for filtering when assignments API has no entry) */
+  activeNeedle?: string;
   needleSizeConfig?: { needleSize: string }[];
   needleSize?: string;
 }
@@ -103,12 +107,18 @@ const AddOrderPage = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [productPage, setProductPage] = useState(1);
+  const [productLimit] = useState(25);
+  const [productTotalPages, setProductTotalPages] = useState(1);
+  const [productTotalResults, setProductTotalResults] = useState(0);
   const [yarnCatalogs, setYarnCatalogs] = useState<YarnCatalogMap>({});
   const [showMachineModal, setShowMachineModal] = useState(false);
   const [machineModalArticleIndex, setMachineModalArticleIndex] = useState<number | null>(null);
   const [machineSearchQuery, setMachineSearchQuery] = useState('');
   /** Machine ID -> active needle (from Catalog Needle Configuration); used to filter and show needle in dropdown */
   const [machineActiveNeedleMap, setMachineActiveNeedleMap] = useState<Map<string, string>>(new Map());
+  /** Machine ID -> assignment (for PO count in Select machine modal) */
+  const [assignmentsByMachineId, setAssignmentsByMachineId] = useState<Map<string, MachineOrderAssignment>>(new Map());
   /** Needles attribute value ID -> display name (for filtering machines by product's Needles) */
   const [needlesValueIdToName, setNeedlesValueIdToName] = useState<Record<string, string>>({});
 
@@ -121,16 +131,15 @@ const AddOrderPage = () => {
   const floorMatches = (floor: string) =>
     validProductionFloors.some((f) => floor?.toLowerCase().includes(f.toLowerCase()));
 
-  // Fetch machine IDs that have active needle (from needle configuration), then fetch machines and filter
+  // Fetch machine IDs that have active needle (from assignments or machine document), then fetch machines and filter
   const fetchMachines = async () => {
     try {
       setIsLoadingMachines(true);
       let activeMap = new Map<string, string>();
       try {
         activeMap = await getMachineActiveNeedleMap();
-        setMachineActiveNeedleMap(activeMap);
       } catch {
-        setMachineActiveNeedleMap(new Map());
+        // continue with empty map; we'll still use machine.activeNeedle from API
       }
 
       const response = await fetch(`${API_BASE_URL}/machines?page=1&limit=1000`, {
@@ -146,12 +155,21 @@ const AddOrderPage = () => {
 
       const data = await response.json();
       const machinesArray = Array.isArray(data.results) ? data.results : [];
-      // Only machines with valid production floors AND with an active needle in needle configuration
+      // Merge active needle from machine document so machines without assignment still show (e.g. activeNeedle from API)
+      machinesArray.forEach((machine: Machine) => {
+        const id = machine._id ?? machine.id;
+        const fromDoc = (machine.activeNeedle ?? '').toString().trim();
+        if (id && fromDoc) activeMap.set(String(id), fromDoc);
+      });
+      setMachineActiveNeedleMap(activeMap);
+
+      // Only machines with valid production floors AND with an active needle (from assignments or machine document)
       const validMachines = machinesArray.filter((machine: Machine) => {
         const id = machine._id ?? machine.id;
         if (!id) return false;
         if (!floorMatches(machine.floor)) return false;
-        return activeMap.has(String(id));
+        const needle = activeMap.get(String(id)) ?? (machine.activeNeedle ?? '').toString().trim();
+        return needle.length > 0;
       });
       setMachines(validMachines);
     } catch (error) {
@@ -189,9 +207,27 @@ const AddOrderPage = () => {
     return () => { cancelled = true; };
   }, []);
 
-  // Fetch machines on component mount
+  // Fetch assignments for PO count in Select machine modal
+  const fetchAssignments = async () => {
+    try {
+      const data = await listMachineOrderAssignments({ page: 1, limit: 500, isActive: true });
+      const map = new Map<string, MachineOrderAssignment>();
+      data.results.forEach((a) => {
+        const mid = typeof a.machine === 'object' && a.machine
+          ? (a.machine as { id?: string }).id ?? (a.machine as { _id?: string })._id
+          : a.machine;
+        if (mid) map.set(String(mid), a);
+      });
+      setAssignmentsByMachineId(map);
+    } catch {
+      setAssignmentsByMachineId(new Map());
+    }
+  };
+
+  // Fetch machines and assignments on component mount
   useEffect(() => {
     fetchMachines();
+    fetchAssignments();
     fetchYarnCatalogs();
   }, []);
 
@@ -230,16 +266,24 @@ const AddOrderPage = () => {
     }
   };
 
-  // Fetch products for modal
-  const fetchProducts = async (search: string = '') => {
+  // Fetch products for modal (paginated)
+  const fetchProducts = async (search: string = '', page: number = 1) => {
     try {
       setIsLoadingProducts(true);
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-      const response = await axios.get(`${API_BASE_URL}/products?page=1&limit=1000${searchParam}`);
-      const productsData = response.data.results || [];
-      // Filter to only show products with factory codes
-      const productsWithFactoryCode = productsData.filter((p: Product) => p.factoryCode && p.factoryCode.trim() !== '');
+      const response = await axios.get(
+        `${API_BASE_URL}/products?page=${page}&limit=${productLimit}${searchParam}`
+      );
+      const data = response.data;
+      const productsData = data.results || [];
+      const totalResults = data.totalResults ?? data.total ?? productsData.length;
+      const totalPages = data.totalPages ?? Math.max(1, Math.ceil(totalResults / productLimit));
+      const productsWithFactoryCode = productsData.filter(
+        (p: Product) => p.factoryCode && p.factoryCode.trim() !== ''
+      );
       setProducts(productsWithFactoryCode);
+      setProductTotalPages(totalPages);
+      setProductTotalResults(totalResults);
     } catch (error) {
       console.error('Error fetching products:', error);
       toast.error('Failed to load products');
@@ -252,9 +296,10 @@ const AddOrderPage = () => {
   const openProductModal = (articleIndex: number) => {
     setSelectedArticleIndex(articleIndex);
     setProductSearchQuery('');
+    setProductPage(1);
     setIsLoadingProducts(true);
     setShowProductModal(true);
-    fetchProducts();
+    fetchProducts('', 1);
   };
 
   // Close modal
@@ -262,6 +307,13 @@ const AddOrderPage = () => {
     setShowProductModal(false);
     setSelectedArticleIndex(null);
     setProductSearchQuery('');
+  };
+
+  const handleProductPageChange = (page: number) => {
+    if (page < 1 || page > productTotalPages) return;
+    setProductPage(page);
+    setIsLoadingProducts(true);
+    fetchProducts(productSearchQuery, page);
   };
 
   // Select product and update article
@@ -313,13 +365,11 @@ const AddOrderPage = () => {
         };
       }));
 
-      // Resolve Needles attribute to display name (for machine filtering)
+      // Needles is always string from API; use as-is for machine filtering
       const attrs = fullProduct.attributes || {};
       const needlesRaw = attrs.Needles ?? attrs.needles;
       const needleSizeFromProduct =
-        needlesRaw != null && needlesRaw !== ''
-          ? needlesValueIdToName[String(needlesRaw)] ?? String(needlesRaw)
-          : undefined;
+        needlesRaw != null && needlesRaw !== '' ? String(needlesRaw).trim() : undefined;
 
       const knittingCode = fullProduct.knittingCode ?? undefined;
 
@@ -1039,16 +1089,11 @@ const AddOrderPage = () => {
                     </div>
                   );
                 }
-                // Only show *active* machines whose active needle (from Needle Configuration) matches the item's needle
+                // Show machines whose active needle matches the item's needle (any status: Idle, Active, etc.)
                 const machinesForNeedle = machines.filter((m) => {
-                  if ((m.status || '').toString().toLowerCase() !== 'active') return false;
                   const id = m._id ?? m.id;
-                  const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) ?? '' : '';
-                  if ((activeNeedle || '').trim() !== needleSize) return false;
-                  const config = m.needleSizeConfig || [];
-                  const hasInConfig = config.some((c) => (c.needleSize || '').trim() === needleSize);
-                  const hasSingle = (m.needleSize || '').trim() === needleSize;
-                  return hasInConfig || hasSingle;
+                  const activeNeedle = String((id ? machineActiveNeedleMap.get(String(id)) ?? '' : '') || (m.activeNeedle ?? '')).trim();
+                  return activeNeedle === needleSize;
                 });
                 const q = machineSearchQuery.trim().toLowerCase();
                 const filtered = q
@@ -1063,24 +1108,32 @@ const AddOrderPage = () => {
                 return filtered.length === 0 ? (
                   <div className="text-center py-8 px-4">
                     <p className="text-red-600 text-sm font-medium">
-                      No active machine found for this item. Please check needle in item and needle available in machine.
+                      No machine found for needle “{needleSize}”. Check item Needles and machine active needle match.
                     </p>
                   </div>
                 ) : (
-                  <div className="max-h-[50vh] overflow-y-auto border border-gray-200 rounded">
+                  <div className="max-h-[50vh] overflow-y-auto border border-gray-200 rounded overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
                         <tr>
                           <th className="text-left px-3 py-2 font-semibold text-gray-700">Machine</th>
                           <th className="text-left px-3 py-2 font-semibold text-gray-700">Active Needle</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-700"># POs</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-700">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {filtered.map((machine) => {
                           const id = machine._id || machine.id;
-                          const activeNeedle = id ? machineActiveNeedleMap.get(String(id)) : '';
+                          const activeNeedle = (id ? machineActiveNeedleMap.get(String(id)) : '') || (machine.activeNeedle ?? '').toString().trim();
+                          const assn = id ? assignmentsByMachineId.get(String(id)) : null;
+                          const items = assn?.productionOrderItems ?? [];
+                          const poCount = new Set(items.map((i) => String(i.productionOrder ?? '')).filter(Boolean)).size;
                           return (
-                            <tr key={id}>
+                            <tr key={id} className="hover:bg-gray-50">
+                              <td className="px-3 py-2 font-medium text-gray-900">{machine.machineCode}</td>
+                              <td className="px-3 py-2 text-gray-700">{activeNeedle || '—'}</td>
+                              <td className="px-3 py-2 text-gray-600">{poCount}</td>
                               <td className="px-3 py-2">
                                 <button
                                   type="button"
@@ -1090,12 +1143,11 @@ const AddOrderPage = () => {
                                     setMachineModalArticleIndex(null);
                                     setMachineSearchQuery('');
                                   }}
-                                  className="w-full text-left font-medium text-purple-600 hover:underline"
+                                  className="px-2 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700"
                                 >
-                                  {machine.machineCode}
+                                  Select
                                 </button>
                               </td>
-                              <td className="px-3 py-2 text-gray-700">{activeNeedle || '—'}</td>
                             </tr>
                           );
                         })}
@@ -1120,18 +1172,25 @@ const AddOrderPage = () => {
                 <i className="ri-close-line text-sm"></i>
               </button>
             </div>
-            <div className="p-[10px] border-b border-gray-200 shrink-0">
+            <div className="p-[10px] border-b border-gray-200 shrink-0 space-y-2">
               <input
                 type="text"
                 className="bg-white border border-gray-200 text-[11px] rounded px-3 py-1.5 w-full focus:ring-0 focus:border-purple-300"
                 placeholder="Search by factory code or product name..."
                 value={productSearchQuery}
                 onChange={(e) => {
-                  setProductSearchQuery(e.target.value);
+                  const q = e.target.value;
+                  setProductSearchQuery(q);
+                  setProductPage(1);
                   setIsLoadingProducts(true);
-                  fetchProducts(e.target.value);
+                  fetchProducts(q, 1);
                 }}
               />
+              {!isLoadingProducts && productTotalResults > 0 && (
+                <div className="text-[11px] font-medium text-gray-500">
+                  Showing {((productPage - 1) * productLimit) + 1} to {Math.min(productPage * productLimit, productTotalResults)} of {productTotalResults} entries
+                </div>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-2 min-h-0">
@@ -1158,9 +1217,7 @@ const AddOrderPage = () => {
                         const productId = product.id ?? (product as any)._id;
                         const needlesRaw = product.attributes?.Needles ?? product.attributes?.needles;
                         const needleDisplay =
-                          needlesRaw != null && needlesRaw !== ''
-                            ? needlesValueIdToName[String(needlesRaw)] ?? String(needlesRaw)
-                            : '—';
+                          needlesRaw != null && needlesRaw !== '' ? String(needlesRaw).trim() : '—';
                         return (
                           <tr key={productId} className="hover:bg-gray-50">
                             <td className="px-2 py-1.5 text-xs font-medium">{product.factoryCode || 'N/A'}</td>
@@ -1175,11 +1232,58 @@ const AddOrderPage = () => {
                                 Select
                               </button>
                             </td>
-                          </tr>
+                                    </tr>
                         );
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+              {!isLoadingProducts && products.length > 0 && productTotalPages > 0 && (
+                <div className="p-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 mt-2">
+                  <div className="text-[11px] font-medium text-gray-500">
+                    Page {productPage} of {productTotalPages}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleProductPageChange(productPage - 1)}
+                      disabled={productPage <= 1}
+                      className="px-3 py-1.5 text-[11px] font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      Prev
+                    </button>
+                    {Array.from({ length: Math.min(productTotalPages, 7) }, (_, i) => {
+                      const pageNum =
+                        productTotalPages <= 7
+                          ? i + 1
+                          : productPage <= 4
+                            ? i + 1
+                            : productPage >= productTotalPages - 3
+                              ? productTotalPages - 6 + i
+                              : productPage - 3 + i;
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => handleProductPageChange(pageNum)}
+                          className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${
+                            productPage === pageNum ? 'bg-purple-600 text-white' : 'text-gray-500 hover:bg-gray-100'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => handleProductPageChange(productPage + 1)}
+                      disabled={productPage >= productTotalPages}
+                      className="px-3 py-1.5 text-[11px] font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

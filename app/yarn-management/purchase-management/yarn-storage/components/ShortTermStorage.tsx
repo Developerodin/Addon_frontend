@@ -1098,14 +1098,6 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600 uppercase">
-                  Order Qty
-                </label>
-                <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                  {scannedBoxDetails.orderQty || 0}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 uppercase">
                   Box Weight (kg)
                 </label>
                 <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">

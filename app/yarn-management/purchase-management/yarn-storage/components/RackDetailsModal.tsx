@@ -376,14 +376,6 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                                         {box.numberOfCones}
                                       </div>
                                     </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Order Qty
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {box.orderQty}
-                                      </div>
-                                    </div>
                                     {box.qcData && (
                                       <>
                                         <div>
