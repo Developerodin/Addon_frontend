@@ -1878,7 +1878,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         </div>
       )}
 
-      {/* Allocate Box Modal */}
+      {/* Allocate Box Modal - use form so Enter key works in production build */}
       {showAllocateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
@@ -1887,45 +1887,48 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                 Allocate Box to Storage
               </h3>
             </div>
-            <div className="box-body px-6 py-4">
-              <div className="mb-4">
-                <label className="form-label text-sm font-medium text-gray-700 mb-2 block">
-                  Storage Rack Code <span className="text-red-500">*</span>
-                </label>
-                <input
-                  ref={rackCodeInputRef}
-                  type="text"
-                  className="form-control uppercase"
-                  placeholder="Enter storage rack barcode"
-                  value={storageRackCode}
-                  onChange={(e) => setStorageRackCode(e.target.value.toUpperCase())}
-                  disabled={isAllocating}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !isAllocating && storageRackCode.trim()) {
-                      e.preventDefault();
-                      handleAllocateConfirm();
-                    }
-                  }}
-                  autoFocus
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Enter the barcode of the storage rack location
-                </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!isAllocating && storageRackCode.trim()) {
+                  handleAllocateConfirm();
+                }
+              }}
+            >
+              <div className="box-body px-6 py-4">
+                <div className="mb-4">
+                  <label className="form-label text-sm font-medium text-gray-700 mb-2 block">
+                    Storage Rack Code <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    ref={rackCodeInputRef}
+                    type="text"
+                    className="form-control uppercase"
+                    placeholder="Enter storage rack barcode"
+                    value={storageRackCode}
+                    onChange={(e) => setStorageRackCode(e.target.value.toUpperCase())}
+                    disabled={isAllocating}
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter the barcode of the storage rack location
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="box-footer border-t border-gray-200 px-6 py-4 flex justify-end gap-2">
-              <button
-                onClick={handleModalClose}
-                className="ti-btn ti-btn-light"
-                disabled={isAllocating}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAllocateConfirm}
-                className="ti-btn ti-btn-primary"
-                disabled={isAllocating || !storageRackCode.trim()}
-              >
+              <div className="box-footer border-t border-gray-200 px-6 py-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleModalClose}
+                  className="ti-btn ti-btn-light"
+                  disabled={isAllocating}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="ti-btn ti-btn-primary"
+                  disabled={isAllocating || !storageRackCode.trim()}
+                >
                 {isAllocating ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white me-2 inline-block"></div>
@@ -1938,7 +1941,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                   </>
                 )}
               </button>
-            </div>
+              </div>
+            </form>
           </div>
         </div>
       )}
