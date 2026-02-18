@@ -5,6 +5,7 @@ import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService
 import { PurchaseOrder } from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 import PurchaseOrderSelectDrawer from "@/shared/components/PurchaseOrderSelectDrawer";
+import AllocateBoxDrawer from "./AllocateBoxDrawer";
 
 interface UnallocatedBoxesProps {
   onBoxAllocate?: (orderId: string) => void;
@@ -612,94 +613,14 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
           </div>
         )}
 
-        {/* Allocate Modal - Side Drawer */}
-        {showAllocateModal && (
-          <div className="fixed inset-0 z-50 overflow-hidden">
-            {/* Backdrop */}
-            <div
-              className="absolute inset-0 bg-black/60 transition-opacity"
-              onClick={handleModalClose}
-            ></div>
-            {/* Side Drawer */}
-            <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out">
-              <div className="flex flex-col h-full">
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
-                  <div className="flex items-center gap-2">
-                    <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-800">
-                        Allocate Box to Storage
-                      </h3>
-                      <p className="text-[10px] text-gray-500 mt-0.5">
-                        Enter storage rack code to allocate box
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleModalClose}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                    disabled={isAllocating}
-                  >
-                    <i className="ri-close-line text-lg"></i>
-                  </button>
-                </div>
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto px-4 py-3">
-                  <div className="mb-4">
-                    <label className="text-xs font-medium text-gray-700 mb-1.5 block">
-                      Storage Rack Code <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                      placeholder="Enter storage rack barcode"
-                      value={storageRackCode}
-                      onChange={(e) => setStorageRackCode(e.target.value)}
-                      disabled={isAllocating}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !isAllocating) {
-                          handleAllocateConfirm();
-                        }
-                      }}
-                      autoFocus
-                    />
-                    <p className="text-[10px] text-gray-500 mt-1">
-                      Enter the barcode of the storage rack location
-                    </p>
-                  </div>
-                </div>
-                {/* Footer */}
-                <div className="border-t border-gray-200 px-4 py-3 bg-gray-50 flex justify-end gap-2">
-                  <button
-                    onClick={handleModalClose}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
-                    disabled={isAllocating}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAllocateConfirm}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
-                    disabled={isAllocating || !storageRackCode.trim()}
-                  >
-                    {isAllocating ? (
-                      <>
-                        <i className="ri-loader-4-line animate-spin text-xs"></i>
-                        Allocating...
-                      </>
-                    ) : (
-                      <>
-                        <i className="ri-check-line text-xs"></i>
-                        Confirm
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <AllocateBoxDrawer
+          isOpen={showAllocateModal}
+          onClose={handleModalClose}
+          rackCode={storageRackCode}
+          onRackCodeChange={setStorageRackCode}
+          onConfirm={handleAllocateConfirm}
+          isAllocating={isAllocating}
+        />
 
         {!selectedPO && (
           <div className="text-center py-8">

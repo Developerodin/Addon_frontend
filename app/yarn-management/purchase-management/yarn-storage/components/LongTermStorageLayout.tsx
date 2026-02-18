@@ -4,6 +4,7 @@ import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
 import JsBarcode from "jsbarcode";
 import BarcodeScanner from "./BarcodeScanner";
+import AllocateBoxDrawer from "./AllocateBoxDrawer";
 import RackDetailsModal from "./RackDetailsModal";
 import RackTransferModal from "./RackTransferModal";
 import { RackLocation, PackedBox } from "../types";
@@ -69,6 +70,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const [transferType, setTransferType] = useState<"LT_TO_LT" | "LT_TO_ST">("LT_TO_LT");
   const [transferBoxId, setTransferBoxId] = useState<string | undefined>(undefined);
   const rackCodeInputRef = useRef<HTMLInputElement>(null);
+  /** API document id for the box being allocated (for PATCH). Set when allocate drawer opens, cleared on close. */
+  const selectedBoxApiIdRef = useRef<string | null>(null);
   const [alreadyStoredBoxInfo, setAlreadyStoredBoxInfo] = useState<{
     boxId: string;
     storageLocation: string;
@@ -223,17 +226,6 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
   const LT_SECTIONS = ["B7-02", "B7-03", "B7-04", "B7-05"];
   const ST_SECTIONS = ["B7-01"];
-
-  // Auto-focus rack code input when allocate modal opens
-  useEffect(() => {
-    if (showAllocateModal && rackCodeInputRef.current) {
-      // Use setTimeout to ensure modal is fully rendered
-      setTimeout(() => {
-        rackCodeInputRef.current?.focus();
-        rackCodeInputRef.current?.select();
-      }, 100);
-    }
-  }, [showAllocateModal]);
 
   // Map storage slots to RackLocation format
   const racks = useMemo(() => {
@@ -467,17 +459,18 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           } else {
             // Box is stored but location format doesn't match LT- or ST-
             // Still show the info message
-            toast.info(`Box is already stored at ${currentStorageLocation}`);
+            toast(`Box is already stored at ${currentStorageLocation}`);
           }
         } else {
           // Rack not found but box is stored - still show the info message
-          toast.info(`Box is already stored at ${currentStorageLocation}`);
+          toast(`Box is already stored at ${currentStorageLocation}`);
         }
         setIsLoadingBox(false);
         return;
       }
 
-      // Box is not stored yet - open allocate modal
+      // Box is not stored yet - open allocate modal (store API id for PATCH)
+      selectedBoxApiIdRef.current = boxDetails._id ?? boxDetails.id ?? null;
       setSelectedBox(mappedBox);
       setStorageRackCode("");
       setShowAllocateModal(true);
@@ -545,18 +538,55 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     focusBarcodeScanner();
   };
 
-  // Handle allocate confirmation from modal
-  const handleAllocateConfirm = async () => {
-    if (!selectedBox || !storageRackCode.trim()) {
+  // Handle allocate confirmation from modal (rackCodeOverride = value from drawer when Enter/Confirm, avoids stale state)
+  const handleAllocateConfirm = async (rackCodeOrEvent?: any) => {
+    // If called via onClick, rackCodeOrEvent is the MouseEvent. Ignore it and use state.
+    // Handle both string override and state-based rack code.
+    const effectiveRackCode = (typeof rackCodeOrEvent === "string" ? rackCodeOrEvent : storageRackCode || "").trim();
+
+    if (!selectedBox || !effectiveRackCode) {
       toast.error("Please enter a storage rack code");
       return;
     }
 
-    const rackCodeUpper = storageRackCode.trim().toUpperCase();
+    const rackCodeUpper = effectiveRackCode.toUpperCase();
     setIsAllocating(true);
     try {
-      // Find rack by barcode (case-insensitive)
-      const rack = racks.find((r) => r.barcode?.toUpperCase() === rackCodeUpper);
+      // 1. Try to find rack in current page's racks
+      let rack = racks.find(
+        (r) =>
+          r.barcode?.toUpperCase() === rackCodeUpper ||
+          r.rackCode?.toUpperCase() === rackCodeUpper
+      );
+
+      // 2. Fallback: Try fetching rack details from API if not found on current page
+      if (!rack) {
+        try {
+          console.log("[LongTermStorage] Rack not found on current page, fetching from API:", rackCodeUpper);
+          const details = await storageSlotService.getSlotDetailsByBarcode(rackCodeUpper);
+          const slot = details.storageSlot;
+          const data = details.type === "boxes" ? (details.data as BoxInSlot[]) : [];
+          rack = {
+            id: slot._id,
+            rackCode: slot.label,
+            row: slot.shelfNumber,
+            column: slot.floorNumber,
+            shelf: slot.shelfNumber,
+            sectionCode: slot.sectionCode,
+            barcode: slot.barcode,
+            capacity: 1,
+            currentBoxes: data.length,
+            status: data.length > 0 ? "Occupied" : slot.isActive ? "Available" : "Maintenance",
+          };
+          // Cache the details for future use
+          setRackSlotDetails((prev) => new Map(prev).set(slot._id, details));
+        } catch (apiErr) {
+          console.error("[LongTermStorage] Failed to find rack via API:", apiErr);
+          toast.error("Rack not found with the provided barcode");
+          return;
+        }
+      }
+
       if (!rack) {
         toast.error("Rack not found with the provided barcode");
         return;
@@ -567,60 +597,46 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         return;
       }
 
-      // Get the box ID - try to find the actual YarnBox to get _id
-      const boxId = selectedBox.id;
-
-      // Call API to update box storage location
+      const boxId = selectedBoxApiIdRef.current ?? selectedBox.id;
       try {
         await yarnBoxService.updateYarnBox(boxId, {
           storageLocation: rackCodeUpper,
           storedStatus: true,
         });
       } catch (apiError) {
-        // If API call fails, still proceed with local state update
         console.warn("Failed to update box via API, updating local state only:", apiError);
       }
 
-      // Update local state via callback
       handleStoreBox(selectedBox.id, rack.id);
 
-      // Refresh only the affected rack after storing new box
       try {
-        // Refresh only the rack details where box was stored (no need to refresh all slots)
-        const details = await storageSlotService.getSlotDetailsByBarcode(rackCodeUpper);
+        const details = await storageSlotService.getSlotDetailsByBarcode(rack.barcode);
         setRackSlotDetails((prev) => {
           const newMap = new Map(prev);
           newMap.set(rack.id, details);
           return newMap;
         });
-        // Call parent refresh callback if provided
-        if (onRefresh) {
-          onRefresh();
-        }
+        if (onRefresh) onRefresh();
       } catch (error) {
         console.error("Failed to refresh data after storing box:", error);
       }
 
       toast.success(`Box stored on this rack (${rackCodeUpper})`, { duration: 4000 });
-
-      // Close modal and reset state
       setShowAllocateModal(false);
       setStorageRackCode("");
       setSelectedBox(null);
-
-      // Refocus barcode scanner input after successful allocation
+      selectedBoxApiIdRef.current = null;
       focusBarcodeScanner();
     } catch (error) {
       console.error("Failed to allocate box:", error);
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to allocate box to storage"
+        error instanceof Error ? error.message : "Failed to allocate box to storage"
       );
     } finally {
       setIsAllocating(false);
     }
   };
+
 
   // Handle modal close
   const handleModalClose = () => {
@@ -628,6 +644,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       setShowAllocateModal(false);
       setStorageRackCode("");
       setSelectedBox(null);
+      selectedBoxApiIdRef.current = null;
     }
   };
 
@@ -1162,7 +1179,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                 onScan={handleBoxScan}
                 label="Scan Box Barcode"
                 placeholder="Scan QC-approved box barcode"
-                disabled={isLoadingBox}
+                disabled={isLoadingBox || showAllocateModal}
               />
               {alreadyStoredBoxInfo && (
                 <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -1212,71 +1229,71 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               )}
             </h3>
             <div className="flex gap-2 items-center flex-wrap">
-            <div className="flex items-center gap-2">
-              <label className="sr-only">Search rack</label>
-              <input
-                type="text"
-                value={rackSearchQuery}
-                onChange={(e) => setRackSearchQuery(e.target.value)}
-                placeholder="Search by rack code or barcode"
-                className="px-2.5 py-1.5 text-xs border border-gray-200 rounded w-52 focus:ring-0 focus:border-purple-300"
-              />
-              {rackSearchQuery.trim() && (
-                <button
-                  type="button"
-                  onClick={() => setRackSearchQuery("")}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded border border-gray-200 hover:bg-gray-50"
-                  title="Clear search"
-                >
-                  <i className="ri-close-line text-sm"></i>
-                </button>
-              )}
-            </div>
-            <div className="flex gap-2 text-xs">
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-green-50 border border-green-200 rounded"></div>
-                <span>Available</span>
+              <div className="flex items-center gap-2">
+                <label className="sr-only">Search rack</label>
+                <input
+                  type="text"
+                  value={rackSearchQuery}
+                  onChange={(e) => setRackSearchQuery(e.target.value)}
+                  placeholder="Search by rack code or barcode"
+                  className="px-2.5 py-1.5 text-xs border border-gray-200 rounded w-52 focus:ring-0 focus:border-purple-300"
+                />
+                {rackSearchQuery.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setRackSearchQuery("")}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 rounded border border-gray-200 hover:bg-gray-50"
+                    title="Clear search"
+                  >
+                    <i className="ri-close-line text-sm"></i>
+                  </button>
+                )}
               </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-blue-50 border border-blue-300 rounded"></div>
-                <span>Occupied</span>
+              <div className="flex gap-2 text-xs">
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-green-50 border border-green-200 rounded"></div>
+                  <span>Available</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-blue-50 border border-blue-300 rounded"></div>
+                  <span>Occupied</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-yellow-50 border border-yellow-300 rounded"></div>
+                  <span>Reserved</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-red-50 border border-red-300 rounded"></div>
+                  <span>Maintenance</span>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-yellow-50 border border-yellow-300 rounded"></div>
-                <span>Reserved</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-red-50 border border-red-300 rounded"></div>
-                <span>Maintenance</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowAddRacksDrawer(true)}
-              className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
-              title="Add racks to a section"
-            >
-              <i className="ri-add-line me-1"></i>
-              Add Racks
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadRackExcel}
-              className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
-              title="Download rack data as Excel"
-            >
-              <i className="ri-file-excel-2-line me-1 text-green-600"></i>
-              Download Excel
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowPrintBarcodeModal(true)}
-              className="ti-btn ti-btn-primary text-xs px-3 py-1.5 ml-2"
-              title="Print rack barcodes"
-            >
-              <i className="ri-printer-line me-1"></i>
-              Print Barcode
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowAddRacksDrawer(true)}
+                className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+                title="Add racks to a section"
+              >
+                <i className="ri-add-line me-1"></i>
+                Add Racks
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadRackExcel}
+                className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+                title="Download rack data as Excel"
+              >
+                <i className="ri-file-excel-2-line me-1 text-green-600"></i>
+                Download Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPrintBarcodeModal(true)}
+                className="ti-btn ti-btn-primary text-xs px-3 py-1.5 ml-2"
+                title="Print rack barcodes"
+              >
+                <i className="ri-printer-line me-1"></i>
+                Print Barcode
+              </button>
             </div>
           </div>
           {/* Pagination: per-page + page nav */}
@@ -1352,120 +1369,120 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                   <span className="ml-3 text-sm text-gray-600">Searching for rack...</span>
                 </div>
               ) : (
-              <div
-                className="grid gap-4 p-6 w-full"
-                style={{
-                  gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                }}
-              >
-                {displayRacksForSearch.map((rack) => (
-                  <div
-                    key={rack.id}
-                    className={`
+                <div
+                  className="grid gap-4 p-6 w-full"
+                  style={{
+                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                  }}
+                >
+                  {displayRacksForSearch.map((rack) => (
+                    <div
+                      key={rack.id}
+                      className={`
                       relative border-2 rounded-xl p-3 min-h-[200px] transition-all cursor-pointer
                       ${getRackStatusColor(rack)}
                       hover:shadow-lg hover:scale-[1.02] flex flex-col
                     `}
-                    onClick={() => handleRackClick(rack)}
-                  >
-                    <div className="flex justify-between items-start mb-2 gap-2">
-                      <div className="flex-1">
-                        <div className="text-xs font-bold text-gray-800 mb-1">{rack.rackCode}</div>
-                        {rack.barcode && (
-                          <div className="text-[10px] text-gray-500 font-mono">{rack.barcode}</div>
-                        )}
+                      onClick={() => handleRackClick(rack)}
+                    >
+                      <div className="flex justify-between items-start mb-2 gap-2">
+                        <div className="flex-1">
+                          <div className="text-xs font-bold text-gray-800 mb-1">{rack.rackCode}</div>
+                          {rack.barcode && (
+                            <div className="text-[10px] text-gray-500 font-mono">{rack.barcode}</div>
+                          )}
+                        </div>
+                        {(() => {
+                          const displayData = getRackDisplayData(rack);
+                          if (displayData.isLoading && displayData.totalBoxes === 0) {
+                            return (
+                              <div className="flex items-center justify-center w-20">
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                              </div>
+                            );
+                          }
+                          if (displayData.totalBoxes > 0) {
+                            const isOccupied = rack.status === "Occupied";
+                            const bgColor = isOccupied ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200";
+                            const titleColor = isOccupied ? "text-blue-900" : "text-green-900";
+                            const contentColor = isOccupied ? "text-blue-800" : "text-green-800";
+                            return (
+                              <div className={`${bgColor} border rounded p-1.5 min-w-[70px]`}>
+                                <div className={`text-[9px] font-semibold ${titleColor} mb-0.5`}>Summary</div>
+                                <div className={`grid grid-cols-2 gap-0.5 text-[9px] ${contentColor}`}>
+                                  <div className="text-center">
+                                    <div className="font-medium">{displayData.totalBoxes}</div>
+                                    <div className="text-[8px]">Boxes</div>
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="font-medium">{displayData.totalWeight.toFixed(0)}</div>
+                                    <div className="text-[8px]">Kg</div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                       {(() => {
                         const displayData = getRackDisplayData(rack);
                         if (displayData.isLoading && displayData.totalBoxes === 0) {
                           return (
-                            <div className="flex items-center justify-center w-20">
+                            <div className="flex items-center justify-center py-2">
                               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                             </div>
                           );
                         }
-                        if (displayData.totalBoxes > 0) {
-                          const isOccupied = rack.status === "Occupied";
-                          const bgColor = isOccupied ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200";
-                          const titleColor = isOccupied ? "text-blue-900" : "text-green-900";
-                          const contentColor = isOccupied ? "text-blue-800" : "text-green-800";
+                        if (displayData.boxes.length > 0) {
                           return (
-                            <div className={`${bgColor} border rounded p-1.5 min-w-[70px]`}>
-                              <div className={`text-[9px] font-semibold ${titleColor} mb-0.5`}>Summary</div>
-                              <div className={`grid grid-cols-2 gap-0.5 text-[9px] ${contentColor}`}>
-                                <div className="text-center">
-                                  <div className="font-medium">{displayData.totalBoxes}</div>
-                                  <div className="text-[8px]">Boxes</div>
-                                </div>
-                                <div className="text-center">
-                                  <div className="font-medium">{displayData.totalWeight.toFixed(0)}</div>
-                                  <div className="text-[8px]">Kg</div>
-                                </div>
-                              </div>
+                            <div className="overflow-x-auto max-h-[100px] mt-1">
+                              <table className="w-full text-[10px]">
+                                <thead className="bg-gray-100 sticky top-0">
+                                  <tr>
+                                    <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">PO</th>
+                                    <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">Yarn</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white">
+                                  {displayData.boxes.slice(0, 3).map((box, idx) => (
+                                    <tr key={idx} className="border-b border-gray-100">
+                                      <td className="px-1 py-0.5 text-gray-700 truncate max-w-[60px]" title={box.poNumber}>
+                                        {box.poNumber}
+                                      </td>
+                                      <td className="px-1 py-0.5 text-gray-700 truncate max-w-[80px]" title={box.yarnName}>
+                                        {box.yarnName}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                  {displayData.boxes.length > 3 && (
+                                    <tr>
+                                      <td colSpan={2} className="px-1 py-0.5 text-[9px] text-gray-500 text-center">
+                                        +{displayData.boxes.length - 3} more
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                      {(() => {
+                        const displayData = getRackDisplayData(rack);
+                        if (displayData.totalBoxes === 0 && !displayData.isLoading) {
+                          return (
+                            <div className="text-xs text-gray-400 text-center py-4">
+                              {rack.status === "Available" ? "Available" : rack.status}
                             </div>
                           );
                         }
                         return null;
                       })()}
                     </div>
-                    {(() => {
-                      const displayData = getRackDisplayData(rack);
-                      if (displayData.isLoading && displayData.totalBoxes === 0) {
-                        return (
-                          <div className="flex items-center justify-center py-2">
-                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                          </div>
-                        );
-                      }
-                      if (displayData.boxes.length > 0) {
-                        return (
-                          <div className="overflow-x-auto max-h-[100px] mt-1">
-                            <table className="w-full text-[10px]">
-                              <thead className="bg-gray-100 sticky top-0">
-                                <tr>
-                                  <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">PO</th>
-                                  <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">Yarn</th>
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white">
-                                {displayData.boxes.slice(0, 3).map((box, idx) => (
-                                  <tr key={idx} className="border-b border-gray-100">
-                                    <td className="px-1 py-0.5 text-gray-700 truncate max-w-[60px]" title={box.poNumber}>
-                                      {box.poNumber}
-                                    </td>
-                                    <td className="px-1 py-0.5 text-gray-700 truncate max-w-[80px]" title={box.yarnName}>
-                                      {box.yarnName}
-                                    </td>
-                                  </tr>
-                                ))}
-                                {displayData.boxes.length > 3 && (
-                                  <tr>
-                                    <td colSpan={2} className="px-1 py-0.5 text-[9px] text-gray-500 text-center">
-                                      +{displayData.boxes.length - 3} more
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                    {(() => {
-                      const displayData = getRackDisplayData(rack);
-                      if (displayData.totalBoxes === 0 && !displayData.isLoading) {
-                        return (
-                          <div className="text-xs text-gray-400 text-center py-4">
-                            {rack.status === "Available" ? "Available" : rack.status}
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
               )}
             </div>
           ) : (
@@ -1878,95 +1895,16 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         </div>
       )}
 
-      {/* Allocate Box Drawer - same as UnallocatedBoxes so rack scan + Enter confirms reliably */}
-      {showAllocateModal && (
-        <div className="fixed inset-0 z-50 overflow-hidden">
-          <div
-            className="absolute inset-0 bg-black/60 transition-opacity"
-            onClick={handleModalClose}
-            aria-hidden="true"
-          />
-          <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out">
-            <div className="flex flex-col h-full">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
-                <div className="flex items-center gap-2">
-                  <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-800">
-                      Allocate Box to Storage
-                    </h3>
-                    <p className="text-[10px] text-gray-500 mt-0.5">
-                      Enter storage rack code to allocate box
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleModalClose}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                  disabled={isAllocating}
-                >
-                  <i className="ri-close-line text-lg" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto px-4 py-3">
-                <div className="mb-4">
-                  <label className="text-xs font-medium text-gray-700 mb-1.5 block">
-                    Storage Rack Code <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    ref={rackCodeInputRef}
-                    type="text"
-                    className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300 uppercase"
-                    placeholder="Enter storage rack barcode"
-                    value={storageRackCode}
-                    onChange={(e) => setStorageRackCode(e.target.value.toUpperCase())}
-                    disabled={isAllocating}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !isAllocating && storageRackCode.trim()) {
-                        e.preventDefault();
-                        handleAllocateConfirm();
-                      }
-                    }}
-                    autoFocus
-                  />
-                  <p className="text-[10px] text-gray-500 mt-1">
-                    Enter the barcode of the storage rack location
-                  </p>
-                </div>
-              </div>
-              <div className="border-t border-gray-200 px-4 py-3 bg-gray-50 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={handleModalClose}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
-                  disabled={isAllocating}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAllocateConfirm}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
-                  disabled={isAllocating || !storageRackCode.trim()}
-                >
-                  {isAllocating ? (
-                    <>
-                      <i className="ri-loader-4-line animate-spin text-xs" />
-                      Allocating...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-check-line text-xs" />
-                      Confirm
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AllocateBoxDrawer
+        isOpen={showAllocateModal}
+        onClose={handleModalClose}
+        rackCode={storageRackCode}
+        onRackCodeChange={(v) => setStorageRackCode(v)}
+        onConfirm={handleAllocateConfirm}
+        isAllocating={isAllocating}
+        inputRef={rackCodeInputRef}
+        uppercaseInput
+      />
 
       {/* Print Settings Modal */}
       {showPrintSettingsModal && (
