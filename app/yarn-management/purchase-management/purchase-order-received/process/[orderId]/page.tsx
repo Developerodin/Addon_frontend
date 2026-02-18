@@ -1208,7 +1208,7 @@ const ProcessOrderPage = () => {
       return `
         <div class="label">
           <div class="content">
-            <div class="code">${(box.boxId || '').replace(/</g, '&lt;')}</div>
+
             <div class="supplier">${(order?.supplier || '-').split(' ').slice(0, 2).join(' ').replace(/</g, '&lt;')}</div>
             <div class="details">
               Yarn: ${(details.yarnName || '-').replace(/</g, '&lt;')}<br/>
@@ -1437,7 +1437,7 @@ const ProcessOrderPage = () => {
         }
         const dummyBox = {
           barcode: 'TEST-123456789',
-          boxId: 'TEST-BOX-001',
+
           yarnName: 'Test Yarn Name',
           shadeCode: 'TEST-SHADE',
           lotNumber: 'TEST-LOT',
@@ -1551,7 +1551,7 @@ const ProcessOrderPage = () => {
           const details = getBoxPrintDetails(box);
           return {
             barcode: String(box.barcode),
-            boxId: box.boxId,
+
             yarnName: details.yarnName,
             shadeCode: details.shadeCode,
             lotNumber: context?.type === 'lot' ? context.lotNumber : (box.lotNumber || ''),
