@@ -551,11 +551,12 @@ const KnittingFloorSupervisorPage = () => {
       } else {
         toast.success('Order updated successfully');
       }
-      
+
       closeUpdateModal();
-      
-      // Reload orders to get updated data
+
+      // Reload orders list and refresh machine view so both show updated data
       loadOrders();
+      setMachineViewRefreshTrigger((prev) => prev + 1);
     } catch (error: any) {
       console.error('Error updating order:', error);
       toast.error(error.message || 'Failed to update order');

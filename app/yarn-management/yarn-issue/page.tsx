@@ -1163,6 +1163,7 @@ const YarnIssuePage = () => {
         transactionConeCount: numberOfCones,
         orderno: selectedOrder.orderNumber,
         orderId: selectedOrder.id || undefined,
+        conesIdsArray: coneData?._id ? [coneData._id] : [],
         ...(selectedArticle && {
           articleNumber: selectedArticle.articleNumber,
           articleId: selectedArticle._id ?? selectedArticle.id,

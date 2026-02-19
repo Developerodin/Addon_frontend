@@ -255,14 +255,6 @@ const YarnReturnPage = () => {
     totalTearWeight: "0",
     totalNetWeight: "",
   });
-  /** Modal: confirm yarn return completed for an order (calls API per assignment item). */
-  const [yarnReturnCompleteModal, setYarnReturnCompleteModal] = useState<{
-    orderId: string;
-    orderNumber: string;
-    itemIds: string[];
-    articleNumbers: string[];
-  } | null>(null);
-  const [yarnReturnCompleteSubmitting, setYarnReturnCompleteSubmitting] = useState(false);
 
   const pendingToastShown = useRef(false);
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Return");
@@ -740,44 +732,6 @@ const YarnReturnPage = () => {
       copy[index] = record;
       return copy;
     });
-  };
-
-  const handleYarnReturnCompleteClick = (order: ProductionOrder) => {
-    const items = getAssignmentItemsForOrder(order.id);
-    if (items.length === 0) {
-      toast.error("No assignment items found for this order.");
-      return;
-    }
-    setYarnReturnCompleteModal({
-      orderId: order.id,
-      orderNumber: order.orderNumber ?? order.productionOrder ?? "",
-      itemIds: items.map((i) => i.itemId),
-      articleNumbers: items.map((i) => i.articleNumber).filter(Boolean),
-    });
-  };
-
-  const handleYarnReturnCompleteConfirm = async () => {
-    if (!yarnReturnCompleteModal || !selectedMachineAssignmentId) return;
-    setYarnReturnCompleteSubmitting(true);
-    try {
-      for (const itemId of yarnReturnCompleteModal.itemIds) {
-        await updateAssignmentItemYarnReturnStatus(
-          selectedMachineAssignmentId,
-          itemId,
-          "Completed"
-        );
-      }
-      toast.success("Yarn return marked as completed for this order.");
-      setYarnReturnCompleteModal(null);
-      // Optionally refetch assignments/orders to reflect status
-      if (selectedMachineAssignment) {
-        loadOrdersForMachine(selectedMachineAssignment);
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update yarn return status.");
-    } finally {
-      setYarnReturnCompleteSubmitting(false);
-    }
   };
 
   const handleReturnConesClick = (orderId: string) => {
@@ -1306,7 +1260,7 @@ const YarnReturnPage = () => {
     const totalTearWeight = parseFloat(transactionForm.totalTearWeight) || 0;
     const totalNetWeight = parseFloat(transactionForm.totalNetWeight) || 0;
 
-    if (Number.isNaN(totalWeight) || totalWeight <= 0) {
+    if (Number.isNaN(totalWeight) || totalWeight < 0) {
       toast.error("Enter a valid total weight.");
       return;
     }
@@ -1701,6 +1655,31 @@ const YarnReturnPage = () => {
           );
         }
 
+        // After return API 200: update assignment item yarn-return status to Completed
+        if (selectedMachineAssignmentId) {
+          const items = getAssignmentItemsForOrder(updatedOrder.id);
+          if (items.length > 0) {
+            try {
+              for (const item of items) {
+                await updateAssignmentItemYarnReturnStatus(
+                  selectedMachineAssignmentId,
+                  item.itemId,
+                  "Completed"
+                );
+              }
+              toast.success("Assignment item return status updated.");
+              if (selectedMachineAssignment) loadOrdersForMachine(selectedMachineAssignment);
+            } catch (err) {
+              console.error("Assignment yarn-return status update failed:", err);
+              toast.error("Cones returned, but failed to mark order yarn-return as completed.");
+            }
+          } else {
+            console.warn("Assignment yarn-return status not updated: no assignment items for order", updatedOrder.orderNumber);
+          }
+        } else {
+          console.warn("Assignment yarn-return status not updated: no selected machine assignment");
+        }
+
         // Refetch transactions to ensure we have the latest data
         try {
           const token = getAccessToken();
@@ -2082,15 +2061,6 @@ const YarnReturnPage = () => {
                                   <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors" onClick={() => handleReturnConesClick(order.id)}>
                                     <i className="ri-reply-line text-sm"></i> Return Cones
                                   </button>
-                                  {order.status === "Returned" && selectedMachineAssignmentId && getAssignmentItemsForOrder(order.id).length > 0 && (
-                                    <button
-                                      type="button"
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-[11px] font-bold rounded hover:bg-green-700 transition-colors"
-                                      onClick={() => handleYarnReturnCompleteClick(order)}
-                                    >
-                                      <i className="ri-check-double-line text-sm"></i> Complete Yarn Return
-                                    </button>
-                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -2649,68 +2619,6 @@ const YarnReturnPage = () => {
                   </div>
                 </>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Yarn return completed confirmation modal */}
-      {yarnReturnCompleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="box-header border-b border-gray-200 px-6 py-4">
-              <div className="flex justify-between items-center">
-                <h3 className="box-title text-lg">Complete Yarn Return</h3>
-                <button
-                  type="button"
-                  onClick={() => !yarnReturnCompleteSubmitting && setYarnReturnCompleteModal(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                  disabled={yarnReturnCompleteSubmitting}
-                >
-                  <i className="ri-close-line text-xl"></i>
-                </button>
-              </div>
-            </div>
-            <div className="box-body p-6">
-              <p className="text-sm text-gray-700 mb-4">
-                Yarn return process is completed for this order?
-              </p>
-              <p className="text-sm font-semibold text-gray-900 mb-1">
-                Order: {yarnReturnCompleteModal.orderNumber}
-              </p>
-              {yarnReturnCompleteModal.articleNumbers.length > 0 && (
-                <p className="text-xs text-gray-600 mb-4">
-                  Article(s): {yarnReturnCompleteModal.articleNumbers.join(", ")}
-                </p>
-              )}
-              <p className="text-xs text-gray-500 mb-6">
-                This will mark yarn return as <strong>Completed</strong> for this article/order in the machine assignment.
-              </p>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setYarnReturnCompleteModal(null)}
-                  className="ti-btn ti-btn-outline"
-                  disabled={yarnReturnCompleteSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleYarnReturnCompleteConfirm}
-                  className="ti-btn ti-btn-primary bg-green-600 hover:bg-green-700"
-                  disabled={yarnReturnCompleteSubmitting}
-                >
-                  {yarnReturnCompleteSubmitting ? (
-                    <>
-                      <span className="animate-spin inline-block mr-2">⟳</span>
-                      Updating...
-                    </>
-                  ) : (
-                    "Yes, complete yarn return"
-                  )}
-                </button>
-              </div>
             </div>
           </div>
         </div>
