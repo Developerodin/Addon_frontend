@@ -1165,7 +1165,8 @@ const ProcessOrderPage = () => {
       shadeCode: shadeNumber,
       shadeNumber: shadeNumber,
       yarnColour: yarnColour || shadeCode || '-',
-      shadeName: shadeName || shadeCode || '-'
+      shadeName: shadeName || shadeCode || '-',
+      boxWeight: data?.boxWeight || box.boxWeight?.toString() || ''
     };
   };
 
@@ -1214,6 +1215,7 @@ const ProcessOrderPage = () => {
               Yarn: ${(details.yarnName || '-').replace(/</g, '&lt;')}<br/>
               L: ${(lotLabel || '-').replace(/</g, '&lt;')}<br/>
               S: ${(details.shadeCode || '-').replace(/</g, '&lt;')}
+              ${details.boxWeight ? `<br/>WT: ${details.boxWeight} kg` : ''}
             </div>
             <div class="barcode"><svg id="${uniqueId}"></svg></div>
           </div>
@@ -1564,6 +1566,7 @@ const ProcessOrderPage = () => {
             boxId: box.boxId,
             yarnName: details.yarnName,
             shadeCode: details.shadeCode,
+            weight: details.boxWeight ? parseFloat(details.boxWeight) : undefined,
             lotNumber: context?.type === 'lot' ? context.lotNumber : (box.lotNumber || ''),
             supplierName: (order.supplier || '').split(' ').slice(0, 2).join(' '),
             poNumber: order.orderNumber || '',

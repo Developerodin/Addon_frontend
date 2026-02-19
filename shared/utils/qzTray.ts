@@ -1052,6 +1052,10 @@ export const generateZPLCone = (
       zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDL: ${lotNumber || '-'}^FS\n`;
       curX += step;
       zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDS: ${shadeCode || '-'}^FS\n`;
+      if (weight && weight > 0) {
+        curX += step;
+        zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDWT: ${weight} kg^FS\n`;
+      }
 
       const qrYPos = yOffset + Math.max(0, Math.floor((labelHeight - qrW) / 2));
       zpl += `^FO${labelWidth - qrW - 30},${qrYPos}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
@@ -1105,6 +1109,10 @@ export const generateZPLCone = (
     zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDL: ${lotNumber || '-'}^FS\n`;
     curY += shadeLotFontSize + 12;
     zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDS: ${shadeCode || '-'}^FS\n`;
+    if (weight && weight > 0) {
+      curY += shadeLotFontSize + 12;
+      zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDWT: ${weight} kg^FS\n`;
+    }
 
     if (isStandalone) zpl += `^XZ\n`;
     return zpl;
@@ -1163,6 +1171,10 @@ export const generateZPLCone = (
       printBold("Shade", xPos, yPos, detailsFont, line);
       yPos += lineHeight;
     });
+    if (weight && weight > 0) {
+      printBold("Weight", xPos, yPos, detailsFont, `WT: ${weight} kg`);
+      yPos += lineHeight;
+    }
 
     // QR Code Alignment: Perfect centering in the right segment
     const rightAreaW = labelWidth - qrSectionX - 10;
@@ -1211,7 +1223,13 @@ export const generateZPLCone = (
     zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FB${dataWidth},1,0,L^FDShade: ${shadeCode || '-'}^FS\n`;
     yPos += lineHeight;
 
-    // 6. QR Code on the right (browser .qr width 33%)
+    // 6. Weight
+    if (weight && weight > 0) {
+      zpl += `^FO${xPos},${yPos}^A0N,${detailsFontSize},${detailsFontSize}^FB${dataWidth},1,0,L^FDWT: ${weight} kg^FS\n`;
+      yPos += lineHeight;
+    }
+
+    // 7. QR Code on the right (browser .qr width 33%)
     const qrYPos = yOffset + Math.max(10, Math.floor((labelHeight - qrWidth) / 2));
     zpl += `^FO${qrSectionX},${qrYPos}^BQN,2,${qrCodeSize}^FDQA,${barcodeValue}^FS\n`;
   }
