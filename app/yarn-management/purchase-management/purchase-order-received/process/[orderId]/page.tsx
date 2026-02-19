@@ -1459,7 +1459,17 @@ const ProcessOrderPage = () => {
       return;
     }
 
-    const boxesToPrint = context?.type === 'lot' ? context.lotBoxes : boxes;
+    let boxesToPrint: YarnBox[] = [];
+    if (context?.type === 'lot') {
+      boxesToPrint = context.lotBoxes;
+    } else {
+      // For 'all' or default: print lot-wise
+      boxesByLot.sortedLots.forEach((lotNum) => {
+        boxesByLot.grouped[lotNum].forEach((box) => boxesToPrint.push(box));
+      });
+      // Add unassigned boxes at the end
+      boxesByLot.unassigned.forEach((box) => boxesToPrint.push(box));
+    }
     if (!order || boxesToPrint.length === 0) {
       toast.error('No boxes available to print');
       return;
