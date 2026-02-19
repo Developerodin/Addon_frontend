@@ -50,16 +50,23 @@ export default function MachineViewTab({ onOpenEditModal }: MachineViewTabProps)
     OrderStatus.CANCELLED,
   ];
 
-  /** Only first-priority item can be set to In Progress / Completed; others get Pending, On Hold, Cancelled only. */
-  const getStatusOptionsForItem = useCallback((idx: number, currentStatus?: OrderStatusType): OrderStatusType[] => {
-    if (idx === 0) return ORDER_STATUS_OPTIONS;
-    const restricted = [OrderStatus.PENDING, OrderStatus.ON_HOLD, OrderStatus.CANCELLED];
-    const current = currentStatus ?? OrderStatus.PENDING;
-    if (current === OrderStatus.IN_PROGRESS || current === OrderStatus.COMPLETED) {
-      return [current, ...restricted.filter((s) => s !== current)];
-    }
-    return restricted;
-  }, []);
+  /** Only first-priority item can be set to In Progress / Completed; and only when yarn issue is Completed. */
+  const getStatusOptionsForItem = useCallback(
+    (idx: number, currentStatus?: OrderStatusType, yarnIssueStatus?: string | null): OrderStatusType[] => {
+      const restricted = [OrderStatus.PENDING, OrderStatus.ON_HOLD, OrderStatus.CANCELLED];
+      if (idx === 0) {
+        const yarnCompleted = (yarnIssueStatus ?? "") === "Completed";
+        if (!yarnCompleted) return restricted;
+        return ORDER_STATUS_OPTIONS;
+      }
+      const current = currentStatus ?? OrderStatus.PENDING;
+      if (current === OrderStatus.IN_PROGRESS || current === OrderStatus.COMPLETED) {
+        return [current, ...restricted.filter((s) => s !== current)];
+      }
+      return restricted;
+    },
+    []
+  );
 
   const handleItemStatusChange = useCallback(
     async (itemId: string, newStatus: OrderStatusType) => {
@@ -475,7 +482,7 @@ export default function MachineViewTab({ onOpenEditModal }: MachineViewTabProps)
                                     disabled={!item.itemId || updatingStatusItemId === item.itemId}
                                     className="bg-white/20 px-1.5 py-0.5 rounded-md text-[9px] font-medium text-white focus:ring-1 focus:ring-white/50 disabled:opacity-60 [&>option]:bg-gray-800 [&>option]:text-white max-w-[82px]"
                                   >
-                                    {getStatusOptionsForItem(opts.statusOptionIdx, item.status).map((opt) => (
+                                    {getStatusOptionsForItem(opts.statusOptionIdx, item.status, item.yarnIssueStatus).map((opt) => (
                                       <option key={opt} value={opt}>{opt}</option>
                                     ))}
                                   </select>

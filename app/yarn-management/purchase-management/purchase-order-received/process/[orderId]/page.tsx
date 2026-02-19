@@ -10,6 +10,7 @@ import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services
 import yarnBoxService, { YarnBox, UpdateYarnBoxPayload } from "@/shared/services/yarnBoxService";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printCones, connectQZ, getDefaultPrinter, isQZLoaded, getAvailablePrinters, PrinterInfo } from "@/shared/utils/qzTray";
+import * as XLSX from "xlsx";
 
 interface ReceivedItem {
   id: string;
@@ -189,6 +190,7 @@ const ProcessOrderPage = () => {
   const [selectedBoxForDetails, setSelectedBoxForDetails] = useState<YarnBox | null>(null);
   const [isUpdatingOrderStatus, setIsUpdatingOrderStatus] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isExportingBoxes, setIsExportingBoxes] = useState(false);
   const [lotData, setLotData] = useState<{
     poNumber: string;
     lotDetails: Array<{
@@ -1661,6 +1663,51 @@ const ProcessOrderPage = () => {
     toast.success('Print preview opened. It will auto-print and close.');
   };
 
+  /** Export all boxes data lot-wise to Excel. */
+  const handleExportBoxesToExcel = () => {
+    if (!order || boxes.length === 0) {
+      toast.error('No boxes to export');
+      return;
+    }
+    setIsExportingBoxes(true);
+    try {
+      const rows: Array<Record<string, string | number>> = [];
+      const addBoxRow = (box: YarnBox, lotNumber: string) => {
+        const boxId = box._id || box.id || box.boxId;
+        const data = boxData[boxId];
+        const lotStatus = getLotStatus(lotNumber);
+        rows.push({
+          "Lot Number": lotNumber,
+          "Lot Status": lotStatus ? getLotStatusDisplay(lotStatus).text : "",
+          "Box ID": box.boxId ?? "",
+          "Barcode": box.barcode ?? "",
+          "PO Number": order.purchaseOrderNumber ?? "",
+          "Supplier": order.supplier ?? "",
+          "Yarn Name": data?.yarnName ?? box.yarnName ?? "",
+          "Shade Code": data?.shadeCode ?? box.shadeCode ?? "",
+          "Box Weight (kg)": data?.boxWeight ? parseFloat(data.boxWeight) : (box.boxWeight ?? ""),
+          "Number of Cones": data?.numberOfCones ?? box.numberOfCones ?? "",
+          "Received Date": order.receivedDate ? new Date(order.receivedDate).toLocaleDateString() : "",
+        });
+      };
+      boxesByLot.sortedLots.forEach((lotNum) => {
+        boxesByLot.grouped[lotNum].forEach((box) => addBoxRow(box, lotNum));
+      });
+      boxesByLot.unassigned.forEach((box) => addBoxRow(box, "Unassigned"));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Boxes by Lot");
+      const fileName = `boxes_lotwise_${order.purchaseOrderNumber}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      toast.success(`Exported ${rows.length} boxes to ${fileName}`);
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to export Excel");
+    } finally {
+      setIsExportingBoxes(false);
+    }
+  };
+
   // Show loading state while permissions are being loaded
   if (isLoading || isLoadingOrder) {
     return (
@@ -1742,6 +1789,23 @@ const ProcessOrderPage = () => {
               <div className="bg-gray-50 px-2 py-1 rounded border border-gray-200">
                 <QZTrayStatus onStatusChange={setQzStatus} />
               </div>
+
+              {boxes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleExportBoxesToExcel}
+                  disabled={isExportingBoxes}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors shadow-sm ${!isExportingBoxes ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                  title={isExportingBoxes ? 'Exporting...' : 'Export all boxes (lot-wise) to Excel'}
+                >
+                  {isExportingBoxes ? (
+                    <i className="ri-loader-4-line animate-spin text-xs"></i>
+                  ) : (
+                    <i className="ri-file-excel-2-line text-xs"></i>
+                  )}
+                  {isExportingBoxes ? 'Exporting...' : 'Export to Excel'}
+                </button>
+              )}
 
               {boxes.length > 0 && (
                 <button

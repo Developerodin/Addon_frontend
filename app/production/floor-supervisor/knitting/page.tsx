@@ -999,6 +999,8 @@ const KnittingFloorSupervisorPage = () => {
                                         const isPending = currentStatus === OrderStatus.PENDING;
                                         const isInProgress = currentStatus === OrderStatus.IN_PROGRESS;
                                         const isDisabled = updatingStatusItemId === assignmentItem?.itemId;
+                                        const yarnIssueCompleted = (assignmentItem?.yarnIssueStatus ?? "") === "Completed";
+                                        const markInProgressDisabled = isDisabled || !yarnIssueCompleted;
                                         if (isPending) {
                                           return (
                                             <div className="space-y-1">
@@ -1006,8 +1008,9 @@ const KnittingFloorSupervisorPage = () => {
                                               <button
                                                 type="button"
                                                 onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.IN_PROGRESS)}
-                                                disabled={isDisabled}
-                                                className="px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60"
+                                                disabled={markInProgressDisabled}
+                                                title={!yarnIssueCompleted ? "Complete yarn issue first" : undefined}
+                                                className="px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed"
                                               >
                                                 Mark In Progress
                                               </button>
