@@ -224,7 +224,7 @@ const ProcessOrderPage = () => {
     firstLabelTopMargin: 0,
     supplierFontSize: 20,
     detailsFontSize: 20,
-    boxIdFontSize: 18,
+    boxIdFontSize: 20,
     rackCodeFontSize: 40,
     zoneFontSize: 30,
     barcodeHeight: 100,

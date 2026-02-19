@@ -1120,17 +1120,8 @@ const YarnIssuePage = () => {
     // For now, we'll use the yarnCode which should be the yarnCatalogId
     const yarnCatalogId = activeRequirement.yarnCode;
 
-    // Check if we're exceeding the required quantity
     const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder.orderNumber);
-    const currentIssuedInGrams = currentIssued * 1000; // Convert kg to grams for comparison
-    const totalNetWeightInGrams = totalNetWeight * 1000; // Convert kg to grams for comparison
-    const maxAllowed = activeRequirement.requiredQty * (1 + activeRequirement.tolerancePercent);
-    if (currentIssuedInGrams + totalNetWeightInGrams > maxAllowed + 0.0001) {
-      toast.error(
-        `Cannot issue more than ${formatKg(maxAllowed)} for ${activeRequirement.yarnName}.`
-      );
-      return;
-    }
+    const currentIssuedInGrams = currentIssued * 1000;
 
     setSubmittingTransaction(true);
     try {
@@ -1548,9 +1539,10 @@ const YarnIssuePage = () => {
                                 return (
                                   <tr key={requirement.id} className={`hover:bg-gray-50/50 transition-colors ${isActive ? "bg-purple-50" : ""}`}>
                                     <td className="pl-[10px] pr-1.5 py-2 border border-gray-200">
-                                      {status === "Issued" ? <span className="text-[11px] text-gray-500 italic">Fully Issued</span> : (
+                                      <div className="flex items-center gap-1.5">
                                         <button type="button" className={`inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-bold rounded transition-colors ${isActive ? "bg-purple-600 text-white" : "border border-purple-200 text-purple-700 hover:bg-purple-50"}`} onClick={() => handleStartIssuing(requirement.id)}>Issue</button>
-                                      )}
+                                        {status === "Issued" && <span className="text-[11px] text-gray-500 italic">Fully Issued</span>}
+                                      </div>
                                     </td>
                                     <td className="px-1.5 py-2 border border-gray-200"><div className="text-[12px] font-bold text-gray-900">{requirement.yarnName}</div><div className="text-[10px] text-gray-500">{requirement.yarnCode} • {requirement.yarnType}</div></td>
                                     <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{formatKgDisplay(requirement.requiredQty)}</td>
@@ -1632,9 +1624,10 @@ const YarnIssuePage = () => {
                             return (
                               <tr key={requirement.id} className={`hover:bg-gray-50/50 transition-colors ${isActive ? "bg-purple-50" : ""}`}>
                                 <td className="pl-[10px] pr-1.5 py-2 border border-gray-200">
-                                  {status === "Issued" ? <span className="text-[11px] text-gray-500 italic">Fully Issued</span> : (
+                                  <div className="flex items-center gap-1.5">
                                     <button type="button" className={`inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-bold rounded transition-colors ${isActive ? "bg-purple-600 text-white" : "border border-purple-200 text-purple-700 hover:bg-purple-50"}`} onClick={() => handleStartIssuing(requirement.id)}>Issue</button>
-                                  )}
+                                    {status === "Issued" && <span className="text-[11px] text-gray-500 italic">Fully Issued</span>}
+                                  </div>
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200"><div className="text-[12px] font-bold text-gray-900">{requirement.yarnName}</div><div className="text-[10px] text-gray-500">{requirement.yarnCode} • {requirement.yarnType}</div></td>
                                 <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{formatKgDisplay(requirement.requiredQty)}</td>
