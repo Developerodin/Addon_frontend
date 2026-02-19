@@ -221,10 +221,10 @@ const ProcessOrderPage = () => {
     paperHeight: 558, // 70mm approx
     labelsPerPage: 1,
     columnsPerRow: 1,
-    firstLabelTopMargin: 20,
+    firstLabelTopMargin: 0,
     supplierFontSize: 20,
     detailsFontSize: 20,
-    boxIdFontSize: 20,
+    boxIdFontSize: 18,
     rackCodeFontSize: 40,
     zoneFontSize: 30,
     barcodeHeight: 100,
@@ -1274,7 +1274,7 @@ const ProcessOrderPage = () => {
                 height: ${labelW}mm;
               ` : ''}
             }
-            .code { font-weight: bold; font-size: ${isSmall ? '14pt' : '22pt'}; margin-bottom: 1mm; line-height: 1.1; }
+            .code { font-weight: bold; font-size: ${isSmall ? '13pt' : '21pt'}; margin-bottom: 1mm; line-height: 1.1; }
             .supplier { font-size: ${isSmall ? '8pt' : '12pt'}; color: #666; margin-bottom: 1mm; white-space: nowrap; font-weight: normal; }
             .details { font-size: ${isSmall ? '10pt' : '16pt'}; margin-bottom: 2mm; white-space: normal; font-weight: normal; }
             .barcode { width: 100%; max-height: 45%; display: flex; justify-content: center; align-items: center; }
@@ -1339,7 +1339,7 @@ const ProcessOrderPage = () => {
         barcodeHeight: 100,
         detailsFontSize: 20,
         supplierFontSize: 20,
-        boxIdFontSize: 20,
+        boxIdFontSize: 19,
         barcodeWidth: 3,
         barcodeYPos: 300,
         footerYPos: 400,

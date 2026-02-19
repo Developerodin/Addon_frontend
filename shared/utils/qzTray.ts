@@ -545,7 +545,7 @@ export const generateZPLBarcode = (
 
     // -- Header Section --
     // Box ID (Smaller font at top)
-    `^FO50,50^A0N,22,22^FDBox ID: ${boxId}^FS`,
+    `^FO50,50^A0N,22,22^FD${boxId}^FS`,
 
     // -- Details Section (Smaller Font) --
     // Spaced 60-70 dots apart to prevent overlap
@@ -614,7 +614,7 @@ export const generateZPLDoubleLabel = (
     firstLabelTopMargin: customSettings?.firstLabelTopMargin || 0,
     supplierFontSize: customSettings?.supplierFontSize || 20,
     detailsFontSize: customSettings?.detailsFontSize || 20,
-    boxIdFontSize: customSettings?.boxIdFontSize || 20,
+    boxIdFontSize: customSettings?.boxIdFontSize || 19,
     yarnFontSize: customSettings?.yarnFontSize || 20,
     shadeLotFontSize: customSettings?.shadeLotFontSize || 20,
     barcodeHeight: customSettings?.barcodeHeight || 100,
@@ -671,7 +671,7 @@ export const generateZPLDoubleLabel = (
         const step = 45;
 
         return `
-          ^FO${curX},${yOffset}^A0R,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${rowLength},1,0,C^FDBox ID: ${boxId}^FS
+          ^FO${curX},${yOffset}^A0R,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${rowLength},1,0,C^FD${boxId}^FS
           ^FO${curX + step},${yOffset}^A0R,${settings.supplierFontSize},${settings.supplierFontSize}^FB${rowLength},2,0,C^FD${supplier}^FS
           ^FO${curX + step * 2 + 10},${yOffset}^A0R,${settings.yarnFontSize},${settings.yarnFontSize}^FB${rowLength},2,0,C^FDYarn: ${yarnName}^FS
           ^FO${curX + step * 3 + 20},${yOffset}^A0R,${settings.shadeLotFontSize},${settings.shadeLotFontSize}^FB${rowLength},1,0,C^FDL: ${lotNumber}^FS
@@ -693,7 +693,7 @@ export const generateZPLDoubleLabel = (
       const lineH = settings.shadeLotFontSize + 8;
 
       return `
-        ^FO20,${curY}^A0N,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${contentWidth},1,0,L^FDBox ID: ${boxId}^FS
+        ^FO20,${curY}^A0N,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${contentWidth},1,0,L^FD${boxId}^FS
         ^FO20,${curY + 40}^A0N,${settings.supplierFontSize},${settings.supplierFontSize}^FB${contentWidth},2,0,L^FD${supplier}^FS
         ^FO20,${curY + 90}^A0N,${settings.yarnFontSize},${settings.yarnFontSize}^FB${contentWidth},2,0,L^FDYarn: ${yarnName}^FS
         ^FO20,${curY + 140}^A0N,${settings.shadeLotFontSize},${settings.shadeLotFontSize}^FB${contentWidth},1,0,L^FDL: ${lotNumber}^FS
@@ -710,7 +710,7 @@ export const generateZPLDoubleLabel = (
     if (settings.orientation === 'vertical') {
       return `
           ^FO${settings.supplierYPos},${yOffset}^A0R,${settings.supplierFontSize},${settings.supplierFontSize}^FB${rowLength},1,0,L^FD${supplier}^FS
-          ^FO${settings.boxIdYPos},${yOffset}^A0R,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${rowLength},1,0,L^FDBox ID: ${boxId}^FS
+          ^FO${settings.boxIdYPos},${yOffset}^A0R,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${rowLength},1,0,L^FD${boxId}^FS
           ^FO${settings.yarnYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,L^FDYarn: ${yarnName}^FS
           ^FO${settings.lotYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,L^FDLot: ${lotNumber}^FS
           ^FO${settings.shadeYPos},${yOffset}^A0R,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,L^FDShade: ${shadeCode}^FS
@@ -720,7 +720,7 @@ export const generateZPLDoubleLabel = (
 
     return `
         ^FO0,${settings.supplierYPos + yOffset}^A0N,${settings.supplierFontSize},${settings.supplierFontSize}^FB${rowLength},1,0,L^FD${supplier}^FS
-        ^FO0,${settings.boxIdYPos + yOffset}^A0N,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${rowLength},1,0,L^FDBox ID: ${boxId}^FS
+        ^FO0,${settings.boxIdYPos + yOffset}^A0N,${settings.boxIdFontSize},${settings.boxIdFontSize}^FB${rowLength},1,0,L^FD${boxId}^FS
         ^FO0,${settings.yarnYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,L^FDYarn: ${yarnName}^FS
         ^FO0,${settings.lotYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,L^FDLot: ${lotNumber}^FS
         ^FO0,${settings.shadeYPos + yOffset}^A0N,${settings.detailsFontSize},${settings.detailsFontSize}^FB${rowLength},1,0,L^FDShade: ${shadeCode}^FS
@@ -954,7 +954,7 @@ export const generateZPLCone = (
     qrCodeSize = 5,
     titleFontSize = 20,
     detailsFontSize = 20,
-    boxIdFontSize = 20,
+    boxIdFontSize = 19,
     yarnFontSize = 20,
     supplierFontSize = 20,
     shadeLotFontSize = 20,
@@ -1027,7 +1027,7 @@ export const generateZPLCone = (
       const maxCharsVert = Math.floor(rowLen / (boxIdFontSize * 0.5));
 
       if (boxId) {
-        const boxIdLabel = `Box ID: ${boxId}`;
+        const boxIdLabel = `${boxId}`;
         const boxIdLines = wrapText(boxIdLabel, maxCharsVert);
         for (const line of boxIdLines) {
           zpl += `^FO${curX},${xStart}^A0R,${boxIdFontSize},${boxIdFontSize}^FB${rowLen},1,0,L^FD${line}^FS\n`;
@@ -1076,7 +1076,7 @@ export const generateZPLCone = (
 
     // 1. Box ID - wrap if long
     if (boxId) {
-      const boxIdLabel = `Box ID: ${boxId}`;
+      const boxIdLabel = `${boxId}`;
       const boxIdLines = wrapText(boxIdLabel, maxChars);
       for (const line of boxIdLines) {
         zpl += `^FO${labelMargin},${curY}^A0N,${boxIdFontSize},${boxIdFontSize}^FB${contentWidth},1,0,L^FD${line}^FS\n`;
