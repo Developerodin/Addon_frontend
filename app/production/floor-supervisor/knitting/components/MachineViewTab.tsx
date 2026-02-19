@@ -18,9 +18,11 @@ import AssignmentsCards from "@/app/catalog/needle-configuration/components/Assi
 export interface MachineViewTabProps {
   /** When user clicks pencil on a machine card, open the same data-entry modal (priority order editable, upcoming read-only). */
   onOpenEditModal?: (assignment: MachineOrderAssignment) => void;
+  /** When this value changes, machine assignments list is refetched (e.g. after completing an article in parent). */
+  refreshTrigger?: number;
 }
 
-export default function MachineViewTab({ onOpenEditModal }: MachineViewTabProps) {
+export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: MachineViewTabProps) {
   const [rows, setRows] = useState<MachineOrderAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -167,7 +169,7 @@ export default function MachineViewTab({ onOpenEditModal }: MachineViewTabProps)
 
   useEffect(() => {
     fetchList();
-  }, [fetchList]);
+  }, [fetchList, refreshTrigger]);
 
   useEffect(() => {
     setPage(1);

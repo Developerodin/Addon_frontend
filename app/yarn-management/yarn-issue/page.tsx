@@ -36,6 +36,7 @@ interface YarnTransaction {
   transactionTotalWeight: number;
   transactionTearWeight: number;
   transactionConeCount: number;
+  orderId?: string;
   orderno: string;
   createdAt: string;
   updatedAt: string;
@@ -137,14 +138,28 @@ type YarnSortField =
 
 const ISSUE_TOLERANCE_DEFAULT = 0.2;
 
-const getIssuedQty = (requirement: YarnRequirement, transactions: YarnTransaction[], orderNumber: string) => {
+/** Match by production order _id when present; fallback to orderno for legacy transactions. */
+const getIssuedQty = (
+  requirement: YarnRequirement,
+  transactions: YarnTransaction[],
+  order: { id: string; orderNumber: string }
+) => {
   return transactions
-    .filter(t => t.yarnName === requirement.yarnName && t.transactionType === "yarn_issued" && t.orderno === orderNumber)
+    .filter(
+      (t) =>
+        t.yarnName === requirement.yarnName &&
+        t.transactionType === "yarn_issued" &&
+        (t.orderId ? t.orderId === order.id : t.orderno === order.orderNumber)
+    )
     .reduce((sum, t) => sum + t.transactionNetWeight, 0);
 };
 
-const getRequirementStatus = (requirement: YarnRequirement, transactions: YarnTransaction[], orderNumber: string): RequirementStatus => {
-  const issued = getIssuedQty(requirement, transactions, orderNumber);
+const getRequirementStatus = (
+  requirement: YarnRequirement,
+  transactions: YarnTransaction[],
+  order: { id: string; orderNumber: string }
+): RequirementStatus => {
+  const issued = getIssuedQty(requirement, transactions, order);
   const issuedInGrams = issued * 1000; // Convert kg to grams for comparison
   if (issuedInGrams === 0) {
     return "Not Issued";
@@ -163,7 +178,7 @@ const getOrderStatus = (order: ProductionOrder, transactions: YarnTransaction[])
     return "Not Issued";
   }
   
-  const requirementStatuses = order.bom.map(req => getRequirementStatus(req, transactions, order.orderNumber));
+  const requirementStatuses = order.bom.map((req) => getRequirementStatus(req, transactions, order));
   if (requirementStatuses.every((status) => status === "Issued")) {
     return "Issued";
   }
@@ -206,7 +221,7 @@ const getOrderTotals = (order: ProductionOrder, transactions: YarnTransaction[])
     aggregatedYarns.forEach((value) => {
       totals.required += value.required;
       // Get issued qty only once per yarn name (not per article)
-      totals.issued += getIssuedQty(value.requirement, transactions, order.orderNumber);
+      totals.issued += getIssuedQty(value.requirement, transactions, order);
     });
   } else if (order.bom && order.bom.length > 0) {
     // Fallback to current BOM if articleBoms not available
@@ -223,7 +238,7 @@ const getOrderTotals = (order: ProductionOrder, transactions: YarnTransaction[])
     
     // Get issued qty once per unique yarn name
     yarnMap.forEach((requirement) => {
-      totals.issued += getIssuedQty(requirement, transactions, order.orderNumber);
+      totals.issued += getIssuedQty(requirement, transactions, order);
     });
   }
   
@@ -931,12 +946,12 @@ const YarnIssuePage = () => {
           bValue = b.requiredQty;
           break;
         case "issuedQty":
-          aValue = getIssuedQty(a, allYarnTransactions, selectedOrder.orderNumber);
-          bValue = getIssuedQty(b, allYarnTransactions, selectedOrder.orderNumber);
+          aValue = getIssuedQty(a, allYarnTransactions, selectedOrder);
+          bValue = getIssuedQty(b, allYarnTransactions, selectedOrder);
           break;
         case "status":
-          aValue = getRequirementStatus(a, allYarnTransactions, selectedOrder.orderNumber);
-          bValue = getRequirementStatus(b, allYarnTransactions, selectedOrder.orderNumber);
+          aValue = getRequirementStatus(a, allYarnTransactions, selectedOrder);
+          bValue = getRequirementStatus(b, allYarnTransactions, selectedOrder);
           break;
         default:
           aValue = 0;
@@ -959,7 +974,7 @@ const YarnIssuePage = () => {
   const allBomIssuedForCurrentArticle = useMemo(() => {
     if (!selectedOrder || !selectedArticleId || selectedArticleId === "all" || !selectedOrder.bom?.length) return false;
     return selectedOrder.bom.every((r) =>
-      getRequirementStatus(r, allYarnTransactions, selectedOrder.orderNumber) === "Issued"
+      getRequirementStatus(r, allYarnTransactions, selectedOrder) === "Issued"
     );
   }, [selectedOrder, selectedArticleId, allYarnTransactions]);
 
@@ -1120,7 +1135,7 @@ const YarnIssuePage = () => {
     // For now, we'll use the yarnCode which should be the yarnCatalogId
     const yarnCatalogId = activeRequirement.yarnCode;
 
-    const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder.orderNumber);
+    const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder);
     const currentIssuedInGrams = currentIssued * 1000;
 
     setSubmittingTransaction(true);
@@ -1128,16 +1143,31 @@ const YarnIssuePage = () => {
       const token = getAccessToken();
       const transactionDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
 
+      // Backend schema: transactionNetWeight, transactionTotalWeight, transactionTearWeight, transactionConeCount; orderId, orderno, articleId, articleNumber, machineId
+      const machine = selectedMachineAssignment?.machine;
+      const machineId =
+        typeof machine === "object" && machine
+          ? (machine as { _id?: string; id?: string })._id ?? (machine as { id?: string }).id
+          : typeof machine === "string"
+            ? machine
+            : undefined;
+
       const transactionData = {
         yarn: yarnCatalogId,
         yarnName: activeRequirement.yarnName,
         transactionType: "yarn_issued",
         transactionDate: transactionDate,
-        totalWeight: totalWeight,
-        totalTearWeight: totalTearWeight,
-        totalNetWeight: totalNetWeight,
-        numberOfCones: numberOfCones,
+        transactionNetWeight: totalNetWeight,
+        transactionTotalWeight: totalWeight,
+        transactionTearWeight: totalTearWeight,
+        transactionConeCount: numberOfCones,
         orderno: selectedOrder.orderNumber,
+        orderId: selectedOrder.id || undefined,
+        ...(selectedArticle && {
+          articleNumber: selectedArticle.articleNumber,
+          articleId: selectedArticle._id ?? selectedArticle.id,
+        }),
+        ...(machineId && { machineId }),
       };
 
       const response = await fetch(`${API_BASE_URL}/yarn-management/yarn-transactions`, {
@@ -1531,10 +1561,10 @@ const YarnIssuePage = () => {
                             </thead>
                             <tbody>
                               {sortedRequirements.map((requirement) => {
-                                const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder.orderNumber);
+                                const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder);
                                 const issuedQtyInGrams = issuedQty * 1000;
                                 const remaining = Math.max(requirement.requiredQty - issuedQtyInGrams, 0);
-                                const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder.orderNumber);
+                                const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder);
                                 const isActive = activeRequirementId === requirement.id;
                                 return (
                                   <tr key={requirement.id} className={`hover:bg-gray-50/50 transition-colors ${isActive ? "bg-purple-50" : ""}`}>
@@ -1616,10 +1646,10 @@ const YarnIssuePage = () => {
                         </thead>
                         <tbody>
                           {sortedRequirements.map((requirement) => {
-                            const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder.orderNumber);
+                            const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder);
                             const issuedQtyInGrams = issuedQty * 1000;
                             const remaining = Math.max(requirement.requiredQty - issuedQtyInGrams, 0);
-                            const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder.orderNumber);
+                            const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder);
                             const isActive = activeRequirementId === requirement.id;
                             return (
                               <tr key={requirement.id} className={`hover:bg-gray-50/50 transition-colors ${isActive ? "bg-purple-50" : ""}`}>
@@ -1704,10 +1734,10 @@ const YarnIssuePage = () => {
                         </div>
                         <span
                           className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
-                            getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder?.orderNumber || "")
+                            getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" })
                           )}`}
                         >
-                          {getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder?.orderNumber || "")}
+                          {getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" })}
                         </span>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
@@ -1720,7 +1750,7 @@ const YarnIssuePage = () => {
                         <div className="bg-white rounded p-3 border border-gray-100">
                           <p className="text-gray-500">Issued</p>
                           <p className="text-sm font-medium text-blue-600">
-                            {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder?.orderNumber || "") * 1000)}
+                            {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }) * 1000)}
                           </p>
                         </div>
                         <div className="bg-white rounded p-3 border border-gray-100">
@@ -2077,9 +2107,9 @@ const YarnIssuePage = () => {
                     </p>
                     <p className="text-xs text-gray-600 mt-1">
                       <span className="font-semibold">Required:</span> {formatKgDisplay(activeRequirement.requiredQty)} |{" "}
-                      <span className="font-semibold">Issued:</span> {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder.orderNumber) * 1000)} |{" "}
+                      <span className="font-semibold">Issued:</span> {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder) * 1000)} |{" "}
                       <span className="font-semibold">Remaining:</span>{" "}
-                      {formatKgDisplay(Math.max(activeRequirement.requiredQty - (getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder.orderNumber) * 1000), 0))}
+                      {formatKgDisplay(Math.max(activeRequirement.requiredQty - (getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder) * 1000), 0))}
                     </p>
                   </div>
                 )}

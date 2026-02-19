@@ -61,6 +61,20 @@ const KnittingFloorSupervisorPage = () => {
   /** Weight modal: shown when user clicks Update Order; capture weight then call update API. */
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [weightInput, setWeightInput] = useState<string>('');
+  /** Complete confirmation: show article summary and "Do you really want to complete?" before marking status Completed. */
+  const [showCompleteConfirmModal, setShowCompleteConfirmModal] = useState(false);
+  const [completeConfirmData, setCompleteConfirmData] = useState<{
+    articleNumber: string;
+    orderNumber: string;
+    transferredWeight: number | null;
+    m4Qty: number;
+    transferQty: number;
+    remainingQty: number;
+    receivedQty: number;
+    itemId: string;
+  } | null>(null);
+  const [completingStatus, setCompletingStatus] = useState(false);
+  const [machineViewRefreshTrigger, setMachineViewRefreshTrigger] = useState(0);
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [showLogsSection, setShowLogsSection] = useState(false);
   const [selectedLogArticleId, setSelectedLogArticleId] = useState<string>('');
@@ -286,6 +300,46 @@ const KnittingFloorSupervisorPage = () => {
       alert(msg);
     } finally {
       setUpdatingStatusItemId(null);
+    }
+  };
+
+  /** Open complete-confirm modal with article summary; on Yes, mark status Completed then close drawer and refresh. */
+  const openCompleteConfirmModal = (data: {
+    articleNumber: string;
+    orderNumber: string;
+    transferredWeight: number | null;
+    m4Qty: number;
+    transferQty: number;
+    remainingQty: number;
+    receivedQty: number;
+    itemId: string;
+  }) => {
+    setCompleteConfirmData(data);
+    setShowCompleteConfirmModal(true);
+  };
+
+  const handleCompleteConfirmYes = async () => {
+    if (!completeConfirmData || !updateModalAssignment?.id) return;
+    setCompletingStatus(true);
+    try {
+      await updateAssignmentItemStatus(updateModalAssignment.id, completeConfirmData.itemId, OrderStatus.COMPLETED);
+      setUpdateModalAssignment(null);
+      setUpdateModalAssignmentItems(null);
+      setUpdateModalReadOnlyFromIndex(undefined);
+      setShowCompleteConfirmModal(false);
+      setCompleteConfirmData(null);
+      setShowUpdateModal(false);
+      setSelectedOrder(null);
+      setUpdateData({});
+      setInitialUpdateData({});
+      toast.success("Article marked as Completed");
+      loadOrders();
+      setMachineViewRefreshTrigger((t) => t + 1);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to update status";
+      toast.error(msg);
+    } finally {
+      setCompletingStatus(false);
     }
   };
 
@@ -667,7 +721,7 @@ const KnittingFloorSupervisorPage = () => {
         {/* Content: Orders | Machine view | Article view */}
         <div className="min-h-[300px]">
           {activeTab === "machine-view" ? (
-            <MachineViewTab onOpenEditModal={handleOpenUpdateModalFromMachine} />
+            <MachineViewTab onOpenEditModal={handleOpenUpdateModalFromMachine} refreshTrigger={machineViewRefreshTrigger} />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
               orders={paginatedOrders}
@@ -1018,16 +1072,29 @@ const KnittingFloorSupervisorPage = () => {
                                           );
                                         }
                                         if (isInProgress) {
+                                          const trfPlusM4 = transferredQty + currentM4FromArticle;
+                                          const showCompleted = trfPlusM4 >= receivedQty;
                                           return (
                                             <div className="flex flex-wrap gap-1.5">
-                                              <button
-                                                type="button"
-                                                onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.COMPLETED)}
-                                                disabled={isDisabled}
-                                                className="px-3 py-1.5 text-[11px] font-bold rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
-                                              >
-                                                Completed
-                                              </button>
+                                              {showCompleted && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => openCompleteConfirmModal({
+                                                    articleNumber: article.articleNumber || `Article ${idx + 1}`,
+                                                    orderNumber: selectedOrder?.orderNumber ?? "",
+                                                    transferredWeight: article.floorQuantities?.knitting?.weight ?? null,
+                                                    m4Qty: currentM4FromArticle,
+                                                    transferQty: transferredQty,
+                                                    remainingQty: remainingQty,
+                                                    receivedQty: receivedQty,
+                                                    itemId: assignmentItem!.itemId!,
+                                                  })}
+                                                  disabled={isDisabled}
+                                                  className="px-3 py-1.5 text-[11px] font-bold rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                                                >
+                                                  Completed
+                                                </button>
+                                              )}
                                               <button
                                                 type="button"
                                                 onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.ON_HOLD)}
@@ -1094,13 +1161,62 @@ const KnittingFloorSupervisorPage = () => {
               </div>
             </div>
 
-            {/* When no read-only articles, show actions at bottom */}
-            {updateModalReadOnlyFromIndex === undefined && (
-              <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-300">
-                <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
-                <button type="button" disabled={!hasUpdateDataChanges || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                  <i className="ri-save-line text-xs"></i> Update Order
-                </button>
+            {/* Always show actions at bottom */}
+            <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-300">
+              <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
+              <button type="button" disabled={!hasUpdateDataChanges || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i className="ri-save-line text-xs"></i> Update Order
+              </button>
+            </div>
+
+            {/* Complete confirmation modal – show article summary, then mark Completed and close drawer on Yes */}
+            {showCompleteConfirmModal && completeConfirmData && (
+              <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40" onClick={() => { if (!completingStatus) { setShowCompleteConfirmModal(false); setCompleteConfirmData(null); } }} aria-hidden>
+                <div className="bg-white rounded-lg shadow-xl border border-gray-300 w-full max-w-sm p-4 flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
+                  <h4 className="text-[13px] font-bold text-gray-800 border-b border-gray-200 pb-2">Complete article</h4>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                    <span className="text-gray-500">Article number</span>
+                    <span className="font-medium text-gray-900">{completeConfirmData.articleNumber}</span>
+                    <span className="text-gray-500">Transferred weight</span>
+                    <span className="font-medium text-gray-900">{completeConfirmData.transferredWeight != null ? String(completeConfirmData.transferredWeight) : "—"}</span>
+                    <span className="text-gray-500">M4 quantity</span>
+                    <span className="font-medium text-gray-900">{completeConfirmData.m4Qty.toLocaleString()}</span>
+                    <span className="text-gray-500">Transfer quantity</span>
+                    <span className="font-medium text-gray-900">{completeConfirmData.transferQty.toLocaleString()}</span>
+                    <span className="text-gray-500">Remaining quantity</span>
+                    <span className="font-medium text-gray-900">{completeConfirmData.remainingQty.toLocaleString()}</span>
+                    <span className="text-gray-500">Received quantity</span>
+                    <span className="font-medium text-gray-900">{completeConfirmData.receivedQty.toLocaleString()}</span>
+                  </div>
+                  <p className="text-[12px] text-gray-700 pt-1">
+                    Do you really want to complete this article for order <strong>{completeConfirmData.orderNumber}</strong>?
+                  </p>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => { setShowCompleteConfirmModal(false); setCompleteConfirmData(null); }}
+                      disabled={completingStatus}
+                      className="px-3 py-1.5 text-[11px] font-bold text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      No
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCompleteConfirmYes}
+                      disabled={completingStatus}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-[11px] font-bold rounded hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {completingStatus ? (
+                        <>
+                          <span className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                          Completing…
+                        </>
+                      ) : (
+                        "Yes, mark Completed"
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

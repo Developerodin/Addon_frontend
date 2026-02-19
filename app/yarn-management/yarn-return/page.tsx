@@ -1,6 +1,7 @@
 "use client";
 import React, {
   FormEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -14,6 +15,14 @@ import { API_BASE_URL } from "@/shared/data/utilities/api";
 import Cookies from "js-cookie";
 import yarnConeService from "@/shared/services/yarnConeService";
 import storageSlotService from "@/shared/services/storageSlotService";
+import {
+  getCompletedItemsAssignments,
+  updateAssignmentItemYarnReturnStatus,
+  type MachineOrderAssignmentTopItems,
+  type PopulatedOrderRef,
+  type PopulatedArticleRef,
+} from "@/shared/services/machineOrderAssignmentService";
+import AssignmentsCards from "@/app/catalog/needle-configuration/components/AssignmentsCards";
 
 type ConeStatus = "Awaiting" | "Returned";
 type OrderStatus = "Awaiting Return" | "In Progress" | "Partial" | "Returned";
@@ -151,6 +160,15 @@ const getAccessToken = (): string | null => {
   }
 };
 
+/** Machine label for display (code or name). Same as yarn-issue. */
+function machineLabel(a: MachineOrderAssignmentTopItems): string {
+  const m = a.machine;
+  if (typeof m === "object" && m) {
+    return (m as { machineCode?: string; name?: string; id?: string }).machineCode ?? (m as { name?: string }).name ?? (m as { id?: string }).id ?? "—";
+  }
+  return typeof m === "string" ? m : "—";
+}
+
 // Helper function to extract transactions from nested API response structure
 const extractTransactions = (data: any): any[] => {
   if (!data) return [];
@@ -210,6 +228,12 @@ const YarnReturnPage = () => {
     to: string;
   }>({ from: "", to: "" });
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [machineAssignments, setMachineAssignments] = useState<MachineOrderAssignmentTopItems[]>([]);
+  const [machineAssignmentsLoading, setMachineAssignmentsLoading] = useState(true);
+  const [selectedMachineAssignmentId, setSelectedMachineAssignmentId] = useState<string | null>(null);
+  const [selectedMachineAssignment, setSelectedMachineAssignment] = useState<MachineOrderAssignmentTopItems | null>(null);
+  const [machineSearchTerm, setMachineSearchTerm] = useState("");
+  const [orderSelectOpen, setOrderSelectOpen] = useState(true);
   const [submittingReturn, setSubmittingReturn] = useState(false);
   const [showScanReturnPanel, setShowScanReturnPanel] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -231,233 +255,243 @@ const YarnReturnPage = () => {
     totalTearWeight: "0",
     totalNetWeight: "",
   });
+  /** Modal: confirm yarn return completed for an order (calls API per assignment item). */
+  const [yarnReturnCompleteModal, setYarnReturnCompleteModal] = useState<{
+    orderId: string;
+    orderNumber: string;
+    itemIds: string[];
+    articleNumbers: string[];
+  } | null>(null);
+  const [yarnReturnCompleteSubmitting, setYarnReturnCompleteSubmitting] = useState(false);
 
   const pendingToastShown = useRef(false);
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Return");
 
-  // Fetch production orders with issued yarn
-  useEffect(() => {
-    const fetchOrders = async () => {
-      if (!hasPermission) return;
-      
-      setOrdersLoading(true);
+  /** Fetch cones + return tx for one order. Used when loading orders from completed-items. */
+  const fetchOrderWithCones = useCallback(
+    async (
+      token: string | null,
+      orderNumber: string,
+      orderId: string,
+      meta: { floor: string; articles: Article[]; createdAt?: string; updatedAt?: string }
+    ): Promise<ProductionOrder> => {
+      let issuedTransactions: any[] = [];
+      let returnedTransactions: any[] = [];
       try {
-        const token = getAccessToken();
-        const response = await fetch(
-          `${API_BASE_URL}/production/orders?page=1&limit=100&sortBy=createdAt&populate=articles`,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch production orders");
+        const [issuedRes, allRes] = await Promise.all([
+          fetch(
+            `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${orderNumber}`,
+            { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
+          ),
+          fetch(
+            `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${orderNumber}`,
+            { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
+          ),
+        ]);
+        if (issuedRes.ok) {
+          const d = await issuedRes.json();
+          issuedTransactions = extractTransactions(d).filter((tx: any) => tx.transactionType === "yarn_issued");
         }
+        if (allRes.ok) {
+          const d = await allRes.json();
+          returnedTransactions = extractTransactions(d).filter((tx: any) => tx.transactionType === "yarn_returned");
+        }
+      } catch (err) {
+        console.warn("Fetch transactions for order", orderNumber, err);
+      }
 
-        const data = await response.json();
-        const apiOrders: ApiProductionOrder[] = data.results || [];
-
-        // Fetch issued transactions for each order to get cones
-        const ordersWithCones = await Promise.all(
-          apiOrders.map(async (order) => {
-            try {
-              const transactionsResponse = await fetch(
-                `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${order.orderNumber}`,
-                {
-                  headers: {
-                    "Content-Type": "application/json",
-                    ...(token && { Authorization: `Bearer ${token}` }),
-                  },
-                }
-              );
-
-              let issuedTransactions: any[] = [];
-              if (transactionsResponse.ok) {
-                const transactionsData = await transactionsResponse.json();
-                // Extract transactions from nested structure
-                issuedTransactions = extractTransactions(transactionsData);
-                // Filter to only yarn_issued transactions
-                issuedTransactions = issuedTransactions.filter((tx: any) => tx.transactionType === "yarn_issued");
-              }
-
-              // Also fetch returned transactions to check which cones are already returned
-              // Query all transactions for this order and filter by type
-              let returnedTransactions: any[] = [];
-              try {
-                const allTransactionsResponse = await fetch(
-                  `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${order.orderNumber}`,
-                  {
-                    headers: {
-                      "Content-Type": "application/json",
-                      ...(token && { Authorization: `Bearer ${token}` }),
-                    },
-                  }
-                );
-                if (allTransactionsResponse.ok) {
-                  const allTransactions = await allTransactionsResponse.json();
-                  returnedTransactions = extractTransactions(allTransactions);
-                  returnedTransactions = returnedTransactions.filter((tx: any) => tx.transactionType === "yarn_returned");
-                }
-              } catch (err) {
-                // API might not exist yet, that's okay
-                console.warn("Failed to fetch returned transactions:", err);
-              }
-
-              // Convert transactions to cones
-              const conesMap = new Map<string, Cone>();
-              
-              // Process issued transactions - create cones for all issued transactions
-              // (already filtered to yarn_issued above, but keeping check for safety)
-              issuedTransactions.forEach((tx: any) => {
-                if (tx.transactionType === "yarn_issued") {
-                  // Use coneBarcode if available, otherwise use transaction ID
-                  const coneBarcode = tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`;
-                  const coneId = coneBarcode;
-                  
-                  // Find matching returned transaction (match by coneBarcode or transaction ID)
-                  const returnedTx = returnedTransactions.find(
-                    (rt: any) => {
-                      if (tx.coneBarcode && rt.coneBarcode) {
-                        return rt.coneBarcode === tx.coneBarcode && rt.transactionType === "yarn_returned";
-                      }
-                      // If no coneBarcode, match by issued transaction ID
-                      return rt.issuedTransactionId === (tx._id || tx.id) && rt.transactionType === "yarn_returned";
-                    }
-                  );
-
-                  // Handle multiple cones in one transaction (numberOfCones > 1)
-                  const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
-                  const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
-
-                  for (let i = 0; i < numberOfCones; i++) {
-                    const coneIndex = numberOfCones > 1 ? i + 1 : 0;
-                    const uniqueConeId = numberOfCones > 1 ? `${coneId}-${coneIndex}` : coneId;
-                    const uniqueBarcode = numberOfCones > 1 ? `${coneBarcode}-${coneIndex}` : coneBarcode;
-
-                    conesMap.set(uniqueConeId, {
-                      id: uniqueConeId,
-                      barcode: uniqueBarcode,
-                      yarnCode: tx.yarn?.id || tx.yarn || "N/A",
-                      yarnName: tx.yarnName || "Unknown Yarn",
-                      yarnType: tx.yarn?.yarnType?.name || "Unknown",
-                      issuedWeight: weightPerCone,
-                      returnedWeight: returnedTx ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones : undefined,
-                      balanceWeight: returnedTx ? Math.max(
-                        weightPerCone - ((returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones),
-                        0
-                      ) : undefined,
-                      status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
-                      lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
-                      transactionId: tx._id || tx.id,
-                      yarnCatalogId: tx.yarn?.id || tx.yarn,
-                    });
-                  }
-                }
-              });
-
-              const cones = Array.from(conesMap.values());
-              
-              // Count issued transactions (already filtered above)
-              const issuedTxCount = issuedTransactions.length;
-              const hasIssued = issuedTxCount > 0;
-
-              return {
-                id: order.id,
-                productionOrder: order.orderNumber,
-                orderNumber: order.orderNumber,
-                floor: order.currentFloor || "N/A",
-                knittingSupervisor: "N/A", // Not available in API
-                knittingCompletedAt: order.updatedAt || order.createdAt || new Date().toISOString(),
-                status: getOrderStatusFromCones(cones),
-                cones: cones,
-                lastUpdated: order.updatedAt || order.createdAt || new Date().toISOString(),
-                articles: order.articles || [],
-                hasIssuedTransactions: hasIssued, // Track if order has issued transactions
-              };
-            } catch (error) {
-              console.error(`Error fetching transactions for order ${order.orderNumber}:`, error);
-              return {
-                id: order.id,
-                productionOrder: order.orderNumber,
-                orderNumber: order.orderNumber,
-                floor: order.currentFloor || "N/A",
-                knittingSupervisor: "N/A",
-                knittingCompletedAt: order.updatedAt || order.createdAt || new Date().toISOString(),
-                status: "Awaiting Return" as OrderStatus,
-                cones: [],
-                lastUpdated: order.updatedAt || order.createdAt || new Date().toISOString(),
-                articles: order.articles || [],
-                hasIssuedTransactions: false,
-              };
-            }
-          })
+      const conesMap = new Map<string, Cone>();
+      issuedTransactions.forEach((tx: any) => {
+        if (tx.transactionType !== "yarn_issued") return;
+        const coneBarcode = tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`;
+        const coneId = coneBarcode;
+        const returnedTx = returnedTransactions.find(
+          (rt: any) =>
+            (tx.coneBarcode && rt.coneBarcode ? rt.coneBarcode === tx.coneBarcode : rt.issuedTransactionId === (tx._id || tx.id)) &&
+            rt.transactionType === "yarn_returned"
         );
+        const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
+        const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
+        for (let i = 0; i < numberOfCones; i++) {
+          const coneIndex = numberOfCones > 1 ? i + 1 : 0;
+          const uniqueConeId = numberOfCones > 1 ? `${coneId}-${coneIndex}` : coneId;
+          const uniqueBarcode = numberOfCones > 1 ? `${coneBarcode}-${coneIndex}` : coneBarcode;
+          conesMap.set(uniqueConeId, {
+            id: uniqueConeId,
+            barcode: uniqueBarcode,
+            yarnCode: tx.yarn?.id || tx.yarn || "N/A",
+            yarnName: tx.yarnName || "Unknown Yarn",
+            yarnType: tx.yarn?.yarnType?.name || "Unknown",
+            issuedWeight: weightPerCone,
+            returnedWeight: returnedTx ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones : undefined,
+            balanceWeight: returnedTx ? Math.max(weightPerCone - ((returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones), 0) : undefined,
+            status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
+            lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
+            transactionId: tx._id || tx.id,
+            yarnCatalogId: tx.yarn?.id || tx.yarn,
+          });
+        }
+      });
+      const cones = Array.from(conesMap.values());
+      const lastUpdated = meta.updatedAt || meta.createdAt || new Date().toISOString();
+      return {
+        id: orderId,
+        productionOrder: orderNumber,
+        orderNumber,
+        floor: meta.floor,
+        knittingSupervisor: "N/A",
+        knittingCompletedAt: meta.createdAt || lastUpdated,
+        status: getOrderStatusFromCones(cones),
+        cones,
+        lastUpdated,
+        articles: meta.articles,
+        hasIssuedTransactions: issuedTransactions.length > 0,
+      };
+    },
+    []
+  );
 
-        // Filter orders that have issued transactions (show all orders with issued yarn, even if 0 returned)
-        const ordersWithIssuedCones = ordersWithCones.filter(
-          (order) => {
-            // Show orders that have issued transactions
-            // This includes orders with issued yarn, even if no cones have been returned yet
-            const hasIssued = (order as any).hasIssuedTransactions === true;
-            const hasCones = order.cones.length > 0;
-            return hasIssued || hasCones;
-          }
-        );
-        
-        console.log("Orders with issued cones:", ordersWithIssuedCones.length, ordersWithIssuedCones.map(o => ({
-          orderNumber: o.orderNumber,
-          hasIssuedTransactions: (o as any).hasIssuedTransactions,
-          conesCount: o.cones.length
-        })));
-
-        setOrders(ordersWithIssuedCones);
-        setHistory(ordersWithIssuedCones.map((order) => buildHistoryRecord(order)));
-
-        // Fetch all return transactions for all orders
-        const uniqueOrderNumbers = Array.from(new Set(ordersWithIssuedCones.map(o => o.orderNumber)));
-        const allReturnTransactions: ReturnTransaction[] = [];
-        
-        await Promise.all(
-          uniqueOrderNumbers.map(async (orderNumber) => {
-            try {
-              const transactionsResponse = await fetch(
-                `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${orderNumber}`,
-                {
-                  headers: {
-                    "Content-Type": "application/json",
-                    ...(token && { Authorization: `Bearer ${token}` }),
-                  },
-                }
-              );
-
-              if (transactionsResponse.ok) {
-                const transactionsData = await transactionsResponse.json();
-                const transactions = extractTransactions(transactionsData);
-                const returnedTxs = transactions.filter(
-                  (tx: any) => tx.transactionType === "yarn_returned"
-                ) as ReturnTransaction[];
-                allReturnTransactions.push(...returnedTxs);
-              }
-            } catch (err) {
-              console.warn(`Failed to fetch return transactions for order ${orderNumber}:`, err);
-            }
-          })
-        );
-
-        setReturnTransactions(allReturnTransactions);
+  // Fetch completed-items (machines with completed PO items) – same pattern as yarn-issue top-items
+  useEffect(() => {
+    const fetchCompleted = async () => {
+      if (!hasPermission) return;
+      setMachineAssignmentsLoading(true);
+      try {
+        const list = await getCompletedItemsAssignments();
+        setMachineAssignments(list);
+        // Empty list: no machine to select → never call loadOrdersForMachine, so clear orders loading
+        if (list.length === 0) setOrdersLoading(false);
       } catch (error) {
-        console.error("Error fetching orders:", error);
-        toast.error("Failed to load production orders");
+        console.error("Error fetching completed-items:", error);
+        toast.error("Failed to load machines (completed items)");
+        setMachineAssignments([]);
+        setOrdersLoading(false);
+      } finally {
+        setMachineAssignmentsLoading(false);
+      }
+    };
+    fetchCompleted();
+  }, [hasPermission]);
+
+  /** Build orders from assignment and fetch cones for each (like yarn-issue loadOrdersForMachine). */
+  const loadOrdersForMachine = useCallback(
+    async (assignment: MachineOrderAssignmentTopItems) => {
+      const items = assignment.productionOrderItems ?? [];
+      if (items.length === 0) {
+        setOrders([]);
+        setHistory([]);
+        setReturnTransactions((prev) => prev);
+        setSelectedOrderId(null);
+        setSelectedMachineAssignmentId(assignment.id);
+        setSelectedMachineAssignment(assignment);
+        setOrdersLoading(false);
+        return;
+      }
+      setSelectedMachineAssignmentId(assignment.id);
+      setSelectedMachineAssignment(assignment);
+
+      const orderMap = new Map<
+        string,
+        { order: PopulatedOrderRef | null; articles: { article: PopulatedArticleRef; item: (typeof items)[0] }[] }
+      >();
+      for (const item of items) {
+        const po = item.productionOrder;
+        const art = item.article;
+        const orderId = typeof po === "string" ? po : (po?.id ?? po?._id ?? "");
+        const orderObj = typeof po === "object" ? po : null;
+        const articleObj = typeof art === "object" ? art : null;
+        if (!orderId || !articleObj) continue;
+        if (!orderMap.has(orderId)) {
+          orderMap.set(orderId, { order: orderObj ?? null, articles: [] });
+        }
+        orderMap.get(orderId)!.articles.push({ article: articleObj, item });
+      }
+
+      const builtOrdersMeta: { orderId: string; orderNumber: string; floor: string; articles: Article[]; createdAt?: string; updatedAt?: string }[] = [];
+      orderMap.forEach((value, orderId) => {
+        const { order, articles } = value;
+        const firstItem = articles[0]?.item;
+        const orderNumber = order?.orderNumber ?? firstItem?.orderNumber ?? "";
+        builtOrdersMeta.push({
+          orderId,
+          orderNumber,
+          floor: order?.currentFloor ?? "N/A",
+          articles: articles.map(({ article, item: it }) => ({
+            id: article?.id ?? article?._id ?? "",
+            _id: article?._id,
+            articleNumber: article?.articleNumber ?? it?.articleNumber ?? "",
+            plannedQuantity: article?.plannedQuantity ?? 0,
+            linkingType: (article?.linkingType as string) ?? "Auto Linking",
+            priority: (article?.priority as string) ?? "Medium",
+            status: (article?.status as string) ?? "Pending",
+            machineId: undefined,
+            remarks: article?.remarks as string | undefined,
+          })),
+          createdAt: order?.createdAt as string | undefined,
+          updatedAt: order?.updatedAt as string | undefined,
+        });
+      });
+
+      setOrdersLoading(true);
+      const token = getAccessToken();
+      try {
+        const ordersWithCones = await Promise.all(
+          builtOrdersMeta.map((meta) =>
+            fetchOrderWithCones(token, meta.orderNumber, meta.orderId, {
+              floor: meta.floor,
+              articles: meta.articles,
+              createdAt: meta.createdAt,
+              updatedAt: meta.updatedAt,
+            })
+          )
+        );
+        const filtered = ordersWithCones.filter((o) => o.hasIssuedTransactions || o.cones.length > 0);
+        setOrders(filtered);
+        setHistory(filtered.map((order) => buildHistoryRecord(order)));
+
+        const allReturnTxs: ReturnTransaction[] = [];
+        await Promise.all(
+          filtered.map(async (o) => {
+            try {
+              const res = await fetch(
+                `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${o.orderNumber}`,
+                { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
+              );
+              if (!res.ok) return;
+              const data = await res.json();
+              const txs = extractTransactions(data).filter((tx: any) => tx.transactionType === "yarn_returned") as ReturnTransaction[];
+              allReturnTxs.push(...txs);
+            } catch (err) {
+              console.warn("Fetch return tx for", o.orderNumber, err);
+            }
+          })
+        );
+        setReturnTransactions(allReturnTxs);
+
+        const first = filtered[0];
+        if (first?.id) {
+          setSelectedOrderId(first.id);
+        } else {
+          setSelectedOrderId(null);
+        }
+      } catch (error) {
+        console.error("Error loading orders for machine:", error);
+        toast.error("Failed to load orders and cones");
+        setOrders([]);
+        setHistory([]);
       } finally {
         setOrdersLoading(false);
       }
-    };
+    },
+    [fetchOrderWithCones]
+  );
 
-    fetchOrders();
-  }, [hasPermission]);
+  // Default: select first machine when completed-items have loaded
+  useEffect(() => {
+    if (!machineAssignmentsLoading && machineAssignments.length > 0 && selectedMachineAssignmentId === null) {
+      loadOrdersForMachine(machineAssignments[0]);
+    }
+  }, [machineAssignmentsLoading, machineAssignments, selectedMachineAssignmentId, loadOrdersForMachine]);
 
   // Filter pending orders - exclude orders where all cones have been returned
   // Check both cone status and return transaction cone counts
@@ -597,6 +631,8 @@ const YarnReturnPage = () => {
     }
   }, [pendingOrders]);
 
+  const filteredOrders = useMemo(() => orders, [orders]);
+
   const filteredReturnTransactions = useMemo(() => {
     return returnTransactions
       .filter((transaction) => {
@@ -638,7 +674,30 @@ const YarnReturnPage = () => {
       );
   }, [returnTransactions, historyDateRange.from, historyDateRange.to, historySearchTerm]);
 
-  if (isLoading || ordersLoading) {
+  /** Get assignment item ids and article numbers for an order (for yarn-return-status API). Must be before any early return (hooks order). */
+  const getAssignmentItemsForOrder = useCallback(
+    (orderId: string): { itemId: string; articleNumber: string }[] => {
+      const assignment = selectedMachineAssignment;
+      if (!assignment?.id || !assignment.productionOrderItems?.length) return [];
+      return assignment.productionOrderItems
+        .filter((item) => {
+          const po = item.productionOrder;
+          const oid = typeof po === "string" ? po : (po?.id ?? (po as { _id?: string })?._id ?? "");
+          return oid === orderId;
+        })
+        .map((item) => ({
+          itemId: item.itemId ?? (item as { id?: string }).id ?? "",
+          articleNumber: item.articleNumber ?? (typeof item.article === "object" && item.article
+            ? (item.article as { articleNumber?: string }).articleNumber ?? ""
+            : ""),
+        }))
+        .filter((x) => x.itemId);
+    },
+    [selectedMachineAssignment]
+  );
+
+  const isInitialLoad = machineAssignmentsLoading || (ordersLoading && orders.length === 0);
+  if (isLoading || isInitialLoad) {
     return (
       <div className="main-content !p-[10px]">
         <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-[10px]">
@@ -681,6 +740,44 @@ const YarnReturnPage = () => {
       copy[index] = record;
       return copy;
     });
+  };
+
+  const handleYarnReturnCompleteClick = (order: ProductionOrder) => {
+    const items = getAssignmentItemsForOrder(order.id);
+    if (items.length === 0) {
+      toast.error("No assignment items found for this order.");
+      return;
+    }
+    setYarnReturnCompleteModal({
+      orderId: order.id,
+      orderNumber: order.orderNumber ?? order.productionOrder ?? "",
+      itemIds: items.map((i) => i.itemId),
+      articleNumbers: items.map((i) => i.articleNumber).filter(Boolean),
+    });
+  };
+
+  const handleYarnReturnCompleteConfirm = async () => {
+    if (!yarnReturnCompleteModal || !selectedMachineAssignmentId) return;
+    setYarnReturnCompleteSubmitting(true);
+    try {
+      for (const itemId of yarnReturnCompleteModal.itemIds) {
+        await updateAssignmentItemYarnReturnStatus(
+          selectedMachineAssignmentId,
+          itemId,
+          "Completed"
+        );
+      }
+      toast.success("Yarn return marked as completed for this order.");
+      setYarnReturnCompleteModal(null);
+      // Optionally refetch assignments/orders to reflect status
+      if (selectedMachineAssignment) {
+        loadOrdersForMachine(selectedMachineAssignment);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update yarn return status.");
+    } finally {
+      setYarnReturnCompleteSubmitting(false);
+    }
   };
 
   const handleReturnConesClick = (orderId: string) => {
@@ -1810,63 +1907,203 @@ const YarnReturnPage = () => {
           </div>
         </div>
 
-        <div className="p-[10px] pt-0">
-          <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Pending Cone Returns ({pendingOrders.length})</h3>
-        </div>
-        <div className="overflow-x-auto min-h-[200px]">
-          {pendingOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="text-gray-400 mb-4">
-                <i className="ri-checkbox-circle-line text-5xl"></i>
-              </div>
-              <h3 className="text-xs font-bold text-gray-400 mb-1">All caught up!</h3>
-              <p className="text-[11px] text-gray-500">No knitting-complete orders awaiting cone return.</p>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 p-[10px] pt-0">
+          <div className="xl:col-span-1 flex flex-col border border-gray-200 rounded overflow-hidden bg-gray-50/30">
+            <div className="p-[10px] border-b border-gray-200 bg-white">
+              <h2 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Machines (completed items)</h2>
             </div>
-          ) : (
-            <table className="w-full border-collapse border border-gray-200">
-              <thead>
-                <tr className="bg-gray-50/30">
-                  <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
-                  <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Floor</th>
-                  <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Knitting Completed</th>
-                  <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Supervisor</th>
-                  <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cones</th>
-                  <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
-                  <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingOrders.map((order) => {
-                  const orderReturnTransactions = returnTransactions.filter((tx) => tx.orderno === order.orderNumber);
-                  const totalConesReturnedFromHistory = orderReturnTransactions.reduce((sum, tx) => sum + (tx.transactionConeCount || 1), 0);
-                  const totalConesInOrder = order.cones.length;
-                  const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
-                  return (
-                    <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{order.productionOrder}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{order.floor}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(order.knittingCompletedAt).toLocaleString()}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{order.knittingSupervisor}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{actualPendingCones} pending</td>
-                      <td className="px-1.5 py-2 border border-gray-200">
-                        <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${statusBadgeColor(order.status)}`}>{order.status}</span>
-                      </td>
-                      <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200">
-                        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors" onClick={() => handleReturnConesClick(order.id)}>
-                          <i className="ri-reply-line text-sm"></i> Return Cones
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+            <div className="p-[10px] flex-1 min-h-0 overflow-auto">
+              <div className="relative mb-3">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
+                  placeholder="Search machine..."
+                  value={machineSearchTerm}
+                  onChange={(e) => setMachineSearchTerm(e.target.value)}
+                />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+              </div>
+              {machineAssignmentsLoading ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-600 border-t-transparent mb-2" />
+                  <p className="text-[11px] text-gray-500">Loading machines...</p>
+                </div>
+              ) : (
+                <AssignmentsCards
+                  rows={
+                    machineSearchTerm.trim()
+                      ? machineAssignments.filter((a) =>
+                          machineLabel(a).toLowerCase().includes(machineSearchTerm.trim().toLowerCase())
+                        )
+                      : machineAssignments
+                  }
+                  page={1}
+                  limit={machineAssignments.length || 20}
+                  totalResults={
+                    machineSearchTerm.trim()
+                      ? machineAssignments.filter((a) =>
+                          machineLabel(a).toLowerCase().includes(machineSearchTerm.trim().toLowerCase())
+                        ).length
+                      : machineAssignments.length
+                  }
+                  totalPages={1}
+                  isLoading={false}
+                  onPageChange={() => {}}
+                  readOnly
+                  compact
+                  nameOnly
+                  onCardClick={(a) => loadOrdersForMachine(a as MachineOrderAssignmentTopItems)}
+                />
+              )}
+            </div>
+          </div>
 
-        <div className="border-t border-gray-100">
-          <div className="p-[10px] flex flex-wrap items-center justify-between gap-4">
-            <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Return History &amp; Tracking</h3>
+          <div className="xl:col-span-2 space-y-4">
+            {!selectedMachineAssignment ? (
+              <div className="border border-gray-200 rounded overflow-hidden bg-white p-[10px]">
+                <div className="flex flex-col items-center justify-center py-16 text-center text-gray-500">
+                  <i className="ri-settings-3-line text-5xl text-gray-300 mb-4"></i>
+                  <p className="text-[11px]">Select a machine to view its orders and cone returns.</p>
+                </div>
+              </div>
+            ) : ordersLoading ? (
+              <div className="border border-gray-200 rounded overflow-hidden bg-white p-[10px]">
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-600 border-t-transparent mb-2" />
+                  <p className="text-[11px] text-gray-500">Loading orders and cones...</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="border border-gray-200 rounded overflow-hidden bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setOrderSelectOpen((o) => !o)}
+                    className="w-full p-[10px] flex justify-between items-center border-b border-gray-100 bg-gray-50/50 hover:bg-gray-50 text-left"
+                  >
+                    <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Select Order</h3>
+                    <span className="text-gray-500 text-sm">
+                      {selectedOrder?.orderNumber ?? "—"} · {filteredOrders.length} order{filteredOrders.length !== 1 ? "s" : ""}
+                    </span>
+                    <i className={`ri-arrow-down-s-line text-lg text-gray-500 transition-transform ${orderSelectOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {orderSelectOpen && (
+                    <div className="p-[10px] border-b border-gray-100">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
+                        {filteredOrders.map((order) => {
+                          const orderReturnTransactions = returnTransactions.filter((tx) => tx.orderno === order.orderNumber);
+                          const totalConesReturnedFromHistory = orderReturnTransactions.reduce((sum, tx) => sum + (tx.transactionConeCount || 1), 0);
+                          const totalConesInOrder = order.cones.length;
+                          const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
+                          const isSelected = selectedOrderId === order.id;
+                          return (
+                            <button
+                              key={order.id}
+                              type="button"
+                              onClick={() => setSelectedOrderId(order.id)}
+                              className={`text-left rounded-lg border-2 p-2.5 transition-all ${
+                                isSelected
+                                  ? "border-purple-500 bg-purple-50 shadow-sm ring-1 ring-purple-200"
+                                  : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50/50"
+                              }`}
+                            >
+                              <div className="text-[12px] font-bold text-gray-900 truncate">{order.orderNumber}</div>
+                              <div className="text-[10px] text-gray-500 mt-0.5 truncate">{order.floor}</div>
+                              <div className="text-[10px] text-gray-600 mt-1 font-medium">{actualPendingCones} pending</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {selectedMachineAssignment && (
+                  <div className="border border-gray-200 rounded overflow-hidden bg-white">
+                    <div className="p-[10px] flex justify-between items-start gap-4 border-b border-gray-100">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-medium text-purple-600 uppercase tracking-wider mb-0.5">
+                          Machine: {machineLabel(selectedMachineAssignment)}
+                        </p>
+                        {selectedOrder && (
+                          <>
+                            <h2 className="text-sm font-bold text-gray-800">{selectedOrder.orderNumber}</h2>
+                            <p className="text-[11px] text-gray-500 mt-0.5">{selectedOrder.floor}</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-[10px] pt-0">
+                  <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Pending Cone Returns ({pendingOrders.length})</h3>
+                </div>
+                <div className="overflow-x-auto min-h-[200px]">
+                  {pendingOrders.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <div className="text-gray-400 mb-4">
+                        <i className="ri-checkbox-circle-line text-5xl"></i>
+                      </div>
+                      <h3 className="text-xs font-bold text-gray-400 mb-1">All caught up!</h3>
+                      <p className="text-[11px] text-gray-500">No knitting-complete orders awaiting cone return for this machine.</p>
+                    </div>
+                  ) : (
+                    <table className="w-full border-collapse border border-gray-200">
+                      <thead>
+                        <tr className="bg-gray-50/30">
+                          <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Floor</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Knitting Completed</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Supervisor</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cones</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                          <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingOrders.map((order) => {
+                          const orderReturnTransactions = returnTransactions.filter((tx) => tx.orderno === order.orderNumber);
+                          const totalConesReturnedFromHistory = orderReturnTransactions.reduce((sum, tx) => sum + (tx.transactionConeCount || 1), 0);
+                          const totalConesInOrder = order.cones.length;
+                          const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
+                          return (
+                            <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{order.productionOrder}</td>
+                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{order.floor}</td>
+                              <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(order.knittingCompletedAt).toLocaleString()}</td>
+                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{order.knittingSupervisor}</td>
+                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{actualPendingCones} pending</td>
+                              <td className="px-1.5 py-2 border border-gray-200">
+                                <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${statusBadgeColor(order.status)}`}>{order.status}</span>
+                              </td>
+                              <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200">
+                                <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                  <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors" onClick={() => handleReturnConesClick(order.id)}>
+                                    <i className="ri-reply-line text-sm"></i> Return Cones
+                                  </button>
+                                  {order.status === "Returned" && selectedMachineAssignmentId && getAssignmentItemsForOrder(order.id).length > 0 && (
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-[11px] font-bold rounded hover:bg-green-700 transition-colors"
+                                      onClick={() => handleYarnReturnCompleteClick(order)}
+                                    >
+                                      <i className="ri-check-double-line text-sm"></i> Complete Yarn Return
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                <div className="border-t border-gray-100">
+                  <div className="p-[10px] flex flex-wrap items-center justify-between gap-4">
+                    <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Return History &amp; Tracking</h3>
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
@@ -1927,8 +2164,11 @@ const YarnReturnPage = () => {
               </table>
             )}
           </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
 
       {/* Scan & Return Side Panel */}
       {showScanReturnPanel && (
@@ -2414,6 +2654,68 @@ const YarnReturnPage = () => {
         </div>
       )}
 
+      {/* Yarn return completed confirmation modal */}
+      {yarnReturnCompleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="box-header border-b border-gray-200 px-6 py-4">
+              <div className="flex justify-between items-center">
+                <h3 className="box-title text-lg">Complete Yarn Return</h3>
+                <button
+                  type="button"
+                  onClick={() => !yarnReturnCompleteSubmitting && setYarnReturnCompleteModal(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                  disabled={yarnReturnCompleteSubmitting}
+                >
+                  <i className="ri-close-line text-xl"></i>
+                </button>
+              </div>
+            </div>
+            <div className="box-body p-6">
+              <p className="text-sm text-gray-700 mb-4">
+                Yarn return process is completed for this order?
+              </p>
+              <p className="text-sm font-semibold text-gray-900 mb-1">
+                Order: {yarnReturnCompleteModal.orderNumber}
+              </p>
+              {yarnReturnCompleteModal.articleNumbers.length > 0 && (
+                <p className="text-xs text-gray-600 mb-4">
+                  Article(s): {yarnReturnCompleteModal.articleNumbers.join(", ")}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mb-6">
+                This will mark yarn return as <strong>Completed</strong> for this article/order in the machine assignment.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setYarnReturnCompleteModal(null)}
+                  className="ti-btn ti-btn-outline"
+                  disabled={yarnReturnCompleteSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleYarnReturnCompleteConfirm}
+                  className="ti-btn ti-btn-primary bg-green-600 hover:bg-green-700"
+                  disabled={yarnReturnCompleteSubmitting}
+                >
+                  {yarnReturnCompleteSubmitting ? (
+                    <>
+                      <span className="animate-spin inline-block mr-2">⟳</span>
+                      Updating...
+                    </>
+                  ) : (
+                    "Yes, complete yarn return"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Cone Type Selection Modal */}
       {showConeTypeModal && pendingConeBarcode && pendingConeData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -2482,6 +2784,7 @@ const YarnReturnPage = () => {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };

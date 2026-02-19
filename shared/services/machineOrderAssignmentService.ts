@@ -14,6 +14,9 @@ export type OrderStatusType = (typeof OrderStatus)[keyof typeof OrderStatus];
 /** Yarn issue status for an assignment item (e.g. Not Started, In Progress, Completed) */
 export type YarnIssueStatusType = 'Not Started' | 'In Progress' | 'Completed';
 
+/** Yarn return status for an assignment item (Pending, In Progress, Completed) */
+export type YarnReturnStatusType = 'Pending' | 'In Progress' | 'Completed';
+
 export interface ProductionOrderItem {
   /** Subdocument _id from API – used for PATCH .../items batch update (priority) */
   itemId?: string;
@@ -244,6 +247,37 @@ export async function getTopItemsAssignments(): Promise<MachineOrderAssignmentTo
   }));
 }
 
+/** GET /completed-items – assignments with completed PO items (populated). Used for yarn-return machine view. */
+export async function getCompletedItemsAssignments(): Promise<MachineOrderAssignmentTopItems[]> {
+  const res = await fetch(`${BASE}/completed-items`, { method: 'GET', headers: getAuthHeaders() });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message || 'Failed to fetch completed-items assignments');
+  }
+  const data = await res.json();
+  const raw = Array.isArray(data) ? data : data.results ?? data.data ?? [];
+  return raw.map((row: any) => ({
+    id: row.id ?? row._id,
+    _id: row._id,
+    machine: row.machine,
+    activeNeedle: row.activeNeedle ?? '',
+    productionOrderItems: Array.isArray(row.productionOrderItems)
+      ? row.productionOrderItems.map((item: any) => ({
+          itemId: item.id ?? item._id,
+          productionOrder: item.productionOrder ?? item.productionOrderId,
+          article: item.article ?? item.articleId,
+          orderNumber: item.orderNumber ?? item.productionOrder?.orderNumber,
+          articleNumber: item.articleNumber ?? item.article?.articleNumber,
+          status: item.status,
+          priority: item.priority,
+        }))
+      : [],
+    isActive: row.isActive !== false,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }));
+}
+
 /** Get one assignment by id */
 export async function getMachineOrderAssignment(id: string): Promise<MachineOrderAssignment> {
   const res = await fetch(`${BASE}/${id}`, { method: 'GET', headers: getAuthHeaders() });
@@ -361,6 +395,26 @@ export async function updateAssignmentItemYarnIssueStatus(
     const err = await res.json().catch(() => ({}));
     const msg = (err as { message?: string }).message || (err as { error?: string }).error || res.statusText || 'Failed to update yarn issue status';
     throw new Error(typeof msg === 'string' ? msg : 'Failed to update yarn issue status');
+  }
+  const data = await res.json();
+  return normalizeAssignment(data.data ?? data);
+}
+
+/** Update a single item's yarn return status. PATCH :assignmentId/items/:itemId/yarn-return-status with { yarnReturnStatus }. Returns updated assignment. */
+export async function updateAssignmentItemYarnReturnStatus(
+  assignmentId: string,
+  itemId: string,
+  yarnReturnStatus: YarnReturnStatusType | string
+): Promise<MachineOrderAssignment> {
+  const res = await fetch(`${BASE}/${assignmentId}/items/${itemId}/yarn-return-status`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ yarnReturnStatus }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = (err as { message?: string }).message || (err as { error?: string }).error || res.statusText || 'Failed to update yarn return status';
+    throw new Error(typeof msg === 'string' ? msg : 'Failed to update yarn return status');
   }
   const data = await res.json();
   return normalizeAssignment(data.data ?? data);
