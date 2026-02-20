@@ -45,23 +45,11 @@ interface MachinesResponse {
   totalResults: number;
 }
 
-/** Number of needle config slots in Excel (at least 2; supports import/export of multiple configs) */
-const NEEDLE_CONFIG_SLOTS = 5;
-
+/** Excel row: needle config columns are dynamic (Needles Config 1..N, Needles Config Cutoff 1..N). */
 interface ExcelRow {
   'ID'?: string;
   'Machine Code': string;
   'Machine Number': string;
-  'Needles Config 1'?: string;
-  'Needles Config Cutoff 1'?: number | string;
-  'Needles Config 2'?: string;
-  'Needles Config Cutoff 2'?: number | string;
-  'Needles Config 3'?: string;
-  'Needles Config Cutoff 3'?: number | string;
-  'Needles Config 4'?: string;
-  'Needles Config Cutoff 4'?: number | string;
-  'Needles Config 5'?: string;
-  'Needles Config Cutoff 5'?: number | string;
   'Model': string;
   'Floor': string;
   'Installation Date': string;
@@ -75,6 +63,7 @@ interface ExcelRow {
   'Maintenance Notes'?: string;
   'Company'?: string;
   'Machine Type'?: string;
+  [key: string]: string | number | undefined;
 }
 
 const MachinesPage = () => {
@@ -363,6 +352,7 @@ const MachinesPage = () => {
       const data = await response.json();
       const exportSource = Array.isArray(data.results) ? data.results : [];
       const config = (machine: Machine): NeedleSizeConfigItem[] => machine.needleSizeConfig ?? [];
+      const maxConfigs = Math.max(1, ...exportSource.map((m) => config(m).length));
       const exportData = exportSource.map((machine: Machine) => {
         const base: Record<string, string | number> = {
           'ID': getMachineId(machine),
@@ -382,7 +372,7 @@ const MachinesPage = () => {
           'Company': machine.company || '',
           'Machine Type': machine.machineType || ''
         };
-        for (let s = 1; s <= NEEDLE_CONFIG_SLOTS; s++) {
+        for (let s = 1; s <= maxConfigs; s++) {
           const c = config(machine)[s - 1];
           base[`Needles Config ${s}`] = c?.needleSize ?? '';
           base[`Needles Config Cutoff ${s}`] = c != null ? c.cutoffQuantity : 0;
@@ -390,7 +380,7 @@ const MachinesPage = () => {
         return base;
       });
       const ws = XLSX.utils.json_to_sheet(exportData);
-      const numCols = 5 + NEEDLE_CONFIG_SLOTS * 2 + 11; // ID, Code, Number, (5 config pairs), Model, Floor, ...
+      const numCols = 5 + maxConfigs * 2 + 11; // ID, Code, Number, (N config pairs), Model, Floor, ...
       ws['!cols'] = Array.from({ length: numCols }, () => ({ wch: 15 }));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Machines');
