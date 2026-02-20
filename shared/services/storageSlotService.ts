@@ -31,6 +31,36 @@ export interface AddRacksResponse {
   alreadyPresentSlots: number;
 }
 
+/** Request body for POST /storage/slots/bulk-assign-boxes */
+export interface BulkAssignBoxesPayload {
+  assignments: Array<{
+    rackBarcode: string;
+    boxBarcodes: string[];
+  }>;
+}
+
+export interface BulkAssignBoxesUpdatedItem {
+  assignmentIndex: number;
+  rackBarcode: string;
+  boxId: string;
+  barcode: string;
+}
+
+export interface BulkAssignBoxesFailedItem {
+  assignmentIndex?: number;
+  rackBarcode?: string;
+  reason?: "slot_not_found" | "no_box_barcodes" | "boxes_not_found" | string;
+  boxBarcodes?: string[];
+}
+
+export interface BulkAssignBoxesResponse {
+  message: string;
+  updatedCount: number;
+  failedCount: number;
+  updated: BulkAssignBoxesUpdatedItem[];
+  failed: BulkAssignBoxesFailedItem[];
+}
+
 export interface BoxInSlot {
   _id: string;
   tearweight: number;
@@ -256,6 +286,26 @@ class StorageSlotService {
       method: "POST",
       body: JSON.stringify(body),
     });
+  }
+
+  /**
+   * Bulk assign boxes to slots. POST /storage/slots/bulk-assign-boxes
+   * Body: { assignments: [ { rackBarcode, boxBarcodes: string[] }, ... ] }
+   */
+  async bulkAssignBoxes(payload: BulkAssignBoxesPayload): Promise<BulkAssignBoxesResponse> {
+    const url = `${this.baseURL}/slots/bulk-assign-boxes`;
+    const token = getAccessToken();
+    if (!token) throw new Error("No access token found. Please login again.");
+    const res = await fetch(url, {
+      method: "POST",
+      headers: this.buildHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || `HTTP error! status: ${res.status}`);
+    }
+    return res.json() as Promise<BulkAssignBoxesResponse>;
   }
 }
 

@@ -7,7 +7,7 @@ import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
-import yarnBoxService, { YarnBox, UpdateYarnBoxPayload } from "@/shared/services/yarnBoxService";
+import yarnBoxService, { YarnBox, UpdateYarnBoxPayload, BulkMatchUpdateItem } from "@/shared/services/yarnBoxService";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printCones, connectQZ, getDefaultPrinter, isQZLoaded, getAvailablePrinters, PrinterInfo } from "@/shared/utils/qzTray";
 import * as XLSX from "xlsx";
@@ -242,8 +242,14 @@ const ProcessOrderPage = () => {
     orientation: 'vertical' as 'horizontal' | 'vertical',
   });
   const [isTestPrint, setIsTestPrint] = useState(false);
-  // When set, modal prints only this lot; when { type: 'all' }, prints all boxes
-  const [printModalContext, setPrintModalContext] = useState<{ type: 'all' } | { type: 'lot'; lotNumber: string; lotBoxes: YarnBox[] } | null>(null);
+  // When set, modal prints only this lot; when { type: 'all' }, prints all boxes. For 'lot', selectedBoxIds = which boxes to print.
+  const [printModalContext, setPrintModalContext] = useState<{ type: 'all' } | { type: 'lot'; lotNumber: string; lotBoxes: YarnBox[]; selectedBoxIds: string[] } | null>(null);
+
+  // Match Excel upload: bulk-match-update from Excel
+  const matchExcelInputRef = useRef<HTMLInputElement>(null);
+  const [isMatchExcelUploading, setIsMatchExcelUploading] = useState(false);
+  const [matchExcelErrorDrawerOpen, setMatchExcelErrorDrawerOpen] = useState(false);
+  const [matchExcelErrors, setMatchExcelErrors] = useState<string[]>([]);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -1402,7 +1408,8 @@ const ProcessOrderPage = () => {
       toast.error('No boxes available to print for this lot');
       return;
     }
-    setPrintModalContext({ type: 'lot', lotNumber, lotBoxes });
+    const allIds = lotBoxes.map((b) => b._id || b.id || b.boxId || '').filter(Boolean);
+    setPrintModalContext({ type: 'lot', lotNumber, lotBoxes, selectedBoxIds: allIds });
     setShowPrintSettingsModal(true);
   };
 
@@ -1465,7 +1472,12 @@ const ProcessOrderPage = () => {
 
     let boxesToPrint: YarnBox[] = [];
     if (context?.type === 'lot') {
-      boxesToPrint = context.lotBoxes;
+      const idSet = new Set(context.selectedBoxIds);
+      boxesToPrint = context.lotBoxes.filter((b) => idSet.has(b._id || b.id || b.boxId || ''));
+      if (boxesToPrint.length === 0) {
+        toast.error('Select at least one box to print');
+        return;
+      }
     } else {
       // For 'all' or default: print lot-wise
       boxesByLot.sortedLots.forEach((lotNum) => {
@@ -1645,12 +1657,19 @@ const ProcessOrderPage = () => {
     toast.success('Print preview opened. It will auto-print and close.');
   };
 
-  const handlePrintLotBarcodesBrowser = (lotNumber: string, lotBoxes: YarnBox[]) => {
+  const handlePrintLotBarcodesBrowser = (lotNumber: string, lotBoxes: YarnBox[], selectedBoxIds?: string[]) => {
     if (!order || lotBoxes.length === 0) {
       toast.error('No boxes available to print for this lot');
       return;
     }
-    const boxesWithLot = lotBoxes.map((box) => ({ box, lotLabel: lotNumber }));
+    const toPrint = selectedBoxIds?.length
+      ? lotBoxes.filter((b) => selectedBoxIds.includes(b._id || b.id || b.boxId || ''))
+      : lotBoxes;
+    if (toPrint.length === 0) {
+      toast.error('Select at least one box to print');
+      return;
+    }
+    const boxesWithLot = toPrint.map((box) => ({ box, lotLabel: lotNumber }));
     const html = getBrowserPrintPreviewHTML(boxesWithLot, `Lot ${lotNumber}`);
     if (!html) return;
     const printWindow = window.open('', '_blank');
@@ -1705,6 +1724,93 @@ const ProcessOrderPage = () => {
       toast.error(error instanceof Error ? error.message : "Failed to export Excel");
     } finally {
       setIsExportingBoxes(false);
+    }
+  };
+
+  /** Parse Excel file for Match Excel Upload. Expects columns: Lot Number, Box ID, Barcode, PO Number, Yarn Name, Shade Code, Box Weight (kg), Number of Cones. */
+  const parseMatchExcel = (file: File): Promise<BulkMatchUpdateItem[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          if (!data) {
+            reject(new Error("Failed to read file"));
+            return;
+          }
+          const wb = XLSX.read(data, { type: "binary" });
+          const firstSheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: "" });
+          const get = (row: Record<string, unknown>, ...keys: string[]) => {
+            for (const k of keys) {
+              const v = row[k];
+              if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim();
+            }
+            return "";
+          };
+          const num = (row: Record<string, unknown>, ...keys: string[]) => {
+            const s = get(row, ...keys);
+            const n = parseFloat(s);
+            return Number.isFinite(n) ? n : 0;
+          };
+          const items: BulkMatchUpdateItem[] = [];
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const lotNumber = get(row, "Lot Number", "lotNumber", "LotNumber");
+            const boxId = get(row, "Box ID", "boxId", "Box ID", "BoxId");
+            const barcode = get(row, "Barcode", "barcode");
+            const poNumber = get(row, "PO Number", "poNumber", "PO Number", "PONumber");
+            const yarnName = get(row, "Yarn Name", "yarnName", "YarnName");
+            const shadeCode = get(row, "Shade Code", "shadeCode", "ShadeCode");
+            const boxWeight = num(row, "Box Weight (kg)", "Box Weight (kg)", "boxWeight", "Box Weight");
+            const numberOfCones = num(row, "Number of Cones", "numberOfCones", "Number of Cones", "NumberOfCones");
+            if (!boxId && !barcode) continue; // skip empty rows
+            items.push({
+              lotNumber: lotNumber || "",
+              poNumber: poNumber || "",
+              yarnName: yarnName || "",
+              shadeCode: shadeCode || "",
+              boxWeight,
+              numberOfCones: Math.round(numberOfCones),
+              barcode: barcode || "",
+              boxId: boxId || "",
+            });
+          }
+          if (items.length === 0) reject(new Error("No valid rows in Excel (need at least Box ID or Barcode)."));
+          resolve(items);
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error("Failed to parse Excel"));
+        }
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsBinaryString(file);
+    });
+  };
+
+  const handleMatchExcelUpload = async (file: File) => {
+    if (!order) return;
+    setIsMatchExcelUploading(true);
+    setMatchExcelErrors([]);
+    setMatchExcelErrorDrawerOpen(false);
+    try {
+      const items = await parseMatchExcel(file);
+      await yarnBoxService.bulkMatchUpdate({ items });
+      toast.success(`Bulk match update completed for ${items.length} row(s).`);
+      fetchBoxes();
+    } catch (err: unknown) {
+      let errorList: string[] = [];
+      if (err && typeof err === "object" && Array.isArray((err as { errors?: string[] }).errors)) {
+        errorList = (err as { errors: string[] }).errors;
+      } else {
+        const message = err instanceof Error ? err.message : "Bulk match update failed.";
+        errorList = message.includes("\n") ? message.split("\n").filter(Boolean) : [message];
+      }
+      setMatchExcelErrors(errorList);
+      setMatchExcelErrorDrawerOpen(true);
+      toast.error("Match Excel update failed. See errors.");
+    } finally {
+      setIsMatchExcelUploading(false);
+      if (matchExcelInputRef.current) matchExcelInputRef.current.value = "";
     }
   };
 
@@ -1790,6 +1896,16 @@ const ProcessOrderPage = () => {
                 <QZTrayStatus onStatusChange={setQzStatus} />
               </div>
 
+              <input
+                type="file"
+                ref={matchExcelInputRef}
+                className="hidden"
+                accept=".xlsx,.xls"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleMatchExcelUpload(f);
+                }}
+              />
               {boxes.length > 0 && (
                 <button
                   type="button"
@@ -1806,6 +1922,20 @@ const ProcessOrderPage = () => {
                   {isExportingBoxes ? 'Exporting...' : 'Export to Excel'}
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => matchExcelInputRef.current?.click()}
+                disabled={isMatchExcelUploading}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors shadow-sm ${!isMatchExcelUploading ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                title={isMatchExcelUploading ? 'Uploading...' : 'Upload Excel to bulk match/update boxes (Lot Number, Box ID, Barcode, PO Number, Yarn Name, Shade Code, Box Weight, Number of Cones)'}
+              >
+                {isMatchExcelUploading ? (
+                  <i className="ri-loader-4-line animate-spin text-xs"></i>
+                ) : (
+                  <i className="ri-upload-2-line text-xs"></i>
+                )}
+                {isMatchExcelUploading ? 'Uploading...' : 'Match Excel Upload'}
+              </button>
 
               {boxes.length > 0 && (
                 <button
@@ -2700,6 +2830,37 @@ const ProcessOrderPage = () => {
         </div>
       </div>
 
+      {/* Match Excel Error Drawer */}
+      {matchExcelErrorDrawerOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div
+            className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+            onClick={() => setMatchExcelErrorDrawerOpen(false)}
+          />
+          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-xl flex flex-col">
+            <div className="bg-amber-500 text-white px-4 py-3 flex-shrink-0 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Match Excel – Errors</h3>
+              <button
+                type="button"
+                onClick={() => setMatchExcelErrorDrawerOpen(false)}
+                className="text-white hover:text-gray-200"
+                aria-label="Close"
+              >
+                <i className="ri-close-line text-lg"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <p className="text-xs text-gray-600 mb-3">Fix these issues and try again:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm text-gray-800">
+                {matchExcelErrors.map((msg, i) => (
+                  <li key={i}>{msg}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Box Details Modal - Side Drawer */}
       {selectedBoxForDetails && (
         <div className={`fixed inset-0 z-50 overflow-hidden ${selectedBoxForDetails ? '' : 'pointer-events-none'}`}>
@@ -2964,7 +3125,7 @@ const ProcessOrderPage = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Print Settings</h3>
                 {printModalContext?.type === 'lot' && (
                   <p className="text-sm text-purple-600 font-medium mt-0.5">
-                    Lot: {printModalContext.lotNumber} ({printModalContext.lotBoxes.length} {printModalContext.lotBoxes.length === 1 ? 'box' : 'boxes'})
+                    Lot: {printModalContext.lotNumber} ({printModalContext.selectedBoxIds.length} of {printModalContext.lotBoxes.length} selected)
                   </p>
                 )}
               </div>
@@ -2977,6 +3138,55 @@ const ProcessOrderPage = () => {
             </div>
 
             <div className="p-6 space-y-6">
+              {/* Lot: select which boxes to print */}
+              {printModalContext?.type === 'lot' && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-gray-700 uppercase">Select boxes to print</h4>
+                  <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2 bg-gray-50/50">
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={() => setPrintModalContext((prev) => prev && prev.type === 'lot' ? { ...prev, selectedBoxIds: prev.lotBoxes.map((b) => b._id || b.id || b.boxId || '').filter(Boolean) } : prev)}
+                        className="text-xs px-2 py-1 text-purple-700 bg-purple-50 border border-purple-200 rounded hover:bg-purple-100"
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPrintModalContext((prev) => prev && prev.type === 'lot' ? { ...prev, selectedBoxIds: [] } : prev)}
+                        className="text-xs px-2 py-1 text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+                      >
+                        Deselect all
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {printModalContext.lotBoxes.map((box) => {
+                        const boxId = box._id || box.id || box.boxId || '';
+                        const isSelected = printModalContext.selectedBoxIds.includes(boxId);
+                        return (
+                          <label key={boxId} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-white cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setPrintModalContext((prev) => {
+                                  if (!prev || prev.type !== 'lot') return prev;
+                                  const next = isSelected ? prev.selectedBoxIds.filter((id) => id !== boxId) : [...prev.selectedBoxIds, boxId];
+                                  return { ...prev, selectedBoxIds: next };
+                                });
+                              }}
+                              className="w-4 h-4 text-purple-600 focus:ring-purple-500 rounded"
+                            />
+                            <span className="text-sm font-mono text-gray-800">{box.boxId || box.barcode || boxId}</span>
+                            {box.barcode && box.boxId !== box.barcode && <span className="text-xs text-gray-500">({box.barcode})</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Paper Size Section */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
@@ -3329,12 +3539,17 @@ const ProcessOrderPage = () => {
             <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
               <button
                 onClick={() => {
+                  if (printModalContext?.type === 'lot' && printModalContext.selectedBoxIds.length === 0) {
+                    toast.error('Select at least one box to print');
+                    return;
+                  }
                   setShowPrintSettingsModal(false);
                   if (printModalContext?.type === 'lot') {
-                    handlePrintLotBarcodesBrowser(printModalContext.lotNumber, printModalContext.lotBoxes);
+                    handlePrintLotBarcodesBrowser(printModalContext.lotNumber, printModalContext.lotBoxes, printModalContext.selectedBoxIds);
                   } else {
                     handlePrintAllBarcodesBrowser();
                   }
+                  setPrintModalContext(null);
                 }}
                 className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-md transition-colors mr-auto"
                 title="Open print preview in a new window (no QZ Tray required)"
@@ -3349,7 +3564,13 @@ const ProcessOrderPage = () => {
                 Cancel
               </button>
               <button
-                onClick={executePrintWithSettings}
+                onClick={() => {
+                  if (printModalContext?.type === 'lot' && printModalContext.selectedBoxIds.length === 0) {
+                    toast.error('Select at least one box to print');
+                    return;
+                  }
+                  executePrintWithSettings();
+                }}
                 className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
               >
                 <i className="ri-printer-line mr-2"></i>

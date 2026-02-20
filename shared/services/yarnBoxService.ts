@@ -130,6 +130,22 @@ export interface TransferBoxesResponse {
   }>;
 }
 
+/** Payload item for bulk match update (Excel upload). */
+export interface BulkMatchUpdateItem {
+  lotNumber: string;
+  poNumber: string;
+  yarnName: string;
+  shadeCode: string;
+  boxWeight: number;
+  numberOfCones: number;
+  barcode: string;
+  boxId: string;
+}
+
+export interface BulkMatchUpdatePayload {
+  items: BulkMatchUpdateItem[];
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === 'undefined') return null;
 
@@ -268,6 +284,14 @@ class YarnBoxService {
 
   async transferBoxes(payload: TransferBoxesPayload): Promise<TransferBoxesResponse> {
     return this.makeRequest<TransferBoxesResponse>('/transfer', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /** Bulk match update from Excel data (POST /bulk-match-update). */
+  async bulkMatchUpdate(payload: BulkMatchUpdatePayload): Promise<{ message?: string; updated?: number }> {
+    return this.makeRequest<{ message?: string; updated?: number }>('/bulk-match-update', {
       method: 'POST',
       body: JSON.stringify(payload),
     });

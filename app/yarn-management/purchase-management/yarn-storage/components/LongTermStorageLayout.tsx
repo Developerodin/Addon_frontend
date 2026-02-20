@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import JsBarcode from "jsbarcode";
 import BarcodeScanner from "./BarcodeScanner";
 import AllocateBoxDrawer from "./AllocateBoxDrawer";
+import BulkAllocateExcelImport from "./BulkAllocateExcelImport";
 import RackDetailsModal from "./RackDetailsModal";
 import RackTransferModal from "./RackTransferModal";
 import { RackLocation, PackedBox } from "../types";
@@ -1209,6 +1210,9 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           )}
         </div>
       </div>
+
+      {/* Bulk Allocate via Excel (boxbarcode + rackcode) */}
+      <BulkAllocateExcelImport onComplete={onRefresh} />
 
       {/* 2D Grid Layout */}
       <div className="box">
