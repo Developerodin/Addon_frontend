@@ -5,7 +5,7 @@
 
 const WEIGHT_API_CANDIDATES = [
   'http://localhost:7001/api/weight/latest',
-  'http://192.168.0.28:7001/api/weight/latest',
+  'http://192.168.0.10:7001/api/weight/latest',
 ] as const;
 
 const CACHE_KEY = 'weightApiUrl';
