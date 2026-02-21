@@ -1881,3 +1881,152 @@ export const printCones = async (
     return { success: false, printed: 0, error: msg || 'Print failed' };
   }
 };
+
+/**
+ * Generate ZPL for a single container label: big QR code (barcode) + container name only.
+ * Layout: QR on top (centered), container name below (direct text, no "Container name:" prefix).
+ */
+export const generateZPLContainerLabel = (
+  barcode: string,
+  containerName: string,
+  options: {
+    labelWidth?: number;
+    labelHeight?: number;
+    xOffset?: number;
+    yOffset?: number;
+    qrCodeSize?: number;
+    nameFontSize?: number;
+  } = {}
+): string => {
+  const {
+    labelWidth = 400,
+    labelHeight = 560,
+    xOffset = 0,
+    yOffset = 0,
+    qrCodeSize = 6,
+    nameFontSize = 24,
+  } = options;
+
+  const labelMargin = 30;
+  const qrW = qrCodeSize * 30;
+  const gap = 20;
+  const displayName = (containerName || barcode || '').trim() || barcode;
+  const contentWidth = labelWidth - labelMargin * 2;
+  const maxChars = Math.max(12, Math.floor(contentWidth / (nameFontSize * 0.55)));
+
+  let zpl = '';
+  const curY = yOffset + labelMargin;
+  zpl += `^FO${xOffset + Math.max(0, Math.floor((labelWidth - qrW) / 2))},${curY}^BQN,2,${qrCodeSize}^FDQA,${barcode}^FS\n`;
+  let textY = curY + qrW + gap;
+  const lines: string[] = [];
+  let remaining = displayName;
+  while (remaining.length > 0) {
+    if (remaining.length <= maxChars) {
+      lines.push(remaining);
+      break;
+    }
+    const chunk = remaining.substring(0, maxChars);
+    const breakAt = chunk.lastIndexOf(' ') !== -1 ? chunk.lastIndexOf(' ') : maxChars;
+    lines.push(remaining.substring(0, breakAt).trim());
+    remaining = remaining.substring(breakAt).trim();
+  }
+  for (const line of lines) {
+    zpl += `^FO${xOffset + labelMargin},${textY}^A0N,${nameFontSize},${nameFontSize}^FB${contentWidth},1,0,C^FD${line}^FS\n`;
+    textY += nameFontSize + 8;
+  }
+  return zpl;
+};
+
+/**
+ * Print container labels via QZ Tray: one label per container = big QR (barcode) + container name only.
+ */
+export const printContainerLabels = async (
+  containers: Array<{ barcode: string; containerName?: string }>,
+  options: {
+    printerName?: string;
+    customSettings?: {
+      paperWidth?: number;
+      paperHeight?: number;
+      orientation?: 'horizontal' | 'vertical';
+      labelsPerPage?: number;
+      columnsPerRow?: number;
+      firstLabelTopMargin?: number;
+      showCutLines?: boolean;
+      qrCodeSize?: number;
+      detailsFontSize?: number;
+    };
+  } = {}
+): Promise<{ success: boolean; printed: number; error?: string }> => {
+  try {
+    const connection = await connectQZ();
+    if (!connection.isConnected) throw new Error(connection.error);
+
+    const config = await getQZConfig(options.customSettings, options.printerName);
+    if (!config) throw new Error('Could not create QZ configuration. Please check your printer connection.');
+
+    const custom = options.customSettings;
+    const rawW = custom?.paperWidth ?? 398;
+    const rawH = custom?.paperHeight ?? 558;
+    const { width: paperWidth, height: paperHeight } = effectivePaperSize(rawW, rawH, custom?.orientation);
+    const firstLabelTopMargin = custom?.firstLabelTopMargin ?? 0;
+    const labelsPerPage = custom?.labelsPerPage ?? 1;
+    const columnsPerRow = custom?.columnsPerRow ?? 1;
+    const showCutLines = custom?.showCutLines !== false;
+    const labelWidth = Math.floor(paperWidth / columnsPerRow);
+    const rowsPerPage = Math.ceil(labelsPerPage / columnsPerRow);
+    const labelHeight = Math.floor(paperHeight / rowsPerPage);
+    const qrCodeSize = custom?.qrCodeSize ?? 6;
+    const nameFontSize = custom?.detailsFontSize ?? 24;
+    const labelsPerSheet = rowsPerPage * columnsPerRow;
+
+    const labels: string[] = [];
+    for (let i = 0; i < containers.length; i += labelsPerSheet) {
+      let zpl = `^XA\n^PW${paperWidth}\n^LL${paperHeight}\n^CI28\n`;
+      for (let j = 0; j < labelsPerSheet && (i + j) < containers.length; j++) {
+        const c = containers[i + j];
+        const row = Math.floor(j / columnsPerRow);
+        const col = j % columnsPerRow;
+        const xOffset = col * labelWidth;
+        const yOffset = row === 0 ? firstLabelTopMargin : row * labelHeight;
+        zpl += generateZPLContainerLabel(c.barcode, c.containerName ?? c.barcode, {
+          labelWidth,
+          labelHeight,
+          xOffset,
+          yOffset,
+          qrCodeSize,
+          nameFontSize,
+        });
+      }
+      if (showCutLines) {
+        for (let row = 1; row < rowsPerPage; row++) {
+          zpl += `^FO0,${row * labelHeight}^GB${paperWidth},1,1^FS\n`;
+        }
+        for (let col = 1; col < columnsPerRow; col++) {
+          zpl += `^FO${col * labelWidth},0^GB1,${paperHeight},1^FS\n`;
+        }
+      }
+      zpl += `^XZ\n`;
+      labels.push(zpl);
+    }
+
+    await window.qz.print(config, labels);
+    return { success: true, printed: containers.length };
+  } catch (error: any) {
+    console.error('[QZ Tray] Container print error:', error);
+    const msg = error?.message || '';
+    if (msg.includes('blocked') || msg.includes('Request blocked')) {
+      const currentUrl = typeof window !== 'undefined'
+        ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`
+        : '';
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('qz-tray-request-blocked', { detail: { url: currentUrl } }));
+      }
+      return {
+        success: false,
+        printed: 0,
+        error: `Request blocked by QZ Tray. Add this site in QZ Tray → Site Manager → + → ${currentUrl}`,
+      };
+    }
+    return { success: false, printed: 0, error: msg || 'Print failed' };
+  }
+};

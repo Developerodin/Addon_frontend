@@ -6,13 +6,13 @@ import { Toaster, toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import {
   containersMasterService,
-  CONTAINER_FLOORS,
   type ContainerMaster,
-  type ContainerFloor,
   type ContainerStatus,
   type CreateContainerBody,
   type UpdateContainerBody,
 } from "@/shared/services/containersMasterService";
+import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
+import { printContainerLabels, connectQZ, getDefaultPrinter, isQZLoaded } from "@/shared/utils/qzTray";
 
 function getPagination(current: number, total: number): (number | "...")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -29,7 +29,6 @@ const ContainersMasterPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [search, setSearch] = useState("");
-  const [filterFloor, setFilterFloor] = useState<ContainerFloor | "">("");
   const [filterStatus, setFilterStatus] = useState<ContainerStatus | "">("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -37,11 +36,26 @@ const ContainersMasterPage = () => {
 
   const [sideModalOpen, setSideModalOpen] = useState(false);
   const [editingContainer, setEditingContainer] = useState<ContainerMaster | null>(null);
-  const [formFloor, setFormFloor] = useState<ContainerFloor>("Warehouse");
   const [formStatus, setFormStatus] = useState<ContainerStatus>("Active");
   const [formContainerName, setFormContainerName] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printModalContainers, setPrintModalContainers] = useState<ContainerMaster[]>([]);
+  const [printSelectedIds, setPrintSelectedIds] = useState<string[]>([]);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printSettings, setPrintSettings] = useState({
+    paperSize: '50mm * 70mm' as '4x6' | '6x4' | '50mm * 70mm',
+    paperWidth: 398,
+    paperHeight: 558,
+    labelsPerPage: 1,
+    columnsPerRow: 1,
+    firstLabelTopMargin: 0,
+    qrCodeSize: 6,
+    detailsFontSize: 24,
+    orientation: 'vertical' as 'horizontal' | 'vertical',
+  });
 
   const fetchList = useCallback(async () => {
     try {
@@ -50,7 +64,6 @@ const ContainersMasterPage = () => {
         page,
         limit,
         search: search || undefined,
-        containerFloor: filterFloor || undefined,
         status: filterStatus || undefined,
         sortBy: sortBy || undefined,
       });
@@ -65,7 +78,7 @@ const ContainersMasterPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, search, filterFloor, filterStatus, sortBy]);
+  }, [page, limit, search, filterStatus, sortBy]);
 
   useEffect(() => {
     fetchList();
@@ -73,7 +86,7 @@ const ContainersMasterPage = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterFloor, filterStatus]);
+  }, [search, filterStatus]);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -94,7 +107,6 @@ const ContainersMasterPage = () => {
 
   const openAddModal = () => {
     setEditingContainer(null);
-    setFormFloor("Warehouse");
     setFormStatus("Active");
     setFormContainerName("");
     setSideModalOpen(true);
@@ -102,7 +114,6 @@ const ContainersMasterPage = () => {
 
   const openEditModal = (row: ContainerMaster) => {
     setEditingContainer(row);
-    setFormFloor(row.containerFloor);
     setFormStatus(row.status);
     setFormContainerName(row.containerName ?? "");
     setSideModalOpen(true);
@@ -118,11 +129,11 @@ const ContainersMasterPage = () => {
     setSaving(true);
     try {
       if (editingContainer) {
-        const body: UpdateContainerBody = { containerFloor: formFloor, status: formStatus, containerName: formContainerName.trim() || undefined };
+        const body: UpdateContainerBody = { status: formStatus, containerName: formContainerName.trim() || undefined };
         await containersMasterService.update(editingContainer._id, body);
         toast.success("Container updated");
       } else {
-        const body: CreateContainerBody = { containerFloor: formFloor, status: formStatus, containerName: formContainerName.trim() || undefined };
+        const body: CreateContainerBody = { status: formStatus, containerName: formContainerName.trim() || undefined };
         await containersMasterService.create(body);
         toast.success("Container created");
       }
@@ -167,10 +178,106 @@ const ContainersMasterPage = () => {
     }
   };
 
+  const openPrintModal = () => {
+    if (selectedIds.length === 0) {
+      toast.error("Select at least one container to print");
+      return;
+    }
+    const toShow = rows.filter((r) => selectedIds.includes(r._id));
+    setPrintModalContainers(toShow);
+    setPrintSelectedIds([...selectedIds]);
+    setShowPrintModal(true);
+  };
+
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mm * 70mm') => {
+    if (size === '50mm * 70mm') {
+      setPrintSettings((s) => ({ ...s, paperSize: size, paperWidth: 398, paperHeight: 558 }));
+    } else if (size === '4x6') {
+      setPrintSettings((s) => ({ ...s, paperSize: size, paperWidth: 812, paperHeight: 1218 }));
+    } else {
+      setPrintSettings((s) => ({ ...s, paperSize: size, paperWidth: 1218, paperHeight: 812 }));
+    }
+  };
+
+  const handleOrientationChange = (orientation: 'horizontal' | 'vertical') => {
+    const s = printSettings;
+    let newWidth = s.paperWidth;
+    let newHeight = s.paperHeight;
+    if (s.paperSize === '50mm * 70mm') {
+      newWidth = orientation === 'horizontal' ? 558 : 398;
+      newHeight = orientation === 'horizontal' ? 398 : 558;
+    } else {
+      const max = Math.max(s.paperWidth, s.paperHeight);
+      const min = Math.min(s.paperWidth, s.paperHeight);
+      newWidth = orientation === 'horizontal' ? max : min;
+      newHeight = orientation === 'horizontal' ? min : max;
+    }
+    setPrintSettings((prev) => ({ ...prev, orientation, paperWidth: newWidth, paperHeight: newHeight }));
+  };
+
+  const executePrintWithSettings = async () => {
+    if (printSelectedIds.length === 0) {
+      toast.error("Select at least one container to print");
+      return;
+    }
+    const toPrint = printModalContainers.filter((c) => printSelectedIds.includes(c._id));
+    if (toPrint.length === 0) {
+      toast.error("No containers selected");
+      return;
+    }
+    setShowPrintModal(false);
+    setIsPrinting(true);
+    const toastId = toast.loading("Connecting to printer...");
+    try {
+      if (!isQZLoaded()) {
+        toast.error("QZ Tray script not loaded. Please wait and try again.", { id: toastId });
+        return;
+      }
+      const connection = await connectQZ();
+      if (!connection.isConnected) {
+        toast.error(connection.error || "QZ Tray not connected", { id: toastId });
+        return;
+      }
+      toast.loading("Detecting printer...", { id: toastId });
+      const defaultPrinter = await getDefaultPrinter();
+      if (!defaultPrinter) {
+        toast.error("No printer found. Set a default printer in system settings.", { id: toastId });
+        return;
+      }
+      const payload = toPrint.map((c) => ({ barcode: c.barcode, containerName: c.containerName ?? c.barcode }));
+      const customSettings = {
+        paperWidth: printSettings.paperWidth,
+        paperHeight: printSettings.paperHeight,
+        orientation: printSettings.orientation,
+        labelsPerPage: printSettings.labelsPerPage,
+        columnsPerRow: printSettings.columnsPerRow,
+        firstLabelTopMargin: printSettings.firstLabelTopMargin,
+        qrCodeSize: printSettings.qrCodeSize,
+        detailsFontSize: printSettings.detailsFontSize,
+      };
+      const result = await printContainerLabels(payload, { customSettings });
+      toast.dismiss(toastId);
+      if (result.success) {
+        toast.success(`Printed ${result.printed} container label(s)`);
+      } else {
+        toast.error(result.error || "Print failed");
+      }
+    } catch (err) {
+      toast.dismiss(toastId);
+      toast.error(err instanceof Error ? err.message : "Print failed");
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   return (
     <div className="main-content !p-[10px]">
       <Seo title="Containers Master" />
       <Toaster position="top-right" />
+      <QZTrayLoader />
+      <QZTrayStatus />
+      <QZTrayUntrustedWarning />
+      <QZTrayRequestBlocked />
 
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px]">
@@ -186,8 +293,8 @@ const ContainersMasterPage = () => {
                 title="Containers Master"
                 content={
                   <div>
-                    <p className="mb-2">Manage floor containers. Create containers for Knitting, Linking, Checking, Washing, Boarding, Silicon, Secondary Checking, Branding, Final Checking, Warehouse, or Dispatch.</p>
-                    <p className="text-sm text-gray-600">Use filters by floor and status, search by barcode, and add/edit/delete from the table or side panel.</p>
+                    <p className="mb-2">Manage containers. Create containers and filter by status.</p>
+                    <p className="text-sm text-gray-600">Use filters by status, search by barcode, and add/edit/delete from the table or side panel.</p>
                   </div>
                 }
               />
@@ -205,16 +312,6 @@ const ContainersMasterPage = () => {
                 <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
               </div>
               <select
-                value={filterFloor}
-                onChange={(e) => setFilterFloor((e.target.value || "") as ContainerFloor | "")}
-                className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
-              >
-                <option value="">All floors</option>
-                {CONTAINER_FLOORS.map((f) => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
-              </select>
-              <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus((e.target.value || "") as ContainerStatus | "")}
                 className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
@@ -229,7 +326,6 @@ const ContainersMasterPage = () => {
                 className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
               >
                 <option value="createdAt">Sort: Created</option>
-                <option value="containerFloor">Sort: Floor</option>
                 <option value="status">Sort: Status</option>
               </select>
               <div className="relative group">
@@ -246,15 +342,26 @@ const ContainersMasterPage = () => {
                 <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
               </div>
               {selectedIds.length > 0 && (
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border bg-red-50 text-red-600 border-red-100 hover:bg-red-100 shadow-sm"
-                  onClick={handleBulkDelete}
-                  disabled={isLoading}
-                >
-                  <i className="ri-delete-bin-line text-xs"></i>
-                  Delete ({selectedIds.length})
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100 shadow-sm"
+                    onClick={openPrintModal}
+                    disabled={isPrinting}
+                  >
+                    <i className="ri-printer-line text-xs"></i>
+                    Print ({selectedIds.length})
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border bg-red-50 text-red-600 border-red-100 hover:bg-red-100 shadow-sm"
+                    onClick={handleBulkDelete}
+                    disabled={isLoading}
+                  >
+                    <i className="ri-delete-bin-line text-xs"></i>
+                    Delete ({selectedIds.length})
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -298,7 +405,6 @@ const ContainersMasterPage = () => {
                   </th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Name</th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Floor</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Created</th>
                   <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
@@ -312,7 +418,6 @@ const ContainersMasterPage = () => {
                     </td>
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-900 border border-gray-200">{row.barcode}</td>
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{row.containerName ?? "-"}</td>
-                    <td className="px-1.5 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-200">{row.containerFloor}</td>
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${row.status === "Active" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"}`}>
                         {row.status}
@@ -386,14 +491,6 @@ const ContainersMasterPage = () => {
                 <input type="text" value={formContainerName} onChange={(e) => setFormContainerName(e.target.value)} placeholder="Optional name" className="w-full bg-white border border-gray-200 text-[12px] font-medium rounded px-3 py-2 focus:ring-0 focus:border-purple-300" />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-gray-700 mb-1">Floor <span className="text-red-500">*</span></label>
-                <select value={formFloor} onChange={(e) => setFormFloor(e.target.value as ContainerFloor)} required className="w-full bg-white border border-gray-200 text-[12px] font-medium rounded px-3 py-2 focus:ring-0 focus:border-purple-300">
-                  {CONTAINER_FLOORS.map((f) => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
                 <label className="block text-[11px] font-bold text-gray-700 mb-1">Status</label>
                 <select value={formStatus} onChange={(e) => setFormStatus(e.target.value as ContainerStatus)} className="w-full bg-white border border-gray-200 text-[12px] font-medium rounded px-3 py-2 focus:ring-0 focus:border-purple-300">
                   <option value="Active">Active</option>
@@ -409,6 +506,205 @@ const ContainersMasterPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Print Settings Modal */}
+      {showPrintModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Print Container Labels</h3>
+                <p className="text-sm text-purple-600 font-medium mt-0.5">
+                  {printSelectedIds.length} of {printModalContainers.length} selected
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPrintModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Select containers to print */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">Containers to print</h4>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setPrintSelectedIds(printModalContainers.map((c) => c._id))}
+                    className="text-xs px-2 py-1 text-purple-700 bg-purple-50 border border-purple-200 rounded hover:bg-purple-100"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintSelectedIds([])}
+                    className="text-xs px-2 py-1 text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+                  >
+                    Deselect all
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2 bg-gray-50/50">
+                  <div className="flex flex-col gap-1">
+                    {printModalContainers.map((c) => {
+                      const isSelected = printSelectedIds.includes(c._id);
+                      return (
+                        <label key={c._id} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-white cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              setPrintSelectedIds((prev) =>
+                                isSelected ? prev.filter((id) => id !== c._id) : [...prev, c._id]
+                              );
+                            }}
+                            className="w-4 h-4 text-purple-600 focus:ring-purple-500 rounded"
+                          />
+                          <span className="text-sm font-mono text-gray-800">{c.barcode}</span>
+                          {c.containerName && (
+                            <span className="text-xs text-gray-500 truncate max-w-[180px]">{c.containerName}</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Paper Settings */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-700 uppercase">Paper Settings</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Paper Size</label>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="4x6"
+                          checked={printSettings.paperSize === '4x6'}
+                          onChange={() => handlePaperSizeChange('4x6')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">4&quot; × 6&quot;</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="6x4"
+                          checked={printSettings.paperSize === '6x4'}
+                          onChange={() => handlePaperSizeChange('6x4')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">6&quot; × 4&quot;</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="50mm * 70mm"
+                          checked={printSettings.paperSize === '50mm * 70mm'}
+                          onChange={() => handlePaperSizeChange('50mm * 70mm')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">50mm × 70mm</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Orientation</label>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="orientation"
+                          value="vertical"
+                          checked={printSettings.orientation === 'vertical'}
+                          onChange={() => handleOrientationChange('vertical')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">Vertical</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="orientation"
+                          value="horizontal"
+                          checked={printSettings.orientation === 'horizontal'}
+                          onChange={() => handleOrientationChange('horizontal')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">Horizontal</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Labels per page</label>
+                    <select
+                      value={printSettings.labelsPerPage}
+                      onChange={(e) => setPrintSettings((s) => ({ ...s, labelsPerPage: parseInt(e.target.value) || 1 }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 text-sm"
+                    >
+                      <option value={1}>1</option>
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                      <option value={4}>4</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">QR code size</label>
+                    <input
+                      type="number"
+                      min={3}
+                      max={12}
+                      value={printSettings.qrCodeSize}
+                      onChange={(e) => setPrintSettings((s) => ({ ...s, qrCodeSize: parseInt(e.target.value) || 6 }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name font size</label>
+                    <input
+                      type="number"
+                      min={14}
+                      max={48}
+                      value={printSettings.detailsFontSize}
+                      onChange={(e) => setPrintSettings((s) => ({ ...s, detailsFontSize: parseInt(e.target.value) || 24 }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPrintModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executePrintWithSettings}
+                disabled={printSelectedIds.length === 0}
+                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-md"
+              >
+                <i className="ri-printer-line mr-2"></i>
+                Print with QZ Tray
+              </button>
+            </div>
           </div>
         </div>
       )}

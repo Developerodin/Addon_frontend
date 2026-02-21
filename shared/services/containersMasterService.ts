@@ -1,36 +1,18 @@
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import Cookies from 'js-cookie';
 
-/** Allowed container floor values from API */
-export const CONTAINER_FLOORS = [
-  'Knitting',
-  'Linking',
-  'Checking',
-  'Washing',
-  'Boarding',
-  'Silicon',
-  'Secondary Checking',
-  'Branding',
-  'Final Checking',
-  'Warehouse',
-  'Dispatch',
-] as const;
-
-export type ContainerFloor = (typeof CONTAINER_FLOORS)[number];
 export type ContainerStatus = 'Active' | 'Inactive';
 
 export interface ContainerMaster {
   _id: string;
   barcode: string;
   containerName?: string;
-  containerFloor: ContainerFloor;
   status: ContainerStatus;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface ContainersListParams {
-  containerFloor?: ContainerFloor;
   status?: ContainerStatus;
   search?: string;
   sortBy?: string;
@@ -47,13 +29,11 @@ export interface PaginatedContainers {
 }
 
 export interface CreateContainerBody {
-  containerFloor: ContainerFloor;
   containerName?: string;
   status?: ContainerStatus;
 }
 
 export interface UpdateContainerBody {
-  containerFloor?: ContainerFloor;
   containerName?: string;
   status?: ContainerStatus;
 }
@@ -98,7 +78,6 @@ class ContainersMasterService {
 
   async list(params?: ContainersListParams): Promise<PaginatedContainers> {
     const sp = new URLSearchParams();
-    if (params?.containerFloor) sp.append('containerFloor', params.containerFloor);
     if (params?.status) sp.append('status', params.status);
     if (params?.search) sp.append('search', params.search);
     if (params?.sortBy) sp.append('sortBy', params.sortBy);
