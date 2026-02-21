@@ -10,6 +10,7 @@ import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services
 import yarnBoxService, { YarnBox, UpdateYarnBoxPayload, BulkMatchUpdateItem } from "@/shared/services/yarnBoxService";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printCones, connectQZ, getDefaultPrinter, isQZLoaded, getAvailablePrinters, PrinterInfo } from "@/shared/utils/qzTray";
+import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
 import * as XLSX from "xlsx";
 
 interface ReceivedItem {
@@ -554,33 +555,14 @@ const ProcessOrderPage = () => {
     }
   };
 
-  // Fetch latest weight from API
+  // Fetch latest weight from API (tries localhost:7001 then 192.168.0.28:7001, uses whichever responds)
   const fetchLatestWeight = async (): Promise<number | null> => {
     try {
       setIsFetchingWeight(true);
-      const response = await fetch('http://localhost:7001/api/weight/latest', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      // Extract weight from response: {"weight":0.65,"weightUnit":"kg",...}
-      const weight = data.weight;
-
-      if (weight !== undefined && weight !== null) {
-        return parseFloat(weight);
-      }
-
-      return null;
+      const weight = await fetchWeightLatest();
+      return weight;
     } catch (error) {
       console.error('Failed to fetch weight:', error);
-      // Don't show error toast, just log it - weight fetching is optional
       return null;
     } finally {
       setIsFetchingWeight(false);

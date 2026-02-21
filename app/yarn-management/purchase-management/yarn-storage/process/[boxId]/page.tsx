@@ -14,6 +14,7 @@ import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService
 import yarnBoxService from "@/shared/services/yarnBoxService";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printCones } from "@/shared/utils/qzTray";
+import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
 
 // Load Google Font for preview
 const LatoFontHeader = () => (
@@ -243,38 +244,14 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     };
   }, [result?.box?.poNumber, cones, coneInputs]);
 
-  // Fetch latest weight from API
+  // Fetch latest weight from API (tries localhost:7001 then 192.168.0.28:7001, uses whichever responds)
   const fetchLatestWeight = async (): Promise<number | null> => {
     try {
       setIsFetchingWeight(true);
-      // Get weight API URL from localStorage or use default
-      const weightApiUrl = typeof window !== 'undefined'
-        ? localStorage.getItem('weightApiUrl') || 'http://localhost:7001/api/weight/latest'
-        : 'http://localhost:7001/api/weight/latest';
-
-      const response = await fetch(weightApiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      // Extract weight from response: {"weight":0.65,"weightUnit":"kg",...}
-      const weight = data.weight;
-
-      if (weight !== undefined && weight !== null) {
-        return parseFloat(weight);
-      }
-
-      return null;
+      const weight = await fetchWeightLatest();
+      return weight;
     } catch (error) {
       console.error('Failed to fetch weight:', error);
-      // Don't show error toast, just log it - weight fetching is optional
       return null;
     } finally {
       setIsFetchingWeight(false);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
+import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
 import Cookies from "js-cookie";
 import {
   getTopItemsAssignments,
@@ -363,8 +364,28 @@ const YarnIssuePage = () => {
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [fetchingWeight, setFetchingWeight] = useState(false);
 
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Issue");
+
+  // When issue modal opens, fetch latest weight from scale (localhost or 192.168.0.28) and pre-fill
+  useEffect(() => {
+    if (!showIssueModal) return;
+    let cancelled = false;
+    (async () => {
+      const w = await fetchWeightLatest();
+      if (cancelled || w == null || w <= 0) return;
+      setTransactionForm((prev) => {
+        const tear = parseFloat(prev.totalTearWeight) || 0;
+        return {
+          ...prev,
+          totalWeight: w.toFixed(2),
+          totalNetWeight: (w - tear).toFixed(2),
+        };
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [showIssueModal]);
 
   // Fetch all yarn-issued transactions for order status calculations (on initial load)
   useEffect(() => {
@@ -2047,13 +2068,44 @@ const YarnIssuePage = () => {
                   <label className="form-label text-sm font-semibold text-gray-700">
                     Total Weight (kg) <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Enter total weight (e.g., 0.05, 1.25, 0.5)"
-                    value={transactionForm.totalWeight}
-                    onChange={(e) => handleTransactionFormChange("totalWeight", e.target.value)}
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="form-control flex-1"
+                      placeholder="Enter total weight (e.g., 0.05, 1.25, 0.5)"
+                      value={transactionForm.totalWeight}
+                      onChange={(e) => handleTransactionFormChange("totalWeight", e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setFetchingWeight(true);
+                        try {
+                          const w = await fetchWeightLatest();
+                          if (w != null && w > 0) {
+                            setTransactionForm((prev) => {
+                              const tear = parseFloat(prev.totalTearWeight) || 0;
+                              return {
+                                ...prev,
+                                totalWeight: w.toFixed(2),
+                                totalNetWeight: (w - tear).toFixed(2),
+                              };
+                            });
+                            toast.success(`Weight from scale: ${w.toFixed(2)} kg`);
+                          } else {
+                            toast.error("Could not get weight from scale.");
+                          }
+                        } finally {
+                          setFetchingWeight(false);
+                        }
+                      }}
+                      className="ti-btn ti-btn-outline-primary whitespace-nowrap"
+                      disabled={fetchingWeight}
+                      title="Get weight from connected scale"
+                    >
+                      {fetchingWeight ? "…" : "From scale"}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
