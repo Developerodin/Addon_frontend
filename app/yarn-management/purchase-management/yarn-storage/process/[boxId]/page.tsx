@@ -74,22 +74,22 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '4x6' as '4x6' | '6x4' | '50mm * 25mm' | '70mm * 50mm' | '50mm * 70mm',
-    paperWidth: 812,
-    paperHeight: 1218,
-    labelsPerPage: 4,
-    columnsPerRow: 2,
-    firstLabelTopMargin: 0,
+    paperSize: '50mm * 25mm' as '4x6' | '6x4' | '50mm * 25mm' | '70mm * 50mm' | '50mm * 70mm',
+    paperWidth: 406,
+    paperHeight: 203,
+    labelsPerPage: 1,
+    columnsPerRow: 1,
+    firstLabelTopMargin: 5,
     showCutLines: true,
-    qrCodeSize: 5,
+    qrCodeSize: 3,
     titleFontSize: 25,
-    detailsFontSize: 18,
+    detailsFontSize: 16,
     boxIdFontSize: 25,
     yarnFontSize: 25,
     supplierFontSize: 20,
     barcodeHeight: 100,
     barcodeWidth: 2,
-    shadeLotFontSize: 18,
+    shadeLotFontSize: 16,
     orientation: 'horizontal' as 'horizontal' | 'vertical',
   });
 
@@ -1515,23 +1515,23 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setPrintSettings({
-                        paperSize: '4x6',
-                        paperWidth: 812,
-                        paperHeight: 1218,
-                        labelsPerPage: 4,
-                        columnsPerRow: 2,
-                        firstLabelTopMargin: 0,
+                        paperSize: '50mm * 25mm',
+                        paperWidth: 406,
+                        paperHeight: 203,
+                        labelsPerPage: 1,
+                        columnsPerRow: 1,
+                        firstLabelTopMargin: 5,
                         showCutLines: true,
-                        qrCodeSize: 5,
+                        qrCodeSize: 3,
                         titleFontSize: 25,
-                        detailsFontSize: 18,
+                        detailsFontSize: 16,
                         boxIdFontSize: 25,
                         yarnFontSize: 25,
                         supplierFontSize: 20,
                         barcodeHeight: 100,
                         barcodeWidth: 2,
                         orientation: 'horizontal',
-                        shadeLotFontSize: 18
+                        shadeLotFontSize: 16
                       })}
                       className="px-3 py-1.5 text-[10px] font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded transition-colors uppercase border border-gray-200"
                     >

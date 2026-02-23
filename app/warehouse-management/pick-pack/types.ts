@@ -1,79 +1,89 @@
-// Pick & Pack types for warehouse management
+// Pick & Pack types for warehouse management (UI state only)
 
-export type PickStatus = 'pending' | 'picking' | 'picked' | 'verified';
-export type PackStatus = 'pending' | 'packing' | 'packed' | 'verified';
+export type PickListStatus = 'generated' | 'picking-in-progress' | 'picking-done';
+export type PickItemStatus = 'pending' | 'partial' | 'picked' | 'verified' | 'skipped';
 
-export type PickItemStatus = 'pending' | 'picked' | 'verified' | 'skipped';
-export type PackItemStatus = 'pending' | 'packed' | 'verified' | 'damaged' | 'missing';
+export type PackListStatus = 'generated' | 'packing-in-progress' | 'packing-done' | 'ready-for-dispatch';
+export type PackBatchStatus = 'ready' | 'packing' | 'packed' | 'dispatch-ready';
+export type PackOrderStatus = 'ready' | 'packing' | 'packed' | 'dispatch-ready';
+export type PackItemStatus = 'pending' | 'partial' | 'packed' | 'verified' | 'damaged' | 'missing';
+
+export type BarcodeLabelType = 'item' | 'carton' | 'order';
 
 export interface RackLocation {
-  row: string;
-  column: string;
-  basketNo: string;
-  zone: string;
+  zone: string; // Zone
+  row: string; // Row
+  column: string; // Column
+  bin: string; // Bin
 }
 
 export interface PickItem {
   id: string;
   sku: string;
   name: string;
-  totalQuantity: number;
-  pickedQuantity: number;
+  imageUrl?: string;
+  pathIndex: number; // Path #
   rackLocation: RackLocation;
-  pickingPath: number; // Order in the optimized picking path
-  status: PickItemStatus;
-  orders: string[]; // Order IDs that require this SKU
+  requiredQty: number;
+  pickedQty: number;
   unit: string;
-  batchNumber?: string;
-  expiryDate?: string;
-}
-
-export interface PackItem {
-  id: string;
-  orderId: string;
-  orderNumber: string;
-  sku: string;
-  name: string;
-  quantity: number;
-  packedQuantity: number;
-  status: PackItemStatus;
-  labelPrinted: boolean;
-  customerName: string;
-  priority: 'low' | 'medium' | 'high';
+  status: PickItemStatus;
+  linkedOrderIds: string[]; // Order IDs that require this SKU
+  batchId?: string; // For filter/display only
 }
 
 export interface PickList {
   id: string;
-  batchId: string;
+  pickBatchId: string;
   createdAt: string;
-  status: PickStatus;
+  status: PickListStatus;
   items: PickItem[];
   assignedTo?: string;
   startedAt?: string;
   completedAt?: string;
 }
 
-export interface PackList {
+export interface PackItem {
   id: string;
-  batchId: string;
-  createdAt: string;
-  status: PackStatus;
-  orders: PackOrder[];
-  assignedTo?: string;
-  startedAt?: string;
-  completedAt?: string;
+  sku: string;
+  name: string;
+  pickedQty: number;
+  packedQty: number;
+  status: PackItemStatus;
+  // Barcodes are generated at PACK stage only (never at pick/inward)
+  itemBarcode?: string;
 }
 
 export interface PackOrder {
   orderId: string;
   orderNumber: string;
   customerName: string;
-  items: PackItem[];
-  totalItems: number;
-  packedItems: number;
-  status: PackItemStatus;
-  labelPrinted: boolean;
+  status: PackOrderStatus;
   priority: 'low' | 'medium' | 'high';
+  items: PackItem[];
+}
+
+export interface PackCarton {
+  id: string;
+  cartonBarcode?: string;
+  createdAt: string;
+}
+
+export interface PackBatch {
+  id: string; // Pack Batch ID
+  orderIds: string[];
+  status: PackBatchStatus;
+  orders: PackOrder[];
+  cartons: PackCarton[];
+  createdAt: string;
+}
+
+export interface PackList {
+  id: string;
+  createdAt: string;
+  status: PackListStatus;
+  batches: PackBatch[];
+  assignedTo?: string;
 }
 
 export interface DamageMissingReport {
@@ -99,6 +109,17 @@ export interface QRScanResult {
   timestamp: string;
   success: boolean;
   message?: string;
+}
+
+export interface BarcodeGenerateRequest {
+  types: BarcodeLabelType[];
+  quantity: number;
+}
+
+export interface BarcodeGenerateResult {
+  type: BarcodeLabelType;
+  quantity: number;
+  previewText: string;
 }
 
 

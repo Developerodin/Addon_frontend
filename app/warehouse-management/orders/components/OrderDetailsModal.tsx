@@ -37,32 +37,35 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div
-          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-          onClick={onClose}
-        ></div>
+    <div className={`fixed inset-0 z-50 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`}>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+        onClick={onClose}
+      ></div>
 
-        {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+      {/* Side Modal */}
+      <div
+        className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+      >
           {/* Header */}
-          <div className="bg-primary text-white px-6 py-4 flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold">Order Details</h3>
-              <p className="text-sm text-white/80 mt-1">{order.orderNumber}</p>
+          <div className="bg-primary text-white px-6 py-4 flex-shrink-0">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-lg font-semibold">Order Details</h3>
+                <p className="text-sm text-white/80 mt-1">{order.orderNumber}</p>
+              </div>
+              <button
+                onClick={onClose}
+                className="text-white hover:text-gray-200 transition-colors"
+              >
+                <i className="ri-close-line text-xl"></i>
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              className="text-white hover:text-gray-200 transition-colors"
-            >
-              <i className="ri-close-line text-xl"></i>
-            </button>
           </div>
 
           {/* Content */}
-          <div className="px-6 py-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <div className="flex-1 overflow-y-auto px-4 py-3">
             {/* Order Summary */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="box">
@@ -352,15 +355,14 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="bg-gray-50 px-6 py-3 flex justify-end">
+          <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 flex-shrink-0 border-t border-gray-200">
             <button
               onClick={onClose}
-              className="ti-btn ti-btn-primary"
+              className="ti-btn ti-btn-light"
             >
               Close
             </button>
           </div>
-        </div>
       </div>
     </div>
   );

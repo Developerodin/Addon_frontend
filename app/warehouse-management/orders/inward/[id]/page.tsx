@@ -55,26 +55,40 @@ export default function InwardDetailPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/warehouse-management/orders/inward"
-              className="ti-btn ti-btn-soft-secondary"
+              className="ti-btn ti-btn-secondary"
             >
               <i className="ri-arrow-left-line me-1"></i>
               Back to Inward
             </Link>
             <h3 className="box-title">{grnNumber}</h3>
           </div>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="ti-btn ti-btn-primary-full"
-          >
-            {saving ? (
-              <span className="animate-spin me-2">⏳</span>
-            ) : (
-              <i className="ri-save-line me-2"></i>
-            )}
-            Save
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="ti-btn ti-btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="ti-btn ti-btn-primary-full"
+            >
+              {saving ? (
+                <>
+                  <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full me-2"></span>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <i className="ri-save-line me-2"></i>
+                  Save
+                </>
+              )}
+            </button>
+          </div>
         </div>
         <div className="box-body space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -97,7 +111,12 @@ export default function InwardDetailPage() {
           </div>
 
           <div>
-            <h4 className="text-lg font-medium mb-3">Receive items</h4>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-lg font-medium">Receive items</h4>
+              <span className="text-sm text-gray-600">
+                {items.length} item{items.length !== 1 ? "s" : ""}
+              </span>
+            </div>
             <div className="overflow-x-auto">
               <table className="table table-hover">
                 <thead>
@@ -108,49 +127,66 @@ export default function InwardDetailPage() {
                     <th>Received</th>
                     <th>Accepted</th>
                     <th>Rejected</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item, index) => (
-                    <tr key={item.sku}>
-                      <td className="font-medium">{item.sku}</td>
-                      <td>{item.name}</td>
-                      <td>{item.orderedQty}</td>
-                      <td>
-                        <input
-                          type="number"
-                          className="form-control form-control-sm w-20"
-                          min={0}
-                          value={item.receivedQty}
-                          onChange={(e) =>
-                            handleQtyChange(index, "receivedQty", parseInt(e.target.value, 10) || 0)
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          className="form-control form-control-sm w-20"
-                          min={0}
-                          value={item.acceptedQty}
-                          onChange={(e) =>
-                            handleQtyChange(index, "acceptedQty", parseInt(e.target.value, 10) || 0)
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          className="form-control form-control-sm w-20"
-                          min={0}
-                          value={item.rejectedQty}
-                          onChange={(e) =>
-                            handleQtyChange(index, "rejectedQty", parseInt(e.target.value, 10) || 0)
-                          }
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                  {items.map((item, index) => {
+                    const variance = item.receivedQty - item.orderedQty;
+                    return (
+                      <tr key={item.sku} className={variance !== 0 ? "bg-yellow-50" : ""}>
+                        <td className="font-medium">{item.sku}</td>
+                        <td>{item.name}</td>
+                        <td className="font-semibold">{item.orderedQty}</td>
+                        <td>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm w-24 text-center"
+                            min={0}
+                            value={item.receivedQty}
+                            onChange={(e) =>
+                              handleQtyChange(index, "receivedQty", parseInt(e.target.value, 10) || 0)
+                            }
+                            placeholder="0"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm w-24 text-center"
+                            min={0}
+                            max={item.receivedQty}
+                            value={item.acceptedQty}
+                            onChange={(e) =>
+                              handleQtyChange(index, "acceptedQty", parseInt(e.target.value, 10) || 0)
+                            }
+                            placeholder="0"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm w-24 text-center"
+                            min={0}
+                            max={item.receivedQty}
+                            value={item.rejectedQty}
+                            onChange={(e) =>
+                              handleQtyChange(index, "rejectedQty", parseInt(e.target.value, 10) || 0)
+                            }
+                            placeholder="0"
+                          />
+                        </td>
+                        <td>
+                          {variance !== 0 && (
+                            <span className="text-xs text-warning">
+                              <i className="ri-alert-line me-1"></i>
+                              {variance > 0 ? "+" : ""}{variance}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

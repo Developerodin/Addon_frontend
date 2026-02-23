@@ -361,54 +361,57 @@ const OrdersPage = () => {
       <Seo title="Order Receiving & Consolidation" />
 
       {/* Actions in Orders tab */}
-      <div className="box !bg-transparent border-0 shadow-none mb-0">
-        <div className="box-header flex items-center justify-end">
-          <Link href="/warehouse-management/orders/add" className="ti-btn ti-btn-primary-full">
-            <i className="ri-add-line me-2"></i>
-            Add New Order
-          </Link>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+            {filteredOrders.length}
+          </span>
         </div>
+        <Link 
+          href="/warehouse-management/orders/add" 
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+        >
+          <i className="ri-add-line text-xs"></i>
+          New Order
+        </Link>
       </div>
 
       {/* Notifications Section */}
-          <NotificationsSection notifications={notifications} />
+      <NotificationsSection notifications={notifications} />
 
           {/* Order Dashboard with Tabs */}
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">Order Dashboard</h3>
+          <div className="mb-6">
+            {/* Tabs */}
+            <div className="flex border-b border-gray-100 mb-4">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
+                    activeTab === tab.key
+                      ? 'text-purple-600'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {tab.label}
+                  {orderCounts[tab.key] > 0 && (
+                    <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[9px] ${
+                      activeTab === tab.key
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {orderCounts[tab.key]}
+                    </span>
+                  )}
+                  {activeTab === tab.key && (
+                    <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full"></div>
+                  )}
+                </button>
+              ))}
             </div>
-            <div className="box-body">
-              {/* Tabs */}
-              <div className="border-b border-gray-200 mb-4">
-                <nav className="flex space-x-2" aria-label="Tabs">
-                  {tabs.map((tab) => (
-                    <button
-                      key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
-                      className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                        activeTab === tab.key
-                          ? 'bg-primary text-white'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                      }`}
-                    >
-                      {tab.label}
-                      {orderCounts[tab.key] > 0 && (
-                        <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
-                          activeTab === tab.key
-                            ? 'bg-white/20 text-white'
-                            : 'bg-gray-200 text-gray-700'
-                        }`}>
-                          {orderCounts[tab.key]}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </nav>
-              </div>
 
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-blue-50 rounded-lg p-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -447,67 +450,63 @@ const OrdersPage = () => {
                 </div>
               </div>
             </div>
+          
+
+      {/* Filters Panel */}
+      <OrderFiltersPanel
+        filters={filters}
+        onApplyFilters={handleApplyFilters}
+        onReset={handleResetFilters}
+      />
+
+      {/* Bulk Actions Panel */}
+      {selectedOrders.length > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded p-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <i className="ri-checkbox-multiple-line text-purple-600 text-lg"></i>
+              <span className="text-[12px] font-bold text-gray-800">
+                {selectedOrders.length} order(s) selected
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleGeneratePickPackList}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-file-list-3-line text-xs"></i>
+                Generate Pick & Pack List
+              </button>
+              <button
+                onClick={() => setSelectedOrders([])}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <i className="ri-close-line text-xs"></i>
+                Clear
+              </button>
+            </div>
           </div>
+        </div>
+      )}
 
-          {/* Filters Panel */}
-          <OrderFiltersPanel
-            filters={filters}
-            onApplyFilters={handleApplyFilters}
-            onReset={handleResetFilters}
-          />
-
-          {/* Bulk Actions Panel */}
-          {selectedOrders.length > 0 && (
-            <div className="box bg-primary/5 border-primary/20">
-              <div className="box-body">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <i className="ri-checkbox-multiple-line text-primary text-xl"></i>
-                    <span className="font-medium">
-                      {selectedOrders.length} order(s) selected
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleGeneratePickPackList}
-                      className="ti-btn ti-btn-primary"
-                    >
-                      <i className="ri-file-list-3-line me-2"></i>
-                      Generate Pick & Pack List
-                    </button>
-                    <button
-                      onClick={() => setSelectedOrders([])}
-                      className="ti-btn ti-btn-secondary"
-                    >
-                      <i className="ri-close-line me-2"></i>
-                      Clear Selection
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Orders Table */}
-          {loading ? (
-            <div className="box">
-              <div className="box-body text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading orders...</p>
-              </div>
-            </div>
-          ) : (
-            <OrderTable
-              orders={filteredOrders}
-              onOrderClick={handleOrderClick}
-              selectedOrders={selectedOrders}
-              onSelectOrder={handleSelectOrder}
-              onSelectAll={handleSelectAll}
-              onEdit={handleEditOrder}
-              onDelete={handleDeleteOrder}
-              onUpdateWebsiteStatus={handleOpenStatusModal}
-            />
-          )}
+      {/* Orders Table */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+          <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+        </div>
+      ) : (
+        <OrderTable
+          orders={filteredOrders}
+          onOrderClick={handleOrderClick}
+          selectedOrders={selectedOrders}
+          onSelectOrder={handleSelectOrder}
+          onSelectAll={handleSelectAll}
+          onEdit={handleEditOrder}
+          onDelete={handleDeleteOrder}
+          onUpdateWebsiteStatus={handleOpenStatusModal}
+        />
+      )}
 
       {/* Order Details Modal */}
       <OrderDetailsModal
