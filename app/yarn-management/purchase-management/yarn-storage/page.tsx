@@ -52,7 +52,7 @@ const YarnStorageContent = () => {
 
   // When returning from process page (?tab=short-term), show Short-Term Storage tab
   useEffect(() => {
-    const tab = searchParams.get("tab");
+    const tab = searchParams?.get("tab");
     if (tab === "short-term") {
       setActiveTab("short-term");
     }
@@ -122,8 +122,8 @@ const YarnStorageContent = () => {
             Math.random() > 0.7
               ? "Occupied"
               : Math.random() > 0.9
-              ? "Reserved"
-              : "Available",
+                ? "Reserved"
+                : "Available",
         });
       }
     }
@@ -217,11 +217,11 @@ const YarnStorageContent = () => {
       prev.map((b) =>
         b.id === boxId
           ? {
-              ...b,
-              status: "Stored",
-              rackLocation: rack,
-              storedDate: new Date().toISOString(),
-            }
+            ...b,
+            status: "Stored",
+            rackLocation: rack,
+            storedDate: new Date().toISOString(),
+          }
           : b
       )
     );
@@ -243,12 +243,12 @@ const YarnStorageContent = () => {
     try {
       // Refresh racks
       setRacks(generateRacks());
-      
+
       // TODO: If boxes are fetched from API, refresh them here
       // Example:
       // const boxesResponse = await yarnBoxService.getYarnBoxes({});
       // setBoxes(/* map response to PackedBox format */);
-      
+
       toast.success("Data refreshed", { duration: 2000 });
     } catch (error) {
       console.error("Failed to refresh data:", error);
@@ -267,12 +267,12 @@ const YarnStorageContent = () => {
         prev.map((inv) =>
           inv.id === existingInventory.id
             ? {
-                ...inv,
-                totalCones: inv.totalCones + transferData.numberOfCones,
-                totalWeight: inv.totalWeight + transferData.totalWeight,
-                cones: [...inv.cones, ...transferData.cones],
-                lastUpdated: new Date().toISOString(),
-              }
+              ...inv,
+              totalCones: inv.totalCones + transferData.numberOfCones,
+              totalWeight: inv.totalWeight + transferData.totalWeight,
+              cones: [...inv.cones, ...transferData.cones],
+              lastUpdated: new Date().toISOString(),
+            }
             : inv
         )
       );
@@ -345,7 +345,7 @@ const YarnStorageContent = () => {
   }
 
   return (
-    <div className="main-content !p-[10px]">
+    <div className="main-content !p-[10px] relative">
       <Seo title="Yarn Storage" />
 
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
@@ -362,11 +362,10 @@ const YarnStorageContent = () => {
           <div className="flex border-b border-gray-100">
             <button
               onClick={() => setActiveTab("unallocated")}
-              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
-                activeTab === "unallocated"
-                  ? "text-purple-600"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
+              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${activeTab === "unallocated"
+                ? "text-purple-600"
+                : "text-gray-600 hover:text-gray-900"
+                }`}
             >
               <i className="ri-box-3-line me-1.5 text-xs"></i>
               Unallocated Boxes
@@ -376,11 +375,10 @@ const YarnStorageContent = () => {
             </button>
             <button
               onClick={() => setActiveTab("allocated")}
-              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
-                activeTab === "allocated"
-                  ? "text-purple-600"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
+              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${activeTab === "allocated"
+                ? "text-purple-600"
+                : "text-gray-600 hover:text-gray-900"
+                }`}
             >
               <i className="ri-checkbox-circle-line me-1.5 text-xs"></i>
               Allocated Boxes
@@ -390,11 +388,10 @@ const YarnStorageContent = () => {
             </button>
             <button
               onClick={() => setActiveTab("long-term")}
-              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
-                activeTab === "long-term"
-                  ? "text-purple-600"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
+              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${activeTab === "long-term"
+                ? "text-purple-600"
+                : "text-gray-600 hover:text-gray-900"
+                }`}
             >
               <i className="ri-archive-line me-1.5 text-xs"></i>
               Long-Term Storage
@@ -404,11 +401,10 @@ const YarnStorageContent = () => {
             </button>
             <button
               onClick={() => setActiveTab("short-term")}
-              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
-                activeTab === "short-term"
-                  ? "text-purple-600"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
+              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${activeTab === "short-term"
+                ? "text-purple-600"
+                : "text-gray-600 hover:text-gray-900"
+                }`}
             >
               <i className="ri-inbox-line me-1.5 text-xs"></i>
               Short-Term Storage

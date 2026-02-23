@@ -5,7 +5,7 @@ import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
-import { Order, OrderFilters, OrderStatus } from './types';
+import { Order, OrderFilters, OrderStatus, DispatchTracking, StockBlockStatus, OrderLifecycleStatus } from './types';
 import { useOrders } from '@/shared/hooks/useOrders';
 import { Order as ApiOrder } from '@/shared/services/orderService';
 import OrderFiltersPanel from './components/OrderFilters';
@@ -44,11 +44,22 @@ const transformApiOrderToUiOrder = (apiOrder: ApiOrder): Order => {
     'Direct': 'direct',
   };
 
+  const status = statusMap[apiOrder.orderStatus] || 'pending';
+  const stockBlockStatus: StockBlockStatus =
+    status === 'dispatched' || status === 'cancelled' ? 'available' :
+    status === 'in-progress' || status === 'packed' ? 'pick-block' : 'tentative-block';
+  const lifecycleStatus: OrderLifecycleStatus =
+    status === 'dispatched' ? 'dispatched' :
+    status === 'packed' ? 'billing-done-dispatch-pending' :
+    status === 'in-progress' ? 'picking-done' : 'order-received';
+
   return {
     id: apiOrder.id,
     orderNumber: apiOrder.externalOrderId,
     date: apiOrder.createdAt || apiOrder.timestamps?.createdAt || new Date().toISOString(),
-    status: statusMap[apiOrder.orderStatus] || 'pending',
+    status,
+    stockBlockStatus,
+    lifecycleStatus,
     channel: (channelMap[apiOrder.source] || 'online') as any,
     customer: {
       name: apiOrder.customer.name,
@@ -100,6 +111,7 @@ const OrdersPage = () => {
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [statusModalOrder, setStatusModalOrder] = useState<Order | null>(null);
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const [orderOverlay, setOrderOverlay] = useState<Record<string, Partial<Order>>>({});
 
   // Use API hook
   const {
@@ -112,15 +124,19 @@ const OrdersPage = () => {
     updateWebsiteOrderStatus,
   } = useOrders();
 
-  // Transform API orders to UI format
+  // Transform API orders to UI format and merge overlay (stock block, lifecycle, tracking)
   const allOrders = useMemo(() => {
     return apiOrders.map(transformApiOrderToUiOrder);
   }, [apiOrders]);
 
+  const ordersWithOverlay = useMemo(() => {
+    return allOrders.map((o) => ({ ...o, ...orderOverlay[o.id] }));
+  }, [allOrders, orderOverlay]);
+
   // Generate notifications from orders
   const notifications = useMemo(() => {
     const notifs: any[] = [];
-    allOrders.forEach(order => {
+    ordersWithOverlay.forEach(order => {
       order.items.forEach(item => {
         if (!item.stockAvailable) {
           notifs.push({
@@ -146,7 +162,7 @@ const OrdersPage = () => {
       });
     });
     return notifs;
-  }, [allOrders]);
+  }, [ordersWithOverlay]);
 
   const buildApiFilters = useCallback(() => {
     const apiFilters: any = {
@@ -208,7 +224,7 @@ const OrdersPage = () => {
 
   // Client-side filtering for additional filters not supported by API
   const filteredOrders = useMemo(() => {
-    let filtered = [...allOrders];
+    let filtered = [...ordersWithOverlay];
 
     // Filter by SKU (client-side)
     if (filters.sku) {
@@ -244,20 +260,20 @@ const OrdersPage = () => {
     }
 
     return filtered;
-  }, [allOrders, filters]);
+  }, [ordersWithOverlay, filters]);
 
   // Get order counts by status
   const orderCounts = useMemo(() => {
     const counts = {
-      all: allOrders.length,
-      pending: allOrders.filter(o => o.status === 'pending').length,
-      'in-progress': allOrders.filter(o => o.status === 'in-progress').length,
-      packed: allOrders.filter(o => o.status === 'packed').length,
-      dispatched: allOrders.filter(o => o.status === 'dispatched').length,
-      cancelled: allOrders.filter(o => o.status === 'cancelled').length,
+      all: ordersWithOverlay.length,
+      pending: ordersWithOverlay.filter(o => o.status === 'pending').length,
+      'in-progress': ordersWithOverlay.filter(o => o.status === 'in-progress').length,
+      packed: ordersWithOverlay.filter(o => o.status === 'packed').length,
+      dispatched: ordersWithOverlay.filter(o => o.status === 'dispatched').length,
+      cancelled: ordersWithOverlay.filter(o => o.status === 'cancelled').length,
     };
     return counts;
-  }, [allOrders]);
+  }, [ordersWithOverlay]);
 
   const handleOrderClick = (order: Order) => {
     setSelectedOrder(order);
@@ -327,6 +343,22 @@ const OrdersPage = () => {
     setStatusModalOrder(null);
     setIsStatusModalOpen(false);
   };
+
+  const handleTrackingSave = (orderId: string, tracking: DispatchTracking) => {
+    setOrderOverlay((prev) => ({
+      ...prev,
+      [orderId]: {
+        ...prev[orderId],
+        tracking,
+        status: 'dispatched',
+        lifecycleStatus: 'dispatched',
+        stockBlockStatus: 'available',
+      },
+    }));
+    toast.success('Tracking saved. Order marked as Dispatched.');
+  };
+
+  const modalOrder = selectedOrder ? filteredOrders.find((o) => o.id === selectedOrder.id) ?? selectedOrder : null;
 
   const handleWebsiteStatusUpdate = async (action: 'cancel' | 'complete' | 'archive') => {
     if (!statusModalOrder) return;
@@ -515,7 +547,8 @@ const OrdersPage = () => {
           setIsModalOpen(false);
           setSelectedOrder(null);
         }}
-        order={selectedOrder}
+        order={modalOrder}
+        onTrackingSave={handleTrackingSave}
       />
 
       <OrderStatusUpdateModal

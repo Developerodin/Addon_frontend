@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { toast } from "react-hot-toast";
 import {
   StorageSlot,
@@ -42,6 +42,7 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
   const [activeTab, setActiveTab] = useState<"details" | "history">("details");
   const [historyData, setHistoryData] = useState<StorageHistoryResponse | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const getRackLocation = (): RackLocation | null => {
     if (!slot) return null;
@@ -83,6 +84,11 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
     if (!isOpen) {
       setActiveTab("details");
       setHistoryData(null);
+    } else {
+      // Auto-scroll to top when drawer opens
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTo(0, 0);
+      }
     }
   }, [isOpen]);
 
@@ -97,191 +103,100 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
     }
   };
 
-  const executeBrowserPrint = () => {
-    if (!slot) return;
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error("Popup blocked! Please allow popups for this site.");
-      return;
-    }
-
-    const paperW = 70; // mm
-    const paperH = 50; // mm
-
-    let html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Browser Print - Rack Label</title>
-          <style>
-            @page { size: ${paperW}mm ${paperH}mm; margin: 0; }
-            body { margin: 0; padding: 0; font-family: sans-serif; -webkit-print-color-adjust: exact; }
-            .label {
-              width: ${paperW}mm;
-              height: ${paperH}mm;
-              display: flex;
-              flex-direction: column;
-              justify-content: center;
-              align-items: center;
-              text-align: center;
-              box-sizing: border-box;
-              padding: 2mm;
-            }
-            .zone { font-size: 8pt; color: #666; margin-bottom: 1mm; text-transform: uppercase; }
-            .code { font-weight: bold; font-size: 18pt; margin-bottom: 1mm; }
-            .details { font-size: 8pt; margin-bottom: 2mm; }
-            .barcode { width: 90%; }
-            svg { width: 100%; height: auto; }
-          </style>
-        </head>
-        <body>
-          <div class="label">
-            <div class="code">${slot.label}</div>
-            <div class="details">Shelf: ${slot.shelfNumber} | Floor: ${slot.floorNumber}</div>
-            <div class="barcode"><svg id="barcode"></svg></div>
-          </div>
-          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-          <script>
-            window.onload = function() {
-              JsBarcode("#barcode", "${slot.barcode}", {
-                format: "CODE128",
-                width: 2,
-                height: 60,
-                displayValue: true,
-                fontSize: 14
-              });
-              setTimeout(() => { window.print(); window.close(); }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-  };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div
-          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-          onClick={onClose}
-        ></div>
-
-        {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+    <>
+      <div className="absolute inset-0 z-50 flex justify-end">
+        <div className="bg-black/20 absolute inset-0" onClick={onClose} aria-hidden />
+        <div className="bg-white w-full h-full shadow-2xl relative flex flex-col animate-slide-in-right overflow-hidden">
           {/* Header */}
-          <div className="bg-primary text-white px-6 py-4 flex justify-between items-center">
-            <h3 className="text-lg font-semibold flex items-center">
-              <i className="ri-stack-line me-2"></i>
-              Rack Details - {slot?.label || "Loading..."}
-            </h3>
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-primary rounded-full"></div>
+              <h3 className="text-sm font-bold text-gray-800 flex items-center">
+                Rack Details — <span className="text-primary ml-1">{slot?.label || "Loading..."}</span>
+              </h3>
+            </div>
             <button
               onClick={onClose}
-              className="text-white hover:text-gray-200 transition-colors"
+              className="text-gray-400 hover:text-gray-600 p-1 transition-colors"
             >
               <i className="ri-close-line text-xl"></i>
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="border-b border-gray-200 bg-white">
-            <div className="flex">
-              <button
-                onClick={() => setActiveTab("details")}
-                className={`px-6 py-3 text-sm font-medium transition-colors ${activeTab === "details"
-                  ? "text-primary border-b-2 border-primary"
-                  : "text-gray-600 hover:text-gray-900"
-                  }`}
-              >
-                <i className="ri-information-line me-2"></i>
-                Details
-              </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`px-6 py-3 text-sm font-medium transition-colors ${activeTab === "history"
-                  ? "text-primary border-b-2 border-primary"
-                  : "text-gray-600 hover:text-gray-900"
-                  }`}
-              >
-                <i className="ri-history-line me-2"></i>
-                History
-              </button>
-            </div>
+          <div className="flex border-b border-gray-200 shrink-0">
+            <button
+              onClick={() => setActiveTab("details")}
+              className={`px-6 py-3 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "details"
+                ? "border-primary text-primary"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+            >
+              <i className="ri-information-line me-1.5"></i>
+              DETAILS
+            </button>
+            <button
+              onClick={() => setActiveTab("history")}
+              className={`px-6 py-3 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "history"
+                ? "border-primary text-primary"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+            >
+              <i className="ri-history-line me-1.5"></i>
+              HISTORY
+            </button>
           </div>
 
           {/* Content */}
-          <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-y-auto p-6 bg-gray-50/30"
+          >
             {isLoading ? (
-              <div className="flex justify-center items-center py-12">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading rack details...</p>
-                </div>
+              <div className="flex flex-col items-center justify-center py-20">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4 opacity-50"></div>
+                <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
               </div>
             ) : slot ? (
-              <>
+              <div className="space-y-6">
                 {activeTab === "details" ? (
                   <div className="space-y-6">
                     {/* Slot Information */}
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <div className="bg-white border border-gray-200 rounded shadow-sm p-4">
+                      <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-widest mb-4 flex items-center gap-2">
                         <i className="ri-information-line text-primary"></i>
                         Slot Information
                       </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-3">
                         <div>
-                          <label className="text-xs font-medium text-gray-600 uppercase">
-                            Label
-                          </label>
-                          <div className="mt-1 text-sm text-gray-900 font-mono bg-white p-2 rounded border">
-                            {slot.label}
-                          </div>
+                          <label className="text-[9px] font-bold text-gray-600 uppercase">Label</label>
+                          <div className="text-[11px] font-bold text-gray-900 mt-0.5">{slot.label}</div>
                         </div>
                         <div>
-                          <label className="text-xs font-medium text-gray-600 uppercase">
-                            Barcode
-                          </label>
-                          <div className="mt-1 text-sm text-gray-900 font-mono bg-white p-2 rounded border">
-                            {slot.barcode}
-                          </div>
+                          <label className="text-[9px] font-bold text-gray-600 uppercase">Barcode</label>
+                          <div className="text-[11px] font-mono text-gray-600 mt-0.5 uppercase">{slot.barcode}</div>
                         </div>
                         <div>
-                          <label className="text-xs font-medium text-gray-600 uppercase">
-                            Zone Type
-                          </label>
-                          <div className="mt-1 text-sm text-gray-900 bg-white p-2 rounded border">
-                            {zoneType}
-                          </div>
+                          <label className="text-[9px] font-bold text-gray-600 uppercase">Zone Type</label>
+                          <div className="text-[11px] font-semibold text-gray-700 mt-0.5">{zoneType}</div>
                         </div>
                         <div>
-                          <label className="text-xs font-medium text-gray-600 uppercase">
-                            Shelf Number
-                          </label>
-                          <div className="mt-1 text-sm text-gray-900 bg-white p-2 rounded border">
-                            {slot.shelfNumber}
-                          </div>
+                          <label className="text-[9px] font-bold text-gray-600 uppercase">Shelf</label>
+                          <div className="text-[11px] font-semibold text-gray-700 mt-0.5">{slot.shelfNumber}</div>
                         </div>
                         <div>
-                          <label className="text-xs font-medium text-gray-600 uppercase">
-                            Floor Number
-                          </label>
-                          <div className="mt-1 text-sm text-gray-900 bg-white p-2 rounded border">
-                            {slot.floorNumber}
-                          </div>
+                          <label className="text-[9px] font-bold text-gray-600 uppercase">Floor</label>
+                          <div className="text-[11px] font-semibold text-gray-700 mt-0.5">{slot.floorNumber}</div>
                         </div>
                         <div>
-                          <label className="text-xs font-medium text-gray-600 uppercase">
-                            Status
-                          </label>
-                          <div className="mt-1">
+                          <label className="text-[9px] font-bold text-gray-600 uppercase">Status</label>
+                          <div className="mt-0.5">
                             <span
-                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${slot.isActive
-                                ? "bg-green-100 text-green-800"
-                                : "bg-red-100 text-red-800"
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase ${slot.isActive
+                                ? "bg-green-50 text-green-600 border border-green-100"
+                                : "bg-red-50 text-red-600 border border-red-100"
                                 }`}
                             >
                               {slot.isActive ? "Active" : "Inactive"}
@@ -292,475 +207,261 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                     </div>
 
                     {/* Boxes or Cones in Slot */}
-                    <div>
-                      {dataType === "boxes" ? (
-                        <>
-                          <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <i className="ri-inbox-line text-primary"></i>
-                            Boxes in Slot ({boxes.length})
-                          </h4>
-                          {boxes.length === 0 ? (
-                            <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-                              <i className="ri-inbox-line text-4xl mb-2 block"></i>
-                              <p>No boxes stored in this slot</p>
+                    <div className="bg-white border border-gray-300 rounded overflow-hidden shadow-sm">
+                      <div className="px-4 py-3 border-b border-gray-200 bg-gray-50/50 flex justify-between items-center">
+                        <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-widest flex items-center gap-2">
+                          <i className={dataType === "boxes" ? "ri-inbox-line" : "ri-barcode-line"}></i>
+                          {dataType === "boxes" ? `Boxes in Slot (${boxes.length})` : `Cones in Slot (${cones.length})`}
+                        </h4>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        {dataType === "boxes" ? (
+                          boxes.length === 0 ? (
+                            <div className="text-center py-12 text-gray-500">
+                              <i className="ri-inbox-line text-3xl mb-2 block opacity-20"></i>
+                              <p className="text-[11px] font-medium">No boxes stored in this slot</p>
                             </div>
                           ) : (
-                            <div className="space-y-4">
-                              {boxes.map((box) => (
-                                <div
-                                  key={box._id}
-                                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                                >
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Box ID
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
-                                        {box.boxId}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Barcode
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
-                                        {box.barcode}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        PO Number
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {box.poNumber}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Yarn Name
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {box.yarnName}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Shade Code
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {box.shadeCode}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Lot Number
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {box.lotNumber}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Box Weight (kg)
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {box.boxWeight}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Number of Cones
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {box.numberOfCones}
-                                      </div>
-                                    </div>
-                                    {box.qcData && (
-                                      <>
-                                        <div>
-                                          <label className="text-xs font-medium text-gray-600 uppercase">
-                                            QC Status
-                                          </label>
-                                          <div className="mt-1">
-                                            <span
-                                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${box.qcData.status === "qc_approved"
-                                                ? "bg-green-100 text-green-800"
-                                                : "bg-red-100 text-red-800"
-                                                }`}
-                                            >
-                                              {box.qcData.status === "qc_approved"
-                                                ? "QC Approved"
-                                                : "QC Rejected"}
-                                            </span>
-                                          </div>
+                            <table className="w-full border-collapse text-[10px]">
+                              <thead className="bg-gray-50/80 sticky top-0">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Box Info</th>
+                                  <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">PO & Yarn</th>
+                                  <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Attributes</th>
+                                  <th className="px-3 py-2 text-center font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Quantity</th>
+                                  <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">QC Status</th>
+                                  <th className="px-3 py-2 text-right pr-4 font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Date</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white">
+                                {boxes.map((box, idx) => (
+                                  <tr key={box._id || idx} className="hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0">
+                                    <td className="px-3 py-2.5">
+                                      <div className="font-bold text-gray-900">{box.boxId}</div>
+                                      <div className="text-[9px] text-gray-500 font-mono mt-0.5">{box.barcode}</div>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="font-semibold text-primary">{box.poNumber}</div>
+                                      <div className="text-[11px] text-gray-700 font-medium whitespace-normal break-words" title={box.yarnName}>{box.yarnName}</div>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="text-gray-700"><span className="text-gray-500 font-bold">Lot:</span> {box.lotNumber}</div>
+                                      <div className="text-gray-700 mt-0.5"><span className="text-gray-500 font-bold">Shade:</span> {box.shadeCode}</div>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      <div className="font-bold text-gray-900">{box.boxWeight} <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span></div>
+                                      <div className="text-gray-700 mt-0.5 font-medium">{box.numberOfCones} <span className="text-[9px] font-bold text-gray-600 uppercase">cones</span></div>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      {box.qcData ? (
+                                        <div className="space-y-1">
+                                          <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${box.qcData.status === "qc_approved" ? "bg-green-50 text-green-600 border border-green-100" : "bg-red-50 text-red-600 border border-red-100"
+                                            }`}>
+                                            {box.qcData.status === "qc_approved" ? "Approved" : "Rejected"}
+                                          </span>
+                                          <div className="text-[8px] text-gray-600 font-medium truncate max-w-[80px]">By: {box.qcData.username}</div>
                                         </div>
-                                        <div>
-                                          <label className="text-xs font-medium text-gray-600 uppercase">
-                                            QC Date
-                                          </label>
-                                          <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                            {formatDateTime(box.qcData.date)}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <label className="text-xs font-medium text-gray-600 uppercase">
-                                            Inspector
-                                          </label>
-                                          <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                            {box.qcData.username}
-                                          </div>
-                                        </div>
-                                      </>
-                                    )}
-                                    {box.coneData && (
-                                      <>
-                                        <div>
-                                          <label className="text-xs font-medium text-gray-600 uppercase">
-                                            Cones Issued
-                                          </label>
-                                          <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                            {box.coneData.conesIssued ? "Yes" : "No"}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <label className="text-xs font-medium text-gray-600 uppercase">
-                                            Issue Date
-                                          </label>
-                                          <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                            {formatDateTime(box.coneData.coneIssueDate)}
-                                          </div>
-                                        </div>
-                                      </>
-                                    )}
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Received Date
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {formatDateTime(box.receivedDate)}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <i className="ri-barcode-line text-primary"></i>
-                            Cones in Slot ({cones.length})
-                          </h4>
-                          {cones.length === 0 ? (
-                            <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-                              <i className="ri-barcode-line text-4xl mb-2 block"></i>
-                              <p>No cones stored in this slot</p>
+                                      ) : (
+                                        <span className="text-gray-400 italic">No QC Data</span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right pr-4">
+                                      <div className="text-gray-600">{formatDateTime(box.receivedDate).split(',')[0]}</div>
+                                      <div className="text-[9px] text-gray-600 font-medium mt-0.5">{formatDateTime(box.receivedDate).split(',')[1]}</div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )
+                        ) : (
+                          cones.length === 0 ? (
+                            <div className="text-center py-12 text-gray-500">
+                              <i className="ri-barcode-line text-3xl mb-2 block opacity-20"></i>
+                              <p className="text-[11px] font-medium">No cones stored in this slot</p>
                             </div>
                           ) : (
-                            <div className="space-y-4">
-                              {cones.map((cone) => (
-                                <div
-                                  key={cone._id}
-                                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                                >
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Cone Barcode
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
-                                        {cone.barcode}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Box ID
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
-                                        {cone.boxId}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        PO Number
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {cone.poNumber}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Yarn Name
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {cone.yarnName}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Shade Code
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {cone.shadeCode}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Cone Weight (kg)
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {cone.coneWeight}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Tear Weight (kg)
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {cone.tearWeight}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Issue Status
-                                      </label>
-                                      <div className="mt-1">
-                                        <span
-                                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${cone.issueStatus === "issued"
-                                            ? "bg-blue-100 text-blue-800"
-                                            : "bg-gray-100 text-gray-800"
-                                            }`}
-                                        >
+                            <table className="w-full border-collapse text-[10px]">
+                              <thead className="bg-gray-50/80 sticky top-0">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Cone Barcode</th>
+                                  <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Box & PO</th>
+                                  <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Yarn</th>
+                                  <th className="px-3 py-2 text-center font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Weight</th>
+                                  <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Status</th>
+                                  <th className="px-3 py-2 text-right pr-4 font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Date</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white">
+                                {cones.map((cone, idx) => (
+                                  <tr key={cone._id || idx} className="hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0">
+                                    <td className="px-3 py-2.5">
+                                      <div className="font-mono font-bold text-gray-900 uppercase">{cone.barcode}</div>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="font-bold text-gray-900">{cone.boxId}</div>
+                                      <div className="text-primary font-semibold mt-0.5">{cone.poNumber}</div>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="text-[11px] text-gray-700 font-medium whitespace-normal break-words" title={cone.yarnName}>{cone.yarnName}</div>
+                                      <div className="text-gray-700 mt-1"><span className="text-[9px] uppercase text-gray-500 font-bold">Shade:</span> {cone.shadeCode}</div>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      <div className="font-bold text-gray-900">{cone.coneWeight} <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span></div>
+                                      <div className="text-[9px] text-gray-600 mt-0.5 font-medium">Tear: {cone.tearWeight}</div>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="flex flex-col gap-1">
+                                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${cone.issueStatus === "issued" ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-gray-50 text-gray-400 border-gray-100"
+                                          }`}>
                                           {cone.issueStatus.replace(/_/g, " ")}
                                         </span>
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Return Status
-                                      </label>
-                                      <div className="mt-1">
-                                        <span
-                                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${cone.returnStatus === "returned"
-                                            ? "bg-green-100 text-green-800"
-                                            : "bg-gray-100 text-gray-800"
-                                            }`}
-                                        >
+                                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${cone.returnStatus === "returned" ? "bg-green-50 text-green-600 border-green-100" : "bg-gray-50 text-gray-400 border-gray-100"
+                                          }`}>
                                           {cone.returnStatus.replace(/_/g, " ")}
                                         </span>
                                       </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Issue Weight (kg)
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {cone.issueWeight}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Return Weight (kg)
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {cone.returnWeight}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Storage ID
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
-                                        {cone.coneStorageId}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Created At
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {formatDateTime(cone.createdAt)}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs font-medium text-gray-600 uppercase">
-                                        Updated At
-                                      </label>
-                                      <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                                        {formatDateTime(cone.updatedAt)}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right pr-4">
+                                      <div className="text-gray-700 font-medium">{formatDateTime(cone.createdAt).split(',')[0]}</div>
+                                      <div className="text-[9px] text-gray-600 font-medium mt-0.5">{formatDateTime(cone.createdAt).split(',')[1]}</div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  /* History Tab */
+                  /* History Tab content */
                   <div className="space-y-6">
                     {isLoadingHistory ? (
-                      <div className="flex justify-center items-center py-12">
-                        <div className="text-center">
-                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                          <p className="text-gray-600">Loading history...</p>
-                        </div>
+                      <div className="flex flex-col items-center justify-center py-20">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4 opacity-50"></div>
+                        <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading History</p>
                       </div>
                     ) : historyData ? (
                       <>
                         {/* Current Inventory Summary */}
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
-                            <i className="ri-inbox-line text-primary"></i>
-                            Current Inventory
+                        <div className="bg-primary/5 border border-primary/10 rounded shadow-sm p-4">
+                          <h4 className="text-[11px] font-bold text-primary uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <i className="ri-inbox-line"></i>
+                            Current Inventory Summary
                           </h4>
-                          <div className="grid grid-cols-3 gap-4 text-sm">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
-                              <span className="text-blue-700 font-medium">Total Boxes:</span>{" "}
-                              <span className="text-blue-900 font-semibold">{historyData.currentInventory.totalBoxes}</span>
+                              <label className="text-[9px] font-bold text-gray-600 uppercase">Total Boxes</label>
+                              <div className="text-[14px] font-bold text-gray-900 mt-0.5">{historyData.currentInventory.totalBoxes}</div>
                             </div>
                             <div>
-                              <span className="text-blue-700 font-medium">Total Weight:</span>{" "}
-                              <span className="text-blue-900 font-semibold">{historyData.currentInventory.totalWeight.toFixed(2)} kg</span>
+                              <label className="text-[9px] font-bold text-gray-600 uppercase">Total Weight</label>
+                              <div className="text-[14px] font-bold text-gray-900 mt-0.5">{historyData.currentInventory.totalWeight.toFixed(2)} <span className="text-[10px] font-bold text-gray-600 uppercase">kg</span></div>
                             </div>
                             <div>
-                              <span className="text-blue-700 font-medium">Yarn Types:</span>{" "}
-                              <span className="text-blue-900 font-semibold">{historyData.currentInventory.yarns.length}</span>
+                              <label className="text-[9px] font-bold text-gray-600 uppercase">Yarn Types</label>
+                              <div className="text-[14px] font-bold text-gray-900 mt-0.5">{historyData.currentInventory.yarns.length}</div>
                             </div>
                           </div>
                         </div>
 
-                        {/* Transfer History */}
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <i className="ri-history-line text-primary"></i>
-                            Transfer History ({historyData.transferHistory.length} transactions)
-                          </h4>
-                          {historyData.transferHistory.length === 0 ? (
-                            <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-                              <i className="ri-history-line text-4xl mb-2 block"></i>
-                              <p>No transfer history available</p>
-                            </div>
-                          ) : (
-                            <div className="border border-gray-200 rounded-lg overflow-hidden">
-                              <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                  <thead className="bg-gray-50">
-                                    <tr>
-                                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                                        Date & Time
-                                      </th>
-                                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                                        Type
-                                      </th>
-                                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                                        Yarn Name
-                                      </th>
-                                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                                        Weight (kg)
-                                      </th>
-                                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                                        Box IDs
-                                      </th>
-                                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                                        From → To
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="bg-white divide-y divide-gray-200">
-                                    {historyData.transferHistory.map((item, index) => (
-                                      <tr key={index} className="hover:bg-gray-50">
-                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                          {formatDateTime(item.transactionDate)}
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap">
-                                          <span
-                                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${item.transactionType === "internal_transfer"
-                                              ? "bg-blue-100 text-blue-800"
-                                              : item.transactionType === "yarn_stocked"
-                                                ? "bg-green-100 text-green-800"
-                                                : "bg-gray-100 text-gray-800"
-                                              }`}
-                                          >
-                                            {item.transactionType === "internal_transfer"
-                                              ? "Transfer"
-                                              : item.transactionType === "yarn_stocked"
-                                                ? "Stocked"
-                                                : item.transactionType.replace(/_/g, " ")}
-                                          </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate" title={item.yarnName}>
-                                          {item.yarnName || "-"}
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                          {item.weight.toFixed(2)}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-700">
-                                          {item.boxIds && item.boxIds.length > 0 ? (
-                                            <div className="flex flex-col gap-1">
-                                              {item.boxIds.slice(0, 2).map((boxId, idx) => (
-                                                <span key={idx} className="font-mono text-xs">
-                                                  {boxId}
-                                                </span>
-                                              ))}
-                                              {item.boxIds.length > 2 && (
-                                                <span className="text-xs text-gray-500">
-                                                  +{item.boxIds.length - 2} more
-                                                </span>
-                                              )}
-                                            </div>
-                                          ) : (
-                                            <span className="text-gray-400">-</span>
-                                          )}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-700">
-                                          {item.fromLocation && item.toLocation ? (
-                                            <div className="flex items-center gap-1">
-                                              <span className="font-mono text-xs">{item.fromLocation}</span>
-                                              <i className="ri-arrow-right-line text-gray-400"></i>
-                                              <span className="font-mono text-xs">{item.toLocation}</span>
-                                            </div>
-                                          ) : item.fromLocation ? (
-                                            <span className="font-mono text-xs">From: {item.fromLocation}</span>
-                                          ) : item.toLocation ? (
-                                            <span className="font-mono text-xs">To: {item.toLocation}</span>
-                                          ) : (
-                                            <span className="text-gray-400">-</span>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                        {/* Transfer History Table */}
+                        <div className="bg-white border border-gray-300 rounded overflow-hidden shadow-sm">
+                          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50/50">
+                            <h4 className="text-[11px] font-bold text-gray-600 uppercase tracking-widest flex items-center gap-2">
+                              <i className="ri-history-line"></i>
+                              Recent Transfer History
+                            </h4>
+                          </div>
+                          <div className="overflow-x-auto">
+                            {historyData.transferHistory.length === 0 ? (
+                              <div className="text-center py-12 text-gray-500">
+                                <i className="ri-history-line text-3xl mb-2 block opacity-20"></i>
+                                <p className="text-[11px] font-medium">No transfer history available</p>
                               </div>
-                            </div>
-                          )}
+                            ) : (
+                              <table className="w-full border-collapse text-[10px]">
+                                <thead className="bg-gray-50/80">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase border-b border-gray-200">Date & Time</th>
+                                    <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase border-b border-gray-200">Transaction</th>
+                                    <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase border-b border-gray-200">Yarn & Weight</th>
+                                    <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase border-b border-gray-200">Movement</th>
+                                    <th className="px-3 py-2 text-right pr-4 font-bold text-[#495057] uppercase border-b border-gray-200">Boxes</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {historyData.transferHistory.map((item, index) => (
+                                    <tr key={index} className="hover:bg-gray-50 border-b border-gray-100 last:border-0 transition-colors">
+                                      <td className="px-3 py-2.5">
+                                        <div className="text-gray-900">{formatDateTime(item.transactionDate).split(',')[0]}</div>
+                                        <div className="text-[9px] text-gray-600 font-medium mt-0.5">{formatDateTime(item.transactionDate).split(',')[1]}</div>
+                                      </td>
+                                      <td className="px-3 py-2.5">
+                                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${item.transactionType === "internal_transfer" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                                          item.transactionType === "yarn_stocked" ? "bg-green-50 text-green-600 border-green-100" :
+                                            "bg-gray-50 text-gray-500 border-gray-100"
+                                          }`}>
+                                          {item.transactionType === "internal_transfer" ? "Transfer" : item.transactionType === "yarn_stocked" ? "Stocked" : item.transactionType.replace(/_/g, " ")}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2.5">
+                                        <div className="text-gray-900 font-medium truncate max-w-[120px]" title={item.yarnName}>{item.yarnName || "-"}</div>
+                                        <div className="text-primary font-bold mt-0.5">{item.weight.toFixed(2)} <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span></div>
+                                      </td>
+                                      <td className="px-3 py-2.5">
+                                        {item.fromLocation && item.toLocation ? (
+                                          <div className="flex items-center gap-1.5 text-[9px] font-mono">
+                                            <span className="bg-gray-100 px-1 rounded text-gray-600 uppercase">{item.fromLocation}</span>
+                                            <i className="ri-arrow-right-line text-gray-600"></i>
+                                            <span className="bg-primary/10 px-1 rounded text-primary uppercase font-bold">{item.toLocation}</span>
+                                          </div>
+                                        ) : (
+                                          <span className="text-[11px] font-mono text-gray-600 uppercase">-</span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2.5 text-right pr-4">
+                                        <div className="flex flex-col items-end gap-0.5">
+                                          {item.boxIds && item.boxIds.length > 0 ? (
+                                            <>
+                                              <span className="font-mono text-[9px] text-gray-700">{item.boxIds[0]}</span>
+                                              {item.boxIds.length > 1 && (
+                                                <span className="text-[8px] bg-gray-100 px-1 rounded text-gray-600 font-medium">+{item.boxIds.length - 1} more</span>
+                                              )}
+                                            </>
+                                          ) : "-"}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
                         </div>
                       </>
                     ) : (
-                      <div className="text-center py-12 text-gray-500">
-                        <i className="ri-error-warning-line text-4xl mb-4 block"></i>
-                        <p>Failed to load history</p>
+                      <div className="text-center py-20 text-gray-400">
+                        <i className="ri-error-warning-line text-4xl mb-2 block opacity-20"></i>
+                        <p className="text-[11px] font-medium tracking-widest uppercase">Failed to load history</p>
                       </div>
                     )}
                   </div>
                 )}
-              </>
+              </div>
             ) : (
-              <div className="text-center py-12 text-gray-500">
-                <i className="ri-error-warning-line text-4xl mb-4 block"></i>
-                <p>No rack details available</p>
+              <div className="text-center py-20 text-gray-400">
+                <i className="ri-error-warning-line text-4xl mb-2 block opacity-20"></i>
+                <p className="text-[11px] font-medium tracking-widest uppercase">No rack details available</p>
               </div>
             )}
           </div>
 
           {/* Footer */}
-          <div className="bg-gray-50 px-6 py-3 flex justify-between items-center">
+          <div className="px-6 py-4 border-t border-gray-200 bg-white flex justify-between items-center shrink-0">
             <div className="flex gap-2">
               {zoneType === "LT" && onTransferLTToLT && (
                 <button
@@ -771,11 +472,11 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                       onClose();
                     }
                   }}
-                  className="ti-btn ti-btn-primary ti-btn-sm"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-[11px] font-bold rounded shadow-sm hover:bg-primary-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={!slot || !slot.isActive}
                 >
-                  <i className="ri-arrow-right-left-line me-1"></i>
-                  Transfer to LT
+                  <i className="ri-arrow-right-left-line text-xs"></i>
+                  TRANSFER TO LT
                 </button>
               )}
               {zoneType === "LT" && onTransferLTToST && (
@@ -787,47 +488,24 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                       onClose();
                     }
                   }}
-                  className="ti-btn ti-btn-primary ti-btn-sm"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-primary/10 text-primary text-[11px] font-bold rounded border border-primary/20 hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={!slot || !slot.isActive}
                 >
-                  <i className="ri-arrow-right-line me-1"></i>
-                  Transfer to ST
-                </button>
-              )}
-              {zoneType === "ST" && onTransferSTToST && (
-                <button
-                  onClick={() => {
-                    const rack = getRackLocation();
-                    if (rack) {
-                      onTransferSTToST(rack);
-                      onClose();
-                    }
-                  }}
-                  className="ti-btn ti-btn-primary ti-btn-sm"
-                  disabled={!slot || !slot.isActive}
-                >
-                  <i className="ri-arrow-right-left-line me-1"></i>
-                  Transfer to ST
+                  <i className="ri-arrow-right-line text-xs"></i>
+                  TRANSFER TO ST
                 </button>
               )}
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={executeBrowserPrint}
-                className="ti-btn ti-btn-purple-soft ti-btn-sm"
-                disabled={!slot}
-              >
-                <i className="ri-window-line me-1"></i>
-                Test Print (Browser)
-              </button>
-              <button onClick={onClose} className="ti-btn ti-btn-light">
-                Close
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              className="px-6 py-2 bg-gray-100 text-gray-500 text-[11px] font-bold rounded hover:bg-gray-200 transition-all uppercase tracking-wider"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

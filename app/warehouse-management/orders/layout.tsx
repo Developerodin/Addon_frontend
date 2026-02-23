@@ -29,6 +29,12 @@ const ORDER_TABS = [
     icon: "ri-stack-line",
     path: "/warehouse-management/orders/consolidation" 
   },
+  { 
+    key: "gap-report", 
+    label: "Gap Report", 
+    icon: "ri-file-list-3-line",
+    path: "/warehouse-management/orders/gap-report" 
+  },
 ] as const;
 
 function isTabActive(pathname: string, tabPath: string): boolean {
@@ -39,6 +45,9 @@ function isTabActive(pathname: string, tabPath: string): boolean {
       pathname.startsWith(base + "/add") ||
       pathname.startsWith(base + "/edit/")
     );
+  }
+  if (tabPath === base + "/gap-report") {
+    return pathname === tabPath || pathname.startsWith(tabPath + "/");
   }
   return pathname === tabPath || pathname.startsWith(tabPath + "/");
 }

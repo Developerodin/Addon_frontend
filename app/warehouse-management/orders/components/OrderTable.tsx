@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Order } from '../types';
+import { Order, StockBlockStatus } from '../types';
 
 interface OrderTableProps {
   orders: Order[];
@@ -12,6 +12,31 @@ interface OrderTableProps {
   onEdit: (orderId: string) => void;
   onDelete: (orderId: string) => void;
   onUpdateWebsiteStatus?: (order: Order) => void;
+}
+
+function getOrderStockBlockStatus(order: Order): StockBlockStatus {
+  if (order.stockBlockStatus) return order.stockBlockStatus;
+  if (order.status === 'dispatched' || order.status === 'cancelled') return 'available';
+  if (order.status === 'in-progress' || order.status === 'packed') return 'pick-block';
+  return 'tentative-block'; // order received (pending)
+}
+
+function getStockBlockBadgeClass(s: StockBlockStatus) {
+  const classes: Record<StockBlockStatus, string> = {
+    available: 'bg-green-100 text-green-800',
+    'tentative-block': 'bg-yellow-100 text-yellow-800',
+    'pick-block': 'bg-blue-100 text-blue-800',
+  };
+  return classes[s] || 'bg-gray-100 text-gray-800';
+}
+
+function getStockBlockLabel(s: StockBlockStatus) {
+  const labels: Record<StockBlockStatus, string> = {
+    available: 'Available',
+    'tentative-block': 'Tentative Block',
+    'pick-block': 'Pick Block',
+  };
+  return labels[s] || s;
 }
 
 const OrderTable: React.FC<OrderTableProps> = ({
@@ -178,22 +203,9 @@ const OrderTable: React.FC<OrderTableProps> = ({
                 </span>
               </td>
               <td className="px-1.5 py-2.5 border border-gray-200">
-                {hasUnavailable(order) ? (
-                  <span className="text-red-600 text-[10px] font-medium">
-                    <i className="ri-error-warning-line me-1"></i>
-                    Unavailable
-                  </span>
-                ) : hasLowStock(order) ? (
-                  <span className="text-yellow-600 text-[10px] font-medium">
-                    <i className="ri-alert-line me-1"></i>
-                    Low Stock
-                  </span>
-                ) : (
-                  <span className="text-green-600 text-[10px] font-medium">
-                    <i className="ri-checkbox-circle-line me-1"></i>
-                    Available
-                  </span>
-                )}
+                <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${getStockBlockBadgeClass(getOrderStockBlockStatus(order))}`}>
+                  {getStockBlockLabel(getOrderStockBlockStatus(order))}
+                </span>
               </td>
               <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
