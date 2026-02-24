@@ -1,32 +1,60 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import type { GapReportRow } from "../types";
+import { whmsGapReport } from "@/shared/services/whmsService";
 
-// Mock gap report data (stock vs orders shortage)
-const MOCK_GAP_ROWS: GapReportRow[] = [
-  { styleCode: "STY-001", itemName: "Premium Cotton T-Shirt", currentStock: 45, ordersQty: 120, requiredQty: 120, shortage: 75, factoryDispatchDate: "2024-02-25" },
-  { styleCode: "STY-002", itemName: "Denim Jeans Regular", currentStock: 30, ordersQty: 80, requiredQty: 80, shortage: 50, factoryDispatchDate: "2024-02-28" },
-  { styleCode: "STY-003", itemName: "Leather Jacket Black", currentStock: 12, ordersQty: 25, requiredQty: 25, shortage: 13, factoryDispatchDate: "2024-03-01" },
-  { styleCode: "STY-004", itemName: "Running Shoes White", currentStock: 0, ordersQty: 60, requiredQty: 60, shortage: 60, factoryDispatchDate: "-" },
-  { styleCode: "STY-005", itemName: "Wool Sweater Gray", currentStock: 88, ordersQty: 40, requiredQty: 40, shortage: 0, factoryDispatchDate: "-" },
-];
+function mapRow(r: { styleCode: string; itemName: string; currentStock: number; ordersQty: number; requiredQty: number; shortage: number; factoryDispatchDate: string | null }): GapReportRow {
+  return {
+    styleCode: r.styleCode,
+    itemName: r.itemName,
+    currentStock: r.currentStock,
+    ordersQty: r.ordersQty,
+    requiredQty: r.requiredQty,
+    shortage: r.shortage,
+    factoryDispatchDate: r.factoryDispatchDate ?? "-",
+  };
+}
 
 export default function GapReportPage() {
-  const [rows, setRows] = useState<GapReportRow[]>(MOCK_GAP_ROWS);
+  const [rows, setRows] = useState<GapReportRow[]>([]);
   const [sending, setSending] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchReport = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await whmsGapReport.get();
+      setRows(Array.isArray(data) ? data.map(mapRow) : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load gap report");
+      toast.error("Failed to load gap report");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
 
   const totalShortage = useMemo(() => rows.reduce((s, r) => s + r.shortage, 0), [rows]);
   const rowsWithShortage = useMemo(() => rows.filter((r) => r.shortage > 0), [rows]);
 
-  const handleSendRequirement = async (styleCode: string) => {
-    setSending(styleCode);
+  const handleSendRequirement = async (row: GapReportRow) => {
+    setSending(row.styleCode);
     try {
-      // Mock API: send requirement request to factory
-      await new Promise((r) => setTimeout(r, 600));
-      toast.success(`Requirement request sent to factory for ${styleCode}`);
+      await whmsGapReport.sendRequirement({
+        styleCode: row.styleCode,
+        itemName: row.itemName,
+        shortage: row.shortage,
+        requestedQty: row.shortage,
+      });
+      toast.success(`Requirement request sent to factory for ${row.styleCode}`);
     } catch {
       toast.error("Failed to send request");
     } finally {
@@ -41,7 +69,14 @@ export default function GapReportPage() {
     }
     setSending("all");
     try {
-      await new Promise((r) => setTimeout(r, 800));
+      await whmsGapReport.sendRequirement(
+        rowsWithShortage.map((r) => ({
+          styleCode: r.styleCode,
+          itemName: r.itemName,
+          shortage: r.shortage,
+          requestedQty: r.shortage,
+        }))
+      );
       toast.success(`Requirement request sent for ${rowsWithShortage.length} item(s)`);
     } catch {
       toast.error("Failed to send requests");
@@ -58,6 +93,15 @@ export default function GapReportPage() {
           <p className="text-sm text-gray-600 mb-2">
             Stock vs orders shortage. Send requirement requests to factory for items with shortage.
           </p>
+          {loading ? (
+            <p className="text-sm text-gray-500">Loading gap report...</p>
+          ) : error ? (
+            <div>
+              <p className="text-red-600 text-sm mb-2">{error}</p>
+              <button type="button" onClick={fetchReport} className="ti-btn ti-btn-primary">Retry</button>
+            </div>
+          ) : (
+          <>
           <div className="flex flex-wrap items-center gap-4">
             <span className="text-[12px] font-bold text-gray-700">
               Items with shortage: <span className="text-purple-600">{rowsWithShortage.length}</span>
@@ -70,17 +114,19 @@ export default function GapReportPage() {
                 type="button"
                 onClick={handleSendAll}
                 disabled={sending !== null}
-                className="ti-btn ti-btn-primary ti-btn-sm"
+                className="ti-btn ti-btn-primary inline-flex items-center justify-center gap-2 whitespace-nowrap px-4 py-2.5 min-h-[36px] text-[12px] font-semibold"
               >
                 {sending === "all" ? (
-                  <i className="ri-loader-4-line animate-spin me-1"></i>
+                  <i className="ri-loader-4-line animate-spin text-base"></i>
                 ) : (
-                  <i className="ri-send-plane-line me-1"></i>
+                  <i className="ri-send-plane-line text-base"></i>
                 )}
-                Send requirement to factory (all)
+                <span>Send requirement to factory (all)</span>
               </button>
             )}
           </div>
+          </>
+          )}
         </div>
       </div>
 
@@ -89,6 +135,11 @@ export default function GapReportPage() {
           <h3 className="box-title">Gap Report</h3>
         </div>
         <div className="box-body">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 opacity-50" />
+            </div>
+          ) : (
           <div className="overflow-x-auto min-h-[260px]">
             <table className="w-full border-collapse border border-gray-200">
               <thead>
@@ -114,7 +165,7 @@ export default function GapReportPage() {
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                     Factory Dispatch Date
                   </th>
-                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 min-w-[140px]">
                     Action
                   </th>
                 </tr>
@@ -151,20 +202,20 @@ export default function GapReportPage() {
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
                       {row.factoryDispatchDate}
                     </td>
-                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200 align-middle">
                       {row.shortage > 0 ? (
                         <button
                           type="button"
-                          onClick={() => handleSendRequirement(row.styleCode)}
+                          onClick={() => handleSendRequirement(row)}
                           disabled={sending !== null}
-                          className="ti-btn ti-btn-primary ti-btn-sm"
+                          className="ti-btn ti-btn-primary inline-flex items-center justify-center gap-2 whitespace-nowrap px-3 py-2 min-h-[32px] min-w-[120px] text-[11px] font-semibold"
                         >
                           {sending === row.styleCode ? (
-                            <i className="ri-loader-4-line animate-spin me-1"></i>
+                            <i className="ri-loader-4-line animate-spin flex-shrink-0"></i>
                           ) : (
-                            <i className="ri-send-plane-line me-1"></i>
+                            <i className="ri-send-plane-line flex-shrink-0"></i>
                           )}
-                          Send request
+                          <span>Send request</span>
                         </button>
                       ) : (
                         <span className="text-[10px] text-gray-400">—</span>
@@ -175,6 +226,7 @@ export default function GapReportPage() {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       </div>
     </>

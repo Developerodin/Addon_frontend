@@ -6,7 +6,7 @@ import { toast } from "react-hot-toast";
 import PickListDashboard from "./components/PickListDashboard";
 import PackListDashboard from "./components/PackListDashboard";
 import type { PackBatch, PickItem, PackItem, PackOrder, PackOrderStatus, PickList, PackList } from "./types";
-import { pickPackMockApi } from "./mockApi";
+import { pickPackApi } from "./pickPackApi";
 
 const PickPackPage = () => {
   const [activeTab, setActiveTab] = useState<"pick" | "pack">("pick");
@@ -29,9 +29,9 @@ const PickPackPage = () => {
     let mounted = true;
     (async () => {
       setLoading(true);
-      const [pl, pkl] = await Promise.all([pickPackMockApi.fetchPickList(), pickPackMockApi.fetchPackList()]);
+      const [pl, pkl] = await Promise.all([pickPackApi.fetchPickList(), pickPackApi.fetchPackList()]);
       if (!mounted) return;
-      setPickList(pl);
+      setPickList(pl ?? null);
       setPackList(pkl);
       setLoading(false);
     })();
@@ -187,13 +187,13 @@ const PickPackPage = () => {
     if (!item) return;
 
     const nextQty = clamp(pickedQty, 0, item.requiredQty);
-    await pickPackMockApi.confirmPick({ itemId, pickedQty: nextQty });
+    await pickPackApi.confirmPick({ itemId, pickedQty: nextQty });
 
     setPickList((prev) => {
       if (!prev) return prev;
       const items = prev.items.map((it) => {
         if (it.id !== itemId) return it;
-        const status = computePickStatus(it.requiredQty, nextQty);
+        const status = computePickStatus(it.requiredQty, nextQty) as PickItem["status"];
         return { ...it, pickedQty: nextQty, status };
       });
       return { ...prev, items };
@@ -212,19 +212,24 @@ const PickPackPage = () => {
     const item = pickItems.find((i) => i.id === itemId);
     if (!item) return;
     const nextQty = clamp(pickedQty, 0, item.requiredQty);
-    await pickPackMockApi.confirmPick({ itemId, pickedQty: nextQty });
+    await pickPackApi.confirmPick({ itemId, pickedQty: nextQty });
     setPickList((prev) => {
       if (!prev) return prev;
-      const items = prev.items.map((it) => (it.id === itemId ? { ...it, pickedQty: nextQty, status: "partial" } : it));
+      const items = prev.items.map((it) =>
+        it.id === itemId ? { ...it, pickedQty: nextQty, status: "partial" as PickItem["status"] } : it
+      );
       return { ...prev, items };
     });
     notify(`Marked partial: ${item.sku} (${nextQty}/${item.requiredQty})`, "info");
   };
 
   const skipPick = async (itemId: string) => {
+    await pickPackApi.skipPick(itemId);
     setPickList((prev) => {
       if (!prev) return prev;
-      const items = prev.items.map((it) => (it.id === itemId ? { ...it, status: "skipped" } : it));
+      const items = prev.items.map((it) =>
+        it.id === itemId ? { ...it, status: "skipped" as PickItem["status"] } : it
+      );
       return { ...prev, items };
     });
     notify("Item skipped", "info");
@@ -251,25 +256,35 @@ const PickPackPage = () => {
       return { ...prev, batches };
     });
 
-    await pickPackMockApi.setPackedQty({ batchId, orderId, itemId, packedQty });
+    await pickPackApi.setPackedQty({ batchId, orderId, itemId, packedQty });
   };
 
   const generateCarton = async (batchId: string) => {
-    await pickPackMockApi.generateCarton({ batchId });
-    setPackList((prev) => {
-      if (!prev) return prev;
-      const now = new Date().toISOString();
-      const batches = prev.batches.map((b) => {
-        if (b.id !== batchId) return b;
-        const nextId = `CTN-${batchId.split("-").pop() || "X"}-${String((b.cartons?.length || 0) + 1).padStart(2, "0")}`;
-        return { ...b, cartons: [...(b.cartons || []), { id: nextId, cartonBarcode: undefined, createdAt: now }] };
+    const updatedBatch = await pickPackApi.generateCarton(batchId);
+    if (updatedBatch) {
+      setPackList((prev) => {
+        if (!prev) return prev;
+        const batches = prev.batches.map((b) => (b.id === batchId ? updatedBatch : b));
+        return { ...prev, batches };
       });
-      return { ...prev, batches };
-    });
-    notify("Carton generated (UI placeholder)", "success");
+      notify("Carton added", "success");
+    } else {
+      const now = new Date().toISOString();
+      setPackList((prev) => {
+        if (!prev) return prev;
+        const batches = prev.batches.map((b) => {
+          if (b.id !== batchId) return b;
+          const nextId = `CTN-${batchId.split("-").pop() || "X"}-${String((b.cartons?.length || 0) + 1).padStart(2, "0")}`;
+          return { ...b, cartons: [...(b.cartons || []), { id: nextId, cartonBarcode: undefined, createdAt: now }] };
+        });
+        return { ...prev, batches };
+      });
+      notify("Carton added", "success");
+    }
   };
 
   const completePacking = async (batchId: string) => {
+    await pickPackApi.completeBatch(batchId);
     setPackList((prev) => {
       if (!prev) return prev;
       const batches = prev.batches.map((b) => {
@@ -286,7 +301,7 @@ const PickPackPage = () => {
       });
       return { ...prev, batches };
     });
-    notify("Packing completed (UI state)", "success");
+    notify("Packing completed", "success");
   };
 
   const generateBarcodesForOrder = async (args: {
@@ -295,35 +310,58 @@ const PickPackPage = () => {
     itemIds: string[];
     request: { types: Array<"item" | "carton" | "order">; quantity: number };
   }) => {
-    await pickPackMockApi.generateBarcodes({
+    const res = await pickPackApi.generateBarcodes({
       batchId: args.batchId,
       orderId: args.orderId,
       itemIds: args.itemIds,
       request: args.request,
     });
 
-    // UI-only: attach item barcodes so scan can validate.
-    setPackList((prev) => {
-      if (!prev) return prev;
-      const batches = prev.batches.map((b) => {
-        if (b.id !== args.batchId) return b;
-        const orders = b.orders.map((o) => {
-          if (o.orderId !== args.orderId) return o;
-          const items = o.items.map((it) => {
-            if (!args.itemIds.includes(it.id)) return it;
-            if (args.request.types.includes("item") && !it.itemBarcode) {
-              return { ...it, itemBarcode: `ITM-${o.orderNumber}-${it.sku}` };
-            }
-            return it;
+    // Attach item barcodes from API response when available
+    const itemBarcodes = (res.generated ?? []).filter((g) => g.type === "item");
+    if (itemBarcodes.length > 0) {
+      setPackList((prev) => {
+        if (!prev) return prev;
+        const batches = prev.batches.map((b) => {
+          if (b.id !== args.batchId) return b;
+          const orders = b.orders.map((o) => {
+            if (o.orderId !== args.orderId) return o;
+            const items = o.items.map((it) => {
+              const found = itemBarcodes.find((x) => x.id === it.id);
+              if (found) return { ...it, itemBarcode: found.barcode };
+              if (args.request.types.includes("item") && !it.itemBarcode && args.itemIds.includes(it.id)) {
+                return { ...it, itemBarcode: `ITM-${o.orderNumber}-${it.sku}` };
+              }
+              return it;
+            });
+            return { ...o, items };
           });
-          return { ...o, items };
+          return { ...b, orders };
         });
-        return { ...b, orders };
+        return { ...prev, batches };
       });
-      return { ...prev, batches };
-    });
-
-    notify("Barcodes generated (UI placeholder)", "success");
+    } else {
+      setPackList((prev) => {
+        if (!prev) return prev;
+        const batches = prev.batches.map((b) => {
+          if (b.id !== args.batchId) return b;
+          const orders = b.orders.map((o) => {
+            if (o.orderId !== args.orderId) return o;
+            const items = o.items.map((it) => {
+              if (!args.itemIds.includes(it.id)) return it;
+              if (args.request.types.includes("item") && !it.itemBarcode) {
+                return { ...it, itemBarcode: `ITM-${o.orderNumber}-${it.sku}` };
+              }
+              return it;
+            });
+            return { ...o, items };
+          });
+          return { ...b, orders };
+        });
+        return { ...prev, batches };
+      });
+    }
+    notify("Barcodes generated", "success");
   };
 
   return (

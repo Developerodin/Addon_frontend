@@ -5,101 +5,13 @@ import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
-import { Order, OrderFilters, OrderStatus, DispatchTracking, StockBlockStatus, OrderLifecycleStatus } from './types';
-import { useOrders } from '@/shared/hooks/useOrders';
-import { Order as ApiOrder } from '@/shared/services/orderService';
+import { Order, OrderFilters, OrderStatus, DispatchTracking } from './types';
+import { useWhmsOrders } from '@/shared/hooks/useWhmsOrders';
 import OrderFiltersPanel from './components/OrderFilters';
 import OrderDetailsModal from './components/OrderDetailsModal';
 import OrderTable from './components/OrderTable';
 import NotificationsSection from './components/NotificationsSection';
 import OrderStatusUpdateModal from './components/OrderStatusUpdateModal';
-
-// Transform API order to UI order format
-const transformApiOrderToUiOrder = (apiOrder: ApiOrder): Order => {
-  // Calculate total quantity and value from items
-  const totalQuantity = apiOrder.items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalValue = apiOrder.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-
-  // Map API status to UI status
-  const statusMap: Record<string, OrderStatus> = {
-    'pending': 'pending',
-    'processing': 'in-progress',
-    'completed': 'dispatched',
-    'cancelled': 'cancelled',
-    'refunded': 'cancelled',
-    'in-progress': 'in-progress',
-    'packed': 'packed',
-    'dispatched': 'dispatched',
-  };
-
-  // Map source to channel
-  const channelMap: Record<string, string> = {
-    'Website': 'online',
-    'Amazon': 'marketplace',
-    'Flipkart': 'marketplace',
-    'Blinkit': 'marketplace',
-    'Mobile App': 'online',
-    'Retail': 'retail',
-    'Wholesale': 'wholesale',
-    'Direct': 'direct',
-  };
-
-  const status = statusMap[apiOrder.orderStatus] || 'pending';
-  const stockBlockStatus: StockBlockStatus =
-    status === 'dispatched' || status === 'cancelled' ? 'available' :
-    status === 'in-progress' || status === 'packed' ? 'pick-block' : 'tentative-block';
-  const lifecycleStatus: OrderLifecycleStatus =
-    status === 'dispatched' ? 'dispatched' :
-    status === 'packed' ? 'billing-done-dispatch-pending' :
-    status === 'in-progress' ? 'picking-done' : 'order-received';
-
-  return {
-    id: apiOrder.id,
-    orderNumber: apiOrder.externalOrderId,
-    date: apiOrder.createdAt || apiOrder.timestamps?.createdAt || new Date().toISOString(),
-    status,
-    stockBlockStatus,
-    lifecycleStatus,
-    channel: (channelMap[apiOrder.source] || 'online') as any,
-    customer: {
-      name: apiOrder.customer.name,
-      email: apiOrder.customer.email,
-      phone: apiOrder.customer.phone,
-      address: {
-        street: apiOrder.customer.address.street || apiOrder.customer.address.addressLine1,
-        city: apiOrder.customer.address.city,
-        state: apiOrder.customer.address.state,
-        zipCode: apiOrder.customer.address.zipCode,
-        country: apiOrder.customer.address.country,
-      },
-    },
-    items: apiOrder.items.map(item => ({
-      sku: item.sku,
-      name: item.name,
-      quantity: item.quantity,
-      unitPrice: item.price,
-      totalPrice: item.quantity * item.price,
-      stockAvailable: true, // Default to true, can be enhanced later
-      stockQuantity: undefined, // Can be added from inventory API later
-    })),
-    packingInstructions: {
-      fragile: false,
-      packagingType: 'standard',
-      notes: apiOrder.meta?.notes || '',
-    },
-    dispatchMode: 'standard',
-    totalValue,
-    totalQuantity,
-    priority: 'medium', // Default priority, can be enhanced
-    estimatedDispatchDate: apiOrder.logistics?.status === 'ready-to-ship' ? apiOrder.updatedAt : undefined,
-    actualDispatchDate: apiOrder.logistics?.status === 'shipped' || apiOrder.logistics?.status === 'delivered' ? apiOrder.updatedAt : undefined,
-    // Pass through API fields
-    source: apiOrder.source,
-    payment: apiOrder.payment,
-    logistics: apiOrder.logistics,
-    meta: apiOrder.meta,
-  };
-};
 
 const OrdersPage = () => {
   const router = useRouter();
@@ -113,21 +25,18 @@ const OrdersPage = () => {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [orderOverlay, setOrderOverlay] = useState<Record<string, Partial<Order>>>({});
 
-  // Use API hook
+  // WHMS API hook (uses your existing Node.js /v1/whms endpoints)
   const {
-    orders: apiOrders,
+    orders: whmsOrderList,
     loading,
     error,
     pagination,
     fetchOrders,
     deleteOrder,
-    updateWebsiteOrderStatus,
-  } = useOrders();
+    saveTracking: saveTrackingApi,
+  } = useWhmsOrders();
 
-  // Transform API orders to UI format and merge overlay (stock block, lifecycle, tracking)
-  const allOrders = useMemo(() => {
-    return apiOrders.map(transformApiOrderToUiOrder);
-  }, [apiOrders]);
+  const allOrders = useMemo(() => whmsOrderList, [whmsOrderList]);
 
   const ordersWithOverlay = useMemo(() => {
     return allOrders.map((o) => ({ ...o, ...orderOverlay[o.id] }));
@@ -165,47 +74,15 @@ const OrdersPage = () => {
   }, [ordersWithOverlay]);
 
   const buildApiFilters = useCallback(() => {
-    const apiFilters: any = {
+    const apiFilters: Record<string, string | number> = {
       page: 1,
-      limit: 100, // Get more orders for filtering
-      sortBy: 'createdAt:desc',
+      limit: 100,
     };
-
-    const statusMap: Record<OrderStatus, string> = {
-      'pending': 'pending',
-      'in-progress': 'processing',
-      'packed': 'processing',
-      'dispatched': 'completed',
-      'cancelled': 'cancelled',
-    };
-
-    if (activeTab !== 'all') {
-      apiFilters.orderStatus = statusMap[activeTab] || activeTab;
-    }
-
-    if (filters.status) {
-      apiFilters.orderStatus = statusMap[filters.status] || filters.status;
-    }
-
-    if (filters.channel) {
-      const sourceMap: Record<string, string> = {
-        'online': 'Website',
-        'marketplace': 'Amazon',
-        'retail': 'Retail',
-        'wholesale': 'Wholesale',
-        'direct': 'Direct',
-      };
-      apiFilters.source = sourceMap[filters.channel] || filters.channel;
-    }
-
-    if (filters.dateFrom) {
-      apiFilters.dateFrom = filters.dateFrom;
-    }
-
-    if (filters.dateTo) {
-      apiFilters.dateTo = filters.dateTo;
-    }
-
+    if (activeTab !== 'all') apiFilters.status = activeTab;
+    if (filters.status) apiFilters.status = filters.status;
+    if (filters.channel) apiFilters.channel = filters.channel;
+    if (filters.dateFrom) apiFilters.dateFrom = filters.dateFrom;
+    if (filters.dateTo) apiFilters.dateTo = filters.dateTo;
     return apiFilters;
   }, [activeTab, filters]);
 
@@ -344,36 +221,40 @@ const OrdersPage = () => {
     setIsStatusModalOpen(false);
   };
 
-  const handleTrackingSave = (orderId: string, tracking: DispatchTracking) => {
-    setOrderOverlay((prev) => ({
-      ...prev,
-      [orderId]: {
-        ...prev[orderId],
-        tracking,
-        status: 'dispatched',
-        lifecycleStatus: 'dispatched',
-        stockBlockStatus: 'available',
-      },
-    }));
-    toast.success('Tracking saved. Order marked as Dispatched.');
+  const handleTrackingSave = async (orderId: string, tracking: DispatchTracking) => {
+    try {
+      await saveTrackingApi(orderId, tracking);
+      setOrderOverlay((prev) => ({
+        ...prev,
+        [orderId]: {
+          ...prev[orderId],
+          tracking,
+          status: 'dispatched',
+          lifecycleStatus: 'dispatched',
+          stockBlockStatus: 'available',
+        },
+      }));
+      toast.success('Tracking saved. Order marked as Dispatched.');
+    } catch {
+      toast.error('Failed to save tracking.');
+    }
   };
 
   const modalOrder = selectedOrder ? filteredOrders.find((o) => o.id === selectedOrder.id) ?? selectedOrder : null;
 
   const handleWebsiteStatusUpdate = async (action: 'cancel' | 'complete' | 'archive') => {
     if (!statusModalOrder) return;
-
+    const { orderService } = await import('@/shared/services/orderService');
     setStatusUpdating(true);
     try {
-      await updateWebsiteOrderStatus(statusModalOrder.orderNumber, action);
+      await orderService.updateWebsiteOrderStatus(statusModalOrder.orderNumber, action);
       toast.success(`Order ${statusModalOrder.orderNumber} updated successfully`);
-      const apiFilters = buildApiFilters();
-      await fetchOrders(apiFilters);
+      await fetchOrders(buildApiFilters());
       handleCloseStatusModal();
-    } catch (err: any) {
-      const message = err?.message || 'Failed to update order status';
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update order status';
       toast.error(message);
-      throw (err instanceof Error ? err : new Error(message));
+      throw new Error(message);
     } finally {
       setStatusUpdating(false);
     }

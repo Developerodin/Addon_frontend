@@ -1,43 +1,44 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { InwardRecord, InwardStatus } from "./types";
+import { whmsInward, WhmsInwardRecord } from "@/shared/services/whmsService";
+import { toast } from "react-hot-toast";
 
-// Mock data for inward list
-const MOCK_INWARD: InwardRecord[] = [
-  {
-    id: "inv-1",
-    grnNumber: "GRN-2024-001",
-    reference: "PO-12345",
-    date: "2024-02-15T10:00:00Z",
-    supplier: "ABC Supplies",
-    status: "pending",
-    items: [],
-    totalItems: 12,
-  },
-  {
-    id: "inv-2",
-    grnNumber: "GRN-2024-002",
-    reference: "PO-12346",
-    date: "2024-02-14T14:30:00Z",
-    supplier: "XYZ Traders",
-    status: "partial",
-    items: [],
-    totalItems: 8,
-  },
-  {
-    id: "inv-3",
-    grnNumber: "GRN-2024-003",
-    date: "2024-02-13T09:00:00Z",
-    supplier: "Global Imports",
-    status: "completed",
-    items: [],
-    totalItems: 24,
-  },
-];
+function mapWhmsToInwardRecord(r: WhmsInwardRecord): InwardRecord {
+  const statusMap: Record<string, InwardStatus> = {
+    pending: "pending",
+    partial: "partial",
+    received: "received",
+    "qc-pending": "qc-pending",
+    completed: "completed",
+  };
+  const status = (statusMap[r.status] ?? "pending") as InwardStatus;
+  const items = (r.items || []).map((i) => ({
+    sku: i.sku,
+    name: i.name ?? i.sku,
+    orderedQty: i.orderedQty ?? 0,
+    receivedQty: i.receivedQty ?? i.acceptedQty ?? 0,
+    acceptedQty: i.acceptedQty ?? 0,
+    rejectedQty: i.rejectedQty ?? 0,
+    unit: i.unit,
+  }));
+  const totalItems = r.totalItems ?? items.reduce((s, i) => s + i.orderedQty, 0);
+  return {
+    id: r.id,
+    grnNumber: r.grnNumber,
+    reference: r.reference,
+    date: r.date,
+    supplier: r.supplier ?? "",
+    status,
+    items,
+    totalItems,
+    notes: r.notes,
+  };
+}
 
 const statusBadge: Record<InwardStatus, string> = {
   pending: "bg-yellow-100 text-yellow-800",
@@ -49,7 +50,28 @@ const statusBadge: Record<InwardStatus, string> = {
 
 export default function InwardListPage() {
   const router = useRouter();
-  const [inward] = useState<InwardRecord[]>(MOCK_INWARD);
+  const [inward, setInward] = useState<InwardRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchInward = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await whmsInward.list({ page: 1, limit: 100 });
+      setInward((data.results || []).map(mapWhmsToInwardRecord));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load inward";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInward();
+  }, [fetchInward]);
 
   const handleRowClick = (id: string) => {
     router.push(`/warehouse-management/orders/inward/${id}`);
@@ -131,7 +153,17 @@ export default function InwardListPage() {
           </Link>
         </div>
         <div className="box-body">
-          {inward.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50" />
+              <p className="text-[10px] text-gray-400 font-bold uppercase">Loading...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <p className="text-red-600 text-sm mb-2">{error}</p>
+              <button type="button" onClick={fetchInward} className="ti-btn ti-btn-primary">Retry</button>
+            </div>
+          ) : inward.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                 <i className="ri-inbox-line text-xl text-gray-200"></i>
@@ -176,10 +208,10 @@ export default function InwardListPage() {
                       <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">
                         {row.grnNumber}
                       </td>
-                      <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">
+                      <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-800 border border-gray-200">
                         {row.reference ?? "—"}
                       </td>
-                      <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">
+                      <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-800 border border-gray-200">
                         {new Date(row.date).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
                       </td>
                       <td className="px-1.5 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-200">

@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
+import { whmsConsolidation, WhmsConsolidationBatch } from "@/shared/services/whmsService";
+import { toast } from "react-hot-toast";
 
 interface ConsolidationRecord {
   id: string;
@@ -12,24 +14,16 @@ interface ConsolidationRecord {
   createdAt: string;
 }
 
-const MOCK_CONSOLIDATION: ConsolidationRecord[] = [
-  {
-    id: "con-1",
-    batchCode: "BATCH-2024-001",
-    orderCount: 12,
-    totalItems: 48,
-    status: "ready",
-    createdAt: "2024-02-15T08:00:00Z",
-  },
-  {
-    id: "con-2",
-    batchCode: "BATCH-2024-002",
-    orderCount: 8,
-    totalItems: 22,
-    status: "draft",
-    createdAt: "2024-02-14T16:00:00Z",
-  },
-];
+function mapBatch(b: WhmsConsolidationBatch): ConsolidationRecord {
+  return {
+    id: b.id,
+    batchCode: b.batchCode,
+    orderCount: b.orderIds?.length ?? b.orderCount ?? 0,
+    totalItems: b.totalItems ?? 0,
+    status: (b.status as "draft" | "ready" | "dispatched") ?? "draft",
+    createdAt: b.createdAt ?? "",
+  };
+}
 
 const statusClass: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800",
@@ -38,7 +32,27 @@ const statusClass: Record<string, string> = {
 };
 
 export default function ConsolidationPage() {
-  const [list] = useState<ConsolidationRecord[]>(MOCK_CONSOLIDATION);
+  const [list, setList] = useState<ConsolidationRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchList = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await whmsConsolidation.list({ page: 1, limit: 100 });
+      setList((data.results || []).map(mapBatch));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load consolidation");
+      toast.error("Failed to load consolidation");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchList();
+  }, [fetchList]);
 
   const handleRowClick = (id: string) => {
     // TODO: Navigate to batch details
@@ -126,7 +140,17 @@ export default function ConsolidationPage() {
           </div>
         </div>
         <div className="box-body">
-          {list.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 opacity-50" />
+              <p className="text-[10px] text-gray-400 font-bold uppercase mt-2">Loading...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <p className="text-red-600 text-sm mb-2">{error}</p>
+              <button type="button" onClick={fetchList} className="ti-btn ti-btn-primary">Retry</button>
+            </div>
+          ) : list.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                 <i className="ri-stack-line text-xl text-gray-200"></i>

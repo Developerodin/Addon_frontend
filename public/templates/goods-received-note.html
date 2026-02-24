@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Goods Received Note</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            margin: 10px;
+            color: #000;
+            background-color: #fff;
+            line-height: 1.2;
+        }
+
+        .grn-container {
+            width: 100%;
+            border: 1px solid #000;
+            box-sizing: border-box;
+            padding: 0;
+        }
+
+        .header-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 14px;
+            text-transform: uppercase;
+            padding: 5px 0;
+            border-bottom: 1px solid #000;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        td,
+        th {
+            border: 1px solid #000;
+            padding: 2px 4px;
+            vertical-align: top;
+            word-wrap: break-word;
+        }
+
+
+        .no-border-top {
+            border-top: none;
+        }
+
+        .no-border-bottom {
+            border-bottom: none;
+        }
+
+        .no-border-left {
+            border-left: none;
+        }
+
+        .no-border-right {
+            border-right: none;
+        }
+
+        .label-cell {
+            font-weight: normal;
+            font-size: 8px;
+            color: #333;
+            margin-bottom: 1px;
+        }
+
+        .value-cell {
+            font-weight: bold;
+            font-size: 9px;
+        }
+
+        .company-name {
+            font-weight: bold;
+            font-size: 10px;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        /* Column Widths for Items Table */
+        .col-sr {
+            width: 30px;
+        }
+
+        .col-color {
+            width: 50px;
+        }
+
+        .col-desc {
+            width: auto;
+        }
+
+        .col-qty {
+            width: 70px;
+        }
+
+        .col-rate {
+            width: 60px;
+        }
+
+        .col-per {
+            width: 40px;
+        }
+
+        .col-amount {
+            width: 80px;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-bold {
+            font-weight: bold;
+        }
+
+        .items-table th {
+            background-color: #f8f9fa;
+            font-size: 9px;
+        }
+
+        .items-table td {
+            height: 20px;
+        }
+
+        .tax-table {
+            margin-top: -1px;
+            /* Align with previous table border */
+        }
+
+        .footer-section {
+            padding: 6px;
+            border-top: 1px solid #000;
+        }
+
+        .declaration {
+            font-size: 9px;
+            margin-top: 5px;
+        }
+
+        .signature-area {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            border-top: 1px solid #000;
+            padding-top: 5px;
+        }
+
+        .sig-box {
+            text-align: center;
+            width: 30%;
+        }
+
+        .sig-label {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        .bottom-note {
+            text-align: center;
+            font-size: 9px;
+            margin-top: 10px;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="grn-container">
+        <div class="header-title" id="page-title">PURCHASE INVOICE</div>
+
+        <table class="header-grid">
+            <tr>
+                <td colspan="4" rowspan="2" style="width: 50%;">
+                    <div class="company-name" id="supplier-name">SUTLEJ TEXTILES AND INDUSTRIES LIM</div>
+                    <div id="supplier-address">
+                        UNIT-CHENAB TEXTILE MILLS National<br>
+                        Highway-1A, KATHUA 184102 JAMMU AND<br>
+                        KASMIR - 184102
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <b>E-Mail:</b> <span id="supplier-email"></span><br>
+                        <b>MOB :</b> <span id="supplier-mob">9906010795</span><br>
+                        <b>GST :</b> <span id="supplier-gst">01AAJCS1850N1ZA</span>
+                    </div>
+                </td>
+                <td colspan="2" style="width: 25%; height: 22px;">
+                    <div class="label-cell">Invoice No. :</div>
+                    <div class="value-cell" id="invoice-no">P/25-26/00702</div>
+                </td>
+                <td colspan="2" style="width: 25%; height: 22px;">
+                    <div class="label-cell">Dated</div>
+                    <div class="value-cell" id="invoice-date">16-02-2026</div>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" style="height: 22px;">
+                    <div class="label-cell">Delivery Note</div>
+                    <div class="value-cell" id="delivery-note"></div>
+                </td>
+                <td colspan="2" style="height: 22px;">
+                    <div class="label-cell">Mode/Terms of Payment</div>
+                    <div class="value-cell" id="payment-terms"></div>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="4" rowspan="4" class="no-border-top">
+                    <div class="label-cell">Consignee</div>
+                    <div class="company-name" id="consignee-name">ADDON HOLDINGS PRIVATE LIMITED</div>
+                    <div id="consignee-address">
+                        B/7, GF Asmeeta Textile Park Addl Kalyan<br>
+                        Bhiwandi MIDC Area, Village Kon, Bhiwandi, Pin -<br>
+                        421302 MAHARASHTRA
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <b>State Code:</b> <span id="consignee-state-code">27</span><br>
+                        <b>Contact No.</b> <span id="consignee-contact">02522-297432</span><br>
+                        <b>E-Mail:-</b> <span id="consignee-email">designer1@addbr.com</span>
+                    </div>
+                </td>
+                <td colspan="2" style="height: 22px;">
+                    <div class="label-cell">Suppliers Ref</div>
+                    <div class="value-cell" id="supplier-ref"></div>
+                </td>
+                <td colspan="2" style="height: 22px;">
+                    <div class="label-cell">Other References/PO No:</div>
+                    <div class="value-cell" id="other-ref"></div>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" style="height: 22px;">
+                    <div class="label-cell">Buyers Order No.</div>
+                    <div class="value-cell" id="po-no"></div>
+                </td>
+                <td colspan="2" style="height: 22px;">
+                    <div class="label-cell">Dated</div>
+                    <div class="value-cell" id="po-date"></div>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" style="height: 22px;">
+                    <div class="label-cell">Despatch Document No.</div>
+                    <div class="value-cell" id="dispatch-doc"></div>
+                </td>
+                <td colspan="2" style="height: 22px;">
+                    <div class="label-cell">Delivery Note Date</div>
+                    <div class="value-cell" id="delivery-date"></div>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" style="height: 40px;" class="no-border-top"></td>
+                <td colspan="2" style="height: 40px;" class="no-border-top"></td>
+            </tr>
+        </table>
+
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th class="col-sr">SR.<br>No.</th>
+                    <th class="col-color">COLOR</th>
+                    <th class="col-desc">DESCRIPTION OF GOODS</th>
+                    <th class="col-qty">QTY</th>
+                    <th class="col-rate">RATE</th>
+                    <th class="col-per">PER</th>
+                    <th class="col-amount">AMOUNT</th>
+                </tr>
+            </thead>
+            <tbody id="items-body">
+                <!-- Rows will be injected here -->
+                <tr>
+                    <td class="text-center">1</td>
+                    <td class="text-center">N/A</td>
+                    <td>Example Yarn Description</td>
+                    <td class="text-right">0.00</td>
+                    <td class="text-right">0.00</td>
+                    <td class="text-center">KGS</td>
+                    <td class="text-right">0.00</td>
+                </tr>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="3" class="text-right text-bold">TOTAL QTY :</td>
+                    <td class="text-right text-bold" id="total-qty">0.0000</td>
+                    <td colspan="2" class="text-right text-bold">TOTAL AMOUNT</td>
+                    <td class="text-right text-bold" id="total-amount">0.00</td>
+                </tr>
+                <tr>
+                    <td colspan="6" class="text-right" style="padding: 1px 4px; font-size: 8px;">Round Off Minus</td>
+                    <td class="text-right" id="round-off" style="padding: 1px 4px; font-size: 8px;">0.00</td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <!-- Tax Table Section -->
+        <table class="tax-table">
+            <thead>
+                <tr>
+                    <th style="width: 18%;"></th>
+                    <th style="width: 14%;">Rate</th>
+                    <th style="width: 16%;">Taxable Value</th>
+                    <th style="width: 18%;">SGST</th>
+                    <th style="width: 18%;">CGST / IGST</th>
+                    <th style="width: 16%;"></th>
+                </tr>
+                <tr>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th>Amount</th>
+                    <th>Amount</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="tax-body">
+                <tr>
+                    <td></td>
+                    <td class="text-center" id="tax-rate-label">IGST 5.0%</td>
+                    <td class="text-right" id="taxable-value">0.00</td>
+                    <td class="text-right" id="sgst-amount">0.00</td>
+                    <td class="text-right" id="igst-amount">0.00</td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Bottom Total Row Table -->
+        <table style="margin-top: -1px;">
+            <tr>
+                <td class="text-bold" style="width: 18%;">TOTAL</td>
+                <td style="width: 14%;"></td>
+                <td style="width: 16%;"></td>
+                <td style="width: 18%;"></td>
+                <td style="width: 18%;"></td>
+                <td class="text-right text-bold" id="grand-total" style="width: 16%;">0.00</td>
+            </tr>
+        </table>
+
+        <div class="footer-section">
+            <div style="margin-bottom: 8px;">
+                <b>Net Amount Total :-</b> <span id="total-in-words">Zero Only.</span>
+            </div>
+            <div style="margin-bottom: 8px;">
+                <b>NARRATION:</b> <span id="narration"></span>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <b>GSTIN :</b> <span id="consignee-gst">27AAACA8827A1ZZ</span>
+            </div>
+
+            <div class="declaration">
+                <b style="text-decoration: underline;">Declaration</b><br>
+                We declare that this invoice shows the actual price of the<br>
+                goods described and that all particulars are true and correct.
+            </div>
+
+            <div class="signature-area">
+                <div class="sig-box">
+                    <div class="sig-label">Prepared by</div>
+                </div>
+                <div class="sig-box">
+                    <div class="sig-label">Verified by</div>
+                </div>
+                <div class="sig-box" style="border: 1px solid #000; padding: 2px;">
+                    <div style="font-size: 8px; text-align: right;">For</div>
+                    <div class="sig-label" style="margin-top: 15px;">Authorised Signatory</div>
+                </div>
+            </div>
+
+            <div class="bottom-note">
+                This is a Computer Generated Invoice. &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; E. & O. E
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

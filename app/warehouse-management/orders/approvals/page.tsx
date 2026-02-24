@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import type { DispatchApprovalRecord } from "../types";
+import { whmsApprovals, WhmsVarianceApproval, WhmsDispatchApproval } from "@/shared/services/whmsService";
 
 type ApprovalTypeFilter = "variance" | "dispatch" | "all";
 
@@ -17,16 +18,29 @@ interface VarianceApprovalRecord {
   status: "pending" | "approved" | "rejected";
 }
 
-const MOCK_VARIANCE: VarianceApprovalRecord[] = [
-  { id: "apr-1", reference: "ORD-1001", type: "order", variance: "Qty +5 units", requestedBy: "John Doe", date: "2024-02-15T09:00:00Z", status: "pending" },
-  { id: "apr-2", reference: "GRN-2024-002", type: "grn", variance: "Price variance ₹200", requestedBy: "Jane Smith", date: "2024-02-14T14:00:00Z", status: "pending" },
-];
+function mapVariance(a: WhmsVarianceApproval): VarianceApprovalRecord {
+  return {
+    id: a.id,
+    reference: a.reference,
+    type: a.type,
+    variance: a.variance ?? "",
+    requestedBy: a.requestedBy ?? "",
+    date: a.date,
+    status: (a.status as "pending" | "approved" | "rejected") ?? "pending",
+  };
+}
 
-const MOCK_DISPATCH: DispatchApprovalRecord[] = [
-  { id: "disp-1", orderId: "ORD-2001", channel: "Website", requestedBy: "Warehouse User", pendingApprover: "sales", status: "pending", requestedAt: "2024-02-15T10:00:00Z" },
-  { id: "disp-2", orderId: "ORD-2002", channel: "Amazon", requestedBy: "Warehouse User", pendingApprover: "accounts", status: "pending", requestedAt: "2024-02-15T11:00:00Z" },
-  { id: "disp-3", orderId: "ORD-2003", channel: "Retail", requestedBy: "Warehouse User", pendingApprover: "both", status: "pending", requestedAt: "2024-02-14T16:00:00Z" },
-];
+function mapDispatch(a: WhmsDispatchApproval): DispatchApprovalRecord {
+  return {
+    id: a.id,
+    orderId: a.orderId,
+    channel: a.channel ?? "",
+    requestedBy: a.requestedBy ?? "",
+    pendingApprover: a.pendingApprover ?? "sales",
+    status: (a.status as "pending" | "approved" | "rejected") ?? "pending",
+    requestedAt: a.requestedAt ?? a.createdAt ?? "",
+  };
+}
 
 const statusClass: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
@@ -36,35 +50,79 @@ const statusClass: Record<string, string> = {
 
 export default function ApprovalsPage() {
   const [approvalType, setApprovalType] = useState<ApprovalTypeFilter>("all");
-  const [varianceApprovals, setVarianceApprovals] = useState<VarianceApprovalRecord[]>(MOCK_VARIANCE);
-  const [dispatchApprovals, setDispatchApprovals] = useState<DispatchApprovalRecord[]>(MOCK_DISPATCH);
+  const [varianceApprovals, setVarianceApprovals] = useState<VarianceApprovalRecord[]>([]);
+  const [dispatchApprovals, setDispatchApprovals] = useState<DispatchApprovalRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleVarianceApprove = (id: string) => {
-    setVarianceApprovals((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: "approved" as const } : a))
-    );
-    toast.success("Variance approved");
+  const fetchApprovals = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [varData, dispData] = await Promise.all([
+        whmsApprovals.variance.list({ page: 1, limit: 100 }),
+        whmsApprovals.dispatch.list({ page: 1, limit: 100 }),
+      ]);
+      setVarianceApprovals((varData.results || []).map(mapVariance));
+      setDispatchApprovals((dispData.results || []).map(mapDispatch));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load approvals");
+      toast.error("Failed to load approvals");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchApprovals();
+  }, [fetchApprovals]);
+
+  const handleVarianceApprove = async (id: string) => {
+    try {
+      await whmsApprovals.variance.update(id, { status: "approved" });
+      setVarianceApprovals((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status: "approved" as const } : a))
+      );
+      toast.success("Variance approved");
+    } catch {
+      toast.error("Failed to approve");
+    }
   };
 
-  const handleVarianceReject = (id: string) => {
-    setVarianceApprovals((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: "rejected" as const } : a))
-    );
-    toast.error("Variance rejected");
+  const handleVarianceReject = async (id: string) => {
+    try {
+      await whmsApprovals.variance.update(id, { status: "rejected" });
+      setVarianceApprovals((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status: "rejected" as const } : a))
+      );
+      toast.error("Variance rejected");
+    } catch {
+      toast.error("Failed to reject");
+    }
   };
 
-  const handleDispatchApprove = (id: string) => {
-    setDispatchApprovals((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: "approved" as const } : a))
-    );
-    toast.success("Dispatch approved");
+  const handleDispatchApprove = async (id: string) => {
+    try {
+      await whmsApprovals.dispatch.update(id, { status: "approved" });
+      setDispatchApprovals((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status: "approved" as const } : a))
+      );
+      toast.success("Dispatch approved");
+    } catch {
+      toast.error("Failed to approve");
+    }
   };
 
-  const handleDispatchReject = (id: string) => {
-    setDispatchApprovals((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: "rejected" as const } : a))
-    );
-    toast.error("Dispatch rejected");
+  const handleDispatchReject = async (id: string) => {
+    try {
+      await whmsApprovals.dispatch.update(id, { status: "rejected" });
+      setDispatchApprovals((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status: "rejected" as const } : a))
+      );
+      toast.error("Dispatch rejected");
+    } catch {
+      toast.error("Failed to reject");
+    }
   };
 
   const variancePending = useMemo(() => varianceApprovals.filter((a) => a.status === "pending").length, [varianceApprovals]);
@@ -151,7 +209,19 @@ export default function ApprovalsPage() {
           </div>
         </div>
         <div className="box-body">
-          {(approvalType === "all" || approvalType === "variance") && (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 opacity-50" />
+              <p className="text-[10px] text-gray-400 font-bold uppercase mt-2">Loading...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-8">
+              <p className="text-red-600 text-sm mb-2">{error}</p>
+              <button type="button" onClick={fetchApprovals} className="ti-btn ti-btn-primary">Retry</button>
+            </div>
+          ) : (
+          <>
+            {(approvalType === "all" || approvalType === "variance") && (
             <>
               <h4 className="text-[12px] font-bold text-gray-700 mb-3 flex items-center gap-2">
                 <i className="ri-file-list-3-line"></i>
@@ -177,10 +247,10 @@ export default function ApprovalsPage() {
                       {varianceApprovals.map((row) => (
                         <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">{row.reference}</td>
-                          <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200 capitalize">{row.type}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-800 border border-gray-200 capitalize">{row.type}</td>
                           <td className="px-1.5 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-200">{row.variance}</td>
-                          <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">{row.requestedBy}</td>
-                          <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">{new Date(row.date).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-800 border border-gray-200">{row.requestedBy}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-800 border border-gray-200">{new Date(row.date).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</td>
                           <td className="px-1.5 py-2.5 text-left border border-gray-200">
                             <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${statusClass[row.status]}`}>{row.status}</span>
                           </td>
@@ -201,9 +271,9 @@ export default function ApprovalsPage() {
                 </div>
               )}
             </>
-          )}
+            )}
 
-          {(approvalType === "all" || approvalType === "dispatch") && (
+            {(approvalType === "all" || approvalType === "dispatch") && (
             <>
               <h4 className="text-[12px] font-bold text-gray-700 mb-3 flex items-center gap-2">
                 <i className="ri-truck-line"></i>
@@ -229,8 +299,8 @@ export default function ApprovalsPage() {
                       {dispatchApprovals.map((row) => (
                         <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">{row.orderId}</td>
-                          <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">{row.channel}</td>
-                          <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-400 border border-gray-200">{row.requestedBy}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-800 border border-gray-200">{row.channel}</td>
+                          <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-800 border border-gray-200">{row.requestedBy}</td>
                           <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200 capitalize">{row.pendingApprover}</td>
                           <td className="px-1.5 py-2.5 text-left border border-gray-200">
                             <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${statusClass[row.status]}`}>{row.status}</span>
@@ -252,7 +322,9 @@ export default function ApprovalsPage() {
                 </div>
               )}
             </>
-          )}
+            )}
+            </>
+            )}
         </div>
       </div>
     </>
