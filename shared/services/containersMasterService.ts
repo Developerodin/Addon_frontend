@@ -8,6 +8,8 @@ export interface ContainerMaster {
   barcode: string;
   containerName?: string;
   status: ContainerStatus;
+  activeArticle?: string;
+  activeFloor?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -36,6 +38,12 @@ export interface CreateContainerBody {
 export interface UpdateContainerBody {
   containerName?: string;
   status?: ContainerStatus;
+}
+
+/** Body for PATCH /barcode/:barcode – set active article and floor on container */
+export interface UpdateContainerByBarcodeBody {
+  activeArticle: string; // MongoDB ObjectId
+  activeFloor: string;   // non-empty floor name
 }
 
 const getAccessToken = (): string | null => {
@@ -107,6 +115,16 @@ class ContainersMasterService {
   async update(containerId: string, body: UpdateContainerBody): Promise<ContainerMaster> {
     if (!containerId) throw new Error('containerId is required');
     return this.request<ContainerMaster>(`/${containerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** PATCH /barcode/:barcode – update container's activeArticle and activeFloor. Returns 404 if barcode not found, 400 if validation fails. */
+  async updateByBarcode(barcode: string, body: UpdateContainerByBarcodeBody): Promise<ContainerMaster> {
+    if (!barcode || !barcode.trim()) throw new Error('barcode is required');
+    if (!body.activeArticle || !body.activeFloor?.trim()) throw new Error('activeArticle and activeFloor are required');
+    return this.request<ContainerMaster>(`/barcode/${encodeURIComponent(barcode.trim())}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     });

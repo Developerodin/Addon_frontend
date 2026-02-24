@@ -62,6 +62,30 @@ export interface Article {
   };
 }
 
+/** Populated order ref from GET /production/articles/:articleId */
+export interface ArticleOrderRef {
+  orderNumber?: string;
+  priority?: string;
+  status?: string;
+  _id?: string;
+}
+
+/** Populated machine ref from GET /production/articles/:articleId */
+export interface ArticleMachineRef {
+  machineCode?: string;
+  machineNumber?: string;
+  model?: string;
+  floor?: string;
+  status?: string;
+  _id?: string;
+}
+
+/** Full article from GET /production/articles/:articleId (orderId & machineId populated) */
+export interface ProductionArticleDetail extends Article {
+  orderId?: string | ArticleOrderRef;
+  machineId?: string | ArticleMachineRef;
+}
+
 export interface CreateOrderRequest {
   priority: 'Urgent' | 'High' | 'Medium' | 'Low';
   articles: {
@@ -116,6 +140,20 @@ export interface TransferArticleRequest {
   quantity: number;
   remarks?: string;
   batchNumber?: string;
+}
+
+/** Body for PATCH /articles/:articleId/floor-received-data – append one receivedData entry. */
+export type ProductionFloorName =
+  | 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Silicon'
+  | 'Secondary Checking' | 'Branding' | 'Final Checking' | 'Warehouse' | 'Dispatch';
+
+export interface FloorReceivedDataBody {
+  floor: ProductionFloorName;
+  receivedData: {
+    receivedStatusFromPreviousFloor?: string;
+    receivedInContainerId?: string | null;
+    receivedTimestamp?: string | null;
+  };
 }
 
 export interface OrderFilters {
@@ -424,15 +462,29 @@ class ProductionService {
 
   async getOrder(orderId: string): Promise<ApiResponse<ProductionOrder>> {
     const response = await this.request<any>(`/orders/${orderId}`);
-    
+
     if (response.success) {
       return {
         success: true,
         data: this.transformOrder(response.data)
       };
     }
-    
+
     return response as ApiResponse<ProductionOrder>;
+  }
+
+  /** GET /production/articles/:articleId – full article with orderId & machineId populated */
+  async getArticle(articleId: string): Promise<ApiResponse<ProductionArticleDetail>> {
+    if (!articleId) throw new Error('articleId is required');
+    const raw = await this.request<any>(`/articles/${articleId}`);
+    if (!raw.success || !raw.data) return raw as ApiResponse<ProductionArticleDetail>;
+    const a = raw.data;
+    const data: ProductionArticleDetail = {
+      ...this.transformArticle(a, typeof a.orderId === 'object' && a.orderId?.orderNumber != null ? (a.orderId as any)._id : a.orderId),
+      orderId: a.orderId,
+      machineId: a.machineId
+    };
+    return { success: true, data };
   }
 
   async updateOrder(orderId: string, updateData: UpdateOrderRequest): Promise<ApiResponse<ProductionOrder>> {
@@ -512,6 +564,14 @@ class ProductionService {
     return this.request<Article>(`/floors/${floor}/orders/${orderId}/articles/${articleId}`, {
       method: 'PATCH',
       body: JSON.stringify(progressData),
+    });
+  }
+
+  /** PATCH /articles/:articleId/floor-received-data – append one receivedData entry for the floor. */
+  async updateArticleFloorReceivedData(articleId: string, body: FloorReceivedDataBody): Promise<ApiResponse<Article>> {
+    return this.request<Article>(`/articles/${articleId}/floor-received-data`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
     });
   }
 

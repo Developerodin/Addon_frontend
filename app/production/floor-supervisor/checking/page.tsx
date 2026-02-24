@@ -1,15 +1,21 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import FloorProgression from "@/shared/components/production/FloorProgression";
-import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
+import { productionService, ProductionOrder, FloorOrderFilters, type Article } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import RepairTransferModal from "@/shared/components/production/RepairTransferModal";
 import { getPreviousFloor } from "@/shared/utils/productionUtils";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
+import ArticleViewTab from "./components/ArticleViewTab";
+import MyTeamTab from "./components/MyTeamTab";
+import { containersMasterService, type ContainerMaster } from "@/shared/services/containersMasterService";
+import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
+
+type CheckingTab = "orders" | "article-view" | "my-team";
 
 interface ArticleLog {
   id: string;
@@ -127,6 +133,31 @@ const CheckingFloorSupervisorPage = () => {
     linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
   } | null>(null);
 
+  // Tabs: Orders | Article view | My Team (like linking)
+  const [activeTab, setActiveTab] = useState<CheckingTab>("article-view");
+  // Scan container flow (Article view): barcode -> get container -> Accept Article Quantity for Checking
+  const [showContainerScanDrawer, setShowContainerScanDrawer] = useState(false);
+  const [containerScanBarcode, setContainerScanBarcode] = useState("");
+  const [containerScanLoading, setContainerScanLoading] = useState(false);
+  const [containerScanned, setContainerScanned] = useState<{ container: ContainerMaster; article: Article | null } | null>(null);
+  const [acceptArticleLoading, setAcceptArticleLoading] = useState(false);
+  const [activeArticleId, setActiveArticleId] = useState<string | null>(null);
+  // Assign drawer
+  const [showAssignDrawer, setShowAssignDrawer] = useState(false);
+  const [assignTeamMembers, setAssignTeamMembers] = useState<TeamMaster[]>([]);
+  const [assignTeamLoading, setAssignTeamLoading] = useState(false);
+  const [confirmAssignModal, setConfirmAssignModal] = useState<{ teamMemberName: string; teamMemberId: string; articleId: string } | null>(null);
+  const [assigningInProgress, setAssigningInProgress] = useState(false);
+  const [removingArticleMemberId, setRemovingArticleMemberId] = useState<string | null>(null);
+  // Update order: scan container/bag before submit (like linking)
+  const [showUpdateContainerModal, setShowUpdateContainerModal] = useState(false);
+  const [updateContainerBarcode, setUpdateContainerBarcode] = useState("");
+  const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "ok">("idle");
+  const [updateContainerFetched, setUpdateContainerFetched] = useState<{ activeArticle?: string; activeFloor?: string } | null>(null);
+  const [updateContainerArticleId, setUpdateContainerArticleId] = useState("");
+  const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Washing");
+  const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
+
   // Load checking floor orders from API
   const loadOrders = async () => {
     setIsLoading(true);
@@ -166,6 +197,50 @@ const CheckingFloorSupervisorPage = () => {
 
     return () => clearTimeout(timeoutId);
   }, [currentPage, itemsPerPage, filters, searchQuery]);
+
+  // Update container modal: debounced barcode check
+  useEffect(() => {
+    if (!showUpdateContainerModal) {
+      setUpdateContainerCheckStatus("idle");
+      setUpdateContainerFetched(null);
+      return;
+    }
+    const barcode = updateContainerBarcode.trim();
+    if (!barcode) {
+      setUpdateContainerCheckStatus("idle");
+      setUpdateContainerFetched(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      setUpdateContainerCheckStatus("loading");
+      setUpdateContainerFetched(null);
+      containersMasterService
+        .getByBarcode(barcode)
+        .then((container) => {
+          if (cancelled) return;
+          const hasActive = !!(container.activeArticle?.trim() || container.activeFloor?.trim());
+          if (hasActive) {
+            setUpdateContainerCheckStatus("already-filled");
+            setUpdateContainerFetched({ activeArticle: container.activeArticle, activeFloor: container.activeFloor });
+          } else {
+            setUpdateContainerCheckStatus("ok");
+            setUpdateContainerFetched(null);
+          }
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          const msg = err instanceof Error ? err.message : String(err);
+          setUpdateContainerCheckStatus(msg.includes("404") ? "not-found" : "idle");
+          setUpdateContainerFetched(null);
+          if (!msg.includes("404")) toast.error(msg);
+        });
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [showUpdateContainerModal, updateContainerBarcode]);
 
   // Filter orders and articles based on received quantity for checking floor only
   const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
@@ -300,6 +375,10 @@ const CheckingFloorSupervisorPage = () => {
     setSelectedOrder(null);
     setUpdateData({});
     setShiftInputs({});
+    setShowUpdateContainerModal(false);
+    setUpdateContainerBarcode("");
+    setUpdateContainerCheckStatus("idle");
+    setUpdateContainerFetched(null);
   };
 
 
@@ -626,6 +705,137 @@ const CheckingFloorSupervisorPage = () => {
 
   const hasActiveFilters = searchQuery || Object.values(filters).some(value => value !== '');
 
+  const findArticleInOrders = useCallback((articleId: string): Article | null => {
+    for (const order of paginatedOrders) {
+      const a = order.articles.find((ar) => (ar._id || ar.id) === articleId);
+      if (a) return a as Article;
+    }
+    return null;
+  }, [paginatedOrders]);
+
+  const handleScanContainerClick = () => {
+    setContainerScanned(null);
+    setContainerScanBarcode("");
+    setShowContainerScanDrawer(true);
+  };
+
+  const handleGetContainerByBarcode = async () => {
+    const barcode = containerScanBarcode.trim();
+    if (!barcode) return;
+    setContainerScanLoading(true);
+    setContainerScanned(null);
+    try {
+      const container = await containersMasterService.getByBarcode(barcode);
+      const articleId = container.activeArticle?.trim();
+      const article = articleId ? findArticleInOrders(articleId) ?? null : null;
+      setContainerScanned({ container, article });
+      if (!article && articleId) toast.error("Article not found in current orders.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("404")) toast.error("Container not found for this barcode.");
+      else toast.error(msg);
+    } finally {
+      setContainerScanLoading(false);
+    }
+  };
+
+  const handleAcceptArticleQuantity = async () => {
+    if (!containerScanned?.article) return;
+    const articleId = containerScanned.article._id || containerScanned.article.id;
+    if (!articleId) return;
+    setAcceptArticleLoading(true);
+    try {
+      const res = await productionService.updateArticleFloorReceivedData(articleId, {
+        floor: "Checking",
+        receivedData: {
+          receivedStatusFromPreviousFloor: "Completed",
+          receivedInContainerId: containerScanned.container._id ?? null,
+          receivedTimestamp: new Date().toISOString(),
+        },
+      });
+      if (res.success) {
+        toast.success("Article quantity accepted.");
+        setActiveArticleId(String(articleId));
+        setShowContainerScanDrawer(false);
+        setContainerScanned(null);
+        setContainerScanBarcode("");
+        loadOrders();
+      } else {
+        toast.error(res.error?.message ?? "Failed to accept article quantity");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to accept");
+    } finally {
+      setAcceptArticleLoading(false);
+    }
+  };
+
+  const handleOpenAssignDrawer = useCallback(async () => {
+    setShowAssignDrawer(true);
+    setAssignTeamLoading(true);
+    try {
+      const data = await teamMasterService.list({ workingFloor: "Checking", limit: 200 });
+      setAssignTeamMembers(data.results);
+    } catch {
+      toast.error("Failed to load team members");
+      setAssignTeamMembers([]);
+    } finally {
+      setAssignTeamLoading(false);
+    }
+  }, []);
+
+  const handleAssignToMember = (member: TeamMaster) => {
+    if (!activeArticleId) {
+      toast.error("No active article selected. Scan container and accept article first.");
+      return;
+    }
+    setConfirmAssignModal({ teamMemberName: member.teamMemberName, teamMemberId: member._id, articleId: activeArticleId });
+  };
+
+  const handleConfirmAssign = async () => {
+    if (!confirmAssignModal?.articleId) return;
+    setAssigningInProgress(true);
+    try {
+      await teamMasterService.addActiveArticle(confirmAssignModal.teamMemberId, confirmAssignModal.articleId);
+      toast.success(`Article assigned to ${confirmAssignModal.teamMemberName}`);
+      setConfirmAssignModal(null);
+      setAssignTeamMembers((prev) =>
+        prev.map((m) =>
+          m._id === confirmAssignModal.teamMemberId
+            ? { ...m, articleData: [...(m.articleData || []), { activeArticle: confirmAssignModal.articleId }] }
+            : m
+        )
+      );
+      const data = await teamMasterService.list({ workingFloor: "Checking", limit: 200 });
+      setAssignTeamMembers(data.results);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to assign article");
+    } finally {
+      setAssigningInProgress(false);
+    }
+  };
+
+  const handleArticleReceived = async (member: TeamMaster) => {
+    if (!activeArticleId) return;
+    setRemovingArticleMemberId(member._id);
+    try {
+      await teamMasterService.removeActiveArticle(member._id, activeArticleId);
+      toast.success("Article received recorded.");
+      const data = await teamMasterService.list({ workingFloor: "Checking", limit: 200 });
+      setAssignTeamMembers(data.results);
+      loadOrders();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove active article");
+    } finally {
+      setRemovingArticleMemberId(null);
+    }
+  };
+
+  const handleCloseAssignDrawer = () => {
+    setShowAssignDrawer(false);
+    setConfirmAssignModal(null);
+  };
+
   const getStatusBadge = (status: string) => {
     const statusClasses = {
       'Pending': 'bg-yellow-100 text-yellow-800',
@@ -647,1068 +857,784 @@ const CheckingFloorSupervisorPage = () => {
   };
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Checking Floor Supervisor Dashboard"/>
-      
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <h1 className="box-title text-2xl font-semibold">Checking Floor Supervisor Dashboard</h1>
-                <HelpIcon
-                  title="Checking Floor Supervisor Dashboard"
-                  content={
-                    <div className="space-y-4">
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
-                        <p className="text-gray-700">
-                          This is the Checking Floor Supervisor Dashboard where you can view and update production orders that are currently on the Checking floor.
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li><strong>View Orders:</strong> See all orders with articles on the Checking floor</li>
-                          <li><strong>Track Quantities:</strong> Monitor planned, received from linking, and M1 quantities (good quality items that pass to next floor)</li>
-                          <li><strong>Update Progress:</strong> Click "Update" to modify quality categories (M1-M4) and add remarks</li>
-                          <li><strong>Step 4B - Quality Check:</strong> Categorize checked quantities into M1, M2, M3, M4</li>
-                          <li><strong>M2 Repair Review:</strong> Review M2 items and shift them to M1, M3, or M4 as needed</li>
-                          <li><strong>Track Articles:</strong> Monitor individual article progress and repair status</li>
-                          <li><strong>Add Remarks:</strong> Add notes and comments for each article and repair process</li>
-                          <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
-                        </ul>
-                      </div>
+
+      <div className="bg-white shadow-sm border border-gray-300 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          {/* Page Header - design spec like linking */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-blue-600 rounded-full" />
+              <h1 className="text-sm font-bold text-gray-800">Checking Floor Supervisor</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {totalResults}
+              </span>
+              <HelpIcon
+                title="Checking Floor Supervisor Dashboard"
+                content={
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                      <p className="text-gray-700">
+                        This is the Checking Floor Supervisor Dashboard where you can view and update production orders that are currently on the Checking floor.
+                      </p>
                     </div>
-                  }
-                />
-              </div>
-              <div className="box-tools flex items-center space-x-2">
-                <button 
-                  type="button" 
-                  className="ti-btn ti-btn-light"
-                  onClick={loadOrders}
-                  disabled={isLoading}
-                  title="Refresh Orders"
-                >
-                  <i className={`ri-refresh-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
-                </button>
-              </div>
-            </div>
-            
-            {/* Floor Progression */}
-            {/* <div className="mt-4">
-              <FloorProgression 
-                linkingType="Auto Linking" 
-                currentFloor="Checking"
-                className="mb-4"
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <li><strong>View Orders:</strong> See all orders with articles on the Checking floor</li>
+                        <li><strong>Article view:</strong> Scan container, accept article, assign to team member</li>
+                        <li><strong>My Team:</strong> View active articles and mark article complete</li>
+                        <li><strong>Update Progress:</strong> Scan container then update M1-M4 and transfer to next floor</li>
+                        <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
+                      </ul>
+                    </div>
+                  </div>
+                }
               />
-            </div> */}
-          </div>
-
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-            <div className="box bg-gradient-to-r from-blue-500 to-blue-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-blue-100 text-sm font-medium">Active Orders</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.filter(order => order.status === 'In Progress').length}
-                    </p>
-                  </div>
-                  <div className="text-blue-200">
-                    <i className="ri-cog-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
             </div>
-
-            <div className="box bg-gradient-to-r from-green-500 to-green-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-green-100 text-sm font-medium">M1 - Good Quality</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.reduce((sum, order) => 
-                        sum + order.articles.reduce((articleSum, article) => {
-                          const checkingFloor = getCheckingFloorData(article);
-                          return articleSum + (checkingFloor.data?.m1Quantity || article.m1Quantity || 0);
-                        }, 0), 0
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-green-200">
-                    <i className="ri-check-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="box bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-yellow-100 text-sm font-medium">M2 - Needs Repair</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.reduce((sum, order) => 
-                        sum + order.articles.reduce((articleSum, article) => {
-                          const checkingFloor = getCheckingFloorData(article);
-                          return articleSum + (checkingFloor.data?.m2Quantity || article.m2Quantity || 0);
-                        }, 0), 0
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-yellow-200">
-                    <i className="ri-tools-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="box bg-gradient-to-r from-red-500 to-red-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-red-100 text-sm font-medium">M3+M4 - Defects</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.reduce((sum, order) => 
-                        sum + order.articles.reduce((articleSum, article) => {
-                          const checkingFloor = getCheckingFloorData(article);
-                          return articleSum + (checkingFloor.data?.m3Quantity || article.m3Quantity || 0) + (checkingFloor.data?.m4Quantity || article.m4Quantity || 0);
-                        }, 0), 0
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-red-200">
-                    <i className="ri-error-warning-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                onClick={loadOrders}
+                disabled={isLoading}
+                title="Refresh Orders"
+              >
+                <i className={`ri-refresh-line text-xs ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+              </button>
             </div>
           </div>
 
-          {/* Content Box */}
-          <div className="box">
-            <div className="box-body">
-              {/* Search and Filters Header */}
-              <div className="mb-6">
-                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                  {/* Filter Toggle and Actions */}
-                  <div className="flex items-center gap-3 flex-shrink-0 order-2 sm:order-1">
-                    <button
-                      type="button"
-                      className={`ti-btn ${showFilters ? 'ti-btn-primary' : 'ti-btn-secondary'}`}
-                      onClick={() => setShowFilters(!showFilters)}
-                    >
-                      <i className="ri-filter-3-line me-2"></i>
-                      Filters {hasActiveFilters && <span className="badge bg-white text-primary ml-1">●</span>}
-                    </button>
-                    
-                    {hasActiveFilters && (
-                      <button
-                        type="button"
-                        className="ti-btn ti-btn-light"
-                        onClick={clearFilters}
-                      >
-                        <i className="ri-close-line me-1"></i>
-                        Clear
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Search Bar */}
-                  <div className="w-full sm:w-80 lg:w-96 order-1 sm:order-2">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        className="form-control py-3 pl-10 pr-4 w-full"
-                        placeholder="Search orders by article number or ID..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                      <i className="ri-search-line text-lg absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    </div>
-                  </div>
-
-                  {/* Rows per page selector */}
-                  <div className="flex items-center gap-2 order-3">
-                    <label className="text-sm text-gray-600 whitespace-nowrap">Show:</label>
-                    <select
-                      className="form-select form-select-sm w-20"
-                      value={itemsPerPage}
-                      onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
-                    >
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
-                    <span className="text-sm text-gray-600 whitespace-nowrap">per page</span>
-                  </div>
-                </div>
-
-                {/* Filters Panel */}
-                {showFilters && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {/* Status Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Status</label>
-                        <select
-                          className="form-select"
-                          value={filters.status}
-                          onChange={(e) => handleFilterChange('status', e.target.value)}
-                        >
-                          <option value="">All Status</option>
-                          <option value="Pending">Pending</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Completed">Completed</option>
-                          <option value="On Hold">On Hold</option>
-                        </select>
-                      </div>
-
-                      {/* Priority Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Priority</label>
-                        <select
-                          className="form-select"
-                          value={filters.priority}
-                          onChange={(e) => handleFilterChange('priority', e.target.value)}
-                        >
-                          <option value="">All Priorities</option>
-                          <option value="Urgent">Urgent</option>
-                          <option value="High">High</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Low">Low</option>
-                        </select>
-                      </div>
-
-                      {/* Linking Type Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Linking Type</label>
-                        <select
-                          className="form-select"
-                          value={filters.linkingType}
-                          onChange={(e) => handleFilterChange('linkingType', e.target.value)}
-                        >
-                          <option value="">All Types</option>
-                          <option value="Auto Linking">Auto Linking</option>
-                          <option value="Rosso Linking">Rosso Linking</option>
-                          <option value="Hand Linking">Hand Linking</option>
-                        </select>
-                      </div>
-
-                      {/* Floor Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Floor</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          placeholder="Filter by floor..."
-                          value={filters.floor}
-                          onChange={(e) => handleFilterChange('floor', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {isLoading ? (
-                <div className="flex justify-center items-center py-12">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading orders...</p>
-                  </div>
-                </div>
-              ) : orders.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="text-gray-400 mb-4">
-                    <i className="ri-file-list-line text-6xl"></i>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No orders found</h3>
-                  <p className="text-gray-500 mb-4">
-                    {hasActiveFilters 
-                      ? 'Try adjusting your filters or search terms' 
-                      : 'No orders currently on Checking floor'
-                    }
-                  </p>
-                </div>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table whitespace-nowrap min-w-full">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">
-                          <input 
-                            type="checkbox" 
-                            className="form-check-input" 
-                            checked={selectAll}
-                            onChange={handleSelectAll}
-                          />
-                        </th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Order Info</th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Articles</th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Status</th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {paginatedOrders.map((order) => (
-                        <tr 
-                          key={order.id}
-                          className="hover:bg-gray-50 transition-colors duration-150"
-                        >
-                          <td className="px-4 py-4">
-                            <input 
-                              type="checkbox" 
-                              className="form-check-input" 
-                              checked={selectedOrders.includes(order.id)}
-                              onChange={() => handleOrderSelect(order.id)}
-                            />
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="space-y-1">
-                              <div className="font-medium text-gray-900">
-                                {order.orderNumber || order.id}
-                                {order.orderNote && (
-                                  <span className="text-sm text-gray-500 ml-2">
-                                    ({order.orderNote})
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 
-                                  (order.articles && order.articles.length > 0 && order.articles[0].createdAt ? 
-                                    new Date(order.articles[0].createdAt).toLocaleDateString() : 'N/A')}
-                              </div>
-                              <div className="text-xs text-gray-400">
-                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : 
-                                  (order.articles && order.articles.length > 0 && order.articles[0].updatedAt ? 
-                                    new Date(order.articles[0].updatedAt).toLocaleDateString() : 'N/A')}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="space-y-1">
-                              <div className="font-medium text-gray-900">
-                                {order.articles.length} Article{order.articles.length > 1 ? 's' : ''}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                Total Qty: {order.articles.reduce((sum, article) => sum + article.plannedQuantity, 0).toLocaleString()}
-                              </div>
-                              {order.articles.some(article => article.floorQuantities?.checking) && (
-                                <div className="text-xs text-blue-600">
-                                  Checking: R:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.checking?.received || 0), 0)} | 
-                                  Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.checking?.remaining || 0), 0)}
-                                </div>
-                              )}
-                              {order.articles.some(article => article.floorQuantities?.knitting?.m4Quantity) && (
-                                <div className="text-xs text-red-600">
-                                  M4 Quantity In Knitting: {order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.m4Quantity || 0), 0)}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="space-y-2">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
-                                {order.status}
-                              </span>
-                              <div>
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(order.priority)}`}>
-                                  {order.priority}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="flex items-center space-x-2">
-                              <button 
-                                className="ti-btn ti-btn-primary ti-btn-sm"
-                                onClick={() => handleViewOrder(order)}
-                                title="View Order"
-                              >
-                                <i className="ri-eye-line"></i>
-                              </button>
-                              <button 
-                                className="ti-btn ti-btn-success ti-btn-sm"
-                                onClick={() => handleUpdateOrder(order)}
-                                title="Update Order"
-                              >
-                                <i className="ri-edit-line"></i>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Pagination */}
-              {!isLoading && orders.length > 0 && (
-                <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-6 border-t border-gray-200">
-                  <div className="text-sm text-gray-700 mb-4 sm:mb-0">
-                    <span className="font-medium">
-                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} 
-                    </span>
-                    <span className="text-gray-500"> of {totalResults.toLocaleString()} orders</span>
-                  </div>
-                  
-                  <nav aria-label="Page navigation" className="flex items-center space-x-1">
-                    <button
-                      className={`px-3 py-2 text-sm font-medium rounded-md ${
-                        currentPage > 1
-                          ? 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
-                          : 'text-gray-300 bg-gray-100 border border-gray-200 cursor-not-allowed'
-                      }`}
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage <= 1}
-                    >
-                      <i className="ri-arrow-left-s-line"></i>
-                    </button>
-                    
-                    {/* Page Numbers */}
-                    {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 7) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 4) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 3) {
-                        pageNum = totalPages - 6 + i;
-                      } else {
-                        pageNum = currentPage - 3 + i;
-                      }
-                      
-                      return (
-                        <button
-                          key={pageNum}
-                          className={`px-3 py-2 text-sm font-medium rounded-md ${
-                            currentPage === pageNum
-                              ? 'bg-primary text-white border border-primary'
-                              : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
-                          }`}
-                          onClick={() => handlePageChange(pageNum)}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                    
-                    <button
-                      className={`px-3 py-2 text-sm font-medium rounded-md ${
-                        currentPage < totalPages
-                          ? 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
-                          : 'text-gray-300 bg-gray-100 border border-gray-200 cursor-not-allowed'
-                      }`}
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage >= totalPages}
-                    >
-                      <i className="ri-arrow-right-s-line"></i>
-                    </button>
-                  </nav>
-                </div>
-              )}
+          {/* Small stat cards - design spec */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+            <div className="bg-blue-50 border border-blue-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wide">In Progress</span>
+              <span className="text-sm font-bold text-blue-900">{orders.filter(o => o.status === 'In Progress').length}</span>
+            </div>
+            <div className="bg-green-50 border border-green-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-green-700 uppercase tracking-wide">M1 Good</span>
+              <span className="text-sm font-bold text-green-900">
+                {orders.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => {
+                  const cf = getCheckingFloorData(article);
+                  return articleSum + (cf.data?.m1Quantity ?? (article as any).m1Quantity ?? 0);
+                }, 0), 0)}
+              </span>
+            </div>
+            <div className="bg-yellow-50 border border-yellow-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-yellow-700 uppercase tracking-wide">M2 Repair</span>
+              <span className="text-sm font-bold text-yellow-900">
+                {orders.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => {
+                  const cf = getCheckingFloorData(article);
+                  return articleSum + (cf.data?.m2Quantity ?? (article as any).m2Quantity ?? 0);
+                }, 0), 0)}
+              </span>
+            </div>
+            <div className="bg-red-50 border border-red-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-red-700 uppercase tracking-wide">M3+M4</span>
+              <span className="text-sm font-bold text-red-900">
+                {orders.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => {
+                  const cf = getCheckingFloorData(article);
+                  return articleSum + (cf.data?.m3Quantity ?? (article as any).m3Quantity ?? 0) + (cf.data?.m4Quantity ?? (article as any).m4Quantity ?? 0);
+                }, 0), 0)}
+              </span>
             </div>
           </div>
+
+          {/* Tabs: Orders | Article view | My Team */}
+          <div className="flex border-b border-gray-300 mb-0">
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("orders")}
+            >
+              Orders
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "article-view" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("article-view")}
+            >
+              Article view
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "my-team" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("my-team")}
+            >
+              My Team
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="min-h-[300px]">
+          {activeTab === "my-team" ? (
+            <MyTeamTab />
+          ) : activeTab === "article-view" ? (
+            <ArticleViewTab
+              orders={paginatedOrders}
+              onViewOrder={handleViewOrder}
+              onUpdateOrder={handleUpdateOrder}
+              getStatusBadge={getStatusBadge}
+              getPriorityBadge={getPriorityBadge}
+              activeArticleId={activeArticleId}
+              onAssignClick={handleOpenAssignDrawer}
+              onScanContainerClick={handleScanContainerClick}
+            />
+          ) : (
+            <>
+          <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-300">
+            <button
+              type="button"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${showFilters ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 text-[#495057] hover:bg-gray-50'}`}
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <i className="ri-filter-3-line text-xs"></i> Filters {hasActiveFilters && <span className="ml-1">●</span>}
+            </button>
+            {hasActiveFilters && (
+              <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[11px] font-bold rounded hover:bg-gray-50" onClick={clearFilters}>
+                <i className="ri-close-line text-xs"></i> Clear
+              </button>
+            )}
+            <div className="relative flex-1 min-w-[140px] max-w-[240px]">
+              <input
+                type="text"
+                className="bg-white border border-gray-300 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-1 focus:ring-blue-300 focus:border-blue-500 w-full placeholder:text-gray-400 font-medium"
+                placeholder="Search order, article..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+            </div>
+            <select
+              className="bg-white border border-gray-300 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
+              value={itemsPerPage}
+              onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+            >
+              <option value={10}>Show 10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          {showFilters && (
+            <div className="p-[10px] bg-gray-50 border-b border-gray-300 flex flex-wrap gap-2">
+              <select className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5" value={filters.status} onChange={(e) => handleFilterChange('status', e.target.value)}>
+                <option value="">All Status</option>
+                <option value="Pending">Pending</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Completed">Completed</option>
+                <option value="On Hold">On Hold</option>
+              </select>
+              <select className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5" value={filters.priority} onChange={(e) => handleFilterChange('priority', e.target.value)}>
+                <option value="">All Priorities</option>
+                <option value="Urgent">Urgent</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+              <select className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5" value={filters.linkingType} onChange={(e) => handleFilterChange('linkingType', e.target.value)}>
+                <option value="">All Types</option>
+                <option value="Auto Linking">Auto Linking</option>
+                <option value="Rosso Linking">Rosso Linking</option>
+                <option value="Hand Linking">Hand Linking</option>
+              </select>
+              <input type="text" className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5 w-28" placeholder="Floor..." value={filters.floor} onChange={(e) => handleFilterChange('floor', e.target.value)} />
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-file-list-line text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">NO ORDERS FOUND</h3>
+              <p className="text-[10px] text-gray-500">
+                {hasActiveFilters ? 'Try adjusting filters or search' : 'No orders on Checking floor'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-50/30">
+                    <th className="pl-[10px] pr-1 py-2.5 w-10 border border-gray-300">
+                      <input type="checkbox" checked={selectAll} onChange={handleSelectAll} className="rounded border-gray-300 text-blue-600 focus:ring-0 h-3.5 w-3.5" />
+                    </th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Order Info</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Articles</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Status</th>
+                    <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedOrders.map((order) => (
+                    <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="pl-[10px] pr-1 py-2.5 border border-gray-300">
+                        <input type="checkbox" checked={selectedOrders.includes(order.id)} onChange={() => handleOrderSelect(order.id)} className="rounded border-gray-300 text-blue-600 focus:ring-0 h-3.5 w-3.5" />
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-300">
+                        <div className="text-[12px] font-bold text-gray-900">{order.orderNumber || order.id}</div>
+                        {order.orderNote && <span className="text-[10px] text-gray-500">({order.orderNote})</span>}
+                        <div className="text-[10px] text-gray-500">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : (order.articles?.[0]?.createdAt ? new Date(order.articles[0].createdAt).toLocaleDateString() : 'N/A')}</div>
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-300">
+                        <div className="text-[12px] font-medium text-gray-600">{order.articles.length} Article{order.articles.length !== 1 ? 's' : ''} · Qty {order.articles.reduce((s, a) => s + (a.plannedQuantity || 0), 0).toLocaleString()}</div>
+                        {order.articles.some(a => (a as any).floorQuantities?.checking) && (
+                          <div className="text-[10px] text-blue-600 mt-0.5">
+                            R:{order.articles.reduce((s, a) => s + ((a as any).floorQuantities?.checking?.received || 0), 0)} Trf:{order.articles.reduce((s, a) => s + ((a as any).floorQuantities?.checking?.transferred || 0), 0)} Rem:{order.articles.reduce((s, a) => s + ((a as any).floorQuantities?.checking?.remaining ?? 0), 0)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-300">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>{order.status}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ml-1 ${getPriorityBadge(order.priority)}`}>{order.priority}</span>
+                      </td>
+                      <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-300">
+                        <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100">
+                          <button className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100" onClick={() => handleViewOrder(order)} title="View"><i className="ri-eye-line text-xs"></i></button>
+                          <button className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100" onClick={() => handleUpdateOrder(order)} title="Update"><i className="ri-edit-line text-xs"></i></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!isLoading && orders.length > 0 && (
+            <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-300">
+              <div className="text-[11px] font-medium text-[#495057]">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage <= 1} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Prev</button>
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                  const pageNum = totalPages <= 7 ? i + 1 : currentPage <= 4 ? i + 1 : currentPage >= totalPages - 3 ? totalPages - 6 + i : currentPage - 3 + i;
+                  return (
+                    <button key={pageNum} onClick={() => handlePageChange(pageNum)} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${currentPage === pageNum ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>{pageNum}</button>
+                  );
+                })}
+                <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= totalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Next</button>
+              </div>
+            </div>
+          )}
+            </>
+          )}
         </div>
       </div>
 
-      {/* Update Order Modal */}
-      {showUpdateModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold">Update Order - {selectedOrder.orderNumber}</h3>
-              <button
-                onClick={closeUpdateModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <i className="ri-close-line text-xl"></i>
+      {/* Scan Container drawer */}
+      {showContainerScanDrawer && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} aria-hidden />
+          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
+            <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
+              <h3 className="text-sm font-bold text-gray-800">Scan Container</h3>
+              <button type="button" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} className="text-gray-500 hover:text-gray-700 p-1">
+                <i className="ri-close-line text-lg" />
               </button>
             </div>
-
-            {/* Order Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-              <div>
-                <label className="text-sm font-medium text-gray-600">Priority</label>
-                <div className="mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(selectedOrder.priority)}`}>
-                    {selectedOrder.priority}
-                  </span>
+            <div className="flex-1 overflow-y-auto p-[10px]">
+              {!containerScanned ? (
+                <div className="space-y-3">
+                  <label className="block text-[11px] font-medium text-[#495057]">Container barcode</label>
+                  <input
+                    type="text"
+                    placeholder="Scan or enter barcode"
+                    value={containerScanBarcode}
+                    onChange={(e) => setContainerScanBarcode(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleGetContainerByBarcode()}
+                    className="w-full border border-gray-200 rounded pl-3 pr-3 py-1.5 text-[11px] font-medium focus:ring-0 focus:border-blue-300 placeholder:text-gray-400"
+                  />
+                  <button
+                    type="button"
+                    disabled={!containerScanBarcode.trim() || containerScanLoading}
+                    onClick={handleGetContainerByBarcode}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-blue-600 text-white hover:bg-blue-700 shadow-sm w-full"
+                  >
+                    {containerScanLoading ? <span className="animate-spin">...</span> : "Get container"}
+                  </button>
                 </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Status</label>
-                <div className="mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedOrder.status)}`}>
-                    {selectedOrder.status}
-                  </span>
+              ) : (
+                <div className="space-y-4">
+                  <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Article details</h4>
+                  {containerScanned.article ? (
+                    <>
+                      <div className="p-2 bg-gray-50 rounded border border-gray-200 text-[12px] text-gray-900">
+                        <div><span className="font-bold text-[#495057]">Article:</span> {containerScanned.article.articleNumber}</div>
+                        <div><span className="font-bold text-[#495057]">Order:</span> {containerScanned.article.orderId ?? "—"}</div>
+                        <div><span className="font-bold text-[#495057]">Planned:</span> {containerScanned.article.plannedQuantity}</div>
+                        <div><span className="font-bold text-[#495057]">Checking received:</span> {(containerScanned.article as any).floorQuantities?.checking?.received ?? 0}</div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={acceptArticleLoading}
+                        onClick={handleAcceptArticleQuantity}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full"
+                      >
+                        {acceptArticleLoading ? "Accepting..." : "Accept Article Quantity"}
+                      </button>
+                    </>
+                  ) : (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                      Article not in current orders. Use another container or go to the order that contains this article.
+                    </p>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
+          </div>
+        </>
+      )}
 
-            {/* Articles Update Form with Tabs */}
-            <div className="space-y-6">
-              <h4 className="text-lg font-medium text-gray-900">Update Article Progress</h4>
+      {/* Assign drawer */}
+      {showAssignDrawer && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={handleCloseAssignDrawer} aria-hidden />
+          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
+            <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
+              <h3 className="text-sm font-bold text-gray-800">Assign article to team member</h3>
+              <button type="button" onClick={handleCloseAssignDrawer} className="text-gray-500 hover:text-gray-700 p-1">
+                <i className="ri-close-line text-lg" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-[10px]">
+              {assignTeamLoading ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4 opacity-50" />
+                  <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
+                </div>
+              ) : assignTeamMembers.length === 0 ? (
+                <p className="text-[11px] text-[#495057]">No team members on Checking floor.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {assignTeamMembers.map((member) => {
+                    const hasActiveArticle = Boolean(activeArticleId && member.articleData?.some((d) => d.activeArticle === activeArticleId));
+                    return (
+                      <li key={member._id} className="flex items-center justify-between gap-2 p-2 border border-gray-200 rounded hover:bg-gray-50">
+                        <div>
+                          <span className="text-[12px] font-medium text-gray-900">{member.teamMemberName}</span>
+                          <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-bold ${member.role === "Supervisor" ? "bg-blue-50 text-blue-700 border border-blue-100" : "bg-gray-50 text-gray-600 border border-gray-200"}`}>{member.role}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {hasActiveArticle ? (
+                            <button type="button" onClick={() => handleArticleReceived(member)} disabled={removingArticleMemberId === member._id} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm disabled:opacity-50">
+                              {removingArticleMemberId === member._id ? "..." : "Article received"}
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => handleAssignToMember(member)} disabled={!activeArticleId} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-blue-600 text-white hover:bg-blue-700 shadow-sm disabled:opacity-50">Assign</button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
-              {/* Blue Article Tabs */}
-              <div className="mb-4">
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {selectedOrder.articles.map((article, idx) => (
-                    <button
-                      key={article.id}
-                      className={`px-3 py-2 text-sm font-medium rounded-md whitespace-nowrap focus:outline-none ${
-                        idx === activeUpdateTabIndex ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                      }`}
-                      onClick={() => {
-                        setActiveUpdateTabIndex(idx);
-                        setShowLogs(false);
-                      }}
-                      title={article.articleNumber}
-                    >
-                      {article.articleNumber || `Article ${idx + 1}`}
-                    </button>
-                  ))}
+      {/* Confirm assign modal */}
+      {confirmAssignModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={() => setConfirmAssignModal(null)}>
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-[10px] border-b border-gray-200">
+              <h4 className="text-sm font-bold text-gray-800">Confirm assign</h4>
+            </div>
+            <p className="p-[10px] text-[11px] text-[#495057]">
+              Assigning this article to <strong>{confirmAssignModal.teamMemberName}</strong>?
+            </p>
+            <div className="flex justify-end gap-2 p-[10px] border-t border-gray-200">
+              <button type="button" onClick={() => setConfirmAssignModal(null)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm">Cancel</button>
+              <button type="button" onClick={handleConfirmAssign} disabled={assigningInProgress} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-[11px] font-bold rounded hover:bg-blue-700 shadow-sm">
+                {assigningInProgress ? "Assigning..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scan container/bag before update order – modal */}
+      {showUpdateContainerModal && selectedOrder && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }} aria-hidden>
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-sm p-[10px] flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
+            <h4 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2">Scan bag / container</h4>
+            <p className="text-[11px] text-[#495057]">Scan or enter the container/bag code in which you put the checking articles for transfer to next floor.</p>
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1">Container barcode</label>
+              <input type="text" placeholder="Scan or enter barcode" value={updateContainerBarcode} onChange={(e) => setUpdateContainerBarcode(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:ring-0 focus:border-blue-300" />
+              {updateContainerCheckStatus === "loading" && <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1"><span className="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-t-transparent" /> Checking...</p>}
+              {updateContainerCheckStatus === "not-found" && <p className="text-[11px] text-red-600 mt-1">Container not found.</p>}
+              {updateContainerCheckStatus === "already-filled" && <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">Container already filled. Use another.</p>}
+              {updateContainerCheckStatus === "ok" && <p className="text-[11px] text-green-600 mt-1">Container available.</p>}
+            </div>
+            <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1">Article in container</label>
+              <select value={updateContainerArticleId} onChange={(e) => setUpdateContainerArticleId(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px]">
+                <option value="">Select article</option>
+                {selectedOrder.articles.map((a) => { const id = a._id || a.id; if (!id) return null; return <option key={id} value={id}>{a.articleNumber || id}</option>; })}
+              </select>
+            </div>
+            <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1">Next floor</label>
+              <select value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px]">
+                {PRODUCTION_FLOORS.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
+              <button
+                type="button"
+                disabled={updateContainerCheckStatus !== "ok" || !updateContainerBarcode.trim() || !updateContainerArticleId || !updateContainerNextFloor.trim() || updateContainerSubmitting}
+                onClick={async () => {
+                  const barcode = updateContainerBarcode.trim();
+                  const articleId = updateContainerArticleId;
+                  const floor = updateContainerNextFloor.trim();
+                  if (!barcode || !articleId || !floor) return;
+                  setUpdateContainerSubmitting(true);
+                  try {
+                    await containersMasterService.updateByBarcode(barcode, { activeArticle: articleId, activeFloor: floor });
+                    toast.success("Container updated");
+                    setShowUpdateContainerModal(false);
+                    setUpdateContainerBarcode("");
+                    setUpdateContainerArticleId("");
+                    setUpdateContainerNextFloor("Washing");
+                    setUpdateContainerCheckStatus("idle");
+                    setUpdateContainerFetched(null);
+                    setUpdateContainerSubmitting(false);
+                    handleUpdateSubmit();
+                  } catch (err) {
+                    setUpdateContainerSubmitting(false);
+                    const msg = err instanceof Error ? err.message : String(err);
+                    if (msg.includes("404")) toast.error("Container not found");
+                    else toast.error(msg);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-[11px] font-bold rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {updateContainerSubmitting ? <span className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" /> : <i className="ri-save-line text-xs" />}
+                Update & submit order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Order – drawer, Excel-like compact */}
+      {showUpdateModal && selectedOrder && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={closeUpdateModal} aria-hidden />
+          <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l-2 border-gray-300">
+            <div className="flex items-center justify-between px-3 py-2 border-b-2 border-gray-300 bg-gray-50 flex-shrink-0">
+              <h3 className="text-sm font-bold text-gray-800">Update Order — {selectedOrder.orderNumber}</h3>
+              <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-800 p-1 rounded border-2 border-gray-300 hover:bg-gray-100">
+                <i className="ri-close-line text-lg"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+            <section className="mb-4 rounded-md border-2 border-gray-300 bg-gray-50 overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">Order</div>
+              <div className="grid grid-cols-2 gap-3 p-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-0.5">Priority</label>
+                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border-2 border-gray-300 ${getPriorityBadge(selectedOrder.priority)}`}>{selectedOrder.priority}</span>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-0.5">Status</label>
+                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border-2 border-gray-300 ${getStatusBadge(selectedOrder.status)}`}>{selectedOrder.status}</span>
                 </div>
               </div>
-
-              {/* Active Article Form */}
+            </section>
+            <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">Article</div>
+              <div className="p-2 flex gap-1.5 flex-wrap">
+                {selectedOrder.articles.map((article, idx) => (
+                  <button
+                    key={article.id}
+                    className={`px-3 py-1.5 text-[11px] font-bold rounded border-2 ${
+                      idx === activeUpdateTabIndex ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
+                    }`}
+                    onClick={() => { setActiveUpdateTabIndex(idx); setShowLogs(false); }}
+                    title={article.articleNumber}
+                  >
+                    {article.articleNumber || `Art ${idx + 1}`}
+                  </button>
+                ))}
+              </div>
+            </section>
               {(() => {
                 const article = selectedOrder.articles[activeUpdateTabIndex];
                 if (!article) return null;
-                
                 const articleId = article.id || article._id;
                 if (!articleId) return null;
-                
                 const checkingFloor = getCheckingFloorData(article);
                 const currentUpdateData = updateData[articleId] || { 
                   remarks: article.remarks || '',
-                  m1Quantity: 0, // Always start with 0 for user input
+                  m1Quantity: 0,
                   m2Quantity: checkingFloor.data?.m2Quantity ?? article.m2Quantity ?? 0,
                   m3Quantity: checkingFloor.data?.m3Quantity ?? article.m3Quantity ?? 0,
                   m4Quantity: checkingFloor.data?.m4Quantity ?? article.m4Quantity ?? 0,
                   repairStatus: checkingFloor.data?.repairStatus || article.repairStatus || 'Not Required',
                   repairRemarks: checkingFloor.data?.repairRemarks || article.repairRemarks || ''
                 };
-                
                 return (
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-4">
+                  <>
+            <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase flex justify-between items-center">
+                <span>{article.articleNumber || '—'}</span>
+                <span className="text-[10px] font-medium normal-case">{article.linkingType || 'N/A'}</span>
+              </div>
+              <div className="p-2">
+                <table className="w-full border-collapse text-[11px] border-2 border-gray-300">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Planned</th>
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Received</th>
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Transferred</th>
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border-2 border-gray-300 px-2 py-1">{(article.plannedQuantity || 0).toLocaleString()}</td>
+                      <td className="border-2 border-gray-300 px-2 py-1"><ReceivedQuantityDisplay received={checkingFloor.data?.received || 0} repairReceived={checkingFloor.data?.repairReceived} repairFromFloor={checkingFloor.data?.repairFromFloor} className="text-[11px]" /></td>
+                      <td className="border-2 border-gray-300 px-2 py-1 text-green-700 font-medium">{checkingFloor.data?.transferred || 0}</td>
+                      <td className="border-2 border-gray-300 px-2 py-1 text-orange-700 font-medium">{(checkingFloor.data?.received || 0) - (checkingFloor.data?.transferred || 0)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
                       <div>
-                        <h5 className="text-md font-medium text-gray-900">{article.articleNumber || 'Unknown Article'}</h5>
-                        <div className="text-sm text-gray-600 mt-1">
-                          <span className="font-medium">Linking Type:</span> {article.linkingType || 'Not specified'}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority)}`}>
-                          {article.priority || 'Unknown'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-                      <div>
-                        <label className="form-label">Planned Quantity</label>
-                        <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <label className="form-label">
-                          {article.linkingType === 'Auto Linking' ? 'Received from Knitting' : 'Received from Linking'}
-                        </label>
-                        <ReceivedQuantityDisplay
-                          received={checkingFloor.data?.received || 0}
-                          repairReceived={checkingFloor.data?.repairReceived}
-                          repairFromFloor={checkingFloor.data?.repairFromFloor}
-                          className="text-lg"
-                        />
-                      </div>
-                      <div>
-                        <label className="form-label">M1 Completed Quantity *</label>
+                        <label className="text-[10px] font-bold text-green-800 block mb-0.5">M1 — Good quality (to next floor) *</label>
                         {(() => {
                           const received = checkingFloor.data?.received || 0;
                           const transferred = checkingFloor.data?.transferred || 0;
-                          const remaining = received - transferred; // Use transferred instead of current M1
+                          const remaining = received - transferred;
                           const isFullyTransferred = remaining <= 0;
-                          
                           return (
                             <>
                               <NumericInput
-                                className={`${
-                                  isFullyTransferred 
-                                    ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
-                                    : currentUpdateData.m1Quantity > remaining 
-                                      ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
-                                      : ''
-                                }`}
+                                className={`py-1.5 px-2 text-[12px] w-24 border-2 rounded ${isFullyTransferred ? 'bg-gray-100 border-gray-300 cursor-not-allowed' : currentUpdateData.m1Quantity > remaining ? 'border-red-500' : 'border-gray-300'}`}
                                 value={currentUpdateData.m1Quantity}
-                                onChange={(value) => {
-                                  if (isFullyTransferred) return;
-                                  if (value <= remaining) {
-                                    handleM1QuantityChange(articleId, value);
-                                  }
-                                }}
-                                placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${remaining}`}
+                                onChange={(value) => { if (!isFullyTransferred && value <= remaining) handleM1QuantityChange(articleId, value); }}
+                                placeholder={isFullyTransferred ? 'Done' : `Max ${remaining}`}
                                 disabled={isFullyTransferred}
                                 allowDecimals
                               />
-                              {isFullyTransferred ? (
-                                <div className="text-xs text-green-600 mt-1 font-medium">
-                                  ✓ All quantity has been transferred to next floor
-                                </div>
-                              ) : currentUpdateData.m1Quantity > remaining ? (
-                                <div className="text-xs text-red-500 mt-1">
-                                  Cannot exceed remaining quantity ({remaining})
-                                </div>
-                              ) : null}
-                              <div className="text-xs text-green-600 mt-1">
-                                Only M1 (Good Quality) passes to next floor
-                              </div>
+                              {isFullyTransferred ? <div className="text-[10px] text-green-600 mt-0.5 font-medium">✓ All transferred</div> : currentUpdateData.m1Quantity > remaining ? <div className="text-[10px] text-red-600 font-medium">Max {remaining}</div> : null}
                             </>
                           );
                         })()}
                       </div>
-                      <div>
-                        <label className="form-label">Transferred to Next Floor</label>
-                        <div className="text-lg font-semibold text-green-600">
-                          {checkingFloor.data?.transferred || 0}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="form-label">Remaining</label>
-                        <div className="text-lg font-semibold text-orange-600">
-                          {(() => {
-                            const received = checkingFloor.data?.received || 0;
-                            const transferred = checkingFloor.data?.transferred || 0;
-                            return (received - transferred).toLocaleString();
-                          })()}
-                        </div>
-                      </div>
                     </div>
 
-                    {/* Step 4B: Article-wise Checked Quantities */}
-                    <div className="mb-6">
-                      <h6 className="text-md font-semibold text-gray-900 mb-3 border-b pb-2">Step 4B: Article-wise Checked Quantities</h6>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                        <div>
-                          <label className="form-label text-yellow-700 font-medium">M2 - Needs Repair</label>
-                          <NumericInput
-                            className="border-yellow-300 focus:border-yellow-500"
-                            value={currentUpdateData.m2Quantity}
-                            onChange={(value) => handleM2QuantityChange(articleId, value)}
-                            allowDecimals
-                          />
-                          <small className="text-yellow-600">To be reviewed</small>
-                          
-                          {/* M2 Status Card */}
+            <section className="mb-4 rounded-md border-2 border-gray-400 overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-300 border-b-2 border-gray-400 text-[11px] font-bold text-gray-900">Step 4B: Quality categories</div>
+              <p className="px-3 py-1.5 text-[10px] text-gray-600 bg-gray-50 border-b-2 border-gray-300">M1 = Good · M2 = Needs repair · M3 = Minor defects · M4 = Major defects. Enter checked quantities.</p>
+              <div className="p-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="border-2 border-green-300 rounded p-2 bg-green-50/50">
+                          <label className="block text-[10px] font-bold text-green-800 mb-1">M1 Good</label>
+                          <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-green-200 rounded" value={currentUpdateData.m1Quantity} onChange={(v) => handleM1QuantityChange(articleId, v)} allowDecimals />
+                        </div>
+                        <div className="border-2 border-yellow-400 rounded p-2 bg-yellow-50/50">
+                          <label className="block text-[10px] font-bold text-yellow-800 mb-1">M2 Repair</label>
+                          <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-yellow-300 rounded" value={currentUpdateData.m2Quantity} onChange={(value) => handleM2QuantityChange(articleId, value)} allowDecimals />
+                        </div>
+                        <div className="border-2 border-orange-300 rounded p-2 bg-orange-50/50">
+                          <label className="block text-[10px] font-bold text-orange-800 mb-1">M3 Minor</label>
+                          <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-orange-200 rounded" value={currentUpdateData.m3Quantity} onChange={(value) => handleM3QuantityChange(articleId, value)} allowDecimals />
+                        </div>
+                        <div className="border-2 border-red-300 rounded p-2 bg-red-50/50">
+                          <label className="block text-[10px] font-bold text-red-800 mb-1">M4 Major</label>
+                          <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-red-200 rounded" value={currentUpdateData.m4Quantity} onChange={(value) => handleM4QuantityChange(articleId, value)} allowDecimals />
+                        </div>
+                      </div>
+            </section>
+                          {/* M2 Repairable */}
                           {(() => {
                             const m2Quantity = checkingFloor.data?.m2Quantity || article.m2Quantity || 0;
                             const m2Transferred = checkingFloor.data?.m2Transferred || 0;
-                            // According to docs: m2Remaining = m2Quantity (since m2Quantity is already reduced when items are sent)
                             const m2Remaining = checkingFloor.data?.m2Remaining ?? m2Quantity;
                             const previousFloor = getPreviousFloor('Checking', article.linkingType);
-                            
-                            // Show M2 status card if there are current M2 items OR if items have been sent for repair
                             if (m2Quantity > 0 || m2Transferred > 0) {
                               return (
-                                <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                                  <div className="text-xs font-semibold text-yellow-800 mb-2">M2 Repairable Items</div>
-                                  <div className="space-y-1 text-xs">
-                                    <div className="flex justify-between">
-                                      <span className="text-gray-600">Current M2:</span>
-                                      <span className="font-medium">{m2Quantity}</span>
-                                      {m2Transferred > 0 && (
-                                        <span className="text-gray-500 ml-2">({m2Transferred} sent for repair)</span>
-                                      )}
-                                    </div>
-                                    {m2Transferred > 0 && (
-                                      <div className="flex justify-between">
-                                        <span className="text-gray-600">Total Sent for Repair:</span>
-                                        <span className="font-medium text-yellow-700">{m2Transferred}</span>
-                                      </div>
+                                <section className="mb-4 rounded-md border-2 border-yellow-400 overflow-hidden">
+                                  <div className="px-3 py-1.5 bg-yellow-100 border-b-2 border-yellow-400 text-[11px] font-bold text-yellow-900">M2 — Repairable items</div>
+                                  <div className="p-2 flex flex-wrap items-center gap-3">
+                                    <span className="text-[11px] text-gray-700">Current M2: <strong>{m2Quantity}</strong></span>
+                                    {m2Transferred > 0 && <span className="text-[11px] text-yellow-800">Sent for repair: <strong>{m2Transferred}</strong></span>}
+                                    {m2Remaining > 0 && previousFloor && (
+                                      <button type="button" className="px-3 py-1.5 text-[11px] font-bold rounded bg-amber-500 text-white border-2 border-amber-600 hover:bg-amber-600" onClick={() => { setSelectedRepairArticle({ articleId: article._id || article.id, articleNumber: article.articleNumber, orderId: selectedOrder.id, linkingType: article.linkingType }); setShowRepairModal(true); }}>Send M2 for Repair</button>
                                     )}
                                   </div>
-                                  {m2Remaining > 0 && previousFloor && (
-                                    <button
-                                      type="button"
-                                      className="ti-btn ti-btn-warning ti-btn w-full mt-2"
-                                      onClick={() => {
-                                        setSelectedRepairArticle({
-                                          articleId: article._id || article.id,
-                                          articleNumber: article.articleNumber,
-                                          orderId: selectedOrder.id,
-                                          linkingType: article.linkingType
-                                        });
-                                        setShowRepairModal(true);
-                                      }}
-                                    >
-                                      <i className="ri-tools-line me-1"></i>
-                                      Send M2 for Repair
-                                    </button>
-                                  )}
-                                </div>
+                                </section>
                               );
                             }
                             return null;
                           })()}
-                        </div>
-                        
-                        <div>
-                          <label className="form-label text-orange-700 font-medium">M3 - Minor Defects</label>
-                          <NumericInput
-                            className="border-orange-300 focus:border-orange-500"
-                            value={currentUpdateData.m3Quantity}
-                            onChange={(value) => handleM3QuantityChange(articleId, value)}
-                            allowDecimals
-                          />
-                          <small className="text-orange-600">Can be fixed</small>
-                        </div>
-                        
-                        <div>
-                          <label className="form-label text-red-700 font-medium">M4 - Major Defects</label>
-                          <NumericInput
-                            className="border-red-300 focus:border-red-500"
-                            value={currentUpdateData.m4Quantity}
-                            onChange={(value) => handleM4QuantityChange(articleId, value)}
-                            allowDecimals
-                          />
-                          <small className="text-red-600">Needs significant repair</small>
-                        </div>
-                      </div>
 
-                      {/* Quantity Shifting Options */}
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                        <h6 className="text-md font-semibold text-blue-800 mb-3">Quantity Shifting Options</h6>
-                        <p className="text-sm text-blue-700 mb-4">Use these options to shift quantities between categories when needed</p>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {/* M2 to M1 Shift */}
+            <section className="mb-4 rounded-md border-2 border-blue-200 overflow-hidden">
+              <div className="px-3 py-1.5 bg-blue-100 border-b-2 border-blue-300 text-[11px] font-bold text-blue-900">Move between categories</div>
+              <p className="px-3 py-1 text-[10px] text-gray-600 bg-blue-50/50 border-b-2 border-blue-200">Reclassify: e.g. M2→M1 when repaired. Enter qty, click Apply.</p>
+              <div className="p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {currentUpdateData.m2Quantity > 0 && (
-                            <div className="bg-white border border-yellow-200 rounded-lg p-3">
-                              <label className="form-label text-yellow-700 font-medium">M2 → M1 (Good Quality)</label>
-                              <div className="flex gap-2 mb-2">
-                                <NumericInput
-                                  className="flex-1"
-                                  placeholder="Qty to shift"
-                                  min={0}
-                                  max={currentUpdateData.m2Quantity}
-                                  value={shiftInputs[articleId]?.m2ToM1 || 0}
-                                  onChange={(value) => handleShiftInputChange(articleId, 'm2ToM1', value)}
-                                  allowDecimals
-                                />
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-success "
-                                  onClick={() => applyShift(articleId, 'm2ToM1')}
-                                  disabled={!shiftInputs[articleId]?.m2ToM1 || shiftInputs[articleId].m2ToM1 <= 0}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary "
-                                  onClick={() => {
-                                    const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
-                                    handleShiftM2Items(articleId, 'M1', shiftQty);
-                                  }}
-                                  disabled={currentUpdateData.m2Quantity === 0}
-                                >
-                                  +1
-                                </button>
+                            <div className="bg-white border-2 border-gray-300 rounded p-2">
+                              <label className="block text-[10px] font-bold text-yellow-800 mb-1">M2→M1</label>
+                              <div className="flex gap-1 mt-0.5 items-center">
+                                <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m2Quantity} value={shiftInputs[articleId]?.m2ToM1 || 0} onChange={(v) => handleShiftInputChange(articleId, 'm2ToM1', v)} allowDecimals />
+                                <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-green-600 text-white hover:bg-green-700" onClick={() => applyShift(articleId, 'm2ToM1')} disabled={!shiftInputs[articleId]?.m2ToM1 || shiftInputs[articleId].m2ToM1 <= 0}>Apply</button>
+                                <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-blue-500 text-white" onClick={() => handleShiftM2Items(articleId, 'M1', Math.min(currentUpdateData.m2Quantity, 1))} disabled={currentUpdateData.m2Quantity === 0}>+1</button>
                               </div>
-                              <small className="text-yellow-600">Available: {currentUpdateData.m2Quantity}</small>
                             </div>
                           )}
-
-                          {/* M2 to M3 Shift */}
                           {currentUpdateData.m2Quantity > 0 && (
-                            <div className="bg-white border border-orange-200 rounded-lg p-3">
-                              <label className="form-label text-orange-700 font-medium">M2 → M3 (Minor Defects)</label>
-                              <div className="flex gap-2 mb-2">
-                                <NumericInput
-                                  className="flex-1"
-                                  placeholder="Qty to shift"
-                                  min={0}
-                                  max={currentUpdateData.m2Quantity}
-                                  value={shiftInputs[articleId]?.m2ToM3 || 0}
-                                  onChange={(value) => handleShiftInputChange(articleId, 'm2ToM3', value)}
-                                  allowDecimals
-                                />
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-warning  "
-                                  onClick={() => applyShift(articleId, 'm2ToM3')}
-                                  disabled={!shiftInputs[articleId]?.m2ToM3 || shiftInputs[articleId].m2ToM3 <= 0}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary  "
-                                  onClick={() => {
-                                    const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
-                                    handleShiftM2Items(articleId, 'M3', shiftQty);
-                                  }}
-                                  disabled={currentUpdateData.m2Quantity === 0}
-                                >
-                                  +1
-                                </button>
+                            <div className="bg-white border border-orange-200 rounded p-1.5">
+                              <label className="text-[10px] font-bold text-orange-700">M2→M3</label>
+                              <div className="flex gap-1 mt-0.5 items-center">
+                                <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m2Quantity} value={shiftInputs[articleId]?.m2ToM3 || 0} onChange={(v) => handleShiftInputChange(articleId, 'm2ToM3', v)} allowDecimals />
+                                <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500 text-white" onClick={() => applyShift(articleId, 'm2ToM3')} disabled={!shiftInputs[articleId]?.m2ToM3 || shiftInputs[articleId].m2ToM3 <= 0}>Apply</button>
+                                <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-blue-500 text-white" onClick={() => handleShiftM2Items(articleId, 'M3', Math.min(currentUpdateData.m2Quantity, 1))} disabled={currentUpdateData.m2Quantity === 0}>+1</button>
                               </div>
-                              <small className="text-orange-600">Available: {currentUpdateData.m2Quantity}</small>
                             </div>
                           )}
-
-                          {/* M2 to M4 Shift */}
                           {currentUpdateData.m2Quantity > 0 && (
-                            <div className="bg-white border border-red-200 rounded-lg p-3">
-                              <label className="form-label text-red-700 font-medium">M2 → M4 (Major Defects)</label>
-                              <div className="flex gap-2 mb-2">
-                                <NumericInput
-                                  className="flex-1"
-                                  placeholder="Qty to shift"
-                                  min={0}
-                                  max={currentUpdateData.m2Quantity}
-                                  value={shiftInputs[articleId]?.m2ToM4 || 0}
-                                  onChange={(value) => handleShiftInputChange(articleId, 'm2ToM4', value)}
-                                  allowDecimals
-                                />
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-danger  "
-                                  onClick={() => applyShift(articleId, 'm2ToM4')}
-                                  disabled={!shiftInputs[articleId]?.m2ToM4 || shiftInputs[articleId].m2ToM4 <= 0}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary  "
-                                  onClick={() => {
-                                    const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
-                                    handleShiftM2Items(articleId, 'M4', shiftQty);
-                                  }}
-                                  disabled={currentUpdateData.m2Quantity === 0}
-                                >
-                                  +1
-                                </button>
+                            <div className="bg-white border border-red-200 rounded p-1.5">
+                              <label className="text-[10px] font-bold text-red-700">M2→M4</label>
+                              <div className="flex gap-1 mt-0.5 items-center">
+                                <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m2Quantity} value={shiftInputs[articleId]?.m2ToM4 || 0} onChange={(v) => handleShiftInputChange(articleId, 'm2ToM4', v)} allowDecimals />
+                                <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white" onClick={() => applyShift(articleId, 'm2ToM4')} disabled={!shiftInputs[articleId]?.m2ToM4 || shiftInputs[articleId].m2ToM4 <= 0}>Apply</button>
+                                <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-blue-500 text-white" onClick={() => handleShiftM2Items(articleId, 'M4', Math.min(currentUpdateData.m2Quantity, 1))} disabled={currentUpdateData.m2Quantity === 0}>+1</button>
                               </div>
-                              <small className="text-red-600">Available: {currentUpdateData.m2Quantity}</small>
                             </div>
                           )}
-                        </div>
-
-                        {/* Additional shifting options for M3 and M4 */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                          {/* M3 to M2 Shift */}
+                          {/* M3 to M2 */}
                           {currentUpdateData.m3Quantity > 0 && (
-                            <div className="bg-white border border-orange-200 rounded-lg p-3">
-                              <label className="form-label text-orange-700 font-medium">M3 → M2 (Needs Repair)</label>
-                              <div className="flex gap-2 mb-2">
-                                <NumericInput
-                                  className="flex-1"
-                                  placeholder="Qty to shift"
-                                  min={0}
-                                  max={currentUpdateData.m3Quantity}
-                                  value={shiftInputs[articleId]?.m3ToM2 || 0}
-                                  onChange={(value) => handleShiftInputChange(articleId, 'm3ToM2', value)}
-                                  allowDecimals
-                                />
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-warning  "
-                                  onClick={() => applyShift(articleId, 'm3ToM2')}
-                                  disabled={!shiftInputs[articleId]?.m3ToM2 || shiftInputs[articleId].m3ToM2 <= 0}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary  "
-                                  onClick={() => {
-                                    const shiftQty = Math.min(currentUpdateData.m3Quantity, 1);
-                                    setUpdateData(prev => {
-                                      const updatedData = { ...prev[articleId] };
-                                      updatedData.m3Quantity = updatedData.m3Quantity - shiftQty;
-                                      updatedData.m2Quantity = updatedData.m2Quantity + shiftQty;
-                                      return {
-                                        ...prev,
-                                        [articleId]: updatedData
-                                      };
-                                    });
-                                  }}
-                                  disabled={currentUpdateData.m3Quantity === 0}
-                                >
-                                  +1
-                                </button>
+                            <div className="bg-white border border-orange-200 rounded p-1.5">
+                              <label className="text-[10px] font-bold text-orange-700">M3→M2</label>
+                              <div className="flex gap-1 mt-0.5 items-center">
+                                <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m3Quantity} value={shiftInputs[articleId]?.m3ToM2 || 0} onChange={(v) => handleShiftInputChange(articleId, 'm3ToM2', v)} allowDecimals />
+                                <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500 text-white" onClick={() => applyShift(articleId, 'm3ToM2')} disabled={!shiftInputs[articleId]?.m3ToM2 || shiftInputs[articleId].m3ToM2 <= 0}>Apply</button>
+                                <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-blue-500 text-white" onClick={() => { const q = Math.min(currentUpdateData.m3Quantity, 1); setUpdateData(prev => { const u = { ...prev[articleId] }; u.m3Quantity = u.m3Quantity - q; u.m2Quantity = u.m2Quantity + q; return { ...prev, [articleId]: u }; }); }} disabled={currentUpdateData.m3Quantity === 0}>+1</button>
                               </div>
-                              <small className="text-orange-600">Available: {currentUpdateData.m3Quantity}</small>
                             </div>
                           )}
-
-                          {/* M4 to M3 Shift */}
                           {currentUpdateData.m4Quantity > 0 && (
-                            <div className="bg-white border border-red-200 rounded-lg p-3">
-                              <label className="form-label text-red-700 font-medium">M4 → M3 (Minor Defects)</label>
-                              <div className="flex gap-2 mb-2">
-                                <NumericInput
-                                  className="flex-1"
-                                  placeholder="Qty to shift"
-                                  min={0}
-                                  max={currentUpdateData.m4Quantity}
-                                  value={shiftInputs[articleId]?.m4ToM3 || 0}
-                                  onChange={(value) => handleShiftInputChange(articleId, 'm4ToM3', value)}
-                                  allowDecimals
-                                />
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-danger  "
-                                  onClick={() => applyShift(articleId, 'm4ToM3')}
-                                  disabled={!shiftInputs[articleId]?.m4ToM3 || shiftInputs[articleId].m4ToM3 <= 0}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary  "
-                                  onClick={() => {
-                                    const shiftQty = Math.min(currentUpdateData.m4Quantity, 1);
-                                    setUpdateData(prev => {
-                                      const updatedData = { ...prev[articleId] };
-                                      updatedData.m4Quantity = updatedData.m4Quantity - shiftQty;
-                                      updatedData.m3Quantity = updatedData.m3Quantity + shiftQty;
-                                      return {
-                                        ...prev,
-                                        [articleId]: updatedData
-                                      };
-                                    });
-                                  }}
-                                  disabled={currentUpdateData.m4Quantity === 0}
-                                >
-                                  +1
-                                </button>
+                            <div className="bg-white border border-red-200 rounded p-1.5">
+                              <label className="text-[10px] font-bold text-red-700">M4→M3</label>
+                              <div className="flex gap-1 mt-0.5 items-center">
+                                <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m4Quantity} value={shiftInputs[articleId]?.m4ToM3 || 0} onChange={(v) => handleShiftInputChange(articleId, 'm4ToM3', v)} allowDecimals />
+                                <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white" onClick={() => applyShift(articleId, 'm4ToM3')} disabled={!shiftInputs[articleId]?.m4ToM3 || shiftInputs[articleId].m4ToM3 <= 0}>Apply</button>
+                                <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-blue-500 text-white" onClick={() => { const q = Math.min(currentUpdateData.m4Quantity, 1); setUpdateData(prev => { const u = { ...prev[articleId] }; u.m4Quantity = u.m4Quantity - q; u.m3Quantity = u.m3Quantity + q; return { ...prev, [articleId]: u }; }); }} disabled={currentUpdateData.m4Quantity === 0}>+1</button>
                               </div>
-                              <small className="text-red-600">Available: {currentUpdateData.m4Quantity}</small>
                             </div>
                           )}
                         </div>
-                      </div>
+            </section>
 
-                      {/* M2 Repair Sub-step */}
-                      {currentUpdateData.m2Quantity > 0 && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                          <h6 className="text-md font-semibold text-yellow-800 mb-3">Step 4B: M2 Items Repair Review</h6>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <label className="form-label">Repair Status</label>
-                              <select
-                                className="form-select"
-                                value={currentUpdateData.repairStatus}
-                                onChange={(e) => handleRepairStatusChange(articleId, e.target.value as 'Not Required' | 'In Review' | 'Repaired' | 'Rejected')}
-                              >
-                                <option value="Not Required">Not Required</option>
-                                <option value="In Review">In Review</option>
-                                <option value="Repaired">Repaired</option>
-                                <option value="Rejected">Rejected</option>
-                              </select>
-                            </div>
-                          </div>
-                          
-                          <div>
-                            <label className="form-label">Repair Remarks</label>
-                            <textarea
-                              className="form-control"
-                              rows={2}
-                              placeholder="Add repair remarks for M2 items..."
-                              value={currentUpdateData.repairRemarks}
-                              onChange={(e) => handleRepairRemarksChange(articleId, e.target.value)}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-
-                      {/* Quantity Summary */}
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                          <div className="text-center">
-                            <div className="font-medium text-green-700">M1: {currentUpdateData.m1Quantity}</div>
-                            <div className="text-xs text-gray-500">(User input)</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium text-yellow-700">M2: {currentUpdateData.m2Quantity}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium text-orange-700">M3: {currentUpdateData.m3Quantity}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium text-red-700">M4: {currentUpdateData.m4Quantity}</div>
-                          </div>
-                        </div>
-                        <div className="text-center mt-2 text-xs text-gray-600">
-                          Total Checked: {(currentUpdateData.m1Quantity + currentUpdateData.m2Quantity + currentUpdateData.m3Quantity + currentUpdateData.m4Quantity)} / {article.plannedQuantity}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <label className="form-label">Remarks</label>
-                      <textarea
-                        className="form-control"
-                        rows={2}
-                        placeholder="Add remarks for this article..."
-                        value={currentUpdateData.remarks}
-                        onChange={(e) => handleRemarksChange(articleId, e.target.value)}
-                      />
-                    </div>
-
-
-                
+            {/* M2 Repair review */}
+            {currentUpdateData.m2Quantity > 0 && (
+              <section className="mb-4 rounded-md border-2 border-yellow-300 overflow-hidden">
+                <div className="px-3 py-1.5 bg-yellow-100 border-b-2 border-yellow-300 text-[11px] font-bold text-yellow-900">M2 Repair review</div>
+                <div className="p-2 space-y-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Repair status</label>
+                    <select className="w-full py-1.5 px-2 text-[11px] border-2 border-gray-300 rounded" value={currentUpdateData.repairStatus} onChange={(e) => handleRepairStatusChange(articleId, e.target.value as 'Not Required' | 'In Review' | 'Repaired' | 'Rejected')}>
+                      <option value="Not Required">Not Required</option>
+                      <option value="In Review">In Review</option>
+                      <option value="Repaired">Repaired</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
                   </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Repair remarks</label>
+                    <textarea className="w-full py-1.5 px-2 text-[11px] border-2 border-gray-300 rounded resize-none" rows={2} placeholder="Remarks..." value={currentUpdateData.repairRemarks} onChange={(e) => handleRepairRemarksChange(articleId, e.target.value)} />
+                  </div>
+                </div>
+              </section>
+            )}
+
+            <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800">Summary</div>
+              <div className="p-2">
+                <div className="grid grid-cols-4 gap-2 text-center mb-2">
+                  <div className="border-2 border-green-300 rounded py-1.5 bg-green-50 text-[11px] font-bold text-green-800">M1: {currentUpdateData.m1Quantity}</div>
+                  <div className="border-2 border-yellow-300 rounded py-1.5 bg-yellow-50 text-[11px] font-bold text-yellow-800">M2: {currentUpdateData.m2Quantity}</div>
+                  <div className="border-2 border-orange-300 rounded py-1.5 bg-orange-50 text-[11px] font-bold text-orange-800">M3: {currentUpdateData.m3Quantity}</div>
+                  <div className="border-2 border-red-300 rounded py-1.5 bg-red-50 text-[11px] font-bold text-red-800">M4: {currentUpdateData.m4Quantity}</div>
+                </div>
+                <div className="text-center text-[11px] text-gray-600 border-t-2 border-gray-200 pt-1.5">Total checked: {currentUpdateData.m1Quantity + currentUpdateData.m2Quantity + currentUpdateData.m3Quantity + currentUpdateData.m4Quantity} / {article.plannedQuantity}</div>
+                <div className="mt-2">
+                  <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Remarks</label>
+                  <textarea className="w-full py-1.5 px-2 text-[11px] border-2 border-gray-300 rounded resize-none" rows={2} placeholder="Remarks for this article..." value={currentUpdateData.remarks} onChange={(e) => handleRemarksChange(articleId, e.target.value)} />
+                </div>
+              </div>
+            </section>
+                  </>
                 );
               })()}
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
+            <div className="flex justify-end gap-2 p-3 border-t-2 border-gray-300 bg-gray-50 flex-shrink-0">
+              <button onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-100 shadow-sm">Cancel</button>
               <button
-                onClick={closeUpdateModal}
-                className="ti-btn ti-btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdateSubmit}
-                className="ti-btn ti-btn-primary"
+                onClick={() => {
+                  if (!selectedOrder) return;
+                  const invalid = selectedOrder.articles.some(article => {
+                    const articleId = article.id || article._id;
+                    if (!articleId) return false;
+                    const update = updateData[articleId];
+                    if (!update) return false;
+                    const checkingFloor = getCheckingFloorData(article);
+                    const received = checkingFloor.data?.received || 0;
+                    const transferred = checkingFloor.data?.transferred || 0;
+                    const remaining = received - transferred;
+                    return update.m1Quantity > remaining;
+                  });
+                  if (invalid) {
+                    toast.error("Cannot submit: Some articles have M1 quantities exceeding remaining quantities");
+                    return;
+                  }
+                  setUpdateContainerBarcode("");
+                  setUpdateContainerCheckStatus("idle");
+                  setUpdateContainerFetched(null);
+                  const first = selectedOrder.articles[0];
+                  setUpdateContainerArticleId(first?._id || first?.id || "");
+                  setUpdateContainerNextFloor("Washing");
+                  setShowUpdateContainerModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-[11px] font-bold rounded hover:bg-blue-700 shadow-sm disabled:opacity-50"
                 disabled={
                   selectedOrder.articles.some(article => {
                     const articleId = article.id || article._id;
                     if (!articleId) return false;
                     const update = updateData[articleId];
                     if (!update) return false;
-                    
                     const checkingFloor = getCheckingFloorData(article);
                     const received = checkingFloor.data?.received || 0;
                     const transferred = checkingFloor.data?.transferred || 0;
-                    const remaining = received - transferred; // Use transferred instead of current M1
-                    
+                    const remaining = received - transferred;
                     return update.m1Quantity > remaining;
                   })
                 }
               >
-                <i className="ri-save-line me-2"></i>
-                Update Order
+                <i className="ri-save-line text-xs"></i> Update Order
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* View Order Modal */}

@@ -45,6 +45,8 @@ export interface TeamMaster {
   role: TeamRole;
   status: TeamMemberStatus;
   barcode?: string;
+  /** Optional: active articles assigned to this member (API may return after add). */
+  articleData?: { activeArticle?: string }[];
   createdAt: string;
   updatedAt: string;
 }
@@ -178,6 +180,25 @@ class TeamMasterService {
   async remove(teamMemberId: string): Promise<void> {
     if (!teamMemberId) throw new Error('teamMemberId is required');
     await this.request<void>(`/${teamMemberId}`, { method: 'DELETE' });
+  }
+
+  /** Add active article to team member's articleData. POST /team-masters/:teamMemberId/active-article */
+  async addActiveArticle(teamMemberId: string, articleId: string): Promise<TeamMaster> {
+    if (!teamMemberId) throw new Error('teamMemberId is required');
+    if (!articleId) throw new Error('articleId is required');
+    return this.request<TeamMaster>(`/${teamMemberId}/active-article`, {
+      method: 'POST',
+      body: JSON.stringify({ articleId }),
+    });
+  }
+
+  /** Remove active article and log. DELETE /team-masters/:teamMemberId/active-article/:articleId */
+  async removeActiveArticle(teamMemberId: string, articleId: string): Promise<TeamMaster> {
+    if (!teamMemberId) throw new Error('teamMemberId is required');
+    if (!articleId) throw new Error('articleId is required');
+    return this.request<TeamMaster>(`/${teamMemberId}/active-article/${encodeURIComponent(articleId)}`, {
+      method: 'DELETE',
+    });
   }
 }
 
