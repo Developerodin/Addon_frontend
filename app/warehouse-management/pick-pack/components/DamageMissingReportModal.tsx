@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useState } from 'react';
-import { PackOrder, DamageMissingReport } from '../types';
+import React, { useMemo, useState } from "react";
+import type { DamageMissingReport, PackOrder, PackItem } from "../types";
 
 interface DamageMissingReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   order: PackOrder;
   itemId: string;
-  onSubmit: (report: Omit<DamageMissingReport, 'id' | 'reportedAt'>) => void;
+  onSubmit: (report: Omit<DamageMissingReport, "id" | "reportedAt">) => void;
 }
 
 const DamageMissingReportModal: React.FC<DamageMissingReportModalProps> = ({
@@ -18,12 +18,15 @@ const DamageMissingReportModal: React.FC<DamageMissingReportModalProps> = ({
   itemId,
   onSubmit,
 }) => {
-  const [reportType, setReportType] = useState<'damage' | 'missing'>('damage');
+  const [reportType, setReportType] = useState<"damage" | "missing">("damage");
   const [quantity, setQuantity] = useState<number>(1);
-  const [reason, setReason] = useState('');
-  const [notes, setNotes] = useState('');
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
 
-  const selectedItem = order.items.find(item => item.id === itemId);
+  const selectedItem: PackItem | undefined = useMemo(
+    () => order.items.find((i) => i.id === itemId),
+    [order.items, itemId]
+  );
 
   if (!isOpen || !selectedItem) return null;
 
@@ -39,7 +42,7 @@ const DamageMissingReportModal: React.FC<DamageMissingReportModalProps> = ({
       sku: selectedItem.sku,
       itemName: selectedItem.name,
       type: reportType,
-      quantity: Math.min(quantity, selectedItem.quantity - selectedItem.packedQuantity),
+      quantity: Math.min(quantity, Math.max(0, selectedItem.pickedQty - selectedItem.packedQty)),
       reason: reason.trim(),
       notes: notes.trim() || undefined,
       reportedBy: 'Current User', // This should come from auth context
@@ -52,7 +55,7 @@ const DamageMissingReportModal: React.FC<DamageMissingReportModalProps> = ({
     setNotes('');
   };
 
-  const maxQuantity = selectedItem.quantity - selectedItem.packedQuantity;
+  const maxQuantity = Math.max(0, selectedItem.pickedQty - selectedItem.packedQty);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -125,11 +128,15 @@ const DamageMissingReportModal: React.FC<DamageMissingReportModalProps> = ({
                 min={1}
                 max={maxQuantity}
                 value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, Math.min(parseInt(e.target.value) || 1, maxQuantity)))}
+                onChange={(e) =>
+                  setQuantity(
+                    Math.max(1, Math.min(parseInt(e.target.value) || 1, Math.max(1, maxQuantity)))
+                  )
+                }
                 className="ti-form-input"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Maximum: {maxQuantity} (remaining unpicked quantity)
+                Maximum: {maxQuantity} (remaining unpacked quantity)
               </p>
             </div>
 

@@ -883,6 +883,185 @@ const ProcessOrderPage = () => {
   };
 
   // Update order status
+  // Helper function to convert number to words (simple version)
+  const numberToWords = (num: number): string => {
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+    if (num === 0) return 'Zero';
+    if (num < 10) return ones[num];
+    if (num < 20) return teens[num - 10];
+    if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 !== 0 ? ' ' + ones[num % 10] : '');
+    if (num < 1000) {
+      const hundred = Math.floor(num / 100);
+      const remainder = num % 100;
+      return ones[hundred] + ' Hundred' + (remainder !== 0 ? ' ' + numberToWords(remainder) : '');
+    }
+    if (num < 100000) {
+      const thousand = Math.floor(num / 1000);
+      const remainder = num % 1000;
+      return numberToWords(thousand) + ' Thousand' + (remainder !== 0 ? ' ' + numberToWords(remainder) : '');
+    }
+    if (num < 10000000) {
+      const lakh = Math.floor(num / 100000);
+      const remainder = num % 100000;
+      return numberToWords(lakh) + ' Lakh' + (remainder !== 0 ? ' ' + numberToWords(remainder) : '');
+    }
+    const crore = Math.floor(num / 10000000);
+    const remainder = num % 10000000;
+    return numberToWords(crore) + ' Crore' + (remainder !== 0 ? ' ' + numberToWords(remainder) : '');
+  };
+
+  const handlePrintOrderSummary = async () => {
+    if (!order || !rawApiOrder) {
+      toast.error('Order data not available');
+      return;
+    }
+
+    setIsPrinting(true);
+    try {
+      // Fetch the NEW HTML template
+      const response = await fetch('/templates/goods-received-note.html');
+      if (!response.ok) throw new Error('Failed to load template');
+      let htmlTemplate = await response.text();
+
+      // Helper function to format date as DD-MM-YYYY
+      const formatDate = (date: string | Date): string => {
+        if (!date) return 'N/A';
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return 'N/A';
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}-${month}-${year}`;
+      };
+
+      // Get supplier details from raw API response
+      const supplierData = rawApiOrder?.supplier || {};
+      const supplierName = rawApiOrder?.supplierName || supplierData?.brandName || order.supplier || 'N/A';
+      const supplierAddress = supplierData?.address || 'N/A';
+      const supplierCity = supplierData?.city || '';
+      const supplierState = supplierData?.state || '';
+      const supplierLocation = [supplierCity, supplierState].filter(Boolean).join(', ') || 'N/A';
+      const supplierContactNumber = supplierData?.contactNumber || 'N/A';
+      const supplierContactName = supplierData?.contactPersonName || '';
+      const supplierEmail = supplierData?.email || 'N/A';
+      const supplierGST = supplierData?.gstNo || supplierData?.gstin || supplierData?.gst || 'N/A';
+
+      // Replace Supplier Info
+      htmlTemplate = htmlTemplate.replace(/id="supplier-name".*?>.*?<\/div>/, `id="supplier-name">${supplierName}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="supplier-address".*?>[\s\S]*?<\/div>/, `id="supplier-address">${supplierAddress}<br>${supplierLocation}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="supplier-email".*?>.*?<\/span>/, `id="supplier-email">${supplierEmail}</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="supplier-mob".*?>.*?<\/span>/, `id="supplier-mob">${supplierContactNumber}</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="supplier-gst".*?>.*?<\/span>/, `id="supplier-gst">${supplierGST}</span>`);
+
+      // Consignee is fixed to ADDON HOLDINGS as per image, but we can ensure state code/gst is correct
+      htmlTemplate = htmlTemplate.replace(/id="consignee-state-code".*?>.*?<\/span>/, `id="consignee-state-code">27</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="consignee-gst".*?>.*?<\/span>/, `id="consignee-gst">27AAACA8827A1ZZ</span>`);
+
+      // Get order details
+      const orderItems = rawApiOrder?.poItems || rawApiOrder?.items || [];
+      const poNumber = rawApiOrder?.poNumber || order.orderNumber || 'N/A';
+      const orderDate = rawApiOrder?.createDate || order.receivedDate;
+      const subTotal = rawApiOrder?.subTotal || 0;
+      const totalGst = rawApiOrder?.gst || 0;
+      const totalAmount = rawApiOrder?.total || order.totalAmount || 0;
+      const notes = rawApiOrder?.notes || order.notes || '';
+
+      // Get packlist details
+      const packlistDetails = rawApiOrder?.packListDetails?.[0] || order.packListDetails;
+      const invoiceNo = rawApiOrder?.invoiceNo || rawApiOrder?.billNo || poNumber;
+      const dispatchDoc = packlistDetails?.trackingNumber || 'N/A';
+      const deliveryNote = packlistDetails?.packingNumber || 'N/A';
+
+      // Header Grid values
+      htmlTemplate = htmlTemplate.replace(/id="invoice-no".*?>.*?<\/div>/, `id="invoice-no">${invoiceNo}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="invoice-date".*?>.*?<\/div>/, `id="invoice-date">${formatDate(orderDate)}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="delivery-note".*?>.*?<\/div>/, `id="delivery-note">${deliveryNote}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="po-no".*?>.*?<\/div>/, `id="po-no">${poNumber}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="po-date".*?>.*?<\/div>/, `id="po-date">${formatDate(orderDate)}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="dispatch-doc".*?>.*?<\/div>/, `id="dispatch-doc">${dispatchDoc}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="delivery-date".*?>.*?<\/div>/, `id="delivery-date">${packlistDetails?.estimatedDeliveryDate ? formatDate(packlistDetails.estimatedDeliveryDate) : 'N/A'}</div>`);
+
+      // Generation of items rows
+      let itemsHtml = '';
+      let totalQty = 0;
+      orderItems.forEach((item: any, index: number) => {
+        const yarnName = item.yarnName || item.yarn?.yarnName || 'N/A';
+        const sizeCount = item.sizeCount || 'N/A';
+        const shadeCode = item.shadeCode || 'N/A';
+        const quantity = item.quantity || 0;
+        const rate = item.rate || 0;
+        const amount = quantity * rate;
+        totalQty += quantity;
+
+        itemsHtml += `
+          <tr>
+            <td class="text-center" style="border: 1px solid #000; padding: 4px;">${index + 1}</td>
+            <td class="text-center" style="border: 1px solid #000; padding: 4px;">${shadeCode}</td>
+            <td style="border: 1px solid #000; padding: 4px;">${yarnName}${sizeCount !== 'N/A' ? ' - ' + sizeCount : ''}</td>
+            <td class="text-right" style="border: 1px solid #000; padding: 4px;">${quantity.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="text-right" style="border: 1px solid #000; padding: 4px;">${rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="text-center" style="border: 1px solid #000; padding: 4px;">KGS</td>
+            <td class="text-right" style="border: 1px solid #000; padding: 4px;">${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>`;
+      });
+
+      htmlTemplate = htmlTemplate.replace(/<tbody id="items-body">[\s\S]*?<\/tbody>/, `<tbody id="items-body">${itemsHtml}</tbody>`);
+      htmlTemplate = htmlTemplate.replace(/id="total-qty".*?>.*?<\/td>/, `id="total-qty">${totalQty.toLocaleString('en-IN', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</td>`);
+      htmlTemplate = htmlTemplate.replace(/id="total-amount".*?>.*?<\/td>/, `id="total-amount">${subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>`);
+
+      // Round off calculation
+      const roundOff = totalAmount - (subTotal + totalGst);
+      htmlTemplate = htmlTemplate.replace(/id="round-off".*?>.*?<\/td>/, `id="round-off" style="padding: 1px 4px; font-size: 8px;">${roundOff.toFixed(2)}</td>`);
+
+      // Calculate GST
+      const isSameState = supplierState?.toLowerCase() === 'maharashtra' || supplierState?.toLowerCase() === 'mh';
+      const avgGstRate = orderItems.length > 0 ? (orderItems.reduce((sum: number, item: any) => sum + (item.gstRate || item.gst || 18), 0) / orderItems.length) : 0;
+
+      let taxLabel = isSameState ? `GST ${avgGstRate.toFixed(1)}%` : `IGST ${avgGstRate.toFixed(1)}%`;
+      let sgst = isSameState ? (totalGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+      let igst = isSameState ? (totalGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      htmlTemplate = htmlTemplate.replace(/id="tax-rate-label".*?>.*?<\/td>/, `id="tax-rate-label">${taxLabel}</td>`);
+      htmlTemplate = htmlTemplate.replace(/id="taxable-value".*?>.*?<\/td>/, `id="taxable-value">${subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>`);
+      htmlTemplate = htmlTemplate.replace(/id="sgst-amount".*?>.*?<\/td>/, `id="sgst-amount">${sgst}</td>`);
+      htmlTemplate = htmlTemplate.replace(/id="igst-amount".*?>.*?<\/td>/, `id="igst-amount">${igst}</td>`);
+      htmlTemplate = htmlTemplate.replace(/id="grand-total".*?>.*?<\/td>/, `id="grand-total" style="width: 16%;">${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>`);
+
+      // Amount in words
+      const rupees = Math.floor(totalAmount);
+      const paise = Math.round((totalAmount - rupees) * 100);
+      let amountInWords = `${numberToWords(rupees)} Only`;
+      if (paise > 0) {
+        amountInWords = `${numberToWords(rupees)} and ${numberToWords(paise)} Paise Only`;
+      }
+      htmlTemplate = htmlTemplate.replace(/id="total-in-words">.*?<\/span>/, `id="total-in-words">${amountInWords}</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="narration">.*?<\/span>/, `id="narration">${notes || 'N/A'}</span>`);
+
+      // Open print window
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(htmlTemplate);
+        printWindow.document.close();
+        printWindow.onload = () => {
+          setTimeout(() => {
+            printWindow.print();
+            setIsPrinting(false);
+          }, 500);
+        };
+      } else {
+        setIsPrinting(false);
+        toast.error('Please allow popups to print summary');
+      }
+    } catch (error) {
+      console.error('Error printing summary:', error);
+      toast.error('Failed to load summary template');
+      setIsPrinting(false);
+    }
+  };
+
   const handleUpdateOrderStatus = async (statusCode: 'goods_received' | 'qc_pending' | 'po_rejected', notes: string) => {
     if (!user || !user.id || !user.email) {
       toast.error('User information not available. Please login again.');
@@ -1946,6 +2125,20 @@ const ProcessOrderPage = () => {
                   {isPrinting ? 'Printing Barcodes...' : 'Print All Barcodes'}
                 </button>
               )}
+              <button
+                type="button"
+                onClick={handlePrintOrderSummary}
+                disabled={isPrinting}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-[11px] font-bold rounded transition-colors shadow-sm ${!isPrinting ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'}`}
+                title="Print Order Summary (PDF)"
+              >
+                {isPrinting ? (
+                  <i className="ri-loader-4-line animate-spin text-xs"></i>
+                ) : (
+                  <i className="ri-file-pdf-line text-xs"></i>
+                )}
+                {isPrinting ? 'Processing...' : 'Print Summary'}
+              </button>
             </div>
           </div>
 

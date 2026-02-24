@@ -5,90 +5,13 @@ import Seo from '@/shared/layout-components/seo/seo';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
-import { Order, OrderFilters, OrderStatus } from './types';
-import { useOrders } from '@/shared/hooks/useOrders';
-import { Order as ApiOrder } from '@/shared/services/orderService';
+import { Order, OrderFilters, OrderStatus, DispatchTracking } from './types';
+import { useWhmsOrders } from '@/shared/hooks/useWhmsOrders';
 import OrderFiltersPanel from './components/OrderFilters';
 import OrderDetailsModal from './components/OrderDetailsModal';
 import OrderTable from './components/OrderTable';
 import NotificationsSection from './components/NotificationsSection';
 import OrderStatusUpdateModal from './components/OrderStatusUpdateModal';
-
-// Transform API order to UI order format
-const transformApiOrderToUiOrder = (apiOrder: ApiOrder): Order => {
-  // Calculate total quantity and value from items
-  const totalQuantity = apiOrder.items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalValue = apiOrder.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-
-  // Map API status to UI status
-  const statusMap: Record<string, OrderStatus> = {
-    'pending': 'pending',
-    'processing': 'in-progress',
-    'completed': 'dispatched',
-    'cancelled': 'cancelled',
-    'refunded': 'cancelled',
-    'in-progress': 'in-progress',
-    'packed': 'packed',
-    'dispatched': 'dispatched',
-  };
-
-  // Map source to channel
-  const channelMap: Record<string, string> = {
-    'Website': 'online',
-    'Amazon': 'marketplace',
-    'Flipkart': 'marketplace',
-    'Blinkit': 'marketplace',
-    'Mobile App': 'online',
-    'Retail': 'retail',
-    'Wholesale': 'wholesale',
-    'Direct': 'direct',
-  };
-
-  return {
-    id: apiOrder.id,
-    orderNumber: apiOrder.externalOrderId,
-    date: apiOrder.createdAt || apiOrder.timestamps?.createdAt || new Date().toISOString(),
-    status: statusMap[apiOrder.orderStatus] || 'pending',
-    channel: (channelMap[apiOrder.source] || 'online') as any,
-    customer: {
-      name: apiOrder.customer.name,
-      email: apiOrder.customer.email,
-      phone: apiOrder.customer.phone,
-      address: {
-        street: apiOrder.customer.address.street || apiOrder.customer.address.addressLine1,
-        city: apiOrder.customer.address.city,
-        state: apiOrder.customer.address.state,
-        zipCode: apiOrder.customer.address.zipCode,
-        country: apiOrder.customer.address.country,
-      },
-    },
-    items: apiOrder.items.map(item => ({
-      sku: item.sku,
-      name: item.name,
-      quantity: item.quantity,
-      unitPrice: item.price,
-      totalPrice: item.quantity * item.price,
-      stockAvailable: true, // Default to true, can be enhanced later
-      stockQuantity: undefined, // Can be added from inventory API later
-    })),
-    packingInstructions: {
-      fragile: false,
-      packagingType: 'standard',
-      notes: apiOrder.meta?.notes || '',
-    },
-    dispatchMode: 'standard',
-    totalValue,
-    totalQuantity,
-    priority: 'medium', // Default priority, can be enhanced
-    estimatedDispatchDate: apiOrder.logistics?.status === 'ready-to-ship' ? apiOrder.updatedAt : undefined,
-    actualDispatchDate: apiOrder.logistics?.status === 'shipped' || apiOrder.logistics?.status === 'delivered' ? apiOrder.updatedAt : undefined,
-    // Pass through API fields
-    source: apiOrder.source,
-    payment: apiOrder.payment,
-    logistics: apiOrder.logistics,
-    meta: apiOrder.meta,
-  };
-};
 
 const OrdersPage = () => {
   const router = useRouter();
@@ -100,27 +23,29 @@ const OrdersPage = () => {
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [statusModalOrder, setStatusModalOrder] = useState<Order | null>(null);
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const [orderOverlay, setOrderOverlay] = useState<Record<string, Partial<Order>>>({});
 
-  // Use API hook
+  // WHMS API hook (uses your existing Node.js /v1/whms endpoints)
   const {
-    orders: apiOrders,
+    orders: whmsOrderList,
     loading,
     error,
     pagination,
     fetchOrders,
     deleteOrder,
-    updateWebsiteOrderStatus,
-  } = useOrders();
+    saveTracking: saveTrackingApi,
+  } = useWhmsOrders();
 
-  // Transform API orders to UI format
-  const allOrders = useMemo(() => {
-    return apiOrders.map(transformApiOrderToUiOrder);
-  }, [apiOrders]);
+  const allOrders = useMemo(() => whmsOrderList, [whmsOrderList]);
+
+  const ordersWithOverlay = useMemo(() => {
+    return allOrders.map((o) => ({ ...o, ...orderOverlay[o.id] }));
+  }, [allOrders, orderOverlay]);
 
   // Generate notifications from orders
   const notifications = useMemo(() => {
     const notifs: any[] = [];
-    allOrders.forEach(order => {
+    ordersWithOverlay.forEach(order => {
       order.items.forEach(item => {
         if (!item.stockAvailable) {
           notifs.push({
@@ -146,50 +71,18 @@ const OrdersPage = () => {
       });
     });
     return notifs;
-  }, [allOrders]);
+  }, [ordersWithOverlay]);
 
   const buildApiFilters = useCallback(() => {
-    const apiFilters: any = {
+    const apiFilters: Record<string, string | number> = {
       page: 1,
-      limit: 100, // Get more orders for filtering
-      sortBy: 'createdAt:desc',
+      limit: 100,
     };
-
-    const statusMap: Record<OrderStatus, string> = {
-      'pending': 'pending',
-      'in-progress': 'processing',
-      'packed': 'processing',
-      'dispatched': 'completed',
-      'cancelled': 'cancelled',
-    };
-
-    if (activeTab !== 'all') {
-      apiFilters.orderStatus = statusMap[activeTab] || activeTab;
-    }
-
-    if (filters.status) {
-      apiFilters.orderStatus = statusMap[filters.status] || filters.status;
-    }
-
-    if (filters.channel) {
-      const sourceMap: Record<string, string> = {
-        'online': 'Website',
-        'marketplace': 'Amazon',
-        'retail': 'Retail',
-        'wholesale': 'Wholesale',
-        'direct': 'Direct',
-      };
-      apiFilters.source = sourceMap[filters.channel] || filters.channel;
-    }
-
-    if (filters.dateFrom) {
-      apiFilters.dateFrom = filters.dateFrom;
-    }
-
-    if (filters.dateTo) {
-      apiFilters.dateTo = filters.dateTo;
-    }
-
+    if (activeTab !== 'all') apiFilters.status = activeTab;
+    if (filters.status) apiFilters.status = filters.status;
+    if (filters.channel) apiFilters.channel = filters.channel;
+    if (filters.dateFrom) apiFilters.dateFrom = filters.dateFrom;
+    if (filters.dateTo) apiFilters.dateTo = filters.dateTo;
     return apiFilters;
   }, [activeTab, filters]);
 
@@ -208,7 +101,7 @@ const OrdersPage = () => {
 
   // Client-side filtering for additional filters not supported by API
   const filteredOrders = useMemo(() => {
-    let filtered = [...allOrders];
+    let filtered = [...ordersWithOverlay];
 
     // Filter by SKU (client-side)
     if (filters.sku) {
@@ -244,20 +137,20 @@ const OrdersPage = () => {
     }
 
     return filtered;
-  }, [allOrders, filters]);
+  }, [ordersWithOverlay, filters]);
 
   // Get order counts by status
   const orderCounts = useMemo(() => {
     const counts = {
-      all: allOrders.length,
-      pending: allOrders.filter(o => o.status === 'pending').length,
-      'in-progress': allOrders.filter(o => o.status === 'in-progress').length,
-      packed: allOrders.filter(o => o.status === 'packed').length,
-      dispatched: allOrders.filter(o => o.status === 'dispatched').length,
-      cancelled: allOrders.filter(o => o.status === 'cancelled').length,
+      all: ordersWithOverlay.length,
+      pending: ordersWithOverlay.filter(o => o.status === 'pending').length,
+      'in-progress': ordersWithOverlay.filter(o => o.status === 'in-progress').length,
+      packed: ordersWithOverlay.filter(o => o.status === 'packed').length,
+      dispatched: ordersWithOverlay.filter(o => o.status === 'dispatched').length,
+      cancelled: ordersWithOverlay.filter(o => o.status === 'cancelled').length,
     };
     return counts;
-  }, [allOrders]);
+  }, [ordersWithOverlay]);
 
   const handleOrderClick = (order: Order) => {
     setSelectedOrder(order);
@@ -328,20 +221,40 @@ const OrdersPage = () => {
     setIsStatusModalOpen(false);
   };
 
+  const handleTrackingSave = async (orderId: string, tracking: DispatchTracking) => {
+    try {
+      await saveTrackingApi(orderId, tracking);
+      setOrderOverlay((prev) => ({
+        ...prev,
+        [orderId]: {
+          ...prev[orderId],
+          tracking,
+          status: 'dispatched',
+          lifecycleStatus: 'dispatched',
+          stockBlockStatus: 'available',
+        },
+      }));
+      toast.success('Tracking saved. Order marked as Dispatched.');
+    } catch {
+      toast.error('Failed to save tracking.');
+    }
+  };
+
+  const modalOrder = selectedOrder ? filteredOrders.find((o) => o.id === selectedOrder.id) ?? selectedOrder : null;
+
   const handleWebsiteStatusUpdate = async (action: 'cancel' | 'complete' | 'archive') => {
     if (!statusModalOrder) return;
-
+    const { orderService } = await import('@/shared/services/orderService');
     setStatusUpdating(true);
     try {
-      await updateWebsiteOrderStatus(statusModalOrder.orderNumber, action);
+      await orderService.updateWebsiteOrderStatus(statusModalOrder.orderNumber, action);
       toast.success(`Order ${statusModalOrder.orderNumber} updated successfully`);
-      const apiFilters = buildApiFilters();
-      await fetchOrders(apiFilters);
+      await fetchOrders(buildApiFilters());
       handleCloseStatusModal();
-    } catch (err: any) {
-      const message = err?.message || 'Failed to update order status';
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update order status';
       toast.error(message);
-      throw (err instanceof Error ? err : new Error(message));
+      throw new Error(message);
     } finally {
       setStatusUpdating(false);
     }
@@ -361,54 +274,57 @@ const OrdersPage = () => {
       <Seo title="Order Receiving & Consolidation" />
 
       {/* Actions in Orders tab */}
-      <div className="box !bg-transparent border-0 shadow-none mb-0">
-        <div className="box-header flex items-center justify-end">
-          <Link href="/warehouse-management/orders/add" className="ti-btn ti-btn-primary-full">
-            <i className="ri-add-line me-2"></i>
-            Add New Order
-          </Link>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+            {filteredOrders.length}
+          </span>
         </div>
+        <Link 
+          href="/warehouse-management/orders/add" 
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+        >
+          <i className="ri-add-line text-xs"></i>
+          New Order
+        </Link>
       </div>
 
       {/* Notifications Section */}
-          <NotificationsSection notifications={notifications} />
+      <NotificationsSection notifications={notifications} />
 
           {/* Order Dashboard with Tabs */}
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">Order Dashboard</h3>
+          <div className="mb-6">
+            {/* Tabs */}
+            <div className="flex border-b border-gray-100 mb-4">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
+                    activeTab === tab.key
+                      ? 'text-purple-600'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {tab.label}
+                  {orderCounts[tab.key] > 0 && (
+                    <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[9px] ${
+                      activeTab === tab.key
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {orderCounts[tab.key]}
+                    </span>
+                  )}
+                  {activeTab === tab.key && (
+                    <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full"></div>
+                  )}
+                </button>
+              ))}
             </div>
-            <div className="box-body">
-              {/* Tabs */}
-              <div className="border-b border-gray-200 mb-4">
-                <nav className="flex space-x-2" aria-label="Tabs">
-                  {tabs.map((tab) => (
-                    <button
-                      key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
-                      className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                        activeTab === tab.key
-                          ? 'bg-primary text-white'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                      }`}
-                    >
-                      {tab.label}
-                      {orderCounts[tab.key] > 0 && (
-                        <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
-                          activeTab === tab.key
-                            ? 'bg-white/20 text-white'
-                            : 'bg-gray-200 text-gray-700'
-                        }`}>
-                          {orderCounts[tab.key]}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </nav>
-              </div>
 
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-blue-50 rounded-lg p-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -447,67 +363,63 @@ const OrdersPage = () => {
                 </div>
               </div>
             </div>
+          
+
+      {/* Filters Panel */}
+      <OrderFiltersPanel
+        filters={filters}
+        onApplyFilters={handleApplyFilters}
+        onReset={handleResetFilters}
+      />
+
+      {/* Bulk Actions Panel */}
+      {selectedOrders.length > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded p-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <i className="ri-checkbox-multiple-line text-purple-600 text-lg"></i>
+              <span className="text-[12px] font-bold text-gray-800">
+                {selectedOrders.length} order(s) selected
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleGeneratePickPackList}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-file-list-3-line text-xs"></i>
+                Generate Pick & Pack List
+              </button>
+              <button
+                onClick={() => setSelectedOrders([])}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <i className="ri-close-line text-xs"></i>
+                Clear
+              </button>
+            </div>
           </div>
+        </div>
+      )}
 
-          {/* Filters Panel */}
-          <OrderFiltersPanel
-            filters={filters}
-            onApplyFilters={handleApplyFilters}
-            onReset={handleResetFilters}
-          />
-
-          {/* Bulk Actions Panel */}
-          {selectedOrders.length > 0 && (
-            <div className="box bg-primary/5 border-primary/20">
-              <div className="box-body">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <i className="ri-checkbox-multiple-line text-primary text-xl"></i>
-                    <span className="font-medium">
-                      {selectedOrders.length} order(s) selected
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleGeneratePickPackList}
-                      className="ti-btn ti-btn-primary"
-                    >
-                      <i className="ri-file-list-3-line me-2"></i>
-                      Generate Pick & Pack List
-                    </button>
-                    <button
-                      onClick={() => setSelectedOrders([])}
-                      className="ti-btn ti-btn-secondary"
-                    >
-                      <i className="ri-close-line me-2"></i>
-                      Clear Selection
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Orders Table */}
-          {loading ? (
-            <div className="box">
-              <div className="box-body text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading orders...</p>
-              </div>
-            </div>
-          ) : (
-            <OrderTable
-              orders={filteredOrders}
-              onOrderClick={handleOrderClick}
-              selectedOrders={selectedOrders}
-              onSelectOrder={handleSelectOrder}
-              onSelectAll={handleSelectAll}
-              onEdit={handleEditOrder}
-              onDelete={handleDeleteOrder}
-              onUpdateWebsiteStatus={handleOpenStatusModal}
-            />
-          )}
+      {/* Orders Table */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+          <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+        </div>
+      ) : (
+        <OrderTable
+          orders={filteredOrders}
+          onOrderClick={handleOrderClick}
+          selectedOrders={selectedOrders}
+          onSelectOrder={handleSelectOrder}
+          onSelectAll={handleSelectAll}
+          onEdit={handleEditOrder}
+          onDelete={handleDeleteOrder}
+          onUpdateWebsiteStatus={handleOpenStatusModal}
+        />
+      )}
 
       {/* Order Details Modal */}
       <OrderDetailsModal
@@ -516,7 +428,8 @@ const OrdersPage = () => {
           setIsModalOpen(false);
           setSelectedOrder(null);
         }}
-        order={selectedOrder}
+        order={modalOrder}
+        onTrackingSave={handleTrackingSave}
       />
 
       <OrderStatusUpdateModal

@@ -1,19 +1,120 @@
 "use client";
 
-import React from 'react';
-import { Order } from '../types';
+import React, { useMemo, useState } from 'react';
+import {
+  Order,
+  OrderLifecycleStatus,
+  StockBlockStatus,
+  DispatchTracking,
+} from '../types';
+
+const LIFECYCLE_STEPS: { key: OrderLifecycleStatus; label: string }[] = [
+  { key: 'order-received', label: 'Order Received' },
+  { key: 'picking-done', label: 'Picking Done' },
+  { key: 'ready-for-barcode', label: 'Ready for Barcode' },
+  { key: 'ready-for-scanning', label: 'Ready for Scanning' },
+  { key: 'scanning-done', label: 'Scanning Done' },
+  { key: 'billing-done-dispatch-pending', label: 'Billing Done Dispatch Pending' },
+  { key: 'dispatched', label: 'Dispatched' },
+];
+
+function getLifecycleFromOrder(order: Order): OrderLifecycleStatus {
+  if (order.lifecycleStatus) return order.lifecycleStatus;
+  switch (order.status) {
+    case 'dispatched': return 'dispatched';
+    case 'packed': return 'billing-done-dispatch-pending';
+    case 'in-progress': return 'picking-done';
+    case 'cancelled': return 'order-received';
+    default: return 'order-received';
+  }
+}
+
+function getOrderStockBlockStatus(order: Order): StockBlockStatus {
+  if (order.stockBlockStatus) return order.stockBlockStatus;
+  if (order.status === 'dispatched' || order.status === 'cancelled') return 'available';
+  if (order.status === 'in-progress' || order.status === 'packed') return 'pick-block';
+  return 'tentative-block';
+}
+
+function getStockBlockLabel(s: StockBlockStatus) {
+  const labels: Record<StockBlockStatus, string> = {
+    available: 'Available',
+    'tentative-block': 'Tentative Block',
+    'pick-block': 'Pick Block',
+  };
+  return labels[s] || s;
+}
+
+function getStockBlockBadgeClass(s: StockBlockStatus) {
+  const classes: Record<StockBlockStatus, string> = {
+    available: 'bg-green-100 text-green-800',
+    'tentative-block': 'bg-yellow-100 text-yellow-800',
+    'pick-block': 'bg-blue-100 text-blue-800',
+  };
+  return classes[s] || 'bg-gray-100 text-gray-800';
+}
 
 interface OrderDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   order: Order | null;
+  onTrackingSave?: (orderId: string, tracking: DispatchTracking) => void;
 }
 
 const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   isOpen,
   onClose,
   order,
+  onTrackingSave,
 }) => {
+  const contentRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (isOpen && order && contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  }, [isOpen, order?.id]);
+
+  const [tracking, setTracking] = useState<DispatchTracking>({
+    courierName: '',
+    trackingNumber: '',
+    dispatchDate: '',
+    vehicleAwb: '',
+    remarks: '',
+  });
+  const [trackingSaving, setTrackingSaving] = useState(false);
+
+  const currentLifecycle = useMemo(() => (order ? getLifecycleFromOrder(order) : 'order-received'), [order]);
+  const currentStepIndex = useMemo(
+    () => Math.max(0, LIFECYCLE_STEPS.findIndex((s) => s.key === currentLifecycle)),
+    [currentLifecycle]
+  );
+
+  React.useEffect(() => {
+    if (order?.tracking) {
+      setTracking(order.tracking);
+    } else if (order) {
+      setTracking({
+        courierName: '',
+        trackingNumber: '',
+        dispatchDate: '',
+        vehicleAwb: '',
+        remarks: '',
+      });
+    }
+  }, [order?.id, order?.tracking]);
+
+  const handleTrackingSave = async () => {
+    if (!onTrackingSave || !order) return;
+    setTrackingSaving(true);
+    try {
+      onTrackingSave(order.id, tracking);
+      onClose();
+    } finally {
+      setTrackingSaving(false);
+    }
+  };
+
   if (!isOpen || !order) return null;
 
   const getStatusBadgeClass = (status: string) => {
@@ -37,32 +138,70 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div
-          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-          onClick={onClose}
-        ></div>
+    <div className={`fixed inset-0 z-50 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`}>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+        onClick={onClose}
+      ></div>
 
-        {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+      {/* Side Modal */}
+      <div
+        className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+      >
           {/* Header */}
-          <div className="bg-primary text-white px-6 py-4 flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold">Order Details</h3>
-              <p className="text-sm text-white/80 mt-1">{order.orderNumber}</p>
+          <div className="bg-primary text-white px-6 py-4 flex-shrink-0">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-lg font-semibold">Order Details</h3>
+                <p className="text-sm text-white/80 mt-1">{order.orderNumber}</p>
+              </div>
+              <button
+                onClick={onClose}
+                className="text-white hover:text-gray-200 transition-colors"
+              >
+                <i className="ri-close-line text-xl"></i>
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              className="text-white hover:text-gray-200 transition-colors"
-            >
-              <i className="ri-close-line text-xl"></i>
-            </button>
+          </div>
+
+          {/* Lifecycle pipeline stepper */}
+          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50">
+            <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Order lifecycle</h4>
+            <div className="flex items-center gap-0 overflow-x-auto pb-2">
+              {LIFECYCLE_STEPS.map((step, idx) => {
+                const isActive = idx <= currentStepIndex;
+                const isCurrent = idx === currentStepIndex;
+                return (
+                  <React.Fragment key={step.key}>
+                    <div
+                      className={`flex flex-col items-center flex-shrink-0 ${isActive ? 'text-primary' : 'text-gray-400'}`}
+                      title={step.label}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                          isCurrent ? 'border-primary bg-primary text-white' : isActive ? 'border-primary bg-primary/10' : 'border-gray-200 bg-white'
+                        }`}
+                      >
+                        {idx + 1}
+                      </div>
+                      <span className="mt-1 text-[9px] font-semibold max-w-[72px] text-center leading-tight truncate">
+                        {step.label}
+                      </span>
+                    </div>
+                    {idx < LIFECYCLE_STEPS.length - 1 && (
+                      <div
+                        className={`flex-shrink-0 w-4 h-0.5 mx-0.5 rounded ${idx < currentStepIndex ? 'bg-primary' : 'bg-gray-200'}`}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </div>
 
           {/* Content */}
-          <div className="px-6 py-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <div ref={contentRef} className="flex-1 overflow-y-auto px-4 py-3">
             {/* Order Summary */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="box">
@@ -84,6 +223,12 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                       <span className="text-gray-600">Status:</span>
                       <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadgeClass(order.status)}`}>
                         {order.status.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Stock Status:</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStockBlockBadgeClass(getOrderStockBlockStatus(order))}`}>
+                        {getStockBlockLabel(getOrderStockBlockStatus(order))}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -349,18 +494,101 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Dispatch tracking entry */}
+            <div className="box mb-6">
+              <div className="box-header">
+                <h4 className="box-title flex items-center gap-2">
+                  <i className="ri-truck-line text-primary"></i>
+                  Dispatch tracking
+                </h4>
+              </div>
+              <div className="box-body space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1">Courier name</label>
+                    <input
+                      type="text"
+                      value={tracking.courierName}
+                      onChange={(e) => setTracking((p) => ({ ...p, courierName: e.target.value }))}
+                      className="ti-form-input !h-9 !text-[12px]"
+                      placeholder="e.g. BlueDart"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1">Tracking number</label>
+                    <input
+                      type="text"
+                      value={tracking.trackingNumber}
+                      onChange={(e) => setTracking((p) => ({ ...p, trackingNumber: e.target.value }))}
+                      className="ti-form-input !h-9 !text-[12px]"
+                      placeholder="AWB / tracking ID"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1">Dispatch date</label>
+                    <input
+                      type="date"
+                      value={tracking.dispatchDate}
+                      onChange={(e) => setTracking((p) => ({ ...p, dispatchDate: e.target.value }))}
+                      className="ti-form-input !h-9 !text-[12px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1">Vehicle / AWB</label>
+                    <input
+                      type="text"
+                      value={tracking.vehicleAwb}
+                      onChange={(e) => setTracking((p) => ({ ...p, vehicleAwb: e.target.value }))}
+                      className="ti-form-input !h-9 !text-[12px]"
+                      placeholder="Vehicle or AWB"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1">Remarks</label>
+                  <textarea
+                    value={tracking.remarks}
+                    onChange={(e) => setTracking((p) => ({ ...p, remarks: e.target.value }))}
+                    className="ti-form-input !text-[12px]"
+                    rows={2}
+                    placeholder="Optional notes"
+                  />
+                </div>
+                {onTrackingSave && order.status !== 'dispatched' && (
+                  <p className="text-[11px] text-gray-500">
+                    Saving tracking will update order status to <strong>Dispatched</strong>.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Footer */}
-          <div className="bg-gray-50 px-6 py-3 flex justify-end">
+          <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 flex-shrink-0 border-t border-gray-200">
             <button
               onClick={onClose}
-              className="ti-btn ti-btn-primary"
+              className="ti-btn ti-btn-light"
             >
               Close
             </button>
+            {onTrackingSave && order.status !== 'dispatched' && (
+              <button
+                onClick={handleTrackingSave}
+                disabled={trackingSaving}
+                className="ti-btn ti-btn-primary"
+              >
+                {trackingSaving ? (
+                  <i className="ri-loader-4-line animate-spin me-1"></i>
+                ) : (
+                  <i className="ri-check-line me-1"></i>
+                )}
+                Save tracking & mark dispatched
+              </button>
+            )}
           </div>
-        </div>
       </div>
     </div>
   );
