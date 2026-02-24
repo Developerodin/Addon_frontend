@@ -1331,7 +1331,7 @@ const CheckingFloorSupervisorPage = () => {
         </div>
       )}
 
-      {/* Update Order – drawer, Excel-like compact */}
+      {/* Update Order – drawer, clear sections & user guidance */}
       {showUpdateModal && selectedOrder && (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={closeUpdateModal} aria-hidden />
@@ -1343,8 +1343,12 @@ const CheckingFloorSupervisorPage = () => {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
+            {/* Short intro so user knows what to do */}
+            <div className="mb-4 px-3 py-2 rounded-md bg-blue-50 border-2 border-blue-200 text-[11px] text-blue-900">
+              <strong>How to update:</strong> Select an article below, then (1) enter how many good pieces go to next floor (M1), (2) enter how many you checked in each quality category (M1–M4), (3) optionally move pieces between categories, then click Update Order.
+            </div>
             <section className="mb-4 rounded-md border-2 border-gray-300 bg-gray-50 overflow-hidden">
-              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">Order</div>
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">1. Order info</div>
               <div className="grid grid-cols-2 gap-3 p-3">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-600 uppercase mb-0.5">Priority</label>
@@ -1357,7 +1361,7 @@ const CheckingFloorSupervisorPage = () => {
               </div>
             </section>
             <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
-              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">Article</div>
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">2. Choose article to update</div>
               <div className="p-2 flex gap-1.5 flex-wrap">
                 {selectedOrder.articles.map((article, idx) => (
                   <button
@@ -1391,10 +1395,8 @@ const CheckingFloorSupervisorPage = () => {
                 return (
                   <>
             <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
-              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase flex justify-between items-center">
-                <span>{article.articleNumber || '—'}</span>
-                <span className="text-[10px] font-medium normal-case">{article.linkingType || 'N/A'}</span>
-              </div>
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">3. Current quantities for this article</div>
+              <p className="px-3 py-1 text-[10px] text-gray-500 bg-gray-50 border-b border-gray-200"><span className="font-semibold text-gray-700">Article: {article.articleNumber}</span> — Planned = order qty · Received = on checking · Transferred = already sent to next floor · Remaining = still to transfer.</p>
               <div className="p-2">
                 <table className="w-full border-collapse text-[11px] border-2 border-gray-300">
                   <thead>
@@ -1416,9 +1418,14 @@ const CheckingFloorSupervisorPage = () => {
                 </table>
               </div>
             </section>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+            {/* 4. M1 — quantity to send to next floor */}
+            <section className="mb-4 rounded-md border-2 border-green-300 overflow-hidden">
+              <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Good quality (M1) — how many to send to next floor?</div>
+              <p className="px-3 py-1 text-[10px] text-gray-600 bg-green-50/50 border-b border-green-200">Only good-quality pieces (M1) go to the next floor. Enter the quantity you are transferring now. Cannot exceed Remaining above.</p>
+              <div className="p-2">
+                    <div className="flex flex-wrap items-center gap-3">
                       <div>
-                        <label className="text-[10px] font-bold text-green-800 block mb-0.5">M1 — Good quality (to next floor) *</label>
+                        <label className="text-[10px] font-bold text-green-800 block mb-0.5">Quantity to transfer</label>
                         {(() => {
                           const received = checkingFloor.data?.received || 0;
                           const transferred = checkingFloor.data?.transferred || 0;
@@ -1426,6 +1433,7 @@ const CheckingFloorSupervisorPage = () => {
                           const isFullyTransferred = remaining <= 0;
                           return (
                             <>
+                              <span className="text-[10px] text-gray-500 block mb-0.5">(Max: {remaining})</span>
                               <NumericInput
                                 className={`py-1.5 px-2 text-[12px] w-24 border-2 rounded ${isFullyTransferred ? 'bg-gray-100 border-gray-300 cursor-not-allowed' : currentUpdateData.m1Quantity > remaining ? 'border-red-500' : 'border-gray-300'}`}
                                 value={currentUpdateData.m1Quantity}
@@ -1440,25 +1448,30 @@ const CheckingFloorSupervisorPage = () => {
                         })()}
                       </div>
                     </div>
-
+              </div>
+            </section>
             <section className="mb-4 rounded-md border-2 border-gray-400 overflow-hidden">
-              <div className="px-3 py-1.5 bg-gray-300 border-b-2 border-gray-400 text-[11px] font-bold text-gray-900">Step 4B: Quality categories</div>
-              <p className="px-3 py-1.5 text-[10px] text-gray-600 bg-gray-50 border-b-2 border-gray-300">M1 = Good · M2 = Needs repair · M3 = Minor defects · M4 = Major defects. Enter checked quantities.</p>
+              <div className="px-3 py-1.5 bg-gray-300 border-b-2 border-gray-400 text-[11px] font-bold text-gray-900">5. Quality categories — how many in each?</div>
+              <p className="px-3 py-1.5 text-[10px] text-gray-600 bg-gray-50 border-b-2 border-gray-300">After checking, enter how many pieces fall in each category. M1 = Good (goes to next floor) · M2 = Needs repair · M3 = Minor defects · M4 = Major defects.</p>
               <div className="p-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div className="border-2 border-green-300 rounded p-2 bg-green-50/50">
-                          <label className="block text-[10px] font-bold text-green-800 mb-1">M1 Good</label>
+                          <label className="block text-[10px] font-bold text-green-800 mb-0.5">M1 Good</label>
+                          <p className="text-[9px] text-green-700 mb-1">Passes to next floor</p>
                           <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-green-200 rounded" value={currentUpdateData.m1Quantity} onChange={(v) => handleM1QuantityChange(articleId, v)} allowDecimals />
                         </div>
                         <div className="border-2 border-yellow-400 rounded p-2 bg-yellow-50/50">
-                          <label className="block text-[10px] font-bold text-yellow-800 mb-1">M2 Repair</label>
+                          <label className="block text-[10px] font-bold text-yellow-800 mb-0.5">M2 Repair</label>
+                          <p className="text-[9px] text-yellow-800 mb-1">Needs repair</p>
                           <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-yellow-300 rounded" value={currentUpdateData.m2Quantity} onChange={(value) => handleM2QuantityChange(articleId, value)} allowDecimals />
                         </div>
                         <div className="border-2 border-orange-300 rounded p-2 bg-orange-50/50">
-                          <label className="block text-[10px] font-bold text-orange-800 mb-1">M3 Minor</label>
+                          <label className="block text-[10px] font-bold text-orange-800 mb-0.5">M3 Minor</label>
+                          <p className="text-[9px] text-orange-800 mb-1">Minor defects</p>
                           <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-orange-200 rounded" value={currentUpdateData.m3Quantity} onChange={(value) => handleM3QuantityChange(articleId, value)} allowDecimals />
                         </div>
                         <div className="border-2 border-red-300 rounded p-2 bg-red-50/50">
-                          <label className="block text-[10px] font-bold text-red-800 mb-1">M4 Major</label>
+                          <label className="block text-[10px] font-bold text-red-800 mb-0.5">M4 Major</label>
+                          <p className="text-[9px] text-red-800 mb-1">Major defects</p>
                           <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-red-200 rounded" value={currentUpdateData.m4Quantity} onChange={(value) => handleM4QuantityChange(articleId, value)} allowDecimals />
                         </div>
                       </div>
@@ -1472,7 +1485,7 @@ const CheckingFloorSupervisorPage = () => {
                             if (m2Quantity > 0 || m2Transferred > 0) {
                               return (
                                 <section className="mb-4 rounded-md border-2 border-yellow-400 overflow-hidden">
-                                  <div className="px-3 py-1.5 bg-yellow-100 border-b-2 border-yellow-400 text-[11px] font-bold text-yellow-900">M2 — Repairable items</div>
+                                  <div className="px-3 py-1.5 bg-yellow-100 border-b-2 border-yellow-400 text-[11px] font-bold text-yellow-900">M2 — Repairable items (send back for repair)</div>
                                   <div className="p-2 flex flex-wrap items-center gap-3">
                                     <span className="text-[11px] text-gray-700">Current M2: <strong>{m2Quantity}</strong></span>
                                     {m2Transferred > 0 && <span className="text-[11px] text-yellow-800">Sent for repair: <strong>{m2Transferred}</strong></span>}
@@ -1487,8 +1500,8 @@ const CheckingFloorSupervisorPage = () => {
                           })()}
 
             <section className="mb-4 rounded-md border-2 border-blue-200 overflow-hidden">
-              <div className="px-3 py-1.5 bg-blue-100 border-b-2 border-blue-300 text-[11px] font-bold text-blue-900">Move between categories</div>
-              <p className="px-3 py-1 text-[10px] text-gray-600 bg-blue-50/50 border-b-2 border-blue-200">Reclassify: e.g. M2→M1 when repaired. Enter qty, click Apply.</p>
+              <div className="px-3 py-1.5 bg-blue-100 border-b-2 border-blue-300 text-[11px] font-bold text-blue-900">6. Reclassify between categories (optional)</div>
+              <p className="px-3 py-1 text-[10px] text-gray-600 bg-blue-50/50 border-b-2 border-blue-200">e.g. After repair, move pieces from M2→M1. Enter quantity, click Apply. +1 adds one quickly.</p>
               <div className="p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {currentUpdateData.m2Quantity > 0 && (
                             <div className="bg-white border-2 border-gray-300 rounded p-2">
@@ -1567,7 +1580,8 @@ const CheckingFloorSupervisorPage = () => {
             )}
 
             <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
-              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800">Summary</div>
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800">7. Summary — then click Update Order</div>
+              <p className="px-3 py-1 text-[10px] text-gray-500 bg-gray-50 border-b border-gray-200">Totals below will be saved. Add remarks if needed.</p>
               <div className="p-2">
                 <div className="grid grid-cols-4 gap-2 text-center mb-2">
                   <div className="border-2 border-green-300 rounded py-1.5 bg-green-50 text-[11px] font-bold text-green-800">M1: {currentUpdateData.m1Quantity}</div>

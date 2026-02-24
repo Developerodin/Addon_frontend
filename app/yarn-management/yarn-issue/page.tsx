@@ -343,12 +343,13 @@ const YarnIssuePage = () => {
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [activeRequirementId, setActiveRequirementId] = useState<string | null>(null);
   const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const [scanYarnMismatchError, setScanYarnMismatchError] = useState<string | null>(null);
   const [sortField, setSortField] = useState<YarnSortField>("yarnName");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [productLoading, setProductLoading] = useState(false);
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [coneData, setConeData] = useState<any>(null);
-  const [barcodeLoading, setBarcodeLoading] = useState(false);
   const [transactionForm, setTransactionForm] = useState({
     totalWeight: "",
     numberOfCones: "",
@@ -1057,6 +1058,7 @@ const YarnIssuePage = () => {
 
   const resetScanState = () => {
     setBarcodeInput("");
+    setScanYarnMismatchError(null);
   };
 
   const handleStartIssuing = (requirementId: string) => {
@@ -1095,6 +1097,22 @@ const YarnIssuePage = () => {
       }
 
       const coneDetails = await response.json();
+
+      // Validate scanned cone matches the yarn selected for issue
+      const coneYarnName =
+        (typeof coneDetails.yarn === "object" && coneDetails.yarn?.yarnName) || coneDetails.yarnName || "";
+      const requirementYarnName = activeRequirement.yarnName?.trim() || "";
+      if (
+        requirementYarnName &&
+        coneYarnName.trim() &&
+        coneYarnName.trim().toLowerCase() !== requirementYarnName.toLowerCase()
+      ) {
+        setScanYarnMismatchError("Please scan the correct yarn. This cone does not match the selected requirement.");
+        setBarcodeLoading(false);
+        return;
+      }
+
+      setScanYarnMismatchError(null);
       setConeData(coneDetails);
       
       // Reset form
@@ -1108,6 +1126,7 @@ const YarnIssuePage = () => {
       setShowIssueModal(true);
     } catch (error) {
       console.error("Error fetching cone:", error);
+      setScanYarnMismatchError(null);
       toast.error("Failed to fetch cone details. Please check the barcode.");
     } finally {
       setBarcodeLoading(false);
@@ -1710,7 +1729,7 @@ const YarnIssuePage = () => {
         </div>
       </div>
 
-      {/* Scan & Issue Side Panel */}
+      {/* Issue Side Panel */}
       {showScanIssuePanel && (
         <>
           {/* Backdrop */}
@@ -1723,7 +1742,7 @@ const YarnIssuePage = () => {
             <div className="box h-full flex flex-col">
               <div className="box-header border-b border-gray-200 flex-shrink-0">
                 <div className="flex justify-between items-center">
-                  <h3 className="box-title text-lg">Scan &amp; Issue</h3>
+                  <h3 className="box-title text-lg">Issue</h3>
                   <button
                     onClick={() => setShowScanIssuePanel(false)}
                     className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -1775,18 +1794,6 @@ const YarnIssuePage = () => {
                             {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }) * 1000)}
                           </p>
                         </div>
-                        <div className="bg-white rounded p-3 border border-gray-100">
-                          <p className="text-gray-500">Short-Term Available</p>
-                          <p className="text-sm font-medium text-green-600">
-                            {formatKgDisplay(activeRequirement.shortTermAvailable)}
-                          </p>
-                        </div>
-                        <div className="bg-white rounded p-3 border border-gray-100">
-                          <p className="text-gray-500">Long-Term Available</p>
-                          <p className="text-sm font-medium text-orange-600">
-                            {formatKgDisplay(activeRequirement.longTermAvailable)}
-                          </p>
-                        </div>
                       </div>
                     </div>
 
@@ -1800,12 +1807,21 @@ const YarnIssuePage = () => {
                           className="form-control ps-10"
                           placeholder="Scan or enter cone barcode"
                           value={barcodeInput}
-                          onChange={(event) => setBarcodeInput(event.target.value)}
+                          onChange={(event) => {
+                            setBarcodeInput(event.target.value);
+                            if (scanYarnMismatchError) setScanYarnMismatchError(null);
+                          }}
                           disabled={barcodeLoading}
                           autoFocus
                         />
                         <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                       </div>
+                      {scanYarnMismatchError && (
+                        <p className="text-sm text-red-600 flex items-center gap-1">
+                          <i className="ri-error-warning-line flex-shrink-0"></i>
+                          {scanYarnMismatchError}
+                        </p>
+                      )}
                       <button
                         type="submit"
                         className="ti-btn ti-btn-primary w-full whitespace-normal break-words leading-tight px-4 py-2 text-sm"
