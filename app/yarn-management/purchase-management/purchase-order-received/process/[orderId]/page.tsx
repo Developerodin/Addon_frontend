@@ -555,11 +555,11 @@ const ProcessOrderPage = () => {
     }
   };
 
-  // Fetch latest weight from API (tries localhost:7001 then 192.168.0.28:7001, uses whichever responds)
+  // Fetch latest weight from box scale API (192.168.0.105:7001, then localhost:7001)
   const fetchLatestWeight = async (): Promise<number | null> => {
     try {
       setIsFetchingWeight(true);
-      const weight = await fetchWeightLatest();
+      const weight = await fetchWeightLatest('boxes');
       return weight;
     } catch (error) {
       console.error('Failed to fetch weight:', error);
@@ -973,7 +973,7 @@ const ProcessOrderPage = () => {
       const packlistDetails = rawApiOrder?.packListDetails?.[0] || order.packListDetails;
       const invoiceNo = rawApiOrder?.invoiceNo || rawApiOrder?.billNo || poNumber;
       const dispatchDoc = packlistDetails?.trackingNumber || 'N/A';
-      const deliveryNote = packlistDetails?.packingNumber || 'N/A';
+      const deliveryNote = '';
 
       // Header Grid values
       htmlTemplate = htmlTemplate.replace(/id="invoice-no".*?>.*?<\/div>/, `id="invoice-no">${invoiceNo}</div>`);

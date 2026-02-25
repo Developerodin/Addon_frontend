@@ -166,7 +166,7 @@ const ProcessQCOrderPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMediaItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [isApprovingAll, setIsApprovingAll] = useState(false);
+  // const [isApprovingAll, setIsApprovingAll] = useState(false);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -393,7 +393,8 @@ const ProcessQCOrderPage = () => {
   // Check if there are any lots pending QC (for showing QC Approve All button)
   const hasPendingLots = order?.receivedLotDetails?.some(lot => lot.status === 'lot_qc_pending') ?? false;
 
-  // Handle QC Approve All
+  // Handle QC Approve All - commented out
+  /*
   const handleQcApproveAll = async () => {
     if (!orderId || !order) return;
     if (!user?.id || !user?.email) {
@@ -429,6 +430,7 @@ const ProcessQCOrderPage = () => {
       setIsApprovingAll(false);
     }
   };
+  */
 
   // Handle submit QC
   const handleSubmitQC = async () => {
@@ -623,6 +625,7 @@ const ProcessQCOrderPage = () => {
                 {order.purchaseOrderNumber}
               </span>
             </div>
+            {/* QC Approve All - commented out
             {order.receivedLotDetails && order.receivedLotDetails.length > 0 && hasPendingLots && (
               <button
                 type="button"
@@ -644,6 +647,7 @@ const ProcessQCOrderPage = () => {
                 )}
               </button>
             )}
+            */}
           </div>
 
           {/* Order Details Grid */}

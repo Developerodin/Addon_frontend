@@ -958,7 +958,7 @@ const PurchasePage = () => {
               <div className="relative">
                 <input
                   type="text"
-                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-32 placeholder:text-gray-400 transition-all font-medium"
+                  className="bg-white border border-gray-500 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 placeholder:text-gray-600 transition-all font-medium"
                   placeholder="Search"
                   value={searchTerm}
                   onChange={(e) => {
@@ -966,7 +966,7 @@ const PurchasePage = () => {
                     setCurrentPage(1);
                   }}
                 />
-                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
               </div>
 
               {/* Show items per page */}
@@ -1020,13 +1020,13 @@ const PurchasePage = () => {
               </Link>
 
               {/* Excel Process button */}
-              <button
+              {/* <button
                 onClick={() => setExcelProcessModalOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm"
               >
                 <i className="ri-file-excel-2-line text-xs"></i>
                 Excel Process
-              </button>
+              </button> */}
 
               {/* Delete button */}
               <button

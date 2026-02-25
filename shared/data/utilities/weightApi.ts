@@ -1,16 +1,27 @@
 /**
  * Weight API: resolve base URL by trying localhost then LAN IP, then fetch latest weight.
- * Use whichever of localhost:7001 or 192.168.0.28:7001 responds.
+ * Supports separate URL candidates for cones (scale) vs boxes (scale).
  */
 
+/** Default candidates for cone weight (yarn-storage process). */
 const WEIGHT_API_CANDIDATES = [
   'http://localhost:7001/api/weight/latest',
   'http://192.168.0.10:7001/api/weight/latest',
 ] as const;
 
+/** Candidates for box weight (purchase-order-received process). */
+const WEIGHT_API_CANDIDATES_BOXES = [
+  'http://192.168.0.105:7001/api/weight/latest',
+  'http://localhost:7001/api/weight/latest',
+] as const;
+
+export type WeightApiContext = 'cones' | 'boxes';
+
 const CACHE_KEY = 'weightApiUrl';
+const CACHE_KEY_BOXES = 'weightApiUrlBoxes';
 
 let cachedUrl: string | null = null;
+let cachedUrlBoxes: string | null = null;
 
 /**
  * Try fetching from a URL; returns true if response is ok.
@@ -24,42 +35,64 @@ async function probe(url: string): Promise<boolean> {
   }
 }
 
+function getCandidates(context: WeightApiContext): readonly string[] {
+  return context === 'boxes' ? WEIGHT_API_CANDIDATES_BOXES : WEIGHT_API_CANDIDATES;
+}
+
+function getCacheKey(context: WeightApiContext): string {
+  return context === 'boxes' ? CACHE_KEY_BOXES : CACHE_KEY;
+}
+
+function getCachedUrl(context: WeightApiContext): string | null {
+  return context === 'boxes' ? cachedUrlBoxes : cachedUrl;
+}
+
+function setCachedUrl(context: WeightApiContext, url: string | null): void {
+  if (context === 'boxes') cachedUrlBoxes = url;
+  else cachedUrl = url;
+}
+
 /**
  * Resolve the weight API URL: try cached (memory/localStorage) first, then try each candidate.
  * Caches the first URL that responds (in memory and localStorage).
+ * @param context - 'cones' for cone weight (default), 'boxes' for box weight (uses 192.168.0.105).
  */
-export async function getResolvedWeightApiUrl(): Promise<string> {
+export async function getResolvedWeightApiUrl(context: WeightApiContext = 'cones'): Promise<string> {
+  const candidates = getCandidates(context);
+  const cacheKey = getCacheKey(context);
   const fromStorage =
-    typeof window !== 'undefined' ? localStorage.getItem(CACHE_KEY) : null;
-  let toTry: readonly string[] = fromStorage ? [fromStorage, ...WEIGHT_API_CANDIDATES.filter((u) => u !== fromStorage)] : [...WEIGHT_API_CANDIDATES];
+    typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null;
+  let toTry: readonly string[] = fromStorage ? [fromStorage, ...candidates.filter((u) => u !== fromStorage)] : [...candidates];
+  const currentCached = getCachedUrl(context);
 
-  if (cachedUrl && toTry[0] === cachedUrl) {
-    const ok = await probe(cachedUrl);
-    if (ok) return cachedUrl;
-    cachedUrl = null;
-    if (typeof window !== 'undefined') localStorage.removeItem(CACHE_KEY);
-    toTry = WEIGHT_API_CANDIDATES;
+  if (currentCached && toTry[0] === currentCached) {
+    const ok = await probe(currentCached);
+    if (ok) return currentCached;
+    setCachedUrl(context, null);
+    if (typeof window !== 'undefined') localStorage.removeItem(cacheKey);
+    toTry = candidates;
   }
 
   for (const url of toTry) {
     const ok = await probe(url);
     if (ok) {
-      cachedUrl = url;
-      if (typeof window !== 'undefined') localStorage.setItem(CACHE_KEY, url);
+      setCachedUrl(context, url);
+      if (typeof window !== 'undefined') localStorage.setItem(cacheKey, url);
       return url;
     }
   }
 
-  return WEIGHT_API_CANDIDATES[0];
+  return candidates[0];
 }
 
 /**
- * Fetch latest weight from the resolved API (localhost or 192.168.0.28, whichever responds).
+ * Fetch latest weight from the resolved API.
+ * @param context - 'cones' for cone scale (localhost/192.168.0.10), 'boxes' for box scale (192.168.0.105).
  * Returns weight in kg or null on failure.
  */
-export async function fetchWeightLatest(): Promise<number | null> {
+export async function fetchWeightLatest(context: WeightApiContext = 'cones'): Promise<number | null> {
   try {
-    const url = await getResolvedWeightApiUrl();
+    const url = await getResolvedWeightApiUrl(context);
     const response = await fetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
