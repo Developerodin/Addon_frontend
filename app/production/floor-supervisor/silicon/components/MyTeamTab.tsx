@@ -6,11 +6,11 @@ import { teamMasterService, type TeamMaster } from "@/shared/services/teamMaster
 import { productionService, type ProductionArticleDetail } from "@/shared/services/productionService";
 import ArticleDetailBlock from "./ArticleDetailBlock";
 
-const FLOOR_WASHING = "Washing" as const;
+const FLOOR_SILICON = "Silicon" as const;
 
 /**
- * Shows all team members whose workingFloor is Washing.
- * Used on the Washing Floor Supervisor page under "My Team" tab.
+ * Shows all team members whose workingFloor is Silicon.
+ * Used on the Silicon Floor Supervisor page under "My Team" tab.
  */
 export default function MyTeamTab() {
   const [members, setMembers] = useState<TeamMaster[]>([]);
@@ -27,7 +27,7 @@ export default function MyTeamTab() {
     try {
       setIsLoading(true);
       const data = await teamMasterService.list({
-        workingFloor: FLOOR_WASHING,
+        workingFloor: FLOOR_SILICON,
         page: 1,
         limit: 200,
         search: search.trim() || undefined,
@@ -133,7 +133,7 @@ export default function MyTeamTab() {
           Refresh
         </button>
         <span className="text-[11px] font-medium text-[#495057]">
-          {totalResults} member{totalResults !== 1 ? "s" : ""} on Washing floor
+          {totalResults} member{totalResults !== 1 ? "s" : ""} on Silicon floor
         </span>
       </div>
 
@@ -152,7 +152,7 @@ export default function MyTeamTab() {
             {members.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-12 text-center text-[11px] text-gray-500">
-                  No team members found for Washing floor.
+                  No team members found for Silicon floor.
                 </td>
               </tr>
             ) : (
@@ -202,7 +202,7 @@ export default function MyTeamTab() {
       {viewActiveMember && (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={closeDrawer} aria-hidden />
-          <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
+          <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200">
             <div className="flex justify-between items-center p-[10px] border-b border-gray-200 flex-shrink-0">
               <h4 className="text-sm font-bold text-gray-800">
                 Active articles — {viewActiveMember.teamMemberName}

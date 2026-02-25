@@ -556,12 +556,12 @@ const WashingFloorSupervisorPage = () => {
     <div className="main-content !p-[10px]">
       <Seo title="Washing Supervisor Dashboard"/>
 
-      <div className="bg-white shadow-sm border border-gray-300 overflow-hidden mx-0">
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px]">
           {/* Page Header - aligned with checking/linking */}
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
-              <div className="w-[3px] h-5 bg-cyan-600 rounded-full" />
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
               <h1 className="text-sm font-bold text-gray-800">Washing Floor Supervisor</h1>
               <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
                 {totalResults}
@@ -593,7 +593,7 @@ const WashingFloorSupervisorPage = () => {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
                 onClick={loadOrders}
                 disabled={isLoading}
                 title="Refresh Orders"
@@ -627,21 +627,21 @@ const WashingFloorSupervisorPage = () => {
           <div className="flex border-b border-gray-300 mb-0">
             <button
               type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-cyan-600 text-cyan-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
               onClick={() => setActiveTab("orders")}
             >
               Orders
             </button>
             <button
               type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "article-view" ? "border-cyan-600 text-cyan-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "article-view" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
               onClick={() => setActiveTab("article-view")}
             >
               Article view
             </button>
             <button
               type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "my-team" ? "border-cyan-600 text-cyan-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "my-team" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
               onClick={() => setActiveTab("my-team")}
             >
               My Team
@@ -669,20 +669,20 @@ const WashingFloorSupervisorPage = () => {
           <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-300">
             <button
               type="button"
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${showFilters ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white border-gray-300 text-[#495057] hover:bg-gray-50'}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${showFilters ? 'bg-purple-600 text-white border-purple-600' : 'bg-white border-gray-200 text-[#495057] hover:bg-gray-50'}`}
               onClick={() => setShowFilters(!showFilters)}
             >
               <i className="ri-filter-3-line text-xs"></i> Filters {hasActiveFilters && <span className="ml-1">●</span>}
             </button>
             {hasActiveFilters && (
-              <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[11px] font-bold rounded hover:bg-gray-50" onClick={clearFilters}>
+              <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50" onClick={clearFilters}>
                 <i className="ri-close-line text-xs"></i> Clear
               </button>
             )}
             <div className="relative flex-1 min-w-[140px] max-w-[240px]">
               <input
                 type="text"
-                className="bg-white border border-gray-300 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-1 focus:ring-cyan-300 focus:border-cyan-500 w-full placeholder:text-gray-400 font-medium"
+                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
                 placeholder="Search order, article..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -690,7 +690,7 @@ const WashingFloorSupervisorPage = () => {
               <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
             </div>
             <select
-              className="bg-white border border-gray-300 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
+              className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
               value={itemsPerPage}
               onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
             >
@@ -729,7 +729,7 @@ const WashingFloorSupervisorPage = () => {
 
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600 mb-4 opacity-50"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
               <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
             </div>
           ) : orders.length === 0 ? (
@@ -748,7 +748,7 @@ const WashingFloorSupervisorPage = () => {
                 <thead>
                   <tr className="bg-gray-50/30">
                     <th className="pl-[10px] pr-1 py-2.5 w-10 border border-gray-300">
-                      <input type="checkbox" checked={selectAll} onChange={handleSelectAll} className="rounded border-gray-300 text-cyan-600 focus:ring-0 h-3.5 w-3.5" />
+                      <input type="checkbox" checked={selectAll} onChange={handleSelectAll} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
                     </th>
                     <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Order Info</th>
                     <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Articles</th>
@@ -760,7 +760,7 @@ const WashingFloorSupervisorPage = () => {
                   {paginatedOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="pl-[10px] pr-1 py-2.5 border border-gray-300">
-                        <input type="checkbox" checked={selectedOrders.includes(order.id)} onChange={() => handleOrderSelect(order.id)} className="rounded border-gray-300 text-cyan-600 focus:ring-0 h-3.5 w-3.5" />
+                        <input type="checkbox" checked={selectedOrders.includes(order.id)} onChange={() => handleOrderSelect(order.id)} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
                       </td>
                       <td className="px-1.5 py-2.5 border border-gray-300">
                         <div className="text-[12px] font-bold text-gray-900">{order.orderNumber || order.id}</div>
@@ -770,7 +770,7 @@ const WashingFloorSupervisorPage = () => {
                       <td className="px-1.5 py-2.5 border border-gray-300">
                         <div className="text-[12px] font-medium text-gray-600">{order.articles.length} Article{order.articles.length !== 1 ? 's' : ''} · Qty {order.articles.reduce((s, a) => s + (a.plannedQuantity || 0), 0).toLocaleString()}</div>
                         {order.articles.some(a => (a as any).floorQuantities?.washing) && (
-                          <div className="text-[10px] text-cyan-600 mt-0.5">
+                          <div className="text-[10px] text-purple-600 mt-0.5">
                             R:{order.articles.reduce((s, a) => s + ((a as any).floorQuantities?.washing?.received || 0), 0)} Trf:{order.articles.reduce((s, a) => s + ((a as any).floorQuantities?.washing?.transferred || 0), 0)} Rem:{order.articles.reduce((s, a) => s + ((a as any).floorQuantities?.washing?.remaining ?? 0), 0)}
                           </div>
                         )}
@@ -802,7 +802,7 @@ const WashingFloorSupervisorPage = () => {
                 {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
                   const pageNum = totalPages <= 7 ? i + 1 : currentPage <= 4 ? i + 1 : currentPage >= totalPages - 3 ? totalPages - 6 + i : currentPage - 3 + i;
                   return (
-                    <button key={pageNum} onClick={() => handlePageChange(pageNum)} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${currentPage === pageNum ? 'bg-cyan-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>{pageNum}</button>
+                    <button key={pageNum} onClick={() => handlePageChange(pageNum)} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${currentPage === pageNum ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>{pageNum}</button>
                   );
                 })}
                 <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= totalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Next</button>
@@ -817,16 +817,16 @@ const WashingFloorSupervisorPage = () => {
       {/* Update Order – right-side drawer; footer opens Scan bag/container then submit */}
       {showUpdateModal && selectedOrder && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={closeUpdateModal} aria-hidden />
-          <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l-2 border-gray-300">
-            <div className="flex items-center justify-between px-3 py-2 border-b-2 border-gray-300 bg-gray-50 flex-shrink-0">
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={closeUpdateModal} aria-hidden />
+          <div className="fixed right-0 top-0 h-full w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200">
+            <div className="flex items-center justify-between p-[10px] border-b border-gray-200 flex-shrink-0 bg-white">
               <h3 className="text-sm font-bold text-gray-800">Update Order — {selectedOrder.orderNumber}</h3>
-              <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-800 p-1 rounded border-2 border-gray-300 hover:bg-gray-100">
+              <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-700 p-1 rounded">
                 <i className="ri-close-line text-lg"></i>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-3">
-            <div className="mb-4 px-3 py-2 rounded-md bg-cyan-50 border-2 border-cyan-200 text-[11px] text-cyan-900">
+            <div className="flex-1 overflow-y-auto p-[10px]">
+            <div className="mb-4 px-3 py-2 rounded-md bg-purple-50 border border-purple-200 text-[11px] text-gray-800">
               <strong>How to update:</strong> Enter washing completed quantity and remarks per article. Then click Update Order, scan the bag/container, select article and next floor, and submit.
             </div>
             <section className="mb-4 rounded-md border-2 border-gray-300 bg-gray-50 overflow-hidden">
@@ -852,7 +852,7 @@ const WashingFloorSupervisorPage = () => {
                       <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Received</th>
                       <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Transferred</th>
                       <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Remaining</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-cyan-50">Washing Completed *</th>
+                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-purple-50">Washing Completed *</th>
                       <th className="px-2 py-1.5 text-center font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
                     </tr>
                   </thead>
@@ -878,7 +878,7 @@ const WashingFloorSupervisorPage = () => {
                           </td>
                           <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
                           <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
-                          <td className="px-2 py-1.5 border-r border-gray-300 bg-cyan-50">
+                          <td className="px-2 py-1.5 border-r border-gray-300 bg-purple-50">
                             <div className="flex flex-col gap-0.5">
                               <NumericInput
                                 className={`py-1 text-xs h-7 border rounded ${isFullyTransferred ? 'bg-gray-100 border-gray-300 cursor-not-allowed' : currentUpdateData.completedQuantity > remainingQty ? 'border-red-500' : 'border-gray-300'}`}
@@ -902,8 +902,8 @@ const WashingFloorSupervisorPage = () => {
               </div>
             </div>
             </div>
-            <div className="flex justify-end gap-2 p-3 border-t-2 border-gray-300 bg-gray-50 flex-shrink-0">
-              <button onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-100 shadow-sm">Cancel</button>
+            <div className="flex justify-end gap-2 p-[10px] border-t border-gray-200 flex-shrink-0 bg-white">
+              <button onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm">Cancel</button>
               <button
                 onClick={() => {
                   if (!selectedOrder) return;
@@ -929,7 +929,7 @@ const WashingFloorSupervisorPage = () => {
                   setUpdateContainerNextFloor("Boarding");
                   setShowUpdateContainerModal(true);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 text-white text-[11px] font-bold rounded hover:bg-cyan-700 shadow-sm disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-50"
                 disabled={selectedOrder.articles.some(article => {
                   const articleId = article.id || article._id;
                   if (!articleId) return false;
@@ -951,15 +951,15 @@ const WashingFloorSupervisorPage = () => {
       {/* Scan bag/container before submit – then run handleUpdateSubmit */}
       {showUpdateContainerModal && selectedOrder && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-[60]" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }} aria-hidden />
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-[60]" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }} aria-hidden />
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg shadow-xl border-2 border-gray-300 max-w-md w-full p-4">
+            <div className="bg-white rounded-lg shadow-xl border border-gray-200 max-w-md w-full p-4 flex flex-col">
               <h4 className="text-sm font-bold text-gray-800 mb-3">Scan bag/container</h4>
               <p className="text-[11px] text-gray-600 mb-3">Scan the container that will move to the next floor. Then select article and next floor, and click Update & submit order.</p>
               <div className="space-y-2 mb-3">
                 <input
                   type="text"
-                  className="w-full border-2 border-gray-300 rounded px-3 py-2 text-sm"
+                  className="w-full border border-gray-200 rounded px-3 py-2 text-[11px] focus:ring-0 focus:border-purple-300 placeholder:text-gray-400 font-medium"
                   placeholder="Barcode..."
                   value={updateContainerBarcode}
                   onChange={(e) => setUpdateContainerBarcode(e.target.value)}
@@ -972,7 +972,7 @@ const WashingFloorSupervisorPage = () => {
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Article</label>
-                  <select className="w-full border-2 border-gray-300 rounded px-2 py-1.5 text-[11px]" value={updateContainerArticleId} onChange={(e) => setUpdateContainerArticleId(e.target.value)}>
+                  <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-gray-300" value={updateContainerArticleId} onChange={(e) => setUpdateContainerArticleId(e.target.value)}>
                     {selectedOrder.articles.map((a) => (
                       <option key={a._id || a.id} value={a._id || a.id}>{a.articleNumber || a._id || a.id}</option>
                     ))}
@@ -980,7 +980,7 @@ const WashingFloorSupervisorPage = () => {
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Next floor</label>
-                  <select className="w-full border-2 border-gray-300 rounded px-2 py-1.5 text-[11px]" value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)}>
+                  <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-gray-300" value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)}>
                     <option value="Boarding">Boarding</option>
                     <option value="Final Checking">Final Checking</option>
                     <option value="Branding">Branding</option>
@@ -988,12 +988,12 @@ const WashingFloorSupervisorPage = () => {
                   </select>
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
-                <button type="button" className="px-3 py-1.5 text-[11px] font-bold rounded border-2 border-gray-300 hover:bg-gray-50" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }}>Cancel</button>
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+                <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }}>Cancel</button>
                 <button
                   type="button"
                   disabled={updateContainerCheckStatus !== "ok" || !updateContainerBarcode.trim() || !updateContainerArticleId || !updateContainerNextFloor.trim() || updateContainerSubmitting}
-                  className="px-3 py-1.5 text-[11px] font-bold rounded bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-50"
                   onClick={async () => {
                     const barcode = updateContainerBarcode.trim();
                     const articleId = updateContainerArticleId;
@@ -1029,9 +1029,9 @@ const WashingFloorSupervisorPage = () => {
       {/* Scan Container drawer (Article view) */}
       {showContainerScanDrawer && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} aria-hidden />
-          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
-            <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} aria-hidden />
+          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200">
+            <div className="flex justify-between items-center p-[10px] border-b border-gray-200 flex-shrink-0">
               <h3 className="text-sm font-bold text-gray-800">Scan Container</h3>
               <button type="button" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} className="text-gray-500 hover:text-gray-700 p-1">
                 <i className="ri-close-line text-lg" />
@@ -1042,18 +1042,18 @@ const WashingFloorSupervisorPage = () => {
                 <div className="space-y-3">
                   <label className="block text-[11px] font-bold text-gray-700">Barcode</label>
                   <div className="flex gap-2">
-                    <input type="text" className="flex-1 border-2 border-gray-300 rounded px-3 py-2 text-sm" placeholder="Scan or enter barcode" value={containerScanBarcode} onChange={(e) => setContainerScanBarcode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleGetContainerByBarcode()} />
-                    <button type="button" onClick={handleGetContainerByBarcode} disabled={containerScanLoading || !containerScanBarcode.trim()} className="px-3 py-2 bg-cyan-600 text-white text-[11px] font-bold rounded hover:bg-cyan-700 disabled:opacity-50">Get</button>
+                    <input type="text" className="flex-1 border border-gray-200 rounded px-3 py-2 text-[11px] focus:ring-0 focus:border-purple-300 placeholder:text-gray-400 font-medium" placeholder="Scan or enter barcode" value={containerScanBarcode} onChange={(e) => setContainerScanBarcode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleGetContainerByBarcode()} />
+                    <button type="button" onClick={handleGetContainerByBarcode} disabled={containerScanLoading || !containerScanBarcode.trim()} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-50">Get</button>
                   </div>
                   {containerScanLoading && <p className="text-[11px] text-gray-500">Loading...</p>}
                 </div>
-              ) : (
+                  ) : (
                 <div className="space-y-3">
                   <p className="text-[11px] text-gray-700">Container: <strong>{containerScanned.container.barcode}</strong></p>
                   {containerScanned.article ? (
                     <>
                       <p className="text-[11px] text-green-700">Article found: <strong>{containerScanned.article.articleNumber}</strong></p>
-                      <button type="button" onClick={handleAcceptArticleQuantity} disabled={acceptArticleLoading} className="w-full px-3 py-2 bg-cyan-600 text-white text-[11px] font-bold rounded hover:bg-cyan-700 disabled:opacity-50">
+                      <button type="button" onClick={handleAcceptArticleQuantity} disabled={acceptArticleLoading} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 shadow-sm disabled:opacity-50">
                         {acceptArticleLoading ? "..." : "Accept article quantity (Washing)"}
                       </button>
                     </>
@@ -1070,9 +1070,9 @@ const WashingFloorSupervisorPage = () => {
       {/* Assign drawer */}
       {showAssignDrawer && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={handleCloseAssignDrawer} aria-hidden />
-          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
-            <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={handleCloseAssignDrawer} aria-hidden />
+          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200">
+            <div className="flex justify-between items-center p-[10px] border-b border-gray-200 flex-shrink-0">
               <h3 className="text-sm font-bold text-gray-800">Assign to team member (Washing)</h3>
               <button type="button" onClick={handleCloseAssignDrawer} className="text-gray-500 hover:text-gray-700 p-1">
                 <i className="ri-close-line text-lg" />
@@ -1087,7 +1087,7 @@ const WashingFloorSupervisorPage = () => {
                   {assignTeamMembers.map((m) => (
                     <li key={m._id} className="flex items-center justify-between gap-2 border border-gray-200 rounded p-2">
                       <span className="text-[12px] font-medium text-gray-900">{m.teamMemberName}</span>
-                      <button type="button" onClick={() => handleAssignToMember(m)} disabled={!activeArticleId || assigningInProgress} className="px-2 py-1 text-[10px] font-bold rounded bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50">Assign</button>
+                      <button type="button" onClick={() => handleAssignToMember(m)} disabled={!activeArticleId || assigningInProgress} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-50">Assign</button>
                     </li>
                   ))}
                 </ul>
@@ -1098,12 +1098,12 @@ const WashingFloorSupervisorPage = () => {
       )}
 
       {confirmAssignModal && (
-        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl p-4 max-w-sm w-full">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 p-4 max-w-sm w-full">
             <p className="text-sm text-gray-800 mb-4">Assign active article to <strong>{confirmAssignModal.teamMemberName}</strong>?</p>
-            <div className="flex justify-end gap-2">
-              <button type="button" className="px-3 py-1.5 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50" onClick={() => setConfirmAssignModal(null)}>Cancel</button>
-              <button type="button" className="px-3 py-1.5 text-[11px] font-bold rounded bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50" onClick={handleConfirmAssign} disabled={assigningInProgress}>{assigningInProgress ? "..." : "Confirm"}</button>
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+              <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm" onClick={() => setConfirmAssignModal(null)}>Cancel</button>
+              <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-50" onClick={handleConfirmAssign} disabled={assigningInProgress}>{assigningInProgress ? "..." : "Confirm"}</button>
             </div>
           </div>
         </div>
@@ -1112,16 +1112,14 @@ const WashingFloorSupervisorPage = () => {
       {/* View Order Modal */}
       {showViewModal && selectedOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold">View Order - {selectedOrder.orderNumber}</h3>
-              <button
-                onClick={closeViewModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <i className="ri-close-line text-xl"></i>
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
+              <h3 className="text-sm font-bold text-gray-800">View Order — {selectedOrder.orderNumber}</h3>
+              <button onClick={closeViewModal} className="text-gray-500 hover:text-gray-700 p-1">
+                <i className="ri-close-line text-lg"></i>
               </button>
             </div>
+            <div className="flex-1 overflow-auto p-[10px]">
 
             {/* Order Summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
@@ -1149,7 +1147,7 @@ const WashingFloorSupervisorPage = () => {
                 <h4 className="text-sm font-medium text-gray-900">Article Details</h4>
                 <button
                   onClick={() => setShowLogsSection(!showLogsSection)}
-                  className={`ti-btn ti-btn-sm min-w-[120px] text-xs ${showLogsSection ? 'ti-btn-primary' : 'ti-btn-secondary'}`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded min-w-[120px] ${showLogsSection ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-sm' : 'bg-white border border-gray-200 text-[#495057] hover:bg-gray-50 shadow-sm'}`}
                 >
                   <i className="ri-file-list-line me-2"></i>
                   {showLogsSection ? 'Hide Logs' : 'Logs'}
@@ -1367,6 +1365,7 @@ const WashingFloorSupervisorPage = () => {
               </button>
             </div>
           </div>
+        </div>
         </div>
       )}
     </div>

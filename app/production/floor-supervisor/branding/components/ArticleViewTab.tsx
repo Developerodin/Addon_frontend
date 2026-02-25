@@ -1,32 +1,34 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import type { ProductionOrder, Article } from "@/shared/services/productionService";
+
+export interface ProductionOrder {
+  id: string;
+  orderNumber?: string;
+  priority: string;
+  status: string;
+  articles: any[];
+}
 
 export interface ArticleRow {
-  article: Article;
+  article: any;
   order: ProductionOrder;
 }
 
 export interface ArticleViewTabProps {
-  /** Orders already filtered by washing received > 0. */
   orders: ProductionOrder[];
   onViewOrder: (order: ProductionOrder) => void;
   onUpdateOrder: (order: ProductionOrder) => void;
   getStatusBadge: (status: string) => string;
   getPriorityBadge: (priority: string) => string;
-  /** Article id that was accepted via container scan – row gets blue border and Assign button. */
-  activeArticleId?: string | null;
-  onAssignClick?: () => void;
   onScanContainerClick?: () => void;
 }
 
-/** Flattens orders into one row per article for washing floor (washing received > 0). */
 function flattenOrdersToArticles(orders: ProductionOrder[]): ArticleRow[] {
   const rows: ArticleRow[] = [];
   for (const order of orders) {
     for (const article of order.articles) {
-      const received = (article as any).floorQuantities?.washing?.received ?? 0;
+      const received = article.floorQuantities?.branding?.received ?? 0;
       if (received > 0) {
         rows.push({ article, order });
       }
@@ -41,8 +43,6 @@ export default function ArticleViewTab({
   onUpdateOrder,
   getStatusBadge,
   getPriorityBadge,
-  activeArticleId = null,
-  onAssignClick,
   onScanContainerClick,
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
@@ -68,7 +68,7 @@ export default function ArticleViewTab({
             <button
               type="button"
               onClick={onScanContainerClick}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-amber-600 text-white hover:bg-amber-700 shadow-sm"
             >
               <i className="ri-barcode-line text-xs" />
               Scan Container
@@ -80,7 +80,7 @@ export default function ArticleViewTab({
             <i className="ri-file-list-line text-xl text-gray-200" />
           </div>
           <h3 className="text-xs font-bold text-gray-400 mb-1">NO ARTICLES</h3>
-          <p className="text-[10px] text-gray-500">No washing articles in current order set</p>
+          <p className="text-[10px] text-gray-500">No branding articles in current order set</p>
         </div>
       </div>
     );
@@ -93,7 +93,7 @@ export default function ArticleViewTab({
           <button
             type="button"
             onClick={onScanContainerClick}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-amber-600 text-white hover:bg-amber-700 shadow-sm"
           >
             <i className="ri-barcode-line text-xs" />
             Scan Container
@@ -102,7 +102,7 @@ export default function ArticleViewTab({
         <div className="relative flex-1 min-w-[140px] max-w-[240px]">
           <input
             type="text"
-            className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium transition-all"
+            className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-amber-300 w-full placeholder:text-gray-400 font-medium"
             placeholder="Search article, order..."
             value={articleSearch}
             onChange={(e) => setArticleSearch(e.target.value)}
@@ -118,51 +118,27 @@ export default function ArticleViewTab({
         <table className="w-full border-collapse border border-gray-200">
           <thead>
             <tr className="bg-gray-50/30">
-              <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Article
-              </th>
-              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Order
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Planned
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Rcv
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Done
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Trf
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Rem
-              </th>
-              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Status
-              </th>
-              <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Actions
-              </th>
+              <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Article</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Planned</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rcv</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Trf</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rem</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Type</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+              <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredRows.map(({ article, order }) => {
               const planned = article.plannedQuantity ?? 0;
-              const wash = (article as any).floorQuantities?.washing;
-              const received = wash?.received ?? 0;
-              const completed = wash?.completed ?? 0;
-              const transferred = wash?.transferred ?? 0;
-              const remaining = wash?.remaining ?? Math.max(0, received - transferred);
+              const br = article.floorQuantities?.branding;
+              const received = br?.received ?? 0;
+              const transferred = br?.transferred ?? 0;
+              const remaining = br?.remaining ?? Math.max(0, received - transferred);
               const key = (article.id ?? article._id) + "-" + order.id;
-              const articleId = article.id ?? article._id;
-              const isActiveRow = Boolean(activeArticleId && articleId && String(articleId) === String(activeArticleId));
               return (
-                <tr
-                  key={key}
-                  className={`hover:bg-gray-50/50 transition-colors group ${isActiveRow ? "ring-2 ring-purple-500 ring-inset bg-purple-50/50" : ""}`}
-                >
+                <tr key={key} className="hover:bg-gray-50/50 transition-colors group">
                   <td className="pl-[10px] pr-1.5 py-2.5 border border-gray-200">
                     <div className="text-[12px] font-bold text-gray-900">{article.articleNumber ?? "—"}</div>
                     <div className="text-[10px] text-gray-500">{article.linkingType ?? "N/A"}</div>
@@ -179,17 +155,17 @@ export default function ArticleViewTab({
                   <td className="px-1.5 py-2.5 text-center text-[12px] text-gray-700 border border-gray-200">
                     {planned.toLocaleString()}
                   </td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-purple-600 font-medium border border-gray-200">
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-amber-600 font-medium border border-gray-200">
                     {received.toLocaleString()}
-                  </td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">
-                    {completed.toLocaleString()}
                   </td>
                   <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">
                     {transferred.toLocaleString()}
                   </td>
                   <td className="px-1.5 py-2.5 text-center text-[12px] text-orange-600 font-medium border border-gray-200">
                     {remaining.toLocaleString()}
+                  </td>
+                  <td className="px-1.5 py-2.5 border border-gray-200 text-[11px] text-gray-700">
+                    {article.brandingType ?? "—"}
                   </td>
                   <td className="px-1.5 py-2.5 border border-gray-200">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>
@@ -198,24 +174,9 @@ export default function ArticleViewTab({
                   </td>
                   <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
                     <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 flex-wrap">
-                      {onAssignClick && (
-                        <button
-                          type="button"
-                          className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors ${
-                            isActiveRow
-                              ? "bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
-                              : "bg-sky-50 text-sky-600 border border-sky-100 hover:bg-sky-100"
-                          }`}
-                          onClick={onAssignClick}
-                          title="Assign to team member"
-                        >
-                          <i className="ri-user-add-line text-xs" />
-                          Assign
-                        </button>
-                      )}
                       <button
                         type="button"
-                        className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100 transition-opacity opacity-80 group-hover:opacity-100"
+                        className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100 transition-opacity"
                         onClick={() => onViewOrder(order)}
                         title="View order"
                       >
@@ -223,7 +184,7 @@ export default function ArticleViewTab({
                       </button>
                       <button
                         type="button"
-                        className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-opacity opacity-80 group-hover:opacity-100"
+                        className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-opacity"
                         onClick={() => onUpdateOrder(order)}
                         title="Update order"
                       >

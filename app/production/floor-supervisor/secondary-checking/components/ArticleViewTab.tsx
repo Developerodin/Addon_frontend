@@ -9,24 +9,23 @@ export interface ArticleRow {
 }
 
 export interface ArticleViewTabProps {
-  /** Orders already filtered by washing received > 0. */
+  /** Orders already filtered by secondaryChecking received > 0. */
   orders: ProductionOrder[];
   onViewOrder: (order: ProductionOrder) => void;
   onUpdateOrder: (order: ProductionOrder) => void;
   getStatusBadge: (status: string) => string;
   getPriorityBadge: (priority: string) => string;
-  /** Article id that was accepted via container scan – row gets blue border and Assign button. */
   activeArticleId?: string | null;
   onAssignClick?: () => void;
   onScanContainerClick?: () => void;
 }
 
-/** Flattens orders into one row per article for washing floor (washing received > 0). */
+/** Flattens orders into one row per article for secondary checking floor. */
 function flattenOrdersToArticles(orders: ProductionOrder[]): ArticleRow[] {
   const rows: ArticleRow[] = [];
   for (const order of orders) {
     for (const article of order.articles) {
-      const received = (article as any).floorQuantities?.washing?.received ?? 0;
+      const received = (article as any).floorQuantities?.secondaryChecking?.received ?? 0;
       if (received > 0) {
         rows.push({ article, order });
       }
@@ -68,7 +67,7 @@ export default function ArticleViewTab({
             <button
               type="button"
               onClick={onScanContainerClick}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
             >
               <i className="ri-barcode-line text-xs" />
               Scan Container
@@ -80,7 +79,7 @@ export default function ArticleViewTab({
             <i className="ri-file-list-line text-xl text-gray-200" />
           </div>
           <h3 className="text-xs font-bold text-gray-400 mb-1">NO ARTICLES</h3>
-          <p className="text-[10px] text-gray-500">No washing articles in current order set</p>
+          <p className="text-[10px] text-gray-500">No secondary checking articles in current order set</p>
         </div>
       </div>
     );
@@ -93,7 +92,7 @@ export default function ArticleViewTab({
           <button
             type="button"
             onClick={onScanContainerClick}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
           >
             <i className="ri-barcode-line text-xs" />
             Scan Container
@@ -102,7 +101,7 @@ export default function ArticleViewTab({
         <div className="relative flex-1 min-w-[140px] max-w-[240px]">
           <input
             type="text"
-            className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium transition-all"
+            className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
             placeholder="Search article, order..."
             value={articleSearch}
             onChange={(e) => setArticleSearch(e.target.value)}
@@ -118,43 +117,25 @@ export default function ArticleViewTab({
         <table className="w-full border-collapse border border-gray-200">
           <thead>
             <tr className="bg-gray-50/30">
-              <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Article
-              </th>
-              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Order
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Planned
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Rcv
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Done
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Trf
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Rem
-              </th>
-              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Status
-              </th>
-              <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Actions
-              </th>
+              <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Article</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Planned</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rcv</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">M1</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Trf</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rem</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+              <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredRows.map(({ article, order }) => {
               const planned = article.plannedQuantity ?? 0;
-              const wash = (article as any).floorQuantities?.washing;
-              const received = wash?.received ?? 0;
-              const completed = wash?.completed ?? 0;
-              const transferred = wash?.transferred ?? 0;
-              const remaining = wash?.remaining ?? Math.max(0, received - transferred);
+              const sc = (article as any).floorQuantities?.secondaryChecking;
+              const received = sc?.received ?? 0;
+              const completed = sc?.m1Quantity ?? (article as any).m1Quantity ?? 0;
+              const transferred = sc?.transferred ?? 0;
+              const remaining = sc?.remaining ?? Math.max(0, received - transferred);
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
               const isActiveRow = Boolean(activeArticleId && articleId && String(articleId) === String(activeArticleId));

@@ -1,15 +1,21 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import FloorProgression from "@/shared/components/production/FloorProgression";
-import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
+import { productionService, ProductionOrder, FloorOrderFilters, type Article } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import RepairTransferModal from "@/shared/components/production/RepairTransferModal";
 import { getPreviousFloor } from "@/shared/utils/productionUtils";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
+import ArticleViewTab from "./components/ArticleViewTab";
+import MyTeamTab from "./components/MyTeamTab";
+import { containersMasterService, type ContainerMaster } from "@/shared/services/containersMasterService";
+import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
+
+type SecondaryCheckingTab = "orders" | "article-view" | "my-team";
 
 interface ArticleLog {
   id: string;
@@ -128,6 +134,27 @@ const SecondaryCheckingFloorSupervisorPage = () => {
     linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
   } | null>(null);
 
+  const [activeTab, setActiveTab] = useState<SecondaryCheckingTab>("article-view");
+  const [showContainerScanDrawer, setShowContainerScanDrawer] = useState(false);
+  const [containerScanBarcode, setContainerScanBarcode] = useState("");
+  const [containerScanLoading, setContainerScanLoading] = useState(false);
+  const [containerScanned, setContainerScanned] = useState<{ container: ContainerMaster; article: Article | null } | null>(null);
+  const [acceptArticleLoading, setAcceptArticleLoading] = useState(false);
+  const [activeArticleId, setActiveArticleId] = useState<string | null>(null);
+  const [showAssignDrawer, setShowAssignDrawer] = useState(false);
+  const [assignTeamMembers, setAssignTeamMembers] = useState<TeamMaster[]>([]);
+  const [assignTeamLoading, setAssignTeamLoading] = useState(false);
+  const [confirmAssignModal, setConfirmAssignModal] = useState<{ teamMemberName: string; teamMemberId: string; articleId: string } | null>(null);
+  const [assigningInProgress, setAssigningInProgress] = useState(false);
+  const [removingArticleMemberId, setRemovingArticleMemberId] = useState<string | null>(null);
+  const [showUpdateContainerModal, setShowUpdateContainerModal] = useState(false);
+  const [updateContainerBarcode, setUpdateContainerBarcode] = useState("");
+  const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "ok">("idle");
+  const [updateContainerFetched, setUpdateContainerFetched] = useState<{ activeArticle?: string; activeFloor?: string } | null>(null);
+  const [updateContainerArticleId, setUpdateContainerArticleId] = useState("");
+  const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Washing");
+  const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
+
   // Load secondary checking floor orders from API
   const loadOrders = async () => {
     setIsLoading(true);
@@ -197,6 +224,57 @@ const SecondaryCheckingFloorSupervisorPage = () => {
 
   // Apply filtering to orders
   const paginatedOrders = filterOrdersByReceivedQuantity(orders);
+
+  const findArticleInOrders = useCallback((articleId: string): Article | null => {
+    for (const order of paginatedOrders) {
+      const a = order.articles.find((ar) => (ar._id || ar.id) === articleId);
+      if (a) return a as Article;
+    }
+    return null;
+  }, [paginatedOrders]);
+
+  useEffect(() => {
+    if (!showUpdateContainerModal) {
+      setUpdateContainerCheckStatus("idle");
+      setUpdateContainerFetched(null);
+      return;
+    }
+    const barcode = updateContainerBarcode.trim();
+    if (!barcode) {
+      setUpdateContainerCheckStatus("idle");
+      setUpdateContainerFetched(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      setUpdateContainerCheckStatus("loading");
+      setUpdateContainerFetched(null);
+      containersMasterService
+        .getByBarcode(barcode)
+        .then((container) => {
+          if (cancelled) return;
+          const hasActive = !!(container.activeArticle?.trim() || container.activeFloor?.trim());
+          if (hasActive) {
+            setUpdateContainerCheckStatus("already-filled");
+            setUpdateContainerFetched({ activeArticle: container.activeArticle, activeFloor: container.activeFloor });
+          } else {
+            setUpdateContainerCheckStatus("ok");
+            setUpdateContainerFetched(null);
+          }
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          const msg = err instanceof Error ? err.message : String(err);
+          setUpdateContainerCheckStatus(msg.includes("404") ? "not-found" : "idle");
+          setUpdateContainerFetched(null);
+          if (!msg.includes("404")) toast.error(msg);
+        });
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [showUpdateContainerModal, updateContainerBarcode]);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -301,6 +379,128 @@ const SecondaryCheckingFloorSupervisorPage = () => {
     setSelectedOrder(null);
     setUpdateData({});
     setShiftInputs({});
+    setShowUpdateContainerModal(false);
+    setUpdateContainerBarcode("");
+    setUpdateContainerCheckStatus("idle");
+    setUpdateContainerFetched(null);
+    setUpdateContainerArticleId("");
+    setUpdateContainerNextFloor("Washing");
+  };
+
+  const handleScanContainerClick = () => {
+    setContainerScanned(null);
+    setContainerScanBarcode("");
+    setShowContainerScanDrawer(true);
+  };
+
+  const handleGetContainerByBarcode = async () => {
+    const barcode = containerScanBarcode.trim();
+    if (!barcode) return;
+    setContainerScanLoading(true);
+    setContainerScanned(null);
+    try {
+      const container = await containersMasterService.getByBarcode(barcode);
+      const articleId = container.activeArticle?.trim();
+      const article = articleId ? findArticleInOrders(articleId) ?? null : null;
+      setContainerScanned({ container, article });
+      if (!article && articleId) toast.error("Article not found in current orders.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("404")) toast.error("Container not found for this barcode.");
+      else toast.error(msg);
+    } finally {
+      setContainerScanLoading(false);
+    }
+  };
+
+  const handleAcceptArticleQuantity = async () => {
+    if (!containerScanned?.article) return;
+    const articleId = containerScanned.article._id || containerScanned.article.id;
+    if (!articleId) return;
+    setAcceptArticleLoading(true);
+    try {
+      const res = await productionService.updateArticleFloorReceivedData(articleId, {
+        floor: "SecondaryChecking",
+        receivedData: {
+          receivedStatusFromPreviousFloor: "Completed",
+          receivedInContainerId: containerScanned.container._id ?? null,
+          receivedTimestamp: new Date().toISOString(),
+        },
+      });
+      if (res.success) {
+        toast.success("Article quantity accepted on Secondary Checking.");
+        setActiveArticleId(String(articleId));
+        setShowContainerScanDrawer(false);
+        setContainerScanned(null);
+        setContainerScanBarcode("");
+        loadOrders();
+      } else {
+        toast.error(res.error?.message ?? "Failed to accept article quantity");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to accept");
+    } finally {
+      setAcceptArticleLoading(false);
+    }
+  };
+
+  const handleOpenAssignDrawer = useCallback(async () => {
+    setShowAssignDrawer(true);
+    setAssignTeamLoading(true);
+    try {
+      const data = await teamMasterService.list({ workingFloor: "SecondaryChecking", limit: 200 });
+      setAssignTeamMembers(data.results);
+    } catch {
+      toast.error("Failed to load team members");
+      setAssignTeamMembers([]);
+    } finally {
+      setAssignTeamLoading(false);
+    }
+  }, []);
+
+  const handleAssignToMember = (member: TeamMaster) => {
+    if (!activeArticleId) {
+      toast.error("No active article selected. Scan container and accept article first.");
+      return;
+    }
+    setConfirmAssignModal({ teamMemberName: member.teamMemberName, teamMemberId: member._id, articleId: activeArticleId });
+  };
+
+  const handleConfirmAssign = async () => {
+    if (!confirmAssignModal?.articleId) return;
+    setAssigningInProgress(true);
+    try {
+      await teamMasterService.addActiveArticle(confirmAssignModal.teamMemberId, confirmAssignModal.articleId);
+      toast.success(`Article assigned to ${confirmAssignModal.teamMemberName}`);
+      setConfirmAssignModal(null);
+      const data = await teamMasterService.list({ workingFloor: "SecondaryChecking", limit: 200 });
+      setAssignTeamMembers(data.results);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to assign article");
+    } finally {
+      setAssigningInProgress(false);
+    }
+  };
+
+  const handleArticleReceived = async (member: TeamMaster) => {
+    if (!activeArticleId) return;
+    setRemovingArticleMemberId(member._id);
+    try {
+      await teamMasterService.removeActiveArticle(member._id, activeArticleId);
+      toast.success("Article received recorded.");
+      const data = await teamMasterService.list({ workingFloor: "SecondaryChecking", limit: 200 });
+      setAssignTeamMembers(data.results);
+      loadOrders();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove active article");
+    } finally {
+      setRemovingArticleMemberId(null);
+    }
+  };
+
+  const handleCloseAssignDrawer = () => {
+    setShowAssignDrawer(false);
+    setConfirmAssignModal(null);
   };
 
 
@@ -648,493 +848,488 @@ const SecondaryCheckingFloorSupervisorPage = () => {
   };
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Secondary Checking Floor Supervisor Dashboard"/>
-      
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <h1 className="box-title text-2xl font-semibold">Secondary Checking Floor Supervisor Dashboard</h1>
-                <HelpIcon
-                  title="Secondary Checking Floor Supervisor Dashboard"
-                  content={
-                    <div className="space-y-4">
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
-                        <p className="text-gray-700">
-                          This is the Secondary Checking Floor Supervisor Dashboard where you can view and update production orders that are currently on the Secondary Checking floor.
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          <li><strong>View Orders:</strong> See all orders with articles on the Secondary Checking floor</li>
-                          <li><strong>Track Quantities:</strong> Monitor planned, received from linking, and M1 quantities (good quality items that pass to next floor)</li>
-                          <li><strong>Update Progress:</strong> Click "Update" to modify quality categories (M1-M4) and add remarks</li>
-                          <li><strong>Step 4B - Quality Check:</strong> Categorize checked quantities into M1, M2, M3, M4</li>
-                          <li><strong>M2 Repair Review:</strong> Review M2 items and shift them to M1, M3, or M4 as needed</li>
-                          <li><strong>Track Articles:</strong> Monitor individual article progress and repair status</li>
-                          <li><strong>Add Remarks:</strong> Add notes and comments for each article and repair process</li>
-                          <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
-                        </ul>
-                      </div>
+
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
+              <h1 className="text-sm font-bold text-gray-800">Secondary Checking Floor Supervisor</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {totalResults}
+              </span>
+              <HelpIcon
+                title="Secondary Checking Floor Supervisor Dashboard"
+                content={
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">What is this page?</h4>
+                      <p className="text-gray-700">
+                        This is the Secondary Checking Floor Supervisor Dashboard where you can view and update production orders on the Secondary Checking floor.
+                      </p>
                     </div>
-                  }
-                />
-              </div>
-              <div className="box-tools flex items-center space-x-2">
-                <button 
-                  type="button" 
-                  className="ti-btn ti-btn-light"
-                  onClick={loadOrders}
-                  disabled={isLoading}
-                  title="Refresh Orders"
-                >
-                  <i className={`ri-refresh-line me-2 ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
-                </button>
-              </div>
-            </div>
-            
-            {/* Floor Progression */}
-            {/* <div className="mt-4">
-              <FloorProgression 
-                linkingType="Auto Linking" 
-                currentFloor="Checking"
-                className="mb-4"
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">What can you do here?</h4>
+                      <ul className="list-disc list-inside space-y-1 text-gray-700">
+                        <li><strong>View Orders:</strong> See all orders with articles on the Secondary Checking floor</li>
+                        <li><strong>Article view:</strong> Scan container, accept article, assign to team member</li>
+                        <li><strong>My Team:</strong> View active articles and mark article complete</li>
+                        <li><strong>Update Progress:</strong> Update M1–M4, scan container, then submit and transfer to next floor</li>
+                        <li><strong>Filter & Search:</strong> Use filters and search to find specific orders</li>
+                      </ul>
+                    </div>
+                  </div>
+                }
               />
-            </div> */}
-          </div>
-
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-            <div className="box bg-gradient-to-r from-blue-500 to-blue-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-blue-100 text-sm font-medium">Active Orders</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.filter(order => order.status === 'In Progress').length}
-                    </p>
-                  </div>
-                  <div className="text-blue-200">
-                    <i className="ri-cog-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
             </div>
-
-            <div className="box bg-gradient-to-r from-green-500 to-green-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-green-100 text-sm font-medium">M1 - Good Quality</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.reduce((sum, order) => 
-                        sum + order.articles.reduce((articleSum, article) => {
-                          const secondaryCheckingFloor = getSecondaryCheckingFloorData(article);
-                          return articleSum + (secondaryCheckingFloor.data?.m1Quantity || article.m1Quantity || 0);
-                        }, 0), 0
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-green-200">
-                    <i className="ri-check-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="box bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-yellow-100 text-sm font-medium">M2 - Needs Repair</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.reduce((sum, order) => 
-                        sum + order.articles.reduce((articleSum, article) => {
-                          const secondaryCheckingFloor = getSecondaryCheckingFloorData(article);
-                          return articleSum + (secondaryCheckingFloor.data?.m2Quantity || article.m2Quantity || 0);
-                        }, 0), 0
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-yellow-200">
-                    <i className="ri-tools-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="box bg-gradient-to-r from-red-500 to-red-600 text-white">
-              <div className="box-body p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-red-100 text-sm font-medium">M3+M4 - Defects</p>
-                    <p className="text-2xl font-bold text-white">
-                      {orders.reduce((sum, order) => 
-                        sum + order.articles.reduce((articleSum, article) => {
-                          const secondaryCheckingFloor = getSecondaryCheckingFloorData(article);
-                          return articleSum + (secondaryCheckingFloor.data?.m3Quantity || article.m3Quantity || 0) + (secondaryCheckingFloor.data?.m4Quantity || article.m4Quantity || 0);
-                        }, 0), 0
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-red-200">
-                    <i className="ri-error-warning-line text-3xl"></i>
-                  </div>
-                </div>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                onClick={loadOrders}
+                disabled={isLoading}
+                title="Refresh Orders"
+              >
+                <i className={`ri-refresh-line text-xs ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+              </button>
             </div>
           </div>
 
-          {/* Content Box */}
-          <div className="box">
-            <div className="box-body">
-              {/* Search and Filters Header */}
-              <div className="mb-6">
-                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                  {/* Filter Toggle and Actions */}
-                  <div className="flex items-center gap-3 flex-shrink-0 order-2 sm:order-1">
-                    <button
-                      type="button"
-                      className={`ti-btn ${showFilters ? 'ti-btn-primary' : 'ti-btn-secondary'}`}
-                      onClick={() => setShowFilters(!showFilters)}
-                    >
-                      <i className="ri-filter-3-line me-2"></i>
-                      Filters {hasActiveFilters && <span className="badge bg-white text-primary ml-1">●</span>}
-                    </button>
-                    
-                    {hasActiveFilters && (
-                      <button
-                        type="button"
-                        className="ti-btn ti-btn-light"
-                        onClick={clearFilters}
-                      >
-                        <i className="ri-close-line me-1"></i>
-                        Clear
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Search Bar */}
-                  <div className="w-full sm:w-80 lg:w-96 order-1 sm:order-2">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        className="form-control py-3 pl-10 pr-4 w-full"
-                        placeholder="Search orders by article number or ID..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                      <i className="ri-search-line text-lg absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    </div>
-                  </div>
-
-                  {/* Rows per page selector */}
-                  <div className="flex items-center gap-2 order-3">
-                    <label className="text-sm text-gray-600 whitespace-nowrap">Show:</label>
-                    <select
-                      className="form-select form-select-sm w-20"
-                      value={itemsPerPage}
-                      onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
-                    >
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
-                    <span className="text-sm text-gray-600 whitespace-nowrap">per page</span>
-                  </div>
-                </div>
-
-                {/* Filters Panel */}
-                {showFilters && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {/* Status Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Status</label>
-                        <select
-                          className="form-select"
-                          value={filters.status}
-                          onChange={(e) => handleFilterChange('status', e.target.value)}
-                        >
-                          <option value="">All Status</option>
-                          <option value="Pending">Pending</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Completed">Completed</option>
-                          <option value="On Hold">On Hold</option>
-                        </select>
-                      </div>
-
-                      {/* Priority Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Priority</label>
-                        <select
-                          className="form-select"
-                          value={filters.priority}
-                          onChange={(e) => handleFilterChange('priority', e.target.value)}
-                        >
-                          <option value="">All Priorities</option>
-                          <option value="Urgent">Urgent</option>
-                          <option value="High">High</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Low">Low</option>
-                        </select>
-                      </div>
-
-                      {/* Linking Type Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Linking Type</label>
-                        <select
-                          className="form-select"
-                          value={filters.linkingType}
-                          onChange={(e) => handleFilterChange('linkingType', e.target.value)}
-                        >
-                          <option value="">All Types</option>
-                          <option value="Auto Linking">Auto Linking</option>
-                          <option value="Rosso Linking">Rosso Linking</option>
-                          <option value="Hand Linking">Hand Linking</option>
-                        </select>
-                      </div>
-
-                      {/* Floor Filter */}
-                      <div>
-                        <label className="form-label text-sm font-medium">Floor</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          placeholder="Filter by floor..."
-                          value={filters.floor}
-                          onChange={(e) => handleFilterChange('floor', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {isLoading ? (
-                <div className="flex justify-center items-center py-12">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading orders...</p>
-                  </div>
-                </div>
-              ) : orders.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="text-gray-400 mb-4">
-                    <i className="ri-file-list-line text-6xl"></i>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No orders found</h3>
-                  <p className="text-gray-500 mb-4">
-                      {hasActiveFilters 
-                      ? 'Try adjusting your filters or search terms' 
-                      : 'No orders currently on Secondary Checking floor'
-                    }
-                  </p>
-                </div>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table whitespace-nowrap min-w-full">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">
-                          <input 
-                            type="checkbox" 
-                            className="form-check-input" 
-                            checked={selectAll}
-                            onChange={handleSelectAll}
-                          />
-                        </th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Order Info</th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Articles</th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Status</th>
-                        <th scope="col" className="px-4 py-3 text-start font-medium text-gray-700">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {paginatedOrders.map((order) => (
-                        <tr 
-                          key={order.id}
-                          className="hover:bg-gray-50 transition-colors duration-150"
-                        >
-                          <td className="px-4 py-4">
-                            <input 
-                              type="checkbox" 
-                              className="form-check-input" 
-                              checked={selectedOrders.includes(order.id)}
-                              onChange={() => handleOrderSelect(order.id)}
-                            />
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="space-y-1">
-                              <div className="font-medium text-gray-900">
-                                {order.orderNumber || order.id}
-                                {order.orderNote && (
-                                  <span className="text-sm text-gray-500 ml-2">
-                                    ({order.orderNote})
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                Created: {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 
-                                  (order.articles && order.articles.length > 0 && order.articles[0].createdAt ? 
-                                    new Date(order.articles[0].createdAt).toLocaleDateString() : 'N/A')}
-                              </div>
-                              <div className="text-xs text-gray-400">
-                                Updated: {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : 
-                                  (order.articles && order.articles.length > 0 && order.articles[0].updatedAt ? 
-                                    new Date(order.articles[0].updatedAt).toLocaleDateString() : 'N/A')}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="space-y-1">
-                              <div className="font-medium text-gray-900">
-                                {order.articles.length} Article{order.articles.length > 1 ? 's' : ''}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                Total Qty: {order.articles.reduce((sum, article) => sum + article.plannedQuantity, 0).toLocaleString()}
-                              </div>
-                              {order.articles.some(article => article.floorQuantities?.secondaryChecking) && (
-                                <div className="text-xs text-blue-600">
-                                  Secondary Checking: R:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.secondaryChecking?.received || 0), 0)} | 
-                                  Rem:{order.articles.reduce((sum, article) => sum + (article.floorQuantities?.secondaryChecking?.remaining || 0), 0)}
-                                </div>
-                              )}
-                              {order.articles.some(article => article.floorQuantities?.knitting?.m4Quantity) && (
-                                <div className="text-xs text-red-600">
-                                  M4 Quantity In Knitting: {order.articles.reduce((sum, article) => sum + (article.floorQuantities?.knitting?.m4Quantity || 0), 0)}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="space-y-2">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
-                                {order.status}
-                              </span>
-                              <div>
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(order.priority)}`}>
-                                  {order.priority}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="flex items-center space-x-2">
-                              <button 
-                                className="ti-btn ti-btn-primary ti-btn-sm"
-                                onClick={() => handleViewOrder(order)}
-                                title="View Order"
-                              >
-                                <i className="ri-eye-line"></i>
-                              </button>
-                              <button 
-                                className="ti-btn ti-btn-success ti-btn-sm"
-                                onClick={() => handleUpdateOrder(order)}
-                                title="Update Order"
-                              >
-                                <i className="ri-edit-line"></i>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Pagination */}
-              {!isLoading && orders.length > 0 && (
-                <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-6 border-t border-gray-200">
-                  <div className="text-sm text-gray-700 mb-4 sm:mb-0">
-                    <span className="font-medium">
-                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} 
-                    </span>
-                    <span className="text-gray-500"> of {totalResults.toLocaleString()} orders</span>
-                  </div>
-                  
-                  <nav aria-label="Page navigation" className="flex items-center space-x-1">
-                    <button
-                      className={`px-3 py-2 text-sm font-medium rounded-md ${
-                        currentPage > 1
-                          ? 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
-                          : 'text-gray-300 bg-gray-100 border border-gray-200 cursor-not-allowed'
-                      }`}
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage <= 1}
-                    >
-                      <i className="ri-arrow-left-s-line"></i>
-                    </button>
-                    
-                    {/* Page Numbers */}
-                    {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 7) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 4) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 3) {
-                        pageNum = totalPages - 6 + i;
-                      } else {
-                        pageNum = currentPage - 3 + i;
-                      }
-                      
-                      return (
-                        <button
-                          key={pageNum}
-                          className={`px-3 py-2 text-sm font-medium rounded-md ${
-                            currentPage === pageNum
-                              ? 'bg-primary text-white border border-primary'
-                              : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
-                          }`}
-                          onClick={() => handlePageChange(pageNum)}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                    
-                    <button
-                      className={`px-3 py-2 text-sm font-medium rounded-md ${
-                        currentPage < totalPages
-                          ? 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700'
-                          : 'text-gray-300 bg-gray-100 border border-gray-200 cursor-not-allowed'
-                      }`}
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage >= totalPages}
-                    >
-                      <i className="ri-arrow-right-s-line"></i>
-                    </button>
-                  </nav>
-                </div>
-              )}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+            <div className="bg-blue-50 border border-blue-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wide">In Progress</span>
+              <span className="text-sm font-bold text-blue-900">{orders.filter(o => o.status === 'In Progress').length}</span>
+            </div>
+            <div className="bg-green-50 border border-green-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-green-700 uppercase tracking-wide">M1 Good</span>
+              <span className="text-sm font-bold text-green-900">
+                {orders.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => {
+                  const sc = getSecondaryCheckingFloorData(article);
+                  return articleSum + (sc.data?.m1Quantity ?? (article as any).m1Quantity ?? 0);
+                }, 0), 0)}
+              </span>
+            </div>
+            <div className="bg-yellow-50 border border-yellow-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-yellow-700 uppercase tracking-wide">M2 Repair</span>
+              <span className="text-sm font-bold text-yellow-900">
+                {orders.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => {
+                  const sc = getSecondaryCheckingFloorData(article);
+                  return articleSum + (sc.data?.m2Quantity ?? (article as any).m2Quantity ?? 0);
+                }, 0), 0)}
+              </span>
+            </div>
+            <div className="bg-red-50 border border-red-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-red-700 uppercase tracking-wide">M3+M4</span>
+              <span className="text-sm font-bold text-red-900">
+                {orders.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => {
+                  const sc = getSecondaryCheckingFloorData(article);
+                  return articleSum + (sc.data?.m3Quantity ?? (article as any).m3Quantity ?? 0) + (sc.data?.m4Quantity ?? (article as any).m4Quantity ?? 0);
+                }, 0), 0)}
+              </span>
             </div>
           </div>
+
+          <div className="flex border-b border-gray-300 mb-0">
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("orders")}
+            >
+              Orders
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "article-view" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("article-view")}
+            >
+              Article view
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "my-team" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("my-team")}
+            >
+              My Team
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-[300px]">
+          {activeTab === "my-team" ? (
+            <MyTeamTab />
+          ) : activeTab === "article-view" ? (
+            <ArticleViewTab
+              orders={paginatedOrders}
+              onViewOrder={handleViewOrder}
+              onUpdateOrder={handleUpdateOrder}
+              getStatusBadge={getStatusBadge}
+              getPriorityBadge={getPriorityBadge}
+              activeArticleId={activeArticleId}
+              onAssignClick={handleOpenAssignDrawer}
+              onScanContainerClick={handleScanContainerClick}
+            />
+          ) : (
+            <>
+          <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-300">
+            <button
+              type="button"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${showFilters ? 'bg-purple-600 text-white border-purple-600' : 'bg-white border-gray-200 text-[#495057] hover:bg-gray-50'}`}
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <i className="ri-filter-3-line text-xs"></i> Filters {hasActiveFilters && <span className="ml-1">●</span>}
+            </button>
+            {hasActiveFilters && (
+              <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50" onClick={clearFilters}>
+                <i className="ri-close-line text-xs"></i> Clear
+              </button>
+            )}
+            <div className="relative flex-1 min-w-[140px] max-w-[240px]">
+              <input
+                type="text"
+                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
+                placeholder="Search order, article..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+            </div>
+            <select
+              className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
+              value={itemsPerPage}
+              onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+            >
+              <option value={10}>Show 10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          {showFilters && (
+            <div className="p-[10px] bg-gray-50 border-b border-gray-300 flex flex-wrap gap-2">
+              <select className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5" value={filters.status} onChange={(e) => handleFilterChange('status', e.target.value)}>
+                <option value="">All Status</option>
+                <option value="Pending">Pending</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Completed">Completed</option>
+                <option value="On Hold">On Hold</option>
+              </select>
+              <select className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5" value={filters.priority} onChange={(e) => handleFilterChange('priority', e.target.value)}>
+                <option value="">All Priorities</option>
+                <option value="Urgent">Urgent</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+              <select className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5" value={filters.linkingType} onChange={(e) => handleFilterChange('linkingType', e.target.value)}>
+                <option value="">All Types</option>
+                <option value="Auto Linking">Auto Linking</option>
+                <option value="Rosso Linking">Rosso Linking</option>
+                <option value="Hand Linking">Hand Linking</option>
+              </select>
+              <input type="text" className="bg-white border border-gray-300 text-[11px] rounded px-2 py-1.5 w-28" placeholder="Floor..." value={filters.floor} onChange={(e) => handleFilterChange('floor', e.target.value)} />
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-file-list-line text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">NO ORDERS FOUND</h3>
+              <p className="text-[10px] text-gray-500">
+                {hasActiveFilters ? 'Try adjusting filters or search' : 'No orders on Secondary Checking floor'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-200">
+                <thead>
+                  <tr className="bg-gray-50/30">
+                    <th className="pl-[10px] pr-1 py-2.5 w-10 border border-gray-200">
+                      <input type="checkbox" checked={selectAll} onChange={handleSelectAll} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                    </th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order Info</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Articles</th>
+                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                    <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedOrders.map((order) => (
+                    <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="pl-[10px] pr-1 py-2.5 border border-gray-200">
+                        <input type="checkbox" checked={selectedOrders.includes(order.id)} onChange={() => handleOrderSelect(order.id)} className="rounded border-gray-200 text-purple-600 focus:ring-0 h-3.5 w-3.5" />
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <div className="text-[12px] font-bold text-gray-900">{order.orderNumber || order.id}</div>
+                        {order.orderNote && <span className="text-[10px] text-gray-500">({order.orderNote})</span>}
+                        <div className="text-[10px] text-gray-500">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : (order.articles?.[0]?.createdAt ? new Date(order.articles[0].createdAt).toLocaleDateString() : 'N/A')}</div>
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <div className="text-[12px] font-medium text-gray-600">{order.articles.length} Article{order.articles.length !== 1 ? 's' : ''} · Qty {order.articles.reduce((s, a) => s + (a.plannedQuantity || 0), 0).toLocaleString()}</div>
+                        {order.articles.some(a => (a as any).floorQuantities?.secondaryChecking) && (
+                          <div className="text-[10px] text-purple-600 mt-0.5">
+                            R:{order.articles.reduce((s, a) => s + ((a as any).floorQuantities?.secondaryChecking?.received || 0), 0)} Trf:{order.articles.reduce((s, a) => s + ((a as any).floorQuantities?.secondaryChecking?.transferred || 0), 0)} Rem:{order.articles.reduce((s, a) => s + ((a as any).floorQuantities?.secondaryChecking?.remaining ?? 0), 0)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>{order.status}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ml-1 ${getPriorityBadge(order.priority)}`}>{order.priority}</span>
+                      </td>
+                      <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                        <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100">
+                          <button className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100" onClick={() => handleViewOrder(order)} title="View"><i className="ri-eye-line text-xs"></i></button>
+                          <button className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100" onClick={() => handleUpdateOrder(order)} title="Update"><i className="ri-edit-line text-xs"></i></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!isLoading && orders.length > 0 && (
+            <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-200">
+              <div className="text-[11px] font-medium text-[#495057]">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage <= 1} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Prev</button>
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                  const pageNum = totalPages <= 7 ? i + 1 : currentPage <= 4 ? i + 1 : currentPage >= totalPages - 3 ? totalPages - 6 + i : currentPage - 3 + i;
+                  return (
+                    <button key={pageNum} onClick={() => handlePageChange(pageNum)} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${currentPage === pageNum ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>{pageNum}</button>
+                  );
+                })}
+                <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= totalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Next</button>
+              </div>
+            </div>
+          )}
+            </>
+          )}
         </div>
       </div>
 
-      {/* Update Order Modal */}
-      {showUpdateModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold">Update Order - {selectedOrder.orderNumber}</h3>
-              <button
-                onClick={closeUpdateModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <i className="ri-close-line text-xl"></i>
+      {/* Scan Container drawer */}
+      {showContainerScanDrawer && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} aria-hidden />
+          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l border-gray-200">
+            <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
+              <h3 className="text-sm font-bold text-gray-800">Scan Container</h3>
+              <button type="button" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} className="text-gray-500 hover:text-gray-700 p-1">
+                <i className="ri-close-line text-lg" />
               </button>
             </div>
+            <div className="flex-1 overflow-y-auto p-[10px]">
+              {!containerScanned ? (
+                <div className="space-y-3">
+                  <label className="block text-[11px] font-medium text-[#495057]">Container barcode</label>
+                  <input
+                    type="text"
+                    placeholder="Scan or enter barcode"
+                    value={containerScanBarcode}
+                    onChange={(e) => setContainerScanBarcode(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleGetContainerByBarcode()}
+                    className="w-full border border-gray-200 rounded pl-3 pr-3 py-1.5 text-[11px] font-medium focus:ring-0 focus:border-purple-300 placeholder:text-gray-400"
+                  />
+                  <button
+                    type="button"
+                    disabled={!containerScanBarcode.trim() || containerScanLoading}
+                    onClick={handleGetContainerByBarcode}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm w-full"
+                  >
+                    {containerScanLoading ? <span className="animate-spin">...</span> : "Get container"}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Article details</h4>
+                  {containerScanned.article ? (
+                    <>
+                      <div className="p-2 bg-gray-50 rounded border border-gray-200 text-[12px] text-gray-900">
+                        <div><span className="font-bold text-[#495057]">Article:</span> {containerScanned.article.articleNumber}</div>
+                        <div><span className="font-bold text-[#495057]">Order:</span> {containerScanned.article.orderId ?? "—"}</div>
+                        <div><span className="font-bold text-[#495057]">Planned:</span> {containerScanned.article.plannedQuantity}</div>
+                        <div><span className="font-bold text-[#495057]">Sec Check received:</span> {(containerScanned.article as any).floorQuantities?.secondaryChecking?.received ?? 0}</div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={acceptArticleLoading}
+                        onClick={handleAcceptArticleQuantity}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full"
+                      >
+                        {acceptArticleLoading ? "Accepting..." : "Accept article quantity (Secondary Checking)"}
+                      </button>
+                    </>
+                  ) : (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                      Article not in current orders. Use another container or go to the order that contains this article.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
+      {/* Assign drawer */}
+      {showAssignDrawer && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={handleCloseAssignDrawer} aria-hidden />
+          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l border-gray-200">
+            <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
+              <h3 className="text-sm font-bold text-gray-800">Assign to team member (Secondary Checking)</h3>
+              <button type="button" onClick={handleCloseAssignDrawer} className="text-gray-500 hover:text-gray-700 p-1">
+                <i className="ri-close-line text-lg" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-[10px]">
+              {assignTeamLoading ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50" />
+                  <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
+                </div>
+              ) : assignTeamMembers.length === 0 ? (
+                <p className="text-[11px] text-[#495057]">No team members on Secondary Checking floor.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {assignTeamMembers.map((member) => {
+                    const hasActiveArticle = Boolean(activeArticleId && member.articleData?.some((d) => d.activeArticle === activeArticleId));
+                    return (
+                      <li key={member._id} className="flex items-center justify-between gap-2 p-2 border border-gray-200 rounded hover:bg-gray-50">
+                        <div>
+                          <span className="text-[12px] font-medium text-gray-900">{member.teamMemberName}</span>
+                          <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-bold ${member.role === "Supervisor" ? "bg-purple-50 text-purple-700 border border-purple-100" : "bg-gray-50 text-gray-600 border border-gray-200"}`}>{member.role}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {hasActiveArticle ? (
+                            <button type="button" onClick={() => handleArticleReceived(member)} disabled={removingArticleMemberId === member._id} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm disabled:opacity-50">
+                              {removingArticleMemberId === member._id ? "..." : "Article received"}
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => handleAssignToMember(member)} disabled={!activeArticleId} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm disabled:opacity-50">Assign</button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Confirm assign modal */}
+      {confirmAssignModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={() => setConfirmAssignModal(null)}>
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-[10px] border-b border-gray-200">
+              <h4 className="text-sm font-bold text-gray-800">Confirm assign</h4>
+            </div>
+            <p className="p-[10px] text-[11px] text-[#495057]">
+              Assign article to <strong>{confirmAssignModal.teamMemberName}</strong>?
+            </p>
+            <div className="flex justify-end gap-2 p-[10px] border-t border-gray-200">
+              <button type="button" onClick={() => setConfirmAssignModal(null)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm">Cancel</button>
+              <button type="button" onClick={handleConfirmAssign} disabled={assigningInProgress} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm">
+                {assigningInProgress ? "Assigning..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scan bag/container before update order – modal */}
+      {showUpdateContainerModal && selectedOrder && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }} aria-hidden>
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-sm p-[10px] flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
+            <h4 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2">Scan bag / container</h4>
+            <p className="text-[11px] text-[#495057]">Scan or enter the container/bag code for transfer to next floor.</p>
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1">Container barcode</label>
+              <input type="text" placeholder="Scan or enter barcode" value={updateContainerBarcode} onChange={(e) => setUpdateContainerBarcode(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:ring-0 focus:border-purple-300" />
+              {updateContainerCheckStatus === "loading" && <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1"><span className="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-t-transparent" /> Checking...</p>}
+              {updateContainerCheckStatus === "not-found" && <p className="text-[11px] text-red-600 mt-1">Container not found.</p>}
+              {updateContainerCheckStatus === "already-filled" && <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">Container already filled. Use another.</p>}
+              {updateContainerCheckStatus === "ok" && <p className="text-[11px] text-green-600 mt-1">Container available.</p>}
+            </div>
+            <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1">Article in container</label>
+              <select value={updateContainerArticleId} onChange={(e) => setUpdateContainerArticleId(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:border-purple-300">
+                <option value="">Select article</option>
+                {selectedOrder.articles.map((a) => { const id = a._id || a.id; if (!id) return null; return <option key={id} value={id}>{a.articleNumber || id}</option>; })}
+              </select>
+            </div>
+            <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1">Next floor</label>
+              <select value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:border-purple-300">
+                {PRODUCTION_FLOORS.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
+              <button
+                type="button"
+                disabled={updateContainerCheckStatus !== "ok" || !updateContainerBarcode.trim() || !updateContainerArticleId || !updateContainerNextFloor.trim() || updateContainerSubmitting}
+                onClick={async () => {
+                  const barcode = updateContainerBarcode.trim();
+                  const articleId = updateContainerArticleId;
+                  const floor = updateContainerNextFloor.trim();
+                  if (!barcode || !articleId || !floor) return;
+                  setUpdateContainerSubmitting(true);
+                  try {
+                    await containersMasterService.updateByBarcode(barcode, { activeArticle: articleId, activeFloor: floor });
+                    toast.success("Container updated");
+                    setShowUpdateContainerModal(false);
+                    setUpdateContainerBarcode("");
+                    setUpdateContainerArticleId("");
+                    setUpdateContainerNextFloor("Washing");
+                    setUpdateContainerCheckStatus("idle");
+                    setUpdateContainerFetched(null);
+                    setUpdateContainerSubmitting(false);
+                    handleUpdateSubmit();
+                  } catch (err) {
+                    setUpdateContainerSubmitting(false);
+                    const msg = err instanceof Error ? err.message : String(err);
+                    if (msg.includes("404")) toast.error("Container not found");
+                    else toast.error(msg);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50"
+              >
+                {updateContainerSubmitting ? <span className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" /> : <i className="ri-save-line text-xs" />}
+                Update & submit order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Order – right-side drawer */}
+      {showUpdateModal && selectedOrder && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={closeUpdateModal} aria-hidden />
+          <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l border-gray-200">
+            <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
+              <h3 className="text-sm font-bold text-gray-800">Update Order — {selectedOrder.orderNumber}</h3>
+              <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-800 p-1 rounded border border-gray-200 hover:bg-gray-100">
+                <i className="ri-close-line text-lg"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-[10px]">
             {/* Order Summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
               <div>
@@ -1680,38 +1875,55 @@ const SecondaryCheckingFloorSupervisorPage = () => {
               })()}
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
+            </div>
+            <div className="flex-shrink-0 flex justify-end gap-2 p-[10px] border-t border-gray-200">
+              <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
               <button
-                onClick={closeUpdateModal}
-                className="ti-btn ti-btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdateSubmit}
-                className="ti-btn ti-btn-primary"
+                type="button"
+                onClick={() => {
+                  const invalid = selectedOrder.articles.some(article => {
+                    const articleId = article.id || article._id;
+                    if (!articleId) return false;
+                    const update = updateData[articleId];
+                    if (!update) return false;
+                    const secondaryCheckingFloor = getSecondaryCheckingFloorData(article);
+                    const received = secondaryCheckingFloor.data?.received || 0;
+                    const transferred = secondaryCheckingFloor.data?.transferred || 0;
+                    const remaining = received - transferred;
+                    return update.m1Quantity > remaining;
+                  });
+                  if (invalid) {
+                    toast.error("Cannot submit: Some articles have M1 quantities exceeding remaining quantities");
+                    return;
+                  }
+                  setUpdateContainerBarcode("");
+                  setUpdateContainerCheckStatus("idle");
+                  setUpdateContainerFetched(null);
+                  const first = selectedOrder.articles[0];
+                  setUpdateContainerArticleId(first?._id || first?.id || "");
+                  setUpdateContainerNextFloor("Washing");
+                  setShowUpdateContainerModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-50"
                 disabled={
                   selectedOrder.articles.some(article => {
                     const articleId = article.id || article._id;
                     if (!articleId) return false;
                     const update = updateData[articleId];
                     if (!update) return false;
-                    
                     const secondaryCheckingFloor = getSecondaryCheckingFloorData(article);
                     const received = secondaryCheckingFloor.data?.received || 0;
                     const transferred = secondaryCheckingFloor.data?.transferred || 0;
-                    const remaining = received - transferred; // Use transferred instead of current M1
-                    
+                    const remaining = received - transferred;
                     return update.m1Quantity > remaining;
                   })
                 }
               >
-                <i className="ri-save-line me-2"></i>
-                Update Order
+                <i className="ri-save-line text-xs"></i> Update Order
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* View Order Modal */}

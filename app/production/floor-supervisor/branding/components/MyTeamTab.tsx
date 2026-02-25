@@ -6,11 +6,11 @@ import { teamMasterService, type TeamMaster } from "@/shared/services/teamMaster
 import { productionService, type ProductionArticleDetail } from "@/shared/services/productionService";
 import ArticleDetailBlock from "./ArticleDetailBlock";
 
-const FLOOR_WASHING = "Washing" as const;
+const FLOOR_BRANDING = "Branding" as const;
 
 /**
- * Shows all team members whose workingFloor is Washing.
- * Used on the Washing Floor Supervisor page under "My Team" tab.
+ * Shows all team members whose workingFloor is Branding.
+ * Used on the Branding Floor Supervisor page under "My Team" tab.
  */
 export default function MyTeamTab() {
   const [members, setMembers] = useState<TeamMaster[]>([]);
@@ -27,7 +27,7 @@ export default function MyTeamTab() {
     try {
       setIsLoading(true);
       const data = await teamMasterService.list({
-        workingFloor: FLOOR_WASHING,
+        workingFloor: FLOOR_BRANDING,
         page: 1,
         limit: 200,
         search: search.trim() || undefined,
@@ -103,7 +103,7 @@ export default function MyTeamTab() {
   if (isLoading && members.length === 0) {
     return (
       <div className="p-[10px] flex flex-col items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mb-4 opacity-50" />
         <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
       </div>
     );
@@ -115,7 +115,7 @@ export default function MyTeamTab() {
         <div className="relative flex-1 min-w-[140px] max-w-[240px]">
           <input
             type="text"
-            className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
+            className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-amber-300 w-full placeholder:text-gray-400 font-medium"
             placeholder="Search by name or contact..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -133,7 +133,7 @@ export default function MyTeamTab() {
           Refresh
         </button>
         <span className="text-[11px] font-medium text-[#495057]">
-          {totalResults} member{totalResults !== 1 ? "s" : ""} on Washing floor
+          {totalResults} member{totalResults !== 1 ? "s" : ""} on Branding floor
         </span>
       </div>
 
@@ -152,7 +152,7 @@ export default function MyTeamTab() {
             {members.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-12 text-center text-[11px] text-gray-500">
-                  No team members found for Washing floor.
+                  No team members found for Branding floor.
                 </td>
               </tr>
             ) : (
@@ -165,7 +165,7 @@ export default function MyTeamTab() {
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
-                          row.role === "Supervisor" ? "bg-purple-50 text-purple-700 border border-purple-100" : "bg-gray-50 text-gray-600 border border-gray-200"
+                          row.role === "Supervisor" ? "bg-amber-50 text-amber-700 border border-amber-100" : "bg-gray-50 text-gray-600 border border-gray-200"
                         }`}
                       >
                         {row.role}
@@ -202,7 +202,7 @@ export default function MyTeamTab() {
       {viewActiveMember && (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={closeDrawer} aria-hidden />
-          <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
+          <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200">
             <div className="flex justify-between items-center p-[10px] border-b border-gray-200 flex-shrink-0">
               <h4 className="text-sm font-bold text-gray-800">
                 Active articles — {viewActiveMember.teamMemberName}
@@ -214,7 +214,7 @@ export default function MyTeamTab() {
             <div className="flex-1 overflow-y-auto p-[10px]">
               {articleDetailsLoading ? (
                 <div className="flex flex-col items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-3 opacity-50" />
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mb-3 opacity-50" />
                   <p className="text-[10px] text-gray-400 font-bold tracking-wider uppercase">Loading articles...</p>
                 </div>
               ) : articleDetails.length === 0 ? (

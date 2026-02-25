@@ -362,22 +362,24 @@ const BaseMenuItems: any = [
         selected: false,
         title: "Final Checking Floor",
       },
-      {
-        icon: FloorIcon,
-        path: "/production/floor-supervisor/warehouse",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Warehouse Floor",
-      },
-      {
-        icon: FloorIcon,
-        path: "/production/floor-supervisor/machine-floor",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Machine Floor",
-      },
+      // Warehouse Floor – commented out from navbar
+      // {
+      //   icon: FloorIcon,
+      //   path: "/production/floor-supervisor/warehouse",
+      //   type: "link",
+      //   active: false,
+      //   selected: false,
+      //   title: "Warehouse Floor",
+      // },
+      // Machine Floor – commented out from navbar
+      // {
+      //   icon: FloorIcon,
+      //   path: "/production/floor-supervisor/machine-floor",
+      //   type: "link",
+      //   active: false,
+      //   selected: false,
+      //   title: "Machine Floor",
+      // },
     ],
   },
   {

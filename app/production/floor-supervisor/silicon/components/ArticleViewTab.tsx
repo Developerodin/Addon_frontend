@@ -9,24 +9,24 @@ export interface ArticleRow {
 }
 
 export interface ArticleViewTabProps {
-  /** Orders already filtered by washing received > 0. */
+  /** Orders already filtered by silicon received > 0. */
   orders: ProductionOrder[];
   onViewOrder: (order: ProductionOrder) => void;
   onUpdateOrder: (order: ProductionOrder) => void;
   getStatusBadge: (status: string) => string;
   getPriorityBadge: (priority: string) => string;
-  /** Article id that was accepted via container scan – row gets blue border and Assign button. */
+  /** Article id that was accepted via container scan – row gets highlight and Assign button. */
   activeArticleId?: string | null;
   onAssignClick?: () => void;
   onScanContainerClick?: () => void;
 }
 
-/** Flattens orders into one row per article for washing floor (washing received > 0). */
+/** Flattens orders into one row per article for silicon floor (silicon received > 0). */
 function flattenOrdersToArticles(orders: ProductionOrder[]): ArticleRow[] {
   const rows: ArticleRow[] = [];
   for (const order of orders) {
     for (const article of order.articles) {
-      const received = (article as any).floorQuantities?.washing?.received ?? 0;
+      const received = (article as any).floorQuantities?.silicon?.received ?? 0;
       if (received > 0) {
         rows.push({ article, order });
       }
@@ -80,7 +80,7 @@ export default function ArticleViewTab({
             <i className="ri-file-list-line text-xl text-gray-200" />
           </div>
           <h3 className="text-xs font-bold text-gray-400 mb-1">NO ARTICLES</h3>
-          <p className="text-[10px] text-gray-500">No washing articles in current order set</p>
+          <p className="text-[10px] text-gray-500">No silicon articles in current order set</p>
         </div>
       </div>
     );
@@ -150,11 +150,11 @@ export default function ArticleViewTab({
           <tbody>
             {filteredRows.map(({ article, order }) => {
               const planned = article.plannedQuantity ?? 0;
-              const wash = (article as any).floorQuantities?.washing;
-              const received = wash?.received ?? 0;
-              const completed = wash?.completed ?? 0;
-              const transferred = wash?.transferred ?? 0;
-              const remaining = wash?.remaining ?? Math.max(0, received - transferred);
+              const silicon = (article as any).floorQuantities?.silicon;
+              const received = silicon?.received ?? 0;
+              const completed = silicon?.completed ?? 0;
+              const transferred = silicon?.transferred ?? 0;
+              const remaining = silicon?.remaining ?? Math.max(0, received - transferred);
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
               const isActiveRow = Boolean(activeArticleId && articleId && String(articleId) === String(activeArticleId));
