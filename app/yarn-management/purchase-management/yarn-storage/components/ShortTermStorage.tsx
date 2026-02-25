@@ -65,6 +65,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferSourceRack, setTransferSourceRack] = useState<RackLocation | null>(null);
   const [showConeTransferModal, setShowConeTransferModal] = useState(false);
+  const [showInternalTransferModal, setShowInternalTransferModal] = useState(false);
   const [rackSlotDetails, setRackSlotDetails] = useState<Map<string, SlotDetailsResponse>>(new Map());
   const [loadingSlotDetails, setLoadingSlotDetails] = useState<Set<string>>(new Set());
 
@@ -860,6 +861,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         }
 
         setSelectedBox(mappedBox);
+        setShowInternalTransferModal(true);
         toast.success(`Box ${boxDetails.boxId || trimmedBarcode} fetched`);
         return mappedBox;
       } catch (error) {
@@ -906,6 +908,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     }
 
     setIsProcessingBox(true);
+    let didNavigate = false;
     try {
       const response = await yarnConeService.generateConesByBox(identifier);
 
@@ -962,6 +965,8 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
       }
 
       toast.success(response.message || "Cones generated successfully");
+      // Keep modal open and button in "Transferring" state until process page has rendered
+      didNavigate = true;
       router.push(
         `/yarn-management/purchase-management/yarn-storage/process/${encodeURIComponent(
           targetBoxId
@@ -973,7 +978,9 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         error instanceof Error ? error.message : "Failed to process box"
       );
     } finally {
-      setIsProcessingBox(false);
+      if (!didNavigate) {
+        setIsProcessingBox(false);
+      }
     }
   }, [
     mapYarnBoxToPackedBox,
@@ -982,6 +989,19 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     selectedBox,
     onInternalTransfer,
   ]);
+
+  // When Internal Transfer modal is open, Enter key triggers the Internal Transfer button
+  useEffect(() => {
+    if (!showInternalTransferModal || !scannedBoxDetails || isProcessingBox) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleProcessBox();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showInternalTransferModal, scannedBoxDetails, isProcessingBox, handleProcessBox]);
 
   const handleScannerScan = useCallback(
     async (barcode: string) => {
@@ -1057,178 +1077,130 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         </div>
       </div>
 
-      {/* Scanned Box Details */}
-      {scannedBoxDetails && (
-        <div className="box">
-          <div className="box-header flex justify-between items-center">
-            <h3 className="box-title">
-              <i className="ri-information-line me-2"></i>
-              Box Details
-            </h3>
-            <button
-              type="button"
-              onClick={() => {
-                setScannedBoxDetails(null);
-                setSelectedBox(null);
-              }}
-              className="text-gray-400 hover:text-gray-600 transition"
-              title="Clear box details"
-            >
-              <i className="ri-close-line text-lg"></i>
-            </button>
-          </div>
-          <div className="box-body space-y-6">
-            {isLoadingBox && (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <i className="ri-loader-4-line animate-spin"></i>
-                <span>Fetching latest details...</span>
-              </div>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label className="text-xs font-medium text-gray-600 uppercase">
-                  Box ID
-                </label>
-                <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
-                  {scannedBoxDetails.boxId}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 uppercase">
-                  Barcode
-                </label>
-                <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
-                  {scannedBoxDetails.barcode}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 uppercase">
-                  PO Number
-                </label>
-                <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                  {scannedBoxDetails.poNumber}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 uppercase">
-                  Yarn Name
-                </label>
-                <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                  {scannedBoxDetails.yarnName || "-"}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 uppercase">
-                  Shade Code
-                </label>
-                <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                  {scannedBoxDetails.shadeCode || "-"}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 uppercase">
-                  Box Weight (kg)
-                </label>
-                <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                  {scannedBoxDetails.boxWeight ?? "-"}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 uppercase">
-                  Number of Cones
-                </label>
-                <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                  {scannedBoxDetails.numberOfCones ?? "-"}
-                </div>
-              </div>
-              {scannedBoxDetails.receivedDate && (
-                <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">
-                    Received Date
-                  </label>
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                    {new Date(scannedBoxDetails.receivedDate).toLocaleString()}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* {scannedBoxDetails.qcData && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <i className="ri-checkbox-circle-line text-blue-600"></i>
-                  <h4 className="text-sm font-semibold text-blue-900">
-                    QC Status
-                  </h4>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-xs font-medium text-blue-700 uppercase">
-                      Status
-                    </label>
-                    <div className="mt-1">
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          scannedBoxDetails.qcData.status === "qc_approved"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {scannedBoxDetails.qcData.status === "qc_approved"
-                          ? "QC Approved"
-                          : "QC Rejected"}
-                      </span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-blue-700 uppercase">
-                      QC Date
-                    </label>
-                    <div className="mt-1 text-sm text-blue-900">
-                      {new Date(scannedBoxDetails.qcData.date).toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-blue-700 uppercase">
-                      Inspector
-                    </label>
-                    <div className="mt-1 text-sm text-blue-900">
-                      {scannedBoxDetails.qcData.username}
-                    </div>
-                  </div>
-                  {scannedBoxDetails.qcData.remarks && (
-                    <div className="col-span-full">
-                      <label className="text-xs font-medium text-blue-700 uppercase">
-                        Remarks
-                      </label>
-                      <div className="mt-1 text-sm text-blue-900 bg-white p-2 rounded border border-blue-200">
-                        {scannedBoxDetails.qcData.remarks}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )} */}
-
-            <div className="flex justify-end">
+      {/* Internal Transfer Modal - shown when user scans box barcode */}
+      {showInternalTransferModal && scannedBoxDetails && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowInternalTransferModal(false);
+              setScannedBoxDetails(null);
+              setSelectedBox(null);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="box-header border-b border-gray-200 px-6 py-4 flex justify-between items-center flex-shrink-0">
+              <h3 className="box-title text-lg font-semibold">
+                <i className="ri-barcode-box-line me-2"></i>
+                Internal Transfer - Box Details
+              </h3>
               <button
                 type="button"
-                onClick={handleProcessBox}
-                className="ti-btn ti-btn-primary"
-                disabled={!scannedBoxDetails || isProcessingBox}
+                onClick={() => {
+                  setShowInternalTransferModal(false);
+                  setScannedBoxDetails(null);
+                  setSelectedBox(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition p-1"
+                title="Close"
               >
-                {isProcessingBox ? (
-                  <>
-                    <i className="ri-loader-4-line animate-spin me-2"></i>
-                    Transferring
-                  </>
-                ) : (
-                  <>
-                    <i className="ri-barcode-box-line me-2"></i>
-                    Internal Transfer
-                  </>
-                )}
+                <i className="ri-close-line text-xl"></i>
               </button>
+            </div>
+            <div className="box-body px-6 py-4 overflow-y-auto flex-1 space-y-4">
+              {isLoadingBox && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <i className="ri-loader-4-line animate-spin"></i>
+                  <span>Fetching latest details...</span>
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Box ID</label>
+                  <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
+                    {scannedBoxDetails.boxId}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Barcode</label>
+                  <div className="mt-1 text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded border">
+                    {scannedBoxDetails.barcode}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">PO Number</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {scannedBoxDetails.poNumber}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Yarn Name</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {scannedBoxDetails.yarnName || "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Shade Code</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {scannedBoxDetails.shadeCode || "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Box Weight (kg)</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {scannedBoxDetails.boxWeight ?? "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Number of Cones</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {scannedBoxDetails.numberOfCones ?? "-"}
+                  </div>
+                </div>
+                {scannedBoxDetails.receivedDate && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase">Received Date</label>
+                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                      {new Date(scannedBoxDetails.receivedDate).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowInternalTransferModal(false);
+                    setScannedBoxDetails(null);
+                    setSelectedBox(null);
+                  }}
+                  className="ti-btn ti-btn-light"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProcessBox}
+                  className="ti-btn bg-black text-white hover:bg-gray-800 border-0"
+                  disabled={!scannedBoxDetails || isProcessingBox}
+                >
+                  {isProcessingBox ? (
+                    <>
+                      <i className="ri-loader-4-line animate-spin me-2"></i>
+                      Transferring
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-barcode-box-line me-2"></i>
+                      Internal Transfer
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
