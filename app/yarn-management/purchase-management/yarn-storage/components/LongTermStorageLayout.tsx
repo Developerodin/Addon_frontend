@@ -125,16 +125,6 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
   const PAGE_SIZE_OPTIONS = [52, 100, 200, 500];
 
-  const racksFilteredBySearch = useMemo(() => {
-    const q = rackSearchQuery.trim().toLowerCase();
-    if (!q || !racks) return [];
-    return (racks ?? []).filter(
-      (r) =>
-        (r.rackCode && r.rackCode.toLowerCase().includes(q)) ||
-        (r.barcode && r.barcode.toLowerCase().includes(q))
-    );
-  }, [racks, rackSearchQuery]);
-
   // Global search: fetch slot by barcode/label so we find the rack even if it's on another page
   useEffect(() => {
     const q = rackSearchQuery.trim();
@@ -161,7 +151,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           barcode: slot.barcode,
           capacity: 1,
           currentBoxes: data.length,
-          status: data.length > 0 ? "Occupied" : slot.isActive ? "Available" : "Maintenance",
+          status: slot.isActive ? "Available" : "Maintenance",
         };
         setSearchResultRack(rack);
         setRackSlotDetails((prev) => new Map(prev).set(slot._id, details));
@@ -170,17 +160,10 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       } finally {
         setIsSearchingByBarcode(false);
       }
-    }, 5000);
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [rackSearchQuery]);
-
-  // Racks to show when searching: prefer API result (global), else current-page matches
-  const displayRacksForSearch = useMemo(() => {
-    if (!rackSearchQuery.trim()) return [];
-    if (searchResultRack) return [searchResultRack];
-    return racksFilteredBySearch;
-  }, [rackSearchQuery, searchResultRack, racksFilteredBySearch]);
 
   // Fetch storage slots from API with pagination
   const fetchStorageSlots = async (page: number = storagePage, limit: number = storageLimit) => {
@@ -276,6 +259,23 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     return mappedRacks;
   }, [storageSlots, boxes, propsRacks]);
 
+  const racksFilteredBySearch = useMemo(() => {
+    const q = rackSearchQuery.trim().toLowerCase();
+    if (!q || !racks) return [];
+    return (racks ?? []).filter(
+      (r) =>
+        (r.rackCode && r.rackCode.toLowerCase().includes(q)) ||
+        (r.barcode && r.barcode.toLowerCase().includes(q))
+    );
+  }, [racks, rackSearchQuery]);
+
+  // Racks to show when searching: prefer API result (global), else current-page matches
+  const displayRacksForSearch = useMemo(() => {
+    if (!rackSearchQuery.trim()) return [];
+    if (searchResultRack) return [searchResultRack];
+    return racksFilteredBySearch;
+  }, [rackSearchQuery, searchResultRack, racksFilteredBySearch]);
+
   // Row index -> (sectionCode, shelfNumber). Only include (section, shelf) that exist on
   // this page so we don't get empty "No Rack" rows (e.g. page 2 has shelves 51-100, not 1-100).
   const rowToSectionShelf = useMemo(() => {
@@ -344,43 +344,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     return grid;
   }, [racks, gridDimensions, rowToSectionShelf]);
 
-  // Fetch slot details for all racks (including available ones that might have data)
-  useEffect(() => {
-    const fetchAllRackDetails = async () => {
-      if (racks.length === 0 || isLoadingSlots) return;
-
-      // Fetch details for all racks with barcodes (not just occupied ones)
-      const racksWithBarcodes = racks.filter((rack) => rack.barcode);
-
-      for (const rack of racksWithBarcodes) {
-        // Skip if already loading or already fetched
-        if (loadingSlotDetails.has(rack.id) || rackSlotDetails.has(rack.id)) {
-          continue;
-        }
-
-        try {
-          setLoadingSlotDetails((prev) => new Set(prev).add(rack.id));
-          const details = await storageSlotService.getSlotDetailsByBarcode(rack.barcode);
-          setRackSlotDetails((prev) => {
-            const newMap = new Map(prev);
-            newMap.set(rack.id, details);
-            return newMap;
-          });
-        } catch (error) {
-          console.error(`Failed to fetch details for rack ${rack.rackCode}:`, error);
-        } finally {
-          setLoadingSlotDetails((prev) => {
-            const newSet = new Set(prev);
-            newSet.delete(rack.id);
-            return newSet;
-          });
-        }
-      }
-    };
-
-    fetchAllRackDetails();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [racks.length, isLoadingSlots]);
+  // Rack details are fetched only on click (handleRackClick / open modal), not on load, to avoid N API calls per box.
 
   // Map YarnBox to PackedBox format
   const mapYarnBoxToPackedBox = (box: YarnBox): PackedBox => {
@@ -495,8 +459,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       return;
     }
 
-    if (rack.status === "Occupied" || rack.status === "Maintenance") {
-      toast.error(`Rack ${rack.rackCode} is ${rack.status.toLowerCase()}`);
+    if (rack.status === "Maintenance") {
+      toast.error(`Rack ${rack.rackCode} is not available (maintenance)`);
       return;
     }
 
@@ -567,6 +531,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           const details = await storageSlotService.getSlotDetailsByBarcode(rackCodeUpper);
           const slot = details.storageSlot;
           const data = details.type === "boxes" ? (details.data as BoxInSlot[]) : [];
+          // API slots can hold multiple boxes; only block if slot is inactive
           rack = {
             id: slot._id,
             rackCode: slot.label,
@@ -577,7 +542,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
             barcode: slot.barcode,
             capacity: 1,
             currentBoxes: data.length,
-            status: data.length > 0 ? "Occupied" : slot.isActive ? "Available" : "Maintenance",
+            status: slot.isActive ? "Available" : "Maintenance",
           };
           // Cache the details for future use
           setRackSlotDetails((prev) => new Map(prev).set(slot._id, details));
@@ -593,8 +558,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         return;
       }
 
-      if (rack.status === "Occupied" || rack.status === "Maintenance") {
-        toast.error(`Rack ${rack.rackCode} is ${rack.status.toLowerCase()}`);
+      if (rack.status === "Maintenance") {
+        toast.error(`Rack ${rack.rackCode} is not available (maintenance)`);
         return;
       }
 
@@ -1217,60 +1182,30 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       {/* 2D Grid Layout */}
       <div className="box">
         <div className="box-header flex flex-col gap-3">
-          <div className="flex justify-between items-center flex-wrap">
-            <h3 className="box-title">
-              Storage Layout
-              {isLoadingSlots ? (
-                <span className="ml-2 text-sm text-gray-500">Loading...</span>
-              ) : rackSearchQuery.trim() ? (
-                <span className="ml-2 text-sm text-gray-500">
-                  {isSearchingByBarcode ? "Searching..." : `(${displayRacksForSearch.length} rack${displayRacksForSearch.length !== 1 ? "s" : ""} match)`}
-                </span>
-              ) : (
-                <span className="ml-2 text-sm text-gray-500">
-                  ({racks.length} slots on this page · {storageTotalResults} total)
-                </span>
-              )}
-            </h3>
-            <div className="flex gap-2 items-center flex-wrap">
-              <div className="flex items-center gap-2">
-                <label className="sr-only">Search rack</label>
-                <input
-                  type="text"
-                  value={rackSearchQuery}
-                  onChange={(e) => setRackSearchQuery(e.target.value)}
-                  placeholder="Search by rack code or barcode"
-                  className="px-2.5 py-1.5 text-xs border border-gray-200 rounded w-52 focus:ring-0 focus:border-purple-300"
-                />
-                {rackSearchQuery.trim() && (
-                  <button
-                    type="button"
-                    onClick={() => setRackSearchQuery("")}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 rounded border border-gray-200 hover:bg-gray-50"
-                    title="Clear search"
-                  >
-                    <i className="ri-close-line text-sm"></i>
-                  </button>
-                )}
-              </div>
-              <div className="flex gap-2 text-xs">
-                <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 bg-green-50 border border-green-200 rounded"></div>
-                  <span>Available</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 bg-blue-50 border border-blue-300 rounded"></div>
-                  <span>Occupied</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 bg-yellow-50 border border-yellow-300 rounded"></div>
-                  <span>Reserved</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 bg-red-50 border border-red-300 rounded"></div>
-                  <span>Maintenance</span>
-                </div>
-              </div>
+          <div className="flex flex-wrap items-center gap-2 justify-between">
+            <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-md">
+              <span className="text-gray-500 text-sm whitespace-nowrap">
+                <i className="ri-search-line me-1"></i>Search rack
+              </span>
+              <input
+                type="text"
+                value={rackSearchQuery}
+                onChange={(e) => setRackSearchQuery(e.target.value)}
+                placeholder="Enter rack code or barcode"
+                className="ti-form-input text-sm flex-1 py-1.5 px-2 border border-gray-300 rounded"
+              />
+              {rackSearchQuery.trim() ? (
+                <button
+                  type="button"
+                  onClick={() => setRackSearchQuery("")}
+                  className="ti-btn ti-btn-light text-xs px-2 py-1.5 border border-gray-300 rounded"
+                  title="Clear search"
+                >
+                  <i className="ri-close-line"></i>
+                </button>
+              ) : null}
+            </div>
+            <div className="flex justify-end items-center flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setShowAddRacksDrawer(true)}
@@ -1379,68 +1314,63 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
                   }}
                 >
-                  {displayRacksForSearch.map((rack) => (
+                  {displayRacksForSearch.map((rack) => {
+                    const displayData = getRackDisplayData(rack);
+                    const isEmpty = displayData.totalBoxes === 0 && !displayData.isLoading;
+                    return (
                     <div
                       key={rack.id}
                       className={`
-                      relative border-2 rounded-xl p-3 min-h-[200px] transition-all cursor-pointer
+                      relative border-2 rounded-xl p-2 min-h-[72px] transition-all cursor-pointer
                       ${getRackStatusColor(rack)}
                       hover:shadow-lg hover:scale-[1.02] flex flex-col
                     `}
                       onClick={() => handleRackClick(rack)}
                     >
-                      <div className="flex justify-between items-start mb-2 gap-2">
-                        <div className="flex-1">
-                          <div className="text-xs font-bold text-gray-800 mb-1">{rack.rackCode}</div>
-                          {rack.barcode && (
-                            <div className="text-[10px] text-gray-500 font-mono">{rack.barcode}</div>
-                          )}
+                      {isEmpty ? (
+                        <div className="flex items-center justify-center flex-1 min-h-[56px] text-xs font-bold text-gray-800 text-center" title={rack.barcode || rack.rackCode}>
+                          {rack.rackCode}
                         </div>
-                        {(() => {
-                          const displayData = getRackDisplayData(rack);
-                          if (displayData.isLoading && displayData.totalBoxes === 0) {
-                            return (
+                      ) : (
+                        <>
+                          <div className="flex justify-between items-start mb-1 gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-bold text-gray-800 truncate" title={rack.barcode || rack.rackCode}>{rack.rackCode}</div>
+                            </div>
+                            {displayData.isLoading && displayData.totalBoxes === 0 ? (
                               <div className="flex items-center justify-center w-20">
                                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                               </div>
-                            );
-                          }
-                          if (displayData.totalBoxes > 0) {
-                            const isOccupied = rack.status === "Occupied";
-                            const bgColor = isOccupied ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200";
-                            const titleColor = isOccupied ? "text-blue-900" : "text-green-900";
-                            const contentColor = isOccupied ? "text-blue-800" : "text-green-800";
-                            return (
-                              <div className={`${bgColor} border rounded p-1.5 min-w-[70px]`}>
-                                <div className={`text-[9px] font-semibold ${titleColor} mb-0.5`}>Summary</div>
-                                <div className={`grid grid-cols-2 gap-0.5 text-[9px] ${contentColor}`}>
-                                  <div className="text-center">
-                                    <div className="font-medium">{displayData.totalBoxes}</div>
-                                    <div className="text-[8px]">Boxes</div>
+                            ) : displayData.totalBoxes > 0 ? (
+                              (() => {
+                                const isOccupied = rack.status === "Occupied";
+                                const bgColor = isOccupied ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200";
+                                const titleColor = isOccupied ? "text-blue-900" : "text-green-900";
+                                const contentColor = isOccupied ? "text-blue-800" : "text-green-800";
+                                return (
+                                  <div className={`${bgColor} border rounded p-1.5 min-w-[70px]`}>
+                                    <div className={`text-[9px] font-semibold ${titleColor} mb-0.5`}>Summary</div>
+                                    <div className={`grid grid-cols-2 gap-0.5 text-[9px] ${contentColor}`}>
+                                      <div className="text-center">
+                                        <div className="font-medium">{displayData.totalBoxes}</div>
+                                        <div className="text-[8px]">Boxes</div>
+                                      </div>
+                                      <div className="text-center">
+                                        <div className="font-medium">{displayData.totalWeight.toFixed(0)}</div>
+                                        <div className="text-[8px]">Kg</div>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <div className="text-center">
-                                    <div className="font-medium">{displayData.totalWeight.toFixed(0)}</div>
-                                    <div className="text-[8px]">Kg</div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </div>
-                      {(() => {
-                        const displayData = getRackDisplayData(rack);
-                        if (displayData.isLoading && displayData.totalBoxes === 0) {
-                          return (
+                                );
+                              })()
+                            ) : null}
+                          </div>
+                          {displayData.isLoading && displayData.totalBoxes === 0 ? (
                             <div className="flex items-center justify-center py-2">
                               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                             </div>
-                          );
-                        }
-                        if (displayData.boxes.length > 0) {
-                          return (
-                            <div className="overflow-x-auto max-h-[100px] mt-1">
+                          ) : displayData.boxes.length > 0 ? (
+                            <div className="overflow-x-auto max-h-[72px] mt-0.5">
                               <table className="w-full text-[10px]">
                                 <thead className="bg-gray-100 sticky top-0">
                                   <tr>
@@ -1469,23 +1399,12 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                                 </tbody>
                               </table>
                             </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                      {(() => {
-                        const displayData = getRackDisplayData(rack);
-                        if (displayData.totalBoxes === 0 && !displayData.isLoading) {
-                          return (
-                            <div className="text-xs text-gray-400 text-center py-4">
-                              {rack.status === "Available" ? "Available" : rack.status}
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
+                          ) : null}
+                        </>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1507,7 +1426,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                       <div
                         key={rack ? rack.id : `empty-${rowIndex}-${colIndex}`}
                         className={`
-                        relative border-2 rounded-xl p-3 min-h-[200px] transition-all cursor-pointer
+                        relative border-2 rounded-xl p-2 min-h-[72px] transition-all cursor-pointer
                         ${getRackStatusColor(rack)}
                         ${rack ? "hover:shadow-lg hover:scale-[1.02]" : ""}
                         flex flex-col
@@ -1519,32 +1438,30 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                         }}
                       >
                         {rack ? (
-                          <>
-                            {/* Top Row: Barcode on left, Summary on right */}
-                            <div className="flex justify-between items-start mb-2 gap-2">
-                              {/* Barcode / Rack Code */}
-                              <div className="flex-1">
-                                <div className="text-xs font-bold text-gray-800 mb-1">
+                          (() => {
+                            const displayData = getRackDisplayData(rack);
+                            const isEmpty = displayData.totalBoxes === 0 && !displayData.isLoading;
+                            if (isEmpty) {
+                              return (
+                                <div className="flex items-center justify-center flex-1 min-h-[56px] text-xs font-bold text-gray-800 text-center" title={rack.barcode || rack.rackCode}>
                                   {rack.rackCode}
                                 </div>
-                                {rack.barcode && (
-                                  <div className="text-[10px] text-gray-500 font-mono">
-                                    {rack.barcode}
-                                  </div>
-                                )}
+                              );
+                            }
+                            return (
+                          <>
+                            <div className="flex justify-between items-start mb-1 gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-bold text-gray-800 truncate" title={rack.barcode || rack.rackCode}>
+                                  {rack.rackCode}
+                                </div>
                               </div>
-
-                              {/* Summary Box - Show if there's data, regardless of status */}
-                              {(() => {
-                                const displayData = getRackDisplayData(rack);
-                                if (displayData.isLoading && displayData.totalBoxes === 0) {
-                                  return (
-                                    <div className="flex items-center justify-center w-20">
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                                    </div>
-                                  );
-                                }
-                                if (displayData.totalBoxes > 0) {
+                              {displayData.isLoading && displayData.totalBoxes === 0 ? (
+                                <div className="flex items-center justify-center w-20">
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                                </div>
+                              ) : displayData.totalBoxes > 0 ? (
+                                (() => {
                                   const isOccupied = rack.status === "Occupied";
                                   const bgColor = isOccupied ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200";
                                   const titleColor = isOccupied ? "text-blue-900" : "text-green-900";
@@ -1564,73 +1481,47 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                                       </div>
                                     </div>
                                   );
-                                }
-                                return null;
-                              })()}
+                                })()
+                              ) : null}
                             </div>
-
-                            {/* Table below - Show if there's data, regardless of status */}
-                            {(() => {
-                              const displayData = getRackDisplayData(rack);
-
-                              if (displayData.isLoading && displayData.totalBoxes === 0) {
-                                return (
-                                  <div className="flex items-center justify-center py-2">
-                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                                  </div>
-                                );
-                              }
-
-                              if (displayData.boxes.length > 0) {
-                                return (
-                                  <div className="overflow-x-auto max-h-[100px] mt-1">
-                                    <table className="w-full text-[10px]">
-                                      <thead className="bg-gray-100 sticky top-0">
-                                        <tr>
-                                          <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">PO</th>
-                                          <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">Yarn</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="bg-white">
-                                        {displayData.boxes.slice(0, 3).map((box, idx) => (
-                                          <tr key={idx} className="border-b border-gray-100">
-                                            <td className="px-1 py-0.5 text-gray-700 truncate max-w-[60px]" title={box.poNumber}>
-                                              {box.poNumber}
-                                            </td>
-                                            <td className="px-1 py-0.5 text-gray-700 truncate max-w-[80px]" title={box.yarnName}>
-                                              {box.yarnName}
-                                            </td>
-                                          </tr>
-                                        ))}
-                                        {displayData.boxes.length > 3 && (
-                                          <tr>
-                                            <td colSpan={2} className="px-1 py-0.5 text-[9px] text-gray-500 text-center">
-                                              +{displayData.boxes.length - 3} more
-                                            </td>
-                                          </tr>
-                                        )}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                );
-                              }
-
-                              return null;
-                            })()}
-
-                            {/* Show status only if there's no data */}
-                            {(() => {
-                              const displayData = getRackDisplayData(rack);
-                              if (displayData.totalBoxes === 0 && !displayData.isLoading) {
-                                return (
-                                  <div className="text-xs text-gray-400 text-center py-4">
-                                    {rack.status === "Available" ? "Available" : rack.status}
-                                  </div>
-                                );
-                              }
-                              return null;
-                            })()}
+                            {displayData.isLoading && displayData.totalBoxes === 0 ? (
+                              <div className="flex items-center justify-center py-2">
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                              </div>
+                            ) : displayData.boxes.length > 0 ? (
+                              <div className="overflow-x-auto max-h-[72px] mt-0.5">
+                                <table className="w-full text-[10px]">
+                                  <thead className="bg-gray-100 sticky top-0">
+                                    <tr>
+                                      <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">PO</th>
+                                      <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">Yarn</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="bg-white">
+                                    {displayData.boxes.slice(0, 3).map((box, idx) => (
+                                      <tr key={idx} className="border-b border-gray-100">
+                                        <td className="px-1 py-0.5 text-gray-700 truncate max-w-[60px]" title={box.poNumber}>
+                                          {box.poNumber}
+                                        </td>
+                                        <td className="px-1 py-0.5 text-gray-700 truncate max-w-[80px]" title={box.yarnName}>
+                                          {box.yarnName}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    {displayData.boxes.length > 3 && (
+                                      <tr>
+                                        <td colSpan={2} className="px-1 py-0.5 text-[9px] text-gray-500 text-center">
+                                          +{displayData.boxes.length - 3} more
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : null}
                           </>
+                            );
+                          })()
                         ) : (
                           <div className="text-sm text-gray-400 text-center flex items-center justify-center h-full">
                             No Rack
