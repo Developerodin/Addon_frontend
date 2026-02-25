@@ -106,20 +106,27 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
 
   return (
     <>
-      <div className="absolute inset-0 z-50 flex justify-end">
-        <div className="bg-black/20 absolute inset-0" onClick={onClose} aria-hidden />
-        <div className="bg-white w-full h-full shadow-2xl relative flex flex-col animate-slide-in-right overflow-hidden">
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="w-[3px] h-5 bg-primary rounded-full"></div>
-              <h3 className="text-sm font-bold text-gray-800 flex items-center">
-                Rack Details — <span className="text-primary ml-1">{slot?.label || "Loading..."}</span>
+      <div className="fixed inset-0 z-50 overflow-hidden">
+        <div
+          className="fixed inset-0 z-[51] bg-gray-500 bg-opacity-75 transition-opacity duration-300"
+          onClick={onClose}
+          aria-hidden
+        />
+        <div
+          className="fixed right-0 top-0 z-[52] h-full w-full max-w-[58.5rem] bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col"
+        >
+          {/* Header — per UI spec: p-[10px] border-b border-gray-200, title text-sm font-bold text-gray-800 */}
+          <div className="p-[10px] border-b border-gray-200 flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-[3px] h-5 bg-primary rounded-full shrink-0"></div>
+              <h3 className="text-sm font-bold text-gray-800 flex items-center min-w-0 truncate">
+                Rack Details — <span className="text-primary ml-1 truncate">{slot?.label || "Loading..."}</span>
               </h3>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 p-1 transition-colors"
+              className="text-gray-500 hover:text-gray-700 p-1 transition-colors shrink-0"
+              aria-label="Close"
             >
               <i className="ri-close-line text-xl"></i>
             </button>
@@ -129,7 +136,7 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
           <div className="flex border-b border-gray-200 shrink-0">
             <button
               onClick={() => setActiveTab("details")}
-              className={`px-6 py-3 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "details"
+              className={`px-4 py-2.5 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "details"
                 ? "border-primary text-primary"
                 : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
@@ -139,7 +146,7 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("history")}
-              className={`px-6 py-3 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "history"
+              className={`px-4 py-2.5 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "history"
                 ? "border-primary text-primary"
                 : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
@@ -149,10 +156,10 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
             </button>
           </div>
 
-          {/* Content */}
+          {/* Body — per UI spec: p-[10px] overflow-auto */}
           <div
             ref={scrollContainerRef}
-            className="flex-1 overflow-y-auto p-6 bg-gray-50/30"
+            className="flex-1 overflow-y-auto p-[10px] bg-gray-50/30"
           >
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-20">
@@ -460,9 +467,9 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
             )}
           </div>
 
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-white flex justify-between items-center shrink-0">
-            <div className="flex gap-2">
+          {/* Footer — per UI spec: flex justify-end p-[10px] border-t border-gray-200; primary bg-purple-600 */}
+          <div className="p-[10px] border-t border-gray-200 bg-white flex justify-between items-center shrink-0 flex-wrap gap-2">
+            <div className="flex gap-2 flex-wrap">
               {zoneType === "LT" && onTransferLTToLT && (
                 <button
                   onClick={() => {
@@ -472,7 +479,7 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                       onClose();
                     }
                   }}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-[11px] font-bold rounded shadow-sm hover:bg-primary-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded shadow-sm hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={!slot || !slot.isActive}
                 >
                   <i className="ri-arrow-right-left-line text-xs"></i>
@@ -488,7 +495,7 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                       onClose();
                     }
                   }}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-primary/10 text-primary text-[11px] font-bold rounded border border-primary/20 hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={!slot || !slot.isActive}
                 >
                   <i className="ri-arrow-right-line text-xs"></i>
@@ -498,7 +505,7 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="px-6 py-2 bg-gray-100 text-gray-500 text-[11px] font-bold rounded hover:bg-gray-200 transition-all uppercase tracking-wider"
+              className="px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm"
             >
               Close
             </button>

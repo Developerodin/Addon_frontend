@@ -1314,10 +1314,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
                   }}
                 >
-                  {displayRacksForSearch.map((rack) => {
-                    const displayData = getRackDisplayData(rack);
-                    const isEmpty = displayData.totalBoxes === 0 && !displayData.isLoading;
-                    return (
+                  {displayRacksForSearch.map((rack) => (
                     <div
                       key={rack.id}
                       className={`
@@ -1327,84 +1324,11 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     `}
                       onClick={() => handleRackClick(rack)}
                     >
-                      {isEmpty ? (
-                        <div className="flex items-center justify-center flex-1 min-h-[56px] text-xs font-bold text-gray-800 text-center" title={rack.barcode || rack.rackCode}>
-                          {rack.rackCode}
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex justify-between items-start mb-1 gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs font-bold text-gray-800 truncate" title={rack.barcode || rack.rackCode}>{rack.rackCode}</div>
-                            </div>
-                            {displayData.isLoading && displayData.totalBoxes === 0 ? (
-                              <div className="flex items-center justify-center w-20">
-                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                              </div>
-                            ) : displayData.totalBoxes > 0 ? (
-                              (() => {
-                                const isOccupied = rack.status === "Occupied";
-                                const bgColor = isOccupied ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200";
-                                const titleColor = isOccupied ? "text-blue-900" : "text-green-900";
-                                const contentColor = isOccupied ? "text-blue-800" : "text-green-800";
-                                return (
-                                  <div className={`${bgColor} border rounded p-1.5 min-w-[70px]`}>
-                                    <div className={`text-[9px] font-semibold ${titleColor} mb-0.5`}>Summary</div>
-                                    <div className={`grid grid-cols-2 gap-0.5 text-[9px] ${contentColor}`}>
-                                      <div className="text-center">
-                                        <div className="font-medium">{displayData.totalBoxes}</div>
-                                        <div className="text-[8px]">Boxes</div>
-                                      </div>
-                                      <div className="text-center">
-                                        <div className="font-medium">{displayData.totalWeight.toFixed(0)}</div>
-                                        <div className="text-[8px]">Kg</div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })()
-                            ) : null}
-                          </div>
-                          {displayData.isLoading && displayData.totalBoxes === 0 ? (
-                            <div className="flex items-center justify-center py-2">
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                            </div>
-                          ) : displayData.boxes.length > 0 ? (
-                            <div className="overflow-x-auto max-h-[72px] mt-0.5">
-                              <table className="w-full text-[10px]">
-                                <thead className="bg-gray-100 sticky top-0">
-                                  <tr>
-                                    <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">PO</th>
-                                    <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">Yarn</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white">
-                                  {displayData.boxes.slice(0, 3).map((box, idx) => (
-                                    <tr key={idx} className="border-b border-gray-100">
-                                      <td className="px-1 py-0.5 text-gray-700 truncate max-w-[60px]" title={box.poNumber}>
-                                        {box.poNumber}
-                                      </td>
-                                      <td className="px-1 py-0.5 text-gray-700 truncate max-w-[80px]" title={box.yarnName}>
-                                        {box.yarnName}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                  {displayData.boxes.length > 3 && (
-                                    <tr>
-                                      <td colSpan={2} className="px-1 py-0.5 text-[9px] text-gray-500 text-center">
-                                        +{displayData.boxes.length - 3} more
-                                      </td>
-                                    </tr>
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : null}
-                        </>
-                      )}
+                      <div className="flex items-center justify-center flex-1 min-h-[56px] text-xs font-bold text-gray-800 text-center" title={rack.barcode || rack.rackCode}>
+                        {rack.rackCode}
+                      </div>
                     </div>
-                    );
-                  })}
+                  ))}
                 </div>
               )}
             </div>
@@ -1438,90 +1362,9 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                         }}
                       >
                         {rack ? (
-                          (() => {
-                            const displayData = getRackDisplayData(rack);
-                            const isEmpty = displayData.totalBoxes === 0 && !displayData.isLoading;
-                            if (isEmpty) {
-                              return (
-                                <div className="flex items-center justify-center flex-1 min-h-[56px] text-xs font-bold text-gray-800 text-center" title={rack.barcode || rack.rackCode}>
-                                  {rack.rackCode}
-                                </div>
-                              );
-                            }
-                            return (
-                          <>
-                            <div className="flex justify-between items-start mb-1 gap-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs font-bold text-gray-800 truncate" title={rack.barcode || rack.rackCode}>
-                                  {rack.rackCode}
-                                </div>
-                              </div>
-                              {displayData.isLoading && displayData.totalBoxes === 0 ? (
-                                <div className="flex items-center justify-center w-20">
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                                </div>
-                              ) : displayData.totalBoxes > 0 ? (
-                                (() => {
-                                  const isOccupied = rack.status === "Occupied";
-                                  const bgColor = isOccupied ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200";
-                                  const titleColor = isOccupied ? "text-blue-900" : "text-green-900";
-                                  const contentColor = isOccupied ? "text-blue-800" : "text-green-800";
-                                  return (
-                                    <div className={`${bgColor} border rounded p-1.5 min-w-[70px]`}>
-                                      <div className={`text-[9px] font-semibold ${titleColor} mb-0.5`}>Summary</div>
-                                      <div className={`grid grid-cols-2 gap-0.5 text-[9px] ${contentColor}`}>
-                                        <div className="text-center">
-                                          <div className="font-medium">{displayData.totalBoxes}</div>
-                                          <div className="text-[8px]">Boxes</div>
-                                        </div>
-                                        <div className="text-center">
-                                          <div className="font-medium">{displayData.totalWeight.toFixed(0)}</div>
-                                          <div className="text-[8px]">Kg</div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })()
-                              ) : null}
-                            </div>
-                            {displayData.isLoading && displayData.totalBoxes === 0 ? (
-                              <div className="flex items-center justify-center py-2">
-                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                              </div>
-                            ) : displayData.boxes.length > 0 ? (
-                              <div className="overflow-x-auto max-h-[72px] mt-0.5">
-                                <table className="w-full text-[10px]">
-                                  <thead className="bg-gray-100 sticky top-0">
-                                    <tr>
-                                      <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">PO</th>
-                                      <th className="px-1 py-0.5 text-left font-semibold text-gray-700 border-b text-[9px]">Yarn</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="bg-white">
-                                    {displayData.boxes.slice(0, 3).map((box, idx) => (
-                                      <tr key={idx} className="border-b border-gray-100">
-                                        <td className="px-1 py-0.5 text-gray-700 truncate max-w-[60px]" title={box.poNumber}>
-                                          {box.poNumber}
-                                        </td>
-                                        <td className="px-1 py-0.5 text-gray-700 truncate max-w-[80px]" title={box.yarnName}>
-                                          {box.yarnName}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                    {displayData.boxes.length > 3 && (
-                                      <tr>
-                                        <td colSpan={2} className="px-1 py-0.5 text-[9px] text-gray-500 text-center">
-                                          +{displayData.boxes.length - 3} more
-                                        </td>
-                                      </tr>
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : null}
-                          </>
-                            );
-                          })()
+                          <div className="flex items-center justify-center flex-1 min-h-[56px] text-xs font-bold text-gray-800 text-center" title={rack.barcode || rack.rackCode}>
+                            {rack.rackCode}
+                          </div>
                         ) : (
                           <div className="text-sm text-gray-400 text-center flex items-center justify-center h-full">
                             No Rack
