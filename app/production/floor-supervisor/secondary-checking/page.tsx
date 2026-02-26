@@ -233,6 +233,11 @@ const SecondaryCheckingFloorSupervisorPage = () => {
     return null;
   }, [paginatedOrders]);
 
+  const CURRENT_FLOOR = "Secondary Checking";
+  const normalizeFloor = (f: string | undefined) => (f ?? "").replace(/\s+/g, "").toLowerCase();
+  const containerBelongsToCurrentFloor =
+    containerScanned && normalizeFloor(containerScanned.container.activeFloor) === normalizeFloor(CURRENT_FLOOR);
+
   useEffect(() => {
     if (!showUpdateContainerModal) {
       setUpdateContainerCheckStatus("idle");
@@ -404,6 +409,9 @@ const SecondaryCheckingFloorSupervisorPage = () => {
       const article = articleId ? findArticleInOrders(articleId) ?? null : null;
       setContainerScanned({ container, article });
       if (!article && articleId) toast.error("Article not found in current orders.");
+      if (normalizeFloor(container.activeFloor) !== normalizeFloor(CURRENT_FLOOR)) {
+        toast.error(`This container belongs to "${container.activeFloor ?? "unknown"}", not ${CURRENT_FLOOR}. Accept Article disabled.`);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("404")) toast.error("Container not found for this barcode.");
@@ -1161,9 +1169,14 @@ const SecondaryCheckingFloorSupervisorPage = () => {
               ) : (
                 <div className="space-y-4">
                   <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Article details</h4>
+                  {!containerBelongsToCurrentFloor && (
+                    <div className="p-2 rounded border-2 border-red-400 bg-red-50 text-[11px] text-red-800">
+                      This container is assigned to <strong>{containerScanned.container.activeFloor || "unknown"}</strong>, not {CURRENT_FLOOR}. Accept Article is disabled.
+                    </div>
+                  )}
                   {containerScanned.article ? (
                     <>
-                      <div className="p-2 bg-gray-50 rounded border border-gray-200 text-[12px] text-gray-900">
+                      <div className={`p-2 rounded border text-[12px] text-gray-900 ${containerBelongsToCurrentFloor ? "bg-gray-50 border-gray-200" : "bg-red-50/50 border-2 border-red-400"}`}>
                         <div><span className="font-bold text-[#495057]">Article:</span> {containerScanned.article.articleNumber}</div>
                         <div><span className="font-bold text-[#495057]">Order:</span> {containerScanned.article.orderId ?? "—"}</div>
                         <div><span className="font-bold text-[#495057]">Planned:</span> {containerScanned.article.plannedQuantity}</div>
@@ -1171,9 +1184,9 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                       </div>
                       <button
                         type="button"
-                        disabled={acceptArticleLoading}
+                        disabled={acceptArticleLoading || !containerBelongsToCurrentFloor}
                         onClick={handleAcceptArticleQuantity}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {acceptArticleLoading ? "Accepting..." : "Accept Article Quantity"}
                       </button>

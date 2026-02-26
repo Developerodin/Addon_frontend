@@ -278,6 +278,11 @@ const WashingFloorSupervisorPage = () => {
     setUpdateContainerFetched(null);
   };
 
+  const CURRENT_FLOOR = "Washing";
+  const normalizeFloor = (f: string | undefined) => (f ?? "").replace(/\s+/g, "").toLowerCase();
+  const containerBelongsToCurrentFloor =
+    containerScanned && normalizeFloor(containerScanned.container.activeFloor) === normalizeFloor(CURRENT_FLOOR);
+
   const handleScanContainerClick = () => {
     setContainerScanned(null);
     setContainerScanBarcode("");
@@ -295,6 +300,9 @@ const WashingFloorSupervisorPage = () => {
       const article = articleId ? findArticleInOrders(articleId) ?? null : null;
       setContainerScanned({ container, article });
       if (!article && articleId) toast.error("Article not found in current orders.");
+      if (normalizeFloor(container.activeFloor) !== normalizeFloor(CURRENT_FLOOR)) {
+        toast.error(`This container belongs to "${container.activeFloor ?? "unknown"}", not ${CURRENT_FLOOR}. Accept Article disabled.`);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("404")) toast.error("Container not found for this barcode.");
@@ -1054,12 +1062,23 @@ const WashingFloorSupervisorPage = () => {
                   {containerScanLoading && <p className="text-[11px] text-gray-500">Loading...</p>}
                 </div>
                   ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
+                  <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Article details</h4>
+                  {!containerBelongsToCurrentFloor && (
+                    <div className="p-2 rounded border-2 border-red-400 bg-red-50 text-[11px] text-red-800">
+                      This container is assigned to <strong>{containerScanned.container.activeFloor || "unknown"}</strong>, not {CURRENT_FLOOR}. Accept Article is disabled.
+                    </div>
+                  )}
                   <p className="text-[11px] text-gray-700">Container: <strong>{containerScanned.container.barcode}</strong></p>
                   {containerScanned.article ? (
                     <>
-                      <p className="text-[11px] text-green-700">Article found: <strong>{containerScanned.article.articleNumber}</strong></p>
-                      <button type="button" onClick={handleAcceptArticleQuantity} disabled={acceptArticleLoading} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 shadow-sm disabled:opacity-50">
+                      <div className={`p-2 rounded border text-[12px] text-gray-900 ${containerBelongsToCurrentFloor ? "bg-gray-50 border-gray-200" : "bg-red-50/50 border-2 border-red-400"}`}>
+                        <div><span className="font-bold text-[#495057]">Article:</span> {containerScanned.article.articleNumber}</div>
+                        <div><span className="font-bold text-[#495057]">Order:</span> {(containerScanned.article as any).orderId ?? "—"}</div>
+                        <div><span className="font-bold text-[#495057]">Planned:</span> {containerScanned.article.plannedQuantity}</div>
+                        <div><span className="font-bold text-[#495057]">Washing received:</span> {(containerScanned.article as any).floorQuantities?.washing?.received ?? 0}</div>
+                      </div>
+                      <button type="button" onClick={handleAcceptArticleQuantity} disabled={acceptArticleLoading || !containerBelongsToCurrentFloor} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                         {acceptArticleLoading ? "..." : "Accept article quantity (Washing)"}
                       </button>
                     </>

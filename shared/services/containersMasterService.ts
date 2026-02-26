@@ -142,6 +142,11 @@ class ContainersMasterService {
     if (!containerId) throw new Error('containerId is required');
     await this.request<void>(`/${containerId}`, { method: 'DELETE' });
   }
+
+  /** POST /reset-active – reset active state for all containers. */
+  async resetActive(): Promise<void> {
+    await this.request<void>('/reset-active', { method: 'POST' });
+  }
 }
 
 export const containersMasterService = new ContainersMasterService();

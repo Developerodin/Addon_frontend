@@ -40,6 +40,8 @@ const ContainersMasterPage = () => {
   const [formContainerName, setFormContainerName] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [resettingActive, setResettingActive] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printModalContainers, setPrintModalContainers] = useState<ContainerMaster[]>([]);
@@ -158,6 +160,20 @@ const ContainersMasterPage = () => {
       toast.error(err instanceof Error ? err.message : "Failed to delete");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleResetActive = async () => {
+    setShowResetConfirm(false);
+    setResettingActive(true);
+    try {
+      await containersMasterService.resetActive();
+      toast.success("All containers have been reset");
+      fetchList();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Reset failed");
+    } finally {
+      setResettingActive(false);
     }
   };
 
@@ -365,6 +381,15 @@ const ContainersMasterPage = () => {
               )}
               <button
                 type="button"
+                onClick={() => setShowResetConfirm(true)}
+                disabled={resettingActive || isLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 shadow-sm disabled:opacity-50"
+              >
+                {resettingActive ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-refresh-line text-xs"></i>}
+                Reset Active
+              </button>
+              <button
+                type="button"
                 onClick={openAddModal}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
               >
@@ -506,6 +531,35 @@ const ContainersMasterPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Active confirmation */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 p-5">
+            <h3 className="text-sm font-bold text-gray-800 mb-2">Reset Active</h3>
+            <p className="text-[12px] text-gray-600 mb-4">
+              All containers will be reset. Are you sure you want to do this?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="px-3 py-1.5 bg-white border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResetActive}
+                disabled={resettingActive}
+                className="px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 disabled:opacity-50"
+              >
+                {resettingActive ? <i className="ri-loader-4-line animate-spin inline-block"></i> : "Yes, reset"}
+              </button>
+            </div>
           </div>
         </div>
       )}

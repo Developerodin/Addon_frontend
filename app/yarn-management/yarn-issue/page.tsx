@@ -500,6 +500,8 @@ const YarnIssuePage = () => {
       setSelectedMachineAssignment(null);
       return;
     }
+    // Clear order search so new machine's orders aren't filtered out (avoids empty filteredOrders and cleared selection)
+    setSearchTerm("");
     setSelectedMachineAssignmentId(assignment.id);
     setSelectedMachineAssignment(assignment);
 
