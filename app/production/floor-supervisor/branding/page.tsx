@@ -10,6 +10,7 @@ import NumericInput from "@/shared/utils/numericInput";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
 import { containersMasterService } from "@/shared/services/containersMasterService";
+import { teamMasterService, type TeamMaster } from "@/shared/services/teamMasterService";
 
 type BrandingTab = "orders" | "article-view" | "my-team";
 
@@ -91,6 +92,12 @@ const BrandingFloorSupervisorPage = () => {
   const [containerScanLoading, setContainerScanLoading] = useState(false);
   const [containerScanned, setContainerScanned] = useState<{ container: any; article: any } | null>(null);
   const [acceptArticleLoading, setAcceptArticleLoading] = useState(false);
+  const [activeArticleId, setActiveArticleId] = useState<string | null>(null);
+  const [showAssignDrawer, setShowAssignDrawer] = useState(false);
+  const [assignTeamMembers, setAssignTeamMembers] = useState<TeamMaster[]>([]);
+  const [assignTeamLoading, setAssignTeamLoading] = useState(false);
+  const [confirmAssignModal, setConfirmAssignModal] = useState<{ teamMemberName: string; teamMemberId: string; articleId: string } | null>(null);
+  const [assigningInProgress, setAssigningInProgress] = useState(false);
 
   // Load branding floor orders from API
   const loadOrders = async () => {
@@ -443,6 +450,7 @@ const BrandingFloorSupervisorPage = () => {
         },
       });
       if (res.success) {
+        setActiveArticleId(String(articleId));
         const barcode = containerScanned.container.barcode;
         try {
           await containersMasterService.clearActiveByBarcode(barcode);
@@ -462,6 +470,49 @@ const BrandingFloorSupervisorPage = () => {
     } finally {
       setAcceptArticleLoading(false);
     }
+  };
+
+  const handleOpenAssignDrawer = useCallback(async () => {
+    setShowAssignDrawer(true);
+    setAssignTeamLoading(true);
+    try {
+      const data = await teamMasterService.list({ workingFloor: "Branding", limit: 200 });
+      setAssignTeamMembers(data.results);
+    } catch {
+      toast.error("Failed to load team members");
+      setAssignTeamMembers([]);
+    } finally {
+      setAssignTeamLoading(false);
+    }
+  }, []);
+
+  const handleAssignToMember = (member: TeamMaster) => {
+    if (!activeArticleId) {
+      toast.error("No active article selected. Scan container and accept article first.");
+      return;
+    }
+    setConfirmAssignModal({ teamMemberName: member.teamMemberName, teamMemberId: member._id, articleId: activeArticleId });
+  };
+
+  const handleConfirmAssign = async () => {
+    if (!confirmAssignModal?.articleId) return;
+    setAssigningInProgress(true);
+    try {
+      await teamMasterService.addActiveArticle(confirmAssignModal.teamMemberId, confirmAssignModal.articleId);
+      toast.success(`Article assigned to ${confirmAssignModal.teamMemberName}`);
+      setConfirmAssignModal(null);
+      const data = await teamMasterService.list({ workingFloor: "Branding", limit: 200 });
+      setAssignTeamMembers(data.results);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to assign article");
+    } finally {
+      setAssigningInProgress(false);
+    }
+  };
+
+  const handleCloseAssignDrawer = () => {
+    setShowAssignDrawer(false);
+    setConfirmAssignModal(null);
   };
 
   const getStatusBadge = (status: string) => {
@@ -588,6 +639,8 @@ const BrandingFloorSupervisorPage = () => {
               onUpdateOrder={handleUpdateOrder}
               getStatusBadge={getStatusBadge}
               getPriorityBadge={getPriorityBadge}
+              activeArticleId={activeArticleId}
+              onAssignClick={handleOpenAssignDrawer}
               onScanContainerClick={handleScanContainerClick}
             />
           ) : (
@@ -743,11 +796,11 @@ const BrandingFloorSupervisorPage = () => {
       {/* Scan Container drawer */}
       {showContainerScanDrawer && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} aria-hidden />
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); setActiveArticleId(null); }} aria-hidden />
           <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l border-gray-200">
             <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
               <h3 className="text-sm font-bold text-gray-800">Scan Container</h3>
-              <button type="button" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} className="text-gray-500 hover:text-gray-700 p-1">
+              <button type="button" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); setActiveArticleId(null); }} className="text-gray-500 hover:text-gray-700 p-1">
                 <i className="ri-close-line text-lg" />
               </button>
             </div>
@@ -802,6 +855,48 @@ const BrandingFloorSupervisorPage = () => {
             </div>
           </div>
         </>
+      )}
+
+      {/* Assign drawer */}
+      {showAssignDrawer && (
+        <>
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={handleCloseAssignDrawer} aria-hidden />
+          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200">
+            <div className="flex justify-between items-center p-[10px] border-b border-gray-200 flex-shrink-0">
+              <h3 className="text-sm font-bold text-gray-800">Assign to team member (Branding)</h3>
+              <button type="button" onClick={handleCloseAssignDrawer} className="text-gray-500 hover:text-gray-700 p-1">
+                <i className="ri-close-line text-lg" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-[10px]">
+              {!activeArticleId && <p className="text-[11px] text-amber-600 mb-2">Scan container and accept article first to assign.</p>}
+              {assignTeamLoading ? (
+                <p className="text-[11px] text-gray-500">Loading team...</p>
+              ) : (
+                <ul className="space-y-2">
+                  {assignTeamMembers.map((m) => (
+                    <li key={m._id} className="flex items-center justify-between gap-2 border border-gray-200 rounded p-2">
+                      <span className="text-[12px] font-medium text-gray-900">{m.teamMemberName}</span>
+                      <button type="button" onClick={() => handleAssignToMember(m)} disabled={!activeArticleId || assigningInProgress} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 shadow-sm disabled:opacity-50">Assign</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {confirmAssignModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 p-4 max-w-sm w-full">
+            <p className="text-sm text-gray-800 mb-4">Assign active article to <strong>{confirmAssignModal.teamMemberName}</strong>?</p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+              <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm" onClick={() => setConfirmAssignModal(null)}>Cancel</button>
+              <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 shadow-sm disabled:opacity-50" onClick={handleConfirmAssign} disabled={assigningInProgress}>{assigningInProgress ? "..." : "Confirm"}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Update Order – right-side drawer */}

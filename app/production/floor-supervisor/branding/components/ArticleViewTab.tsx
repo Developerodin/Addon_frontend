@@ -21,6 +21,8 @@ export interface ArticleViewTabProps {
   onUpdateOrder: (order: ProductionOrder) => void;
   getStatusBadge: (status: string) => string;
   getPriorityBadge: (priority: string) => string;
+  activeArticleId?: string | null;
+  onAssignClick?: () => void;
   onScanContainerClick?: () => void;
 }
 
@@ -43,6 +45,8 @@ export default function ArticleViewTab({
   onUpdateOrder,
   getStatusBadge,
   getPriorityBadge,
+  activeArticleId = null,
+  onAssignClick,
   onScanContainerClick,
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
@@ -137,8 +141,10 @@ export default function ArticleViewTab({
               const transferred = br?.transferred ?? 0;
               const remaining = br?.remaining ?? Math.max(0, received - transferred);
               const key = (article.id ?? article._id) + "-" + order.id;
+              const articleId = article.id ?? article._id;
+              const isActiveRow = Boolean(activeArticleId && articleId && String(articleId) === String(activeArticleId));
               return (
-                <tr key={key} className="hover:bg-gray-50/50 transition-colors group">
+                <tr key={key} className={`hover:bg-gray-50/50 transition-colors group ${isActiveRow ? "ring-2 ring-amber-500 ring-inset bg-amber-50/50" : ""}`}>
                   <td className="pl-[10px] pr-1.5 py-2.5 border border-gray-200">
                     <div className="text-[12px] font-bold text-gray-900">{article.articleNumber ?? "—"}</div>
                     <div className="text-[10px] text-gray-500">{article.linkingType ?? "N/A"}</div>
@@ -174,6 +180,21 @@ export default function ArticleViewTab({
                   </td>
                   <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
                     <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 flex-wrap">
+                      {onAssignClick && (
+                        <button
+                          type="button"
+                          className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors ${
+                            isActiveRow
+                              ? "bg-amber-600 text-white hover:bg-amber-700 shadow-sm"
+                              : "bg-sky-50 text-sky-600 border border-sky-100 hover:bg-sky-100"
+                          }`}
+                          onClick={onAssignClick}
+                          title="Assign to team member"
+                        >
+                          <i className="ri-user-add-line text-xs" />
+                          Assign
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100 transition-opacity"

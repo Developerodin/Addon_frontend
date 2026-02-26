@@ -6,7 +6,8 @@ import { teamMasterService, type TeamMaster } from "@/shared/services/teamMaster
 import { productionService, type ProductionArticleDetail } from "@/shared/services/productionService";
 import ArticleDetailBlock from "./ArticleDetailBlock";
 
-const FLOOR_SECONDARY_CHECKING = "SecondaryChecking" as const;
+/** API expects "Secondary Checking" (with space) for workingFloor */
+const FLOOR_SECONDARY_CHECKING = "Secondary Checking" as const;
 
 /**
  * Shows all team members whose workingFloor is Secondary Checking.

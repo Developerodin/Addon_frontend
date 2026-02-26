@@ -12,6 +12,7 @@ import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuan
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
 import { containersMasterService } from "@/shared/services/containersMasterService";
+import { teamMasterService, type TeamMaster } from "@/shared/services/teamMasterService";
 
 type FinalCheckingTab = "orders" | "article-view" | "my-team";
 
@@ -93,6 +94,13 @@ const FinalCheckingFloorSupervisorPage = () => {
   const [containerScanLoading, setContainerScanLoading] = useState(false);
   const [containerScanned, setContainerScanned] = useState<{ container: any; article: any } | null>(null);
   const [acceptArticleLoading, setAcceptArticleLoading] = useState(false);
+  const [activeArticleId, setActiveArticleId] = useState<string | null>(null);
+  const [showAssignDrawer, setShowAssignDrawer] = useState(false);
+  const [assignTeamMembers, setAssignTeamMembers] = useState<TeamMaster[]>([]);
+  const [assignTeamLoading, setAssignTeamLoading] = useState(false);
+  const [confirmAssignModal, setConfirmAssignModal] = useState<{ teamMemberName: string; teamMemberId: string; articleId: string } | null>(null);
+  const [assigningInProgress, setAssigningInProgress] = useState(false);
+  const [removingArticleMemberId, setRemovingArticleMemberId] = useState<string | null>(null);
   const [showRepairModal, setShowRepairModal] = useState(false);
   const [selectedRepairArticle, setSelectedRepairArticle] = useState<{
     articleId: string;
@@ -664,6 +672,7 @@ const FinalCheckingFloorSupervisorPage = () => {
         },
       });
       if (res.success) {
+        setActiveArticleId(String(articleId));
         const barcode = containerScanned.container.barcode;
         try {
           await containersMasterService.clearActiveByBarcode(barcode);
@@ -683,6 +692,65 @@ const FinalCheckingFloorSupervisorPage = () => {
     } finally {
       setAcceptArticleLoading(false);
     }
+  };
+
+  const handleOpenAssignDrawer = useCallback(async () => {
+    setShowAssignDrawer(true);
+    setAssignTeamLoading(true);
+    try {
+      const data = await teamMasterService.list({ workingFloor: "Final Checking", limit: 200 });
+      setAssignTeamMembers(data.results);
+    } catch {
+      toast.error("Failed to load team members");
+      setAssignTeamMembers([]);
+    } finally {
+      setAssignTeamLoading(false);
+    }
+  }, []);
+
+  const handleAssignToMember = (member: TeamMaster) => {
+    if (!activeArticleId) {
+      toast.error("No active article selected. Scan container and accept article first.");
+      return;
+    }
+    setConfirmAssignModal({ teamMemberName: member.teamMemberName, teamMemberId: member._id, articleId: activeArticleId });
+  };
+
+  const handleConfirmAssign = async () => {
+    if (!confirmAssignModal?.articleId) return;
+    setAssigningInProgress(true);
+    try {
+      await teamMasterService.addActiveArticle(confirmAssignModal.teamMemberId, confirmAssignModal.articleId);
+      toast.success(`Article assigned to ${confirmAssignModal.teamMemberName}`);
+      setConfirmAssignModal(null);
+      const data = await teamMasterService.list({ workingFloor: "Final Checking", limit: 200 });
+      setAssignTeamMembers(data.results);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to assign article");
+    } finally {
+      setAssigningInProgress(false);
+    }
+  };
+
+  const handleArticleReceived = async (member: TeamMaster) => {
+    if (!activeArticleId) return;
+    setRemovingArticleMemberId(member._id);
+    try {
+      await teamMasterService.removeActiveArticle(member._id, activeArticleId);
+      toast.success("Article received recorded.");
+      const data = await teamMasterService.list({ workingFloor: "Final Checking", limit: 200 });
+      setAssignTeamMembers(data.results);
+      loadOrders();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove active article");
+    } finally {
+      setRemovingArticleMemberId(null);
+    }
+  };
+
+  const handleCloseAssignDrawer = () => {
+    setShowAssignDrawer(false);
+    setConfirmAssignModal(null);
   };
 
   const getStatusBadge = (status: string) => {
@@ -815,6 +883,8 @@ const FinalCheckingFloorSupervisorPage = () => {
               onUpdateOrder={handleUpdateOrder}
               getStatusBadge={getStatusBadge}
               getPriorityBadge={getPriorityBadge}
+              activeArticleId={activeArticleId}
+              onAssignClick={handleOpenAssignDrawer}
               onScanContainerClick={handleScanContainerClick}
             />
           ) : (
@@ -969,11 +1039,11 @@ const FinalCheckingFloorSupervisorPage = () => {
       {/* Scan Container drawer */}
       {showContainerScanDrawer && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} aria-hidden />
-          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l border-gray-200">
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); setActiveArticleId(null); }} aria-hidden />
+          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
             <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
               <h3 className="text-sm font-bold text-gray-800">Scan Container</h3>
-              <button type="button" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); }} className="text-gray-500 hover:text-gray-700 p-1">
+              <button type="button" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); setActiveArticleId(null); }} className="text-gray-500 hover:text-gray-700 p-1">
                 <i className="ri-close-line text-lg" />
               </button>
             </div>
@@ -1015,7 +1085,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                         onClick={handleAcceptArticleQuantity}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full"
                       >
-                        {acceptArticleLoading ? "Accepting..." : "Accept article quantity (Final Checking)"}
+                        {acceptArticleLoading ? "Accepting..." : "Accept Article Quantity"}
                       </button>
                     </>
                   ) : (
@@ -1030,587 +1100,339 @@ const FinalCheckingFloorSupervisorPage = () => {
         </>
       )}
 
-      {/* Update Order – right-side drawer */}
-      {showUpdateModal && selectedOrder && (
+      {/* Assign drawer */}
+      {showAssignDrawer && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={closeUpdateModal} aria-hidden />
-          <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l border-gray-200">
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={handleCloseAssignDrawer} aria-hidden />
+          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
             <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
-              <h3 className="text-sm font-bold text-gray-800">Update Order — {selectedOrder.orderNumber}</h3>
-              <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-800 p-1 rounded border border-gray-200 hover:bg-gray-100">
-                <i className="ri-close-line text-lg"></i>
+              <h3 className="text-sm font-bold text-gray-800">Assign article to team member</h3>
+              <button type="button" onClick={handleCloseAssignDrawer} className="text-gray-500 hover:text-gray-700 p-1">
+                <i className="ri-close-line text-lg" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-[10px]">
-            {/* Order Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-              <div>
-                <label className="text-sm font-medium text-gray-600">Priority</label>
-                <div className="mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(selectedOrder.priority)}`}>
-                    {selectedOrder.priority}
-                  </span>
+              {assignTeamLoading ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mb-4 opacity-50" />
+                  <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
                 </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Status</label>
-                <div className="mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedOrder.status)}`}>
-                    {selectedOrder.status}
-                  </span>
-                </div>
-              </div>
+              ) : assignTeamMembers.length === 0 ? (
+                <p className="text-[11px] text-[#495057]">No team members on Final Checking floor.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {assignTeamMembers.map((member) => {
+                    const hasActiveArticle = Boolean(activeArticleId && member.articleData?.some((d) => d.activeArticle === activeArticleId));
+                    return (
+                      <li key={member._id} className="flex items-center justify-between gap-2 p-2 border border-gray-200 rounded hover:bg-gray-50">
+                        <div>
+                          <span className="text-[12px] font-medium text-gray-900">{member.teamMemberName}</span>
+                          <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-bold ${member.role === "Supervisor" ? "bg-teal-50 text-teal-700 border border-teal-100" : "bg-gray-50 text-gray-600 border border-gray-200"}`}>{member.role}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {hasActiveArticle ? (
+                            <button type="button" onClick={() => handleArticleReceived(member)} disabled={removingArticleMemberId === member._id} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm disabled:opacity-50">
+                              {removingArticleMemberId === member._id ? "..." : "Article received"}
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => handleAssignToMember(member)} disabled={!activeArticleId} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-teal-600 text-white hover:bg-teal-700 shadow-sm disabled:opacity-50">Assign</button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
+          </div>
+        </>
+      )}
 
-            {/* Articles Update Form with Tabs */}
-            <div className="space-y-6">
-              <h4 className="text-lg font-medium text-gray-900">Update Article Progress</h4>
+      {/* Confirm assign modal */}
+      {confirmAssignModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={() => setConfirmAssignModal(null)}>
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-[10px] border-b border-gray-200">
+              <h4 className="text-sm font-bold text-gray-800">Confirm assign</h4>
+            </div>
+            <p className="p-[10px] text-[11px] text-[#495057]">
+              Assigning this article to <strong>{confirmAssignModal.teamMemberName}</strong>?
+            </p>
+            <div className="flex justify-end gap-2 p-[10px] border-t border-gray-200">
+              <button type="button" onClick={() => setConfirmAssignModal(null)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm">Cancel</button>
+              <button type="button" onClick={handleConfirmAssign} disabled={assigningInProgress} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 shadow-sm">
+                {assigningInProgress ? "Assigning..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-              {/* Blue Article Tabs */}
-              <div className="mb-4">
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {selectedOrder.articles.map((article, idx) => (
-                    <button
-                      key={article.id}
-                      className={`px-3 py-2 text-sm font-medium rounded-md whitespace-nowrap focus:outline-none ${
-                        idx === activeUpdateTabIndex ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                      }`}
-                      onClick={() => {
-                        setActiveUpdateTabIndex(idx);
-                        setShowLogs(false);
-                      }}
-                      title={article.articleNumber}
-                    >
-                      {article.articleNumber || `Article ${idx + 1}`}
-                    </button>
-                  ))}
+      {/* Update Order – drawer, clear sections & user guidance */}
+      {showUpdateModal && selectedOrder && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={closeUpdateModal} aria-hidden />
+          <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l-2 border-gray-300">
+            <div className="flex items-center justify-between px-3 py-2 border-b-2 border-gray-300 bg-gray-50 flex-shrink-0">
+              <h3 className="text-sm font-bold text-gray-800">Update Order — {selectedOrder.orderNumber}</h3>
+              <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-800 p-1 rounded border-2 border-gray-300 hover:bg-gray-100">
+                <i className="ri-close-line text-lg"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+            {/* Short intro so user knows what to do */}
+            <div className="mb-4 px-3 py-2 rounded-md bg-teal-50 border-2 border-teal-200 text-[11px] text-teal-900">
+              <strong>How to update:</strong> Select an article below, then (1) enter how many good pieces go to next floor (M1), (2) enter how many you checked in each quality category (M1–M4), (3) optionally move pieces between categories, then click Update Order.
+            </div>
+            <section className="mb-4 rounded-md border-2 border-gray-300 bg-gray-50 overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">1. Order info</div>
+              <div className="grid grid-cols-2 gap-3 p-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-0.5">Priority</label>
+                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border-2 border-gray-300 ${getPriorityBadge(selectedOrder.priority)}`}>{selectedOrder.priority}</span>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-0.5">Status</label>
+                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border-2 border-gray-300 ${getStatusBadge(selectedOrder.status)}`}>{selectedOrder.status}</span>
                 </div>
               </div>
-
-              {/* Active Article Form */}
+            </section>
+            <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">2. Choose article to update</div>
+              <div className="p-2 flex gap-1.5 flex-wrap">
+                {selectedOrder.articles.map((article, idx) => (
+                  <button
+                    key={article.id}
+                    type="button"
+                    className={`px-3 py-1.5 text-[11px] font-bold rounded border-2 ${
+                      idx === activeUpdateTabIndex ? "bg-teal-600 text-white border-teal-600" : "bg-white text-gray-700 border-gray-300 hover:border-teal-400"
+                    }`}
+                    onClick={() => { setActiveUpdateTabIndex(idx); setShowLogs(false); }}
+                    title={article.articleNumber}
+                  >
+                    {article.articleNumber || `Art ${idx + 1}`}
+                  </button>
+                ))}
+              </div>
+            </section>
               {(() => {
                 const article = selectedOrder.articles[activeUpdateTabIndex];
                 if (!article) return null;
-                
                 const articleId = article.id || article._id;
                 if (!articleId) return null;
-                
-                const currentUpdateData = updateData[articleId] || { 
-                  remarks: article.remarks || '',
-                  m1Quantity: 0, // Always start with 0 for user input
-                  m2Quantity: article.floorQuantities?.finalChecking?.m2Quantity || article.m2Quantity || 0,
-                  m3Quantity: article.floorQuantities?.finalChecking?.m3Quantity || article.m3Quantity || 0,
-                  m4Quantity: article.floorQuantities?.finalChecking?.m4Quantity || article.m4Quantity || 0,
-                  repairStatus: (article as any).floorQuantities?.finalChecking?.repairStatus || (article as any).repairStatus || 'Not Required',
-                  repairRemarks: (article as any).floorQuantities?.finalChecking?.repairRemarks || (article as any).repairRemarks || ''
+                const fc = article.floorQuantities?.finalChecking;
+                const currentUpdateData = updateData[articleId] || {
+                  remarks: article.remarks || "",
+                  m1Quantity: 0,
+                  m2Quantity: fc?.m2Quantity ?? article.m2Quantity ?? 0,
+                  m3Quantity: fc?.m3Quantity ?? article.m3Quantity ?? 0,
+                  m4Quantity: fc?.m4Quantity ?? article.m4Quantity ?? 0,
+                  repairStatus: (fc?.repairStatus || (article as any).repairStatus || "Not Required") as "Not Required" | "In Review" | "Repaired" | "Rejected",
+                  repairRemarks: fc?.repairRemarks || (article as any).repairRemarks || ""
                 };
-                
+                const received = fc?.received || 0;
+                const transferred = fc?.transferred || 0;
+                const remaining = received - transferred;
                 return (
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h5 className="text-md font-medium text-gray-900">{article.articleNumber || 'Unknown Article'}</h5>
-                        <div className="text-sm text-gray-600 mt-1">
-                          <span className="font-medium">Linking Type:</span> {article.linkingType || 'Not specified'}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority)}`}>
-                          {article.priority || 'Unknown'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-                      <div>
-                        <label className="form-label">Planned Quantity</label>
-                        <div className="text-lg font-semibold text-gray-900">{(article.plannedQuantity || 0).toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <label className="form-label">Received from Branding</label>
-                        <ReceivedQuantityDisplay
-                          received={article.floorQuantities?.finalChecking?.received || 0}
-                          repairReceived={article.floorQuantities?.finalChecking?.repairReceived}
-                          repairFromFloor={article.floorQuantities?.finalChecking?.repairFromFloor}
-                          className="text-lg"
-                        />
-                      </div>
-                      <div>
-                        <label className="form-label">M1 Completed Quantity *</label>
-                        {(() => {
-                          const received = article.floorQuantities?.finalChecking?.received || 0;
-                          const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
-                          const remaining = received - transferred; // Use transferred instead of current M1
-                          const isFullyTransferred = remaining <= 0;
-                          
-                          return (
-                            <>
-                              <NumericInput
-                                className={`${
-                                  isFullyTransferred 
-                                    ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
-                                    : currentUpdateData.m1Quantity > received 
-                                      ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
-                                      : ''
-                                }`}
-                                value={currentUpdateData.m1Quantity}
-                                onChange={(value) => {
-                                  if (isFullyTransferred) return;
-                                  if (value <= received) {
-                                    handleM1QuantityChange(articleId, value);
-                                  }
-                                }}
-                                placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${received}`}
-                                disabled={isFullyTransferred}
-                                allowDecimals
-                              />
-                              {isFullyTransferred ? (
-                                <div className="text-xs text-green-600 mt-1 font-medium">
-                                  ✓ All quantity has been transferred to next floor
-                                </div>
-                              ) : currentUpdateData.m1Quantity > received ? (
-                                <div className="text-xs text-red-500 mt-1">
-                                  Cannot exceed received quantity ({received})
-                                </div>
-                              ) : null}
-                              <div className="text-xs text-green-600 mt-1">
-                                Only M1 (Good Quality) passes to warehouse
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                      <div>
-                        <label className="form-label">Transferred to Next Floor</label>
-                        <div className="text-lg font-semibold text-green-600">
-                          {article.floorQuantities?.finalChecking?.transferred || 0}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="form-label">Remaining</label>
-                        <div className="text-lg font-semibold text-orange-600">
-                          {(() => {
-                            const received = article.floorQuantities?.finalChecking?.received || 0;
-                            const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
-                            return (received - transferred).toLocaleString();
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Step 4B: Article-wise Checked Quantities */}
-                    <div className="mb-6">
-                      <h6 className="text-md font-semibold text-gray-900 mb-3 border-b pb-2">Step 4B: Article-wise Checked Quantities</h6>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                        <div>
-                          <label className="form-label text-yellow-700 font-medium">M2 - Needs Repair</label>
+                  <>
+            <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">3. Current quantities for this article</div>
+              <p className="px-3 py-1 text-[10px] text-gray-500 bg-gray-50 border-b border-gray-200"><span className="font-semibold text-gray-700">Article: {article.articleNumber}</span> — Planned = order qty · Received = on final checking · Transferred = already sent to next floor · Remaining = still to transfer.</p>
+              <div className="p-2">
+                <table className="w-full border-collapse text-[11px] border-2 border-gray-300">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Planned</th>
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Received</th>
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Transferred</th>
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border-2 border-gray-300 px-2 py-1">{(article.plannedQuantity || 0).toLocaleString()}</td>
+                      <td className="border-2 border-gray-300 px-2 py-1"><ReceivedQuantityDisplay received={received} repairReceived={fc?.repairReceived} repairFromFloor={fc?.repairFromFloor} className="text-[11px]" /></td>
+                      <td className="border-2 border-gray-300 px-2 py-1 text-green-700 font-medium">{transferred}</td>
+                      <td className="border-2 border-gray-300 px-2 py-1 text-orange-700 font-medium">{remaining}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="mb-4 rounded-md border-2 border-green-300 overflow-hidden">
+              <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Good quality (M1) — how many to send to next floor?</div>
+              <p className="px-3 py-1 text-[10px] text-gray-600 bg-green-50/50 border-b border-green-200">Only good-quality pieces (M1) go to the next floor. Enter the quantity you are transferring now. Cannot exceed Remaining above.</p>
+              <div className="p-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-green-800 block mb-0.5">Quantity to transfer</label>
+                    {(() => {
+                      const isFullyTransferred = remaining <= 0;
+                      return (
+                        <>
+                          <span className="text-[10px] text-gray-500 block mb-0.5">(Max: {remaining})</span>
                           <NumericInput
-                            className="border-yellow-300 focus:border-yellow-500"
-                            value={currentUpdateData.m2Quantity}
-                            onChange={(value) => handleM2QuantityChange(articleId, value)}
+                            className={`py-1.5 px-2 text-[12px] w-24 border-2 rounded ${isFullyTransferred ? "bg-gray-100 border-gray-300 cursor-not-allowed" : currentUpdateData.m1Quantity > remaining ? "border-red-500" : "border-gray-300"}`}
+                            value={currentUpdateData.m1Quantity}
+                            onChange={(value) => { if (!isFullyTransferred && value <= remaining) handleM1QuantityChange(articleId, value); }}
+                            placeholder={isFullyTransferred ? "Done" : `Max ${remaining}`}
+                            disabled={isFullyTransferred}
                             allowDecimals
                           />
-                          <small className="text-yellow-600">To be reviewed</small>
-                          
-                          {/* M2 Status Card */}
-                          {(() => {
-                            const m2Quantity = article.floorQuantities?.finalChecking?.m2Quantity || article.m2Quantity || 0;
-                            const m2Transferred = article.floorQuantities?.finalChecking?.m2Transferred || 0;
-                            // According to docs: m2Remaining = m2Quantity (since m2Quantity is already reduced when items are sent)
-                            const m2Remaining = article.floorQuantities?.finalChecking?.m2Remaining ?? m2Quantity;
-                            const previousFloor = getPreviousFloor('Final Checking', article.linkingType);
-                            
-                            // Show M2 status card if there are current M2 items OR if items have been sent for repair
-                            if (m2Quantity > 0 || m2Transferred > 0) {
-                              return (
-                                <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                                  <div className="text-xs font-semibold text-yellow-800 mb-2">M2 Repairable Items</div>
-                                  <div className="space-y-1 text-xs">
-                                    <div className="flex justify-between">
-                                      <span className="text-gray-600">Current M2:</span>
-                                      <span className="font-medium">{m2Quantity}</span>
-                                      {m2Transferred > 0 && (
-                                        <span className="text-gray-500 ml-2">({m2Transferred} sent for repair)</span>
-                                      )}
-                                    </div>
-                                    {m2Transferred > 0 && (
-                                      <div className="flex justify-between">
-                                        <span className="text-gray-600">Total Sent for Repair:</span>
-                                        <span className="font-medium text-yellow-700">{m2Transferred}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  {m2Remaining > 0 && previousFloor && (
-                                    <button
-                                      type="button"
-                                      className="ti-btn ti-btn-warning ti-btn w-full mt-2"
-                                      onClick={() => {
-                                        setSelectedRepairArticle({
-                                          articleId: article._id || article.id,
-                                          articleNumber: article.articleNumber,
-                                          orderId: selectedOrder.id,
-                                          linkingType: article.linkingType
-                                        });
-                                        setShowRepairModal(true);
-                                      }}
-                                    >
-                                      <i className="ri-tools-line me-1"></i>
-                                      Send M2 for Repair
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </div>
-                        
-                        <div>
-                          <label className="form-label text-orange-700 font-medium">M3 - Minor Defects</label>
-                          <NumericInput
-                            className="border-orange-300 focus:border-orange-500"
-                            value={currentUpdateData.m3Quantity}
-                            onChange={(value) => handleM3QuantityChange(articleId, value)}
-                            allowDecimals
-                          />
-                          <small className="text-orange-600">Can be fixed</small>
-                        </div>
-                        
-                        <div>
-                          <label className="form-label text-red-700 font-medium">M4 - Major Defects</label>
-                          <NumericInput
-                            className="border-red-300 focus:border-red-500"
-                            value={currentUpdateData.m4Quantity}
-                            onChange={(value) => handleM4QuantityChange(articleId, value)}
-                            allowDecimals
-                          />
-                          <small className="text-red-600">Needs significant repair</small>
-                        </div>
-                      </div>
-
-                      {/* Quantity Shifting Options */}
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                        <h6 className="text-md font-semibold text-blue-800 mb-3">Quantity Shifting Options</h6>
-                        <p className="text-sm text-blue-700 mb-4">Use these options to shift quantities between categories when needed</p>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {/* M2 to M1 Shift */}
-                          {currentUpdateData.m2Quantity > 0 && (
-                            <div className="bg-white border border-yellow-200 rounded-lg p-3">
-                              <label className="form-label text-yellow-700 font-medium">M2 → M1 (Good Quality)</label>
-                              <div className="flex gap-2 mb-2">
-                                <NumericInput
-                                  className="flex-1"
-                                  placeholder="Qty to shift"
-                                  min={0}
-                                  max={currentUpdateData.m2Quantity}
-                                  value={shiftInputs[articleId]?.m2ToM1 || 0}
-                                  onChange={(value) => handleShiftInputChange(articleId, 'm2ToM1', value)}
-                                  allowDecimals
-                                />
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-success  "
-                                  onClick={() => applyShift(articleId, 'm2ToM1')}
-                                  disabled={!shiftInputs[articleId]?.m2ToM1 || shiftInputs[articleId].m2ToM1 <= 0}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary  "
-                                  onClick={() => {
-                                    const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
-                                    handleShiftM2Items(articleId, 'M1', shiftQty);
-                                  }}
-                                  disabled={currentUpdateData.m2Quantity === 0}
-                                >
-                                  +1
-                                </button>
-                              </div>
-                              <small className="text-yellow-600">Available: {currentUpdateData.m2Quantity}</small>
-                            </div>
-                          )}
-
-                          {/* M2 to M3 Shift */}
-                          {currentUpdateData.m2Quantity > 0 && (
-                            <div className="bg-white border border-orange-200 rounded-lg p-3">
-                              <label className="form-label text-orange-700 font-medium">M2 → M3 (Minor Defects)</label>
-                              <div className="flex gap-2 mb-2">
-                                <NumericInput
-                                  className="flex-1"
-                                  placeholder="Qty to shift"
-                                  min={0}
-                                  max={currentUpdateData.m2Quantity}
-                                  value={shiftInputs[articleId]?.m2ToM3 || 0}
-                                  onChange={(value) => handleShiftInputChange(articleId, 'm2ToM3', value)}
-                                  allowDecimals
-                                />
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-warning  "
-                                  onClick={() => applyShift(articleId, 'm2ToM3')}
-                                  disabled={!shiftInputs[articleId]?.m2ToM3 || shiftInputs[articleId].m2ToM3 <= 0}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary  "
-                                  onClick={() => {
-                                    const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
-                                    handleShiftM2Items(articleId, 'M3', shiftQty);
-                                  }}
-                                  disabled={currentUpdateData.m2Quantity === 0}
-                                >
-                                  +1
-                                </button>
-                              </div>
-                              <small className="text-orange-600">Available: {currentUpdateData.m2Quantity}</small>
-                            </div>
-                          )}
-
-                          {/* M2 to M4 Shift */}
-                          {currentUpdateData.m2Quantity > 0 && (
-                            <div className="bg-white border border-red-200 rounded-lg p-3">
-                              <label className="form-label text-red-700 font-medium">M2 → M4 (Major Defects)</label>
-                              <div className="flex gap-2 mb-2">
-                                <NumericInput
-                                  className="flex-1"
-                                  placeholder="Qty to shift"
-                                  min={0}
-                                  max={currentUpdateData.m2Quantity}
-                                  value={shiftInputs[articleId]?.m2ToM4 || 0}
-                                  onChange={(value) => handleShiftInputChange(articleId, 'm2ToM4', value)}
-                                  allowDecimals
-                                />
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-danger  "
-                                  onClick={() => applyShift(articleId, 'm2ToM4')}
-                                  disabled={!shiftInputs[articleId]?.m2ToM4 || shiftInputs[articleId].m2ToM4 <= 0}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary  "
-                                  onClick={() => {
-                                    const shiftQty = Math.min(currentUpdateData.m2Quantity, 1);
-                                    handleShiftM2Items(articleId, 'M4', shiftQty);
-                                  }}
-                                  disabled={currentUpdateData.m2Quantity === 0}
-                                >
-                                  +1
-                                </button>
-                              </div>
-                              <small className="text-red-600">Available: {currentUpdateData.m2Quantity}</small>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Additional shifting options for M3 and M4 */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                          {/* M3 to M2 Shift */}
-                          {currentUpdateData.m3Quantity > 0 && (
-                            <div className="bg-white border border-orange-200 rounded-lg p-3">
-                              <label className="form-label text-orange-700 font-medium">M3 → M2 (Needs Repair)</label>
-                              <div className="flex gap-2 mb-2">
-                                <NumericInput
-                                  className="flex-1"
-                                  placeholder="Qty to shift"
-                                  min={0}
-                                  max={currentUpdateData.m3Quantity}
-                                  value={shiftInputs[articleId]?.m3ToM2 || 0}
-                                  onChange={(value) => handleShiftInputChange(articleId, 'm3ToM2', value)}
-                                  allowDecimals
-                                />
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-warning  "
-                                  onClick={() => applyShift(articleId, 'm3ToM2')}
-                                  disabled={!shiftInputs[articleId]?.m3ToM2 || shiftInputs[articleId].m3ToM2 <= 0}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary  "
-                                  onClick={() => {
-                                    const shiftQty = Math.min(currentUpdateData.m3Quantity, 1);
-                                    setUpdateData(prev => {
-                                      const updatedData = { ...prev[articleId] };
-                                      updatedData.m3Quantity = updatedData.m3Quantity - shiftQty;
-                                      updatedData.m2Quantity = updatedData.m2Quantity + shiftQty;
-                                      return {
-                                        ...prev,
-                                        [articleId]: updatedData
-                                      };
-                                    });
-                                  }}
-                                  disabled={currentUpdateData.m3Quantity === 0}
-                                >
-                                  +1
-                                </button>
-                              </div>
-                              <small className="text-orange-600">Available: {currentUpdateData.m3Quantity}</small>
-                            </div>
-                          )}
-
-                          {/* M4 to M3 Shift */}
-                          {currentUpdateData.m4Quantity > 0 && (
-                            <div className="bg-white border border-red-200 rounded-lg p-3">
-                              <label className="form-label text-red-700 font-medium">M4 → M3 (Minor Defects)</label>
-                              <div className="flex gap-2 mb-2">
-                                <NumericInput
-                                  className="flex-1"
-                                  placeholder="Qty to shift"
-                                  min={0}
-                                  max={currentUpdateData.m4Quantity}
-                                  value={shiftInputs[articleId]?.m4ToM3 || 0}
-                                  onChange={(value) => handleShiftInputChange(articleId, 'm4ToM3', value)}
-                                  allowDecimals
-                                />
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-danger  "
-                                  onClick={() => applyShift(articleId, 'm4ToM3')}
-                                  disabled={!shiftInputs[articleId]?.m4ToM3 || shiftInputs[articleId].m4ToM3 <= 0}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ti-btn ti-btn-primary  "
-                                  onClick={() => {
-                                    const shiftQty = Math.min(currentUpdateData.m4Quantity, 1);
-                                    setUpdateData(prev => {
-                                      const updatedData = { ...prev[articleId] };
-                                      updatedData.m4Quantity = updatedData.m4Quantity - shiftQty;
-                                      updatedData.m3Quantity = updatedData.m3Quantity + shiftQty;
-                                      return {
-                                        ...prev,
-                                        [articleId]: updatedData
-                                      };
-                                    });
-                                  }}
-                                  disabled={currentUpdateData.m4Quantity === 0}
-                                >
-                                  +1
-                                </button>
-                              </div>
-                              <small className="text-red-600">Available: {currentUpdateData.m4Quantity}</small>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* M2 Repair Sub-step */}
-                      {currentUpdateData.m2Quantity > 0 && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                          <h6 className="text-md font-semibold text-yellow-800 mb-3">Step 4B: M2 Items Repair Review</h6>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <label className="form-label">Repair Status</label>
-                              <select
-                                className="form-select"
-                                value={currentUpdateData.repairStatus}
-                                onChange={(e) => handleRepairStatusChange(articleId, e.target.value as 'Not Required' | 'In Review' | 'Repaired' | 'Rejected')}
-                              >
-                                <option value="Not Required">Not Required</option>
-                                <option value="In Review">In Review</option>
-                                <option value="Repaired">Repaired</option>
-                                <option value="Rejected">Rejected</option>
-                              </select>
-                            </div>
-                          </div>
-                          
-                          <div>
-                            <label className="form-label">Repair Remarks</label>
-                            <textarea
-                              className="form-control"
-                              rows={2}
-                              placeholder="Add repair remarks for M2 items..."
-                              value={currentUpdateData.repairRemarks}
-                              onChange={(e) => handleRepairRemarksChange(articleId, e.target.value)}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Quantity Summary */}
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                          <div className="text-center">
-                            <div className="font-medium text-green-700">M1: {currentUpdateData.m1Quantity}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium text-yellow-700">M2: {currentUpdateData.m2Quantity}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium text-orange-700">M3: {currentUpdateData.m3Quantity}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium text-red-700">M4: {currentUpdateData.m4Quantity}</div>
-                          </div>
-                        </div>
-                        <div className="text-center mt-2 text-xs text-gray-600">
-                          Total Checked: {(currentUpdateData.m1Quantity + currentUpdateData.m2Quantity + currentUpdateData.m3Quantity + currentUpdateData.m4Quantity)} / {article.plannedQuantity}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <label className="form-label">Remarks</label>
-                      <textarea
-                        className="form-control"
-                        rows={2}
-                        placeholder="Add remarks for this article..."
-                        value={currentUpdateData.remarks}
-                        onChange={(e) => handleRemarksChange(articleId, e.target.value)}
-                      />
-                    </div>
-
-
-                    {/* View Logs Button and panel */}
-                    {/* <div className="mt-4">
-                      <button
-                        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
-                        onClick={() => setShowLogs(!showLogs)}
-                        title="View Article Logs"
-                        type="button"
-                      >
-                        <i className="ri-file-list-3-line"></i>
-                        {showLogs ? 'Hide Logs' : 'View Logs'}
-                      </button>
-                      {showLogs && (
-                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded max-w-full overflow-x-auto">
-                          <ul className="list-disc list-inside text-sm text-blue-900 space-y-1 break-words">
-                            {(
-                              ((article as any).logs || [])
-                                .slice()
-                                .sort((a: any, b: any) => (a.date > b.date ? -1 : 1))
-                            ).map((log: any) => (
-                              <li key={log.id}>
-                                {(log.fromFloor || 'Final Checking')} {log.action?.toLowerCase?.() || 'action'} {log.quantity.toLocaleString()} {log.toFloor ? `to ${log.toFloor}` : ''} on {log.date}
-                                {log.remarks ? ` — ${log.remarks}` : ''}
-                              </li>
-                            ))}
-                            {(((article as any).logs?.length || 0) === 0) && <li>No logs yet</li>}
-                          </ul>
-                        </div>
-                      )}
-                    </div> */}
+                          {isFullyTransferred ? <div className="text-[10px] text-green-600 mt-0.5 font-medium">✓ All transferred</div> : currentUpdateData.m1Quantity > remaining ? <div className="text-[10px] text-red-600 font-medium">Max {remaining}</div> : null}
+                        </>
+                      );
+                    })()}
                   </div>
+                </div>
+              </div>
+            </section>
+            <section className="mb-4 rounded-md border-2 border-gray-400 overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-300 border-b-2 border-gray-400 text-[11px] font-bold text-gray-900">5. Quality categories — how many in each?</div>
+              <p className="px-3 py-1.5 text-[10px] text-gray-600 bg-gray-50 border-b-2 border-gray-300">After checking, enter how many pieces fall in each category. M1 = Good (goes to next floor) · M2 = Needs repair · M3 = Minor defects · M4 = Major defects.</p>
+              <div className="p-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="border-2 border-green-300 rounded p-2 bg-green-50/50">
+                  <label className="block text-[10px] font-bold text-green-800 mb-0.5">M1 Good</label>
+                  <p className="text-[9px] text-green-700 mb-1">Passes to next floor</p>
+                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-green-200 rounded" value={currentUpdateData.m1Quantity} onChange={(v) => handleM1QuantityChange(articleId, v)} allowDecimals />
+                </div>
+                <div className="border-2 border-yellow-400 rounded p-2 bg-yellow-50/50">
+                  <label className="block text-[10px] font-bold text-yellow-800 mb-0.5">M2 Repair</label>
+                  <p className="text-[9px] text-yellow-800 mb-1">Needs repair</p>
+                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-yellow-300 rounded" value={currentUpdateData.m2Quantity} onChange={(value) => handleM2QuantityChange(articleId, value)} allowDecimals />
+                </div>
+                <div className="border-2 border-orange-300 rounded p-2 bg-orange-50/50">
+                  <label className="block text-[10px] font-bold text-orange-800 mb-0.5">M3 Minor</label>
+                  <p className="text-[9px] text-orange-800 mb-1">Minor defects</p>
+                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-orange-200 rounded" value={currentUpdateData.m3Quantity} onChange={(value) => handleM3QuantityChange(articleId, value)} allowDecimals />
+                </div>
+                <div className="border-2 border-red-300 rounded p-2 bg-red-50/50">
+                  <label className="block text-[10px] font-bold text-red-800 mb-0.5">M4 Major</label>
+                  <p className="text-[9px] text-red-800 mb-1">Major defects</p>
+                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-red-200 rounded" value={currentUpdateData.m4Quantity} onChange={(value) => handleM4QuantityChange(articleId, value)} allowDecimals />
+                </div>
+              </div>
+            </section>
+            {(() => {
+              const m2Quantity = fc?.m2Quantity ?? article.m2Quantity ?? 0;
+              const m2Transferred = fc?.m2Transferred ?? 0;
+              const m2Remaining = fc?.m2Remaining ?? m2Quantity;
+              const previousFloor = getPreviousFloor("Final Checking", article.linkingType);
+              if (m2Quantity > 0 || m2Transferred > 0) {
+                return (
+                  <section className="mb-4 rounded-md border-2 border-yellow-400 overflow-hidden">
+                    <div className="px-3 py-1.5 bg-yellow-100 border-b-2 border-yellow-400 text-[11px] font-bold text-yellow-900">M2 — Repairable items (send back for repair)</div>
+                    <div className="p-2 flex flex-wrap items-center gap-3">
+                      <span className="text-[11px] text-gray-700">Current M2: <strong>{m2Quantity}</strong></span>
+                      {m2Transferred > 0 && <span className="text-[11px] text-yellow-800">Sent for repair: <strong>{m2Transferred}</strong></span>}
+                      {m2Remaining > 0 && previousFloor && (
+                        <button type="button" className="px-3 py-1.5 text-[11px] font-bold rounded bg-amber-500 text-white border-2 border-amber-600 hover:bg-amber-600" onClick={() => { setSelectedRepairArticle({ articleId: article._id || article.id, articleNumber: article.articleNumber, orderId: selectedOrder.id, linkingType: article.linkingType }); setShowRepairModal(true); }}>Send M2 for Repair</button>
+                      )}
+                    </div>
+                  </section>
+                );
+              }
+              return null;
+            })()}
+            <section className="mb-4 rounded-md border-2 border-teal-200 overflow-hidden">
+              <div className="px-3 py-1.5 bg-teal-100 border-b-2 border-teal-300 text-[11px] font-bold text-teal-900">6. Reclassify between categories (optional)</div>
+              <p className="px-3 py-1 text-[10px] text-gray-600 bg-teal-50/50 border-b-2 border-teal-200">e.g. After repair, move pieces from M2→M1. Enter quantity, click Apply. +1 adds one quickly.</p>
+              <div className="p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {currentUpdateData.m2Quantity > 0 && (
+                  <div className="bg-white border-2 border-gray-300 rounded p-2">
+                    <label className="block text-[10px] font-bold text-yellow-800 mb-1">M2→M1</label>
+                    <div className="flex gap-1 mt-0.5 items-center">
+                      <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m2Quantity} value={shiftInputs[articleId]?.m2ToM1 || 0} onChange={(v) => handleShiftInputChange(articleId, "m2ToM1", v)} allowDecimals />
+                      <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-green-600 text-white hover:bg-green-700" onClick={() => applyShift(articleId, "m2ToM1")} disabled={!shiftInputs[articleId]?.m2ToM1 || shiftInputs[articleId].m2ToM1 <= 0}>Apply</button>
+                      <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-teal-500 text-white" onClick={() => handleShiftM2Items(articleId, "M1", Math.min(currentUpdateData.m2Quantity, 1))} disabled={currentUpdateData.m2Quantity === 0}>+1</button>
+                    </div>
+                  </div>
+                )}
+                {currentUpdateData.m2Quantity > 0 && (
+                  <div className="bg-white border border-orange-200 rounded p-1.5">
+                    <label className="text-[10px] font-bold text-orange-700">M2→M3</label>
+                    <div className="flex gap-1 mt-0.5 items-center">
+                      <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m2Quantity} value={shiftInputs[articleId]?.m2ToM3 || 0} onChange={(v) => handleShiftInputChange(articleId, "m2ToM3", v)} allowDecimals />
+                      <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500 text-white" onClick={() => applyShift(articleId, "m2ToM3")} disabled={!shiftInputs[articleId]?.m2ToM3 || shiftInputs[articleId].m2ToM3 <= 0}>Apply</button>
+                      <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-teal-500 text-white" onClick={() => handleShiftM2Items(articleId, "M3", Math.min(currentUpdateData.m2Quantity, 1))} disabled={currentUpdateData.m2Quantity === 0}>+1</button>
+                    </div>
+                  </div>
+                )}
+                {currentUpdateData.m2Quantity > 0 && (
+                  <div className="bg-white border border-red-200 rounded p-1.5">
+                    <label className="text-[10px] font-bold text-red-700">M2→M4</label>
+                    <div className="flex gap-1 mt-0.5 items-center">
+                      <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m2Quantity} value={shiftInputs[articleId]?.m2ToM4 || 0} onChange={(v) => handleShiftInputChange(articleId, "m2ToM4", v)} allowDecimals />
+                      <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white" onClick={() => applyShift(articleId, "m2ToM4")} disabled={!shiftInputs[articleId]?.m2ToM4 || shiftInputs[articleId].m2ToM4 <= 0}>Apply</button>
+                      <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-teal-500 text-white" onClick={() => handleShiftM2Items(articleId, "M4", Math.min(currentUpdateData.m2Quantity, 1))} disabled={currentUpdateData.m2Quantity === 0}>+1</button>
+                    </div>
+                  </div>
+                )}
+                {currentUpdateData.m3Quantity > 0 && (
+                  <div className="bg-white border border-orange-200 rounded p-1.5">
+                    <label className="text-[10px] font-bold text-orange-700">M3→M2</label>
+                    <div className="flex gap-1 mt-0.5 items-center">
+                      <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m3Quantity} value={shiftInputs[articleId]?.m3ToM2 || 0} onChange={(v) => handleShiftInputChange(articleId, "m3ToM2", v)} allowDecimals />
+                      <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500 text-white" onClick={() => applyShift(articleId, "m3ToM2")} disabled={!shiftInputs[articleId]?.m3ToM2 || shiftInputs[articleId].m3ToM2 <= 0}>Apply</button>
+                      <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-teal-500 text-white" onClick={() => { const q = Math.min(currentUpdateData.m3Quantity, 1); setUpdateData(prev => { const u = { ...prev[articleId] }; u.m3Quantity = u.m3Quantity - q; u.m2Quantity = u.m2Quantity + q; return { ...prev, [articleId]: u }; }); }} disabled={currentUpdateData.m3Quantity === 0}>+1</button>
+                    </div>
+                  </div>
+                )}
+                {currentUpdateData.m4Quantity > 0 && (
+                  <div className="bg-white border border-red-200 rounded p-1.5">
+                    <label className="text-[10px] font-bold text-red-700">M4→M3</label>
+                    <div className="flex gap-1 mt-0.5 items-center">
+                      <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m4Quantity} value={shiftInputs[articleId]?.m4ToM3 || 0} onChange={(v) => handleShiftInputChange(articleId, "m4ToM3", v)} allowDecimals />
+                      <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white" onClick={() => applyShift(articleId, "m4ToM3")} disabled={!shiftInputs[articleId]?.m4ToM3 || shiftInputs[articleId].m4ToM3 <= 0}>Apply</button>
+                      <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-teal-500 text-white" onClick={() => { const q = Math.min(currentUpdateData.m4Quantity, 1); setUpdateData(prev => { const u = { ...prev[articleId] }; u.m4Quantity = u.m4Quantity - q; u.m3Quantity = u.m3Quantity + q; return { ...prev, [articleId]: u }; }); }} disabled={currentUpdateData.m4Quantity === 0}>+1</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+            {currentUpdateData.m2Quantity > 0 && (
+              <section className="mb-4 rounded-md border-2 border-yellow-300 overflow-hidden">
+                <div className="px-3 py-1.5 bg-yellow-100 border-b-2 border-yellow-300 text-[11px] font-bold text-yellow-900">M2 Repair review</div>
+                <div className="p-2 space-y-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Repair status</label>
+                    <select className="w-full py-1.5 px-2 text-[11px] border-2 border-gray-300 rounded" value={currentUpdateData.repairStatus} onChange={(e) => handleRepairStatusChange(articleId, e.target.value as "Not Required" | "In Review" | "Repaired" | "Rejected")}>
+                      <option value="Not Required">Not Required</option>
+                      <option value="In Review">In Review</option>
+                      <option value="Repaired">Repaired</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Repair remarks</label>
+                    <textarea className="w-full py-1.5 px-2 text-[11px] border-2 border-gray-300 rounded resize-none" rows={2} placeholder="Remarks..." value={currentUpdateData.repairRemarks} onChange={(e) => handleRepairRemarksChange(articleId, e.target.value)} />
+                  </div>
+                </div>
+              </section>
+            )}
+            <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800">7. Summary — then click Update Order</div>
+              <p className="px-3 py-1 text-[10px] text-gray-500 bg-gray-50 border-b border-gray-200">Totals below will be saved. Add remarks if needed.</p>
+              <div className="p-2">
+                <div className="grid grid-cols-4 gap-2 text-center mb-2">
+                  <div className="border-2 border-green-300 rounded py-1.5 bg-green-50 text-[11px] font-bold text-green-800">M1: {currentUpdateData.m1Quantity}</div>
+                  <div className="border-2 border-yellow-300 rounded py-1.5 bg-yellow-50 text-[11px] font-bold text-yellow-800">M2: {currentUpdateData.m2Quantity}</div>
+                  <div className="border-2 border-orange-300 rounded py-1.5 bg-orange-50 text-[11px] font-bold text-orange-800">M3: {currentUpdateData.m3Quantity}</div>
+                  <div className="border-2 border-red-300 rounded py-1.5 bg-red-50 text-[11px] font-bold text-red-800">M4: {currentUpdateData.m4Quantity}</div>
+                </div>
+                <div className="text-center text-[11px] text-gray-600 border-t-2 border-gray-200 pt-1.5">Total checked: {currentUpdateData.m1Quantity + currentUpdateData.m2Quantity + currentUpdateData.m3Quantity + currentUpdateData.m4Quantity} / {article.plannedQuantity}</div>
+                <div className="mt-2">
+                  <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Remarks</label>
+                  <textarea className="w-full py-1.5 px-2 text-[11px] border-2 border-gray-300 rounded resize-none" rows={2} placeholder="Remarks for this article..." value={currentUpdateData.remarks} onChange={(e) => handleRemarksChange(articleId, e.target.value)} />
+                </div>
+              </div>
+            </section>
+                  </>
                 );
               })()}
             </div>
-
-            </div>
-            <div className="flex-shrink-0 flex justify-end gap-2 p-[10px] border-t border-gray-200">
-              <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
+            <div className="flex justify-end gap-2 p-3 border-t-2 border-gray-300 bg-gray-50 flex-shrink-0">
+              <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-100 shadow-sm">Cancel</button>
               <button
                 type="button"
                 onClick={handleUpdateSubmit}

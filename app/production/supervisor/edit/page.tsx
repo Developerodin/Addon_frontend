@@ -32,6 +32,8 @@ interface Article {
   productId?: string;
   /** Needle size from product's Needles attribute (for filtering machines) */
   needleSizeFromProduct?: string;
+  /** From product API (e.g. FL-AXCR26217-Pique-Black); sent in update payload */
+  knittingCode?: string;
   bom?: ProductBOM[];
 }
 
@@ -96,8 +98,13 @@ const EditOrderContent = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [productPage, setProductPage] = useState(1);
+  const [productLimit] = useState(25);
+  const [productTotalPages, setProductTotalPages] = useState(1);
+  const [productTotalResults, setProductTotalResults] = useState(0);
   const [yarnCatalogs, setYarnCatalogs] = useState<YarnCatalogMap>({});
   const [showMachineModal, setShowMachineModal] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [machineModalArticleIndex, setMachineModalArticleIndex] = useState<number | null>(null);
   const [machineSearchQuery, setMachineSearchQuery] = useState('');
   const [machineActiveNeedleMap, setMachineActiveNeedleMap] = useState<Map<string, string>>(new Map());
@@ -265,16 +272,24 @@ const EditOrderContent = () => {
     }
   };
 
-  // Fetch products for modal
-  const fetchProducts = async (search: string = '') => {
+  // Fetch products for modal (paginated, same as add page)
+  const fetchProducts = async (search: string = '', page: number = 1) => {
     try {
       setIsLoadingProducts(true);
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-      const response = await axios.get(`${API_BASE_URL}/products?page=1&limit=1000${searchParam}`);
-      const productsData = response.data.results || [];
-      // Filter to only show products with factory codes
-      const productsWithFactoryCode = productsData.filter((p: Product) => p.factoryCode && p.factoryCode.trim() !== '');
+      const response = await axios.get(
+        `${API_BASE_URL}/products?page=${page}&limit=${productLimit}${searchParam}`
+      );
+      const data = response.data;
+      const productsData = data.results || [];
+      const totalResults = data.totalResults ?? data.total ?? productsData.length;
+      const totalPages = data.totalPages ?? Math.max(1, Math.ceil(totalResults / productLimit));
+      const productsWithFactoryCode = productsData.filter(
+        (p: Product) => p.factoryCode && p.factoryCode.trim() !== ''
+      );
       setProducts(productsWithFactoryCode);
+      setProductTotalPages(totalPages);
+      setProductTotalResults(totalResults);
     } catch (error) {
       console.error('Error fetching products:', error);
       toast.error('Failed to load products');
@@ -283,12 +298,21 @@ const EditOrderContent = () => {
     }
   };
 
-  // Open product selection modal
+  const handleProductPageChange = (page: number) => {
+    if (page < 1 || page > productTotalPages) return;
+    setProductPage(page);
+    setIsLoadingProducts(true);
+    fetchProducts(productSearchQuery, page);
+  };
+
+  // Open product selection modal — set loading true first so modal shows loader immediately (no blank flash)
   const openProductModal = (articleIndex: number) => {
     setSelectedArticleIndex(articleIndex);
-    setShowProductModal(true);
     setProductSearchQuery('');
-    fetchProducts();
+    setProductPage(1);
+    setIsLoadingProducts(true);
+    setShowProductModal(true);
+    fetchProducts('', 1);
   };
 
   // Close modal
@@ -301,11 +325,13 @@ const EditOrderContent = () => {
   // Select product and update article
   const selectProduct = async (product: Product) => {
     if (selectedArticleIndex === null) return;
+    const productId = product.id ?? (product as any)._id;
+    if (!productId) return;
 
     try {
       // Fetch full product details with BOM
-      const productResponse = await axios.get(`${API_BASE_URL}/products/${product.id}`);
-      const fullProduct = productResponse.data;
+      const productResponse = await axios.get(`${API_BASE_URL}/products/${productId}`);
+      const fullProduct = productResponse.data?.data ?? productResponse.data;
 
       // Normalize BOM structure - handle both yarnCatalogId and materialId formats
       const normalizedBOM = await Promise.all((fullProduct.bom || []).map(async (bomItem: any) => {
@@ -350,6 +376,8 @@ const EditOrderContent = () => {
       const needleSizeFromProduct =
         needlesRaw != null && needlesRaw !== '' ? String(needlesRaw).trim() : undefined;
 
+      const knittingCode = fullProduct.knittingCode ?? undefined;
+
       setFormData(prev => ({
         ...prev,
         articles: prev.articles.map((article, index) => 
@@ -357,8 +385,9 @@ const EditOrderContent = () => {
             ? { 
                 ...article, 
                 articleNumber: product.factoryCode,
-                productId: product.id,
+                productId: productId,
                 needleSizeFromProduct,
+                knittingCode,
                 bom: normalizedBOM
               }
             : article
@@ -380,8 +409,7 @@ const EditOrderContent = () => {
             ? { 
                 ...article, 
                 articleNumber: product.factoryCode,
-                productId: product.id,
-                needleSizeFromProduct
+                productId: productId
               }
             : article
         )
@@ -481,6 +509,7 @@ const EditOrderContent = () => {
               const needlesRaw = attrs.Needles ?? attrs.needles;
               const needleSizeFromProduct =
                 needlesRaw != null && needlesRaw !== '' ? String(needlesRaw).trim() : undefined;
+              const knittingCode = fullProduct.knittingCode ?? undefined;
 
               return {
                 id: article._id ?? article.id,
@@ -493,6 +522,7 @@ const EditOrderContent = () => {
                 remarks: article.remarks || '',
                 productId: matchingProduct.id,
                 needleSizeFromProduct,
+                knittingCode,
                 bom: normalizedBOM
               };
             }
@@ -680,7 +710,8 @@ const EditOrderContent = () => {
     }
 
     setIsSubmitting(true);
-    
+    setApiError(null);
+
     try {
       const updateData: UpdateOrderRequest = {
         priority: formData.orderPriority,
@@ -692,7 +723,8 @@ const EditOrderContent = () => {
           linkingType: article.linkingType,
           priority: article.priority,
           machineId: article.machineId || undefined,
-          remarks: article.remarks
+          remarks: article.remarks,
+          knittingCode: article.knittingCode
         }))
       };
 
@@ -762,35 +794,21 @@ const EditOrderContent = () => {
         }
         router.push('/production/supervisor');
       } else {
-        // Extract error message with better handling
         const errorMessage = response.error?.message || 'Failed to update order';
         const errorCode = response.error?.code || 'UNKNOWN_ERROR';
         const errorDetails = response.error?.details || [];
-        
-        console.error('Order update error:', {
-          code: errorCode,
-          message: errorMessage,
-          details: errorDetails,
-          fullError: response.error
-        });
-        
-        // Show error in toast
-        toast.error(errorMessage, {
-          duration: 5000,
-        });
-        
-        // Also show alert for critical errors
+        console.error('Order update error:', { code: errorCode, message: errorMessage, details: errorDetails, fullError: response.error });
+        setApiError(errorMessage);
+        toast.error(errorMessage, { duration: 6000 });
         if (errorCode === '400' || errorCode === 'VALIDATION_ERROR') {
           alert(`Error: ${errorMessage}\n\nPlease check the form and try again.`);
         }
       }
     } catch (error: any) {
       console.error('Error updating order:', error);
-      // This should rarely happen now since service returns errors in ApiResponse format
       const errorMessage = error?.message || 'Failed to update order';
-      
-      // Show both toast and alert for unexpected errors
-      toast.error(errorMessage, { duration: 5000 });
+      setApiError(errorMessage);
+      toast.error(errorMessage, { duration: 6000 });
       alert(`Unexpected Error: ${errorMessage}\n\nPlease try again or contact support if the issue persists.`);
     } finally {
       setIsSubmitting(false);
@@ -875,6 +893,7 @@ const EditOrderContent = () => {
       });
     }
     setErrors({});
+    setApiError(null);
   };
 
   if (isLoading) {
@@ -978,8 +997,34 @@ const EditOrderContent = () => {
 
         <div className="p-[10px]">
               <form onSubmit={handleSubmit}>
+                {/* API Error Display */}
+                {apiError && (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <i className="ri-error-warning-line text-red-600 text-xl"></i>
+                      </div>
+                      <div className="ml-3 flex-1">
+                        <h3 className="text-sm font-medium text-red-800">Error Updating Order</h3>
+                        <div className="mt-2 text-sm text-red-700">
+                          <p>{apiError}</p>
+                        </div>
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={() => setApiError(null)}
+                            className="text-sm text-red-800 hover:text-red-900 underline"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Order Priority + Order Note */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
                   <div>
                     <label className="form-label text-sm">Order Priority *</label>
                     <select
@@ -993,7 +1038,7 @@ const EditOrderContent = () => {
                       <option value="Low">Low</option>
                     </select>
                   </div>
-                  <div>
+                  <div className="lg:col-span-2">
                     <label className="form-label text-sm">Order Name (optional)</label>
                     <textarea
                       className="form-control form-control-sm text-xs py-1 px-2"
@@ -1028,7 +1073,6 @@ const EditOrderContent = () => {
                           <th className="w-32 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Linking</th>
                           <th className="w-24 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                           <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine</th>
-                          <th className="w-20 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Queue #</th>
                           <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                           <th className="w-16 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                         </tr>
@@ -1054,6 +1098,11 @@ const EditOrderContent = () => {
                                   <i className="ri-search-line text-xs"></i>
                                 </button>
                               </div>
+                              {article.knittingCode && (
+                                <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={article.knittingCode}>
+                                  Knitting: {article.knittingCode}
+                                </div>
+                              )}
                               {errors[`article_${index}_articleNumber`] && (
                                 <div className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_articleNumber`]}</div>
                               )}
@@ -1121,19 +1170,6 @@ const EditOrderContent = () => {
                                 </span>
                                 <i className="ri-arrow-down-s-line text-gray-500 shrink-0" />
                               </button>
-                            </td>
-                            <td className="px-2 py-2">
-                              {article.machineId ? (
-                                <NumericInput
-                                  className="form-control form-control-sm w-full text-xs py-1 px-2 h-8"
-                                  value={article.queuePriority}
-                                  onChange={(value) => handleArticleChange(index, "queuePriority", value >= 1 ? value : undefined)}
-                                  placeholder="1"
-                                  allowDecimals={false}
-                                />
-                              ) : (
-                                <span className="text-xs text-gray-400">—</span>
-                              )}
                             </td>
                             <td className="px-2 py-2">
                               <input
@@ -1283,13 +1319,17 @@ const EditOrderContent = () => {
         <div className="fixed inset-0 z-50 flex">
           <div className="absolute inset-0 z-0 bg-black/50" onClick={() => { setShowMachineModal(false); setMachineModalArticleIndex(null); setMachineSearchQuery(''); }} aria-hidden />
           <div className="relative z-10 ml-auto w-full max-w-xl h-full bg-white shadow-xl flex flex-col border-l border-gray-200" onClick={(e) => e.stopPropagation()}>
-            <div className="p-[10px] border-b border-gray-200 flex justify-between items-center shrink-0">
+            <div className="p-[10px] border-b border-gray-200 flex justify-between items-center">
               <div>
                 <h3 className="text-sm font-bold text-gray-800">Select Machine</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Only machines with an active needle (from Catalog → Needle Configuration) are shown.</p>
-                {machineModalArticleIndex !== null && formData.articles[machineModalArticleIndex]?.needleSizeFromProduct && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Only active machines with an active needle (Catalog → Needle Configuration) are shown.
+                </p>
+                {machineModalArticleIndex !== null &&
+                  formData.articles[machineModalArticleIndex]?.needleSizeFromProduct && (
                   <p className="text-xs text-gray-500 mt-0.5">
-                    Filtered by item needle: <strong>{formData.articles[machineModalArticleIndex].needleSizeFromProduct}</strong>
+                    Filtered by item needle:{" "}
+                    <strong>{formData.articles[machineModalArticleIndex].needleSizeFromProduct}</strong>
                   </p>
                 )}
               </div>
@@ -1306,7 +1346,7 @@ const EditOrderContent = () => {
               </button>
             </div>
             {machineModalArticleIndex !== null && formData.articles[machineModalArticleIndex]?.needleSizeFromProduct?.trim() && (
-              <div className="p-[10px] border-b border-gray-200 shrink-0">
+              <div className="p-[10px] border-b border-gray-200">
                 <input
                   type="text"
                   className="bg-white border border-gray-200 text-[11px] rounded px-3 py-1.5 w-full focus:ring-0 focus:border-purple-300"
@@ -1316,7 +1356,7 @@ const EditOrderContent = () => {
                 />
               </div>
             )}
-            <div className="flex-1 overflow-y-auto p-[10px] min-h-0">
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
               {(() => {
                 const article =
                   machineModalArticleIndex !== null ? formData.articles[machineModalArticleIndex] : null;
@@ -1353,41 +1393,37 @@ const EditOrderContent = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
-                    <table className="min-w-full text-sm border border-gray-200">
-                      <thead className="bg-gray-50 sticky top-0">
+                  <div className="max-h-[50vh] overflow-y-auto border border-gray-200 rounded overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
                         <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Active needle</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase"># POs</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Article #</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-700">Machine</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-700">Active Needle</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-700"># POs</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-700">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="divide-y divide-gray-200">
                         {filtered.map((machine) => {
                           const id = machine._id || machine.id;
                           const activeNeedle = (id ? machineActiveNeedleMap.get(String(id)) : '') || (machine.activeNeedle ?? '').toString().trim();
                           const assn = id ? assignmentsByMachineId.get(String(id)) : null;
                           const items = assn?.productionOrderItems ?? [];
-                          const poCount = new Set(items.map((i) => String(i.productionOrder ?? "")).filter(Boolean)).size;
-                          const articleNumbers = items.map((i) => i.articleNumber || i.article || "—").join(", ");
-                          const selectMachine = () => {
-                            handleArticleChange(machineModalArticleIndex, "machineId", id ?? "");
-                            setShowMachineModal(false);
-                            setMachineModalArticleIndex(null);
-                            setMachineSearchQuery("");
-                          };
+                          const poCount = new Set(items.map((i) => String(i.productionOrder ?? '')).filter(Boolean)).size;
                           return (
-                            <tr key={id} className="hover:bg-purple-50 transition-colors">
+                            <tr key={id} className="hover:bg-gray-50">
                               <td className="px-3 py-2 font-medium text-gray-900">{machine.machineCode}</td>
-                              <td className="px-3 py-2 text-xs text-emerald-600 font-medium">{activeNeedle || "—"}</td>
-                              <td className="px-3 py-2 text-xs text-gray-600">{poCount}</td>
-                              <td className="px-3 py-2 text-xs text-gray-600 max-w-[200px] truncate" title={articleNumbers}>{articleNumbers || "—"}</td>
+                              <td className="px-3 py-2 text-gray-700">{activeNeedle || '—'}</td>
+                              <td className="px-3 py-2 text-gray-600">{poCount}</td>
                               <td className="px-3 py-2">
                                 <button
                                   type="button"
-                                  onClick={(e) => { e.stopPropagation(); selectMachine(); }}
+                                  onClick={() => {
+                                    handleArticleChange(machineModalArticleIndex, 'machineId', id ?? '');
+                                    setShowMachineModal(false);
+                                    setMachineModalArticleIndex(null);
+                                    setMachineSearchQuery('');
+                                  }}
                                   className="px-2 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700"
                                 >
                                   Select
@@ -1406,68 +1442,129 @@ const EditOrderContent = () => {
         </div>
       )}
 
-      {/* Product Selection — side drawer from right */}
+      {/* Product Selection — side drawer from right (same as add page) */}
       {showProductModal && (
         <div className="fixed inset-0 z-50 flex">
           <div className="absolute inset-0 z-0" onClick={closeProductModal} aria-hidden />
-          <div className="relative z-10 ml-auto w-full max-w-xl h-full bg-white shadow-xl flex flex-col border-l border-gray-200" onClick={(e) => e.stopPropagation()}>
+          <div className="relative z-10 ml-auto w-full max-w-xl h-full bg-white shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="p-[10px] border-b border-gray-200 flex justify-between items-center shrink-0">
               <h3 className="text-sm font-bold text-gray-800">Select Factory Code</h3>
-              <button onClick={closeProductModal} className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-200 rounded hover:bg-gray-100">
+              <button onClick={closeProductModal} type="button" className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-200 rounded hover:bg-gray-100">
                 <i className="ri-close-line text-sm"></i>
               </button>
             </div>
-            <div className="p-[10px] border-b border-gray-200 shrink-0">
+            <div className="p-[10px] border-b border-gray-200 shrink-0 space-y-2">
               <input
                 type="text"
                 className="bg-white border border-gray-200 text-[11px] rounded px-3 py-1.5 w-full focus:ring-0 focus:border-purple-300"
                 placeholder="Search by factory code or product name..."
                 value={productSearchQuery}
                 onChange={(e) => {
-                  setProductSearchQuery(e.target.value);
-                  fetchProducts(e.target.value);
+                  const q = e.target.value;
+                  setProductSearchQuery(q);
+                  setProductPage(1);
+                  setIsLoadingProducts(true);
+                  fetchProducts(q, 1);
                 }}
               />
+              {!isLoadingProducts && productTotalResults > 0 && (
+                <div className="text-[11px] font-medium text-gray-500">
+                  Showing {((productPage - 1) * productLimit) + 1} to {Math.min(productPage * productLimit, productTotalResults)} of {productTotalResults} entries
+                </div>
+              )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-[10px] min-h-0">
+            <div className="flex-1 overflow-y-auto p-2 min-h-0">
               {isLoadingProducts ? (
-                <div className="text-center py-8">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="sr-only">Loading...</span>
-                  </div>
+                <div className="flex flex-col items-center justify-center py-12 gap-2">
+                  <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-gray-500">Loading products...</p>
                 </div>
               ) : products.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No products found
-                </div>
+                <div className="text-center py-6 text-gray-500 text-sm">No products found</div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full">
+                  <table className="min-w-full text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Factory Code</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product Name</th>
-                        <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase w-24">Action</th>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">Factory Code</th>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">Product Name</th>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">Needle</th>
+                        <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-16">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {products.map((product) => (
-                        <tr key={product.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-2 text-sm font-medium">{product.factoryCode || 'N/A'}</td>
-                          <td className="px-4 py-2 text-sm">{product.name}</td>
-                          <td className="px-4 py-2 text-center">
-                            <button
-                              onClick={() => selectProduct(product)}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
-                            >
-                              Select
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {products.map((product) => {
+                        const productId = product.id ?? (product as any)._id;
+                        const needlesRaw = product.attributes?.Needles ?? product.attributes?.needles;
+                        const needleDisplay =
+                          needlesRaw != null && needlesRaw !== '' ? String(needlesRaw).trim() : '—';
+                        return (
+                          <tr key={productId} className="hover:bg-gray-50">
+                            <td className="px-2 py-1.5 text-xs font-medium">{product.factoryCode || 'N/A'}</td>
+                            <td className="px-2 py-1.5 text-xs truncate max-w-[140px]">{product.name}</td>
+                            <td className="px-2 py-1.5 text-xs text-gray-600">{needleDisplay}</td>
+                            <td className="px-2 py-1.5 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); selectProduct({ ...product, id: productId }); }}
+                                className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+                              >
+                                Select
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
+                </div>
+              )}
+              {!isLoadingProducts && products.length > 0 && productTotalPages > 0 && (
+                <div className="p-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 mt-2">
+                  <div className="text-[11px] font-medium text-gray-500">
+                    Page {productPage} of {productTotalPages}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleProductPageChange(productPage - 1)}
+                      disabled={productPage <= 1}
+                      className="px-3 py-1.5 text-[11px] font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      Prev
+                    </button>
+                    {Array.from({ length: Math.min(productTotalPages, 7) }, (_, i) => {
+                      const pageNum =
+                        productTotalPages <= 7
+                          ? i + 1
+                          : productPage <= 4
+                            ? i + 1
+                            : productPage >= productTotalPages - 3
+                              ? productTotalPages - 6 + i
+                              : productPage - 3 + i;
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => handleProductPageChange(pageNum)}
+                          className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${
+                            productPage === pageNum ? 'bg-purple-600 text-white' : 'text-gray-500 hover:bg-gray-100'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => handleProductPageChange(productPage + 1)}
+                      disabled={productPage >= productTotalPages}
+                      className="px-3 py-1.5 text-[11px] font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
