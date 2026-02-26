@@ -664,6 +664,12 @@ const FinalCheckingFloorSupervisorPage = () => {
         },
       });
       if (res.success) {
+        const barcode = containerScanned.container.barcode;
+        try {
+          await containersMasterService.clearActiveByBarcode(barcode);
+        } catch {
+          // Accept succeeded; clear-active is best-effort
+        }
         toast.success("Article quantity accepted on Final Checking.");
         setShowContainerScanDrawer(false);
         setContainerScanned(null);

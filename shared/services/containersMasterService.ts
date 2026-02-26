@@ -130,6 +130,14 @@ class ContainersMasterService {
     });
   }
 
+  /** PATCH /barcode/:barcode/clear-active – clear active article/floor on container. Call after Accept Article Quantity. */
+  async clearActiveByBarcode(barcode: string): Promise<void> {
+    if (!barcode || !barcode.trim()) throw new Error('barcode is required');
+    await this.request<void>(`/barcode/${encodeURIComponent(barcode.trim())}/clear-active`, {
+      method: 'PATCH',
+    });
+  }
+
   async remove(containerId: string): Promise<void> {
     if (!containerId) throw new Error('containerId is required');
     await this.request<void>(`/${containerId}`, { method: 'DELETE' });

@@ -482,6 +482,12 @@ const LinkingFloorSupervisorPage = () => {
         },
       });
       if (res.success) {
+        const barcode = containerScanned.container.barcode;
+        try {
+          await containersMasterService.clearActiveByBarcode(barcode);
+        } catch {
+          // Accept succeeded; clear-active is best-effort
+        }
         toast.success("Article quantity accepted.");
         setActiveArticleId(String(articleId));
         setShowContainerScanDrawer(false);

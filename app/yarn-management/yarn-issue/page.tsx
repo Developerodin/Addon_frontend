@@ -1013,7 +1013,7 @@ const YarnIssuePage = () => {
   }, [selectedMachineAssignment, selectedOrderId, selectedArticleId]);
 
   const canMarkYarnIssueCompleted = Boolean(
-    allBomIssuedForCurrentArticle && assignmentItemIdForCurrent && selectedMachineAssignment?.id
+    assignmentItemIdForCurrent && selectedMachineAssignment?.id
   );
 
   const handleMarkYarnIssueCompleted = useCallback(async () => {
@@ -1631,7 +1631,7 @@ const YarnIssuePage = () => {
                         <p className="text-[11px] text-gray-600">
                           {allBomIssuedForCurrentArticle
                             ? "All yarn issued for this article. You can mark yarn issue as completed."
-                            : "Issue all BOM yarns above to enable marking yarn issue completed."}
+                            : "Mark yarn issue as completed for this article when ready."}
                         </p>
                         <button
                           type="button"
