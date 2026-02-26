@@ -146,6 +146,8 @@ export const generateZPLContainerLabel = (
   if (isSmallSideBySide) {
     // Left column: name (can wrap to 2 lines), vertically centered
     const labelMarginSmall = 30;
+    const nameToQrGap = 12; // gap between name and QR (reduced from labelMarginSmall)
+    const rightMargin = 28; // margin so QR doesn't merge with label edge
     const dataWidth =
       Math.floor(labelWidth * 0.62) - labelMarginSmall; // ~62% for text
     const xPos = xOffset + labelMarginSmall;
@@ -166,9 +168,9 @@ export const generateZPLContainerLabel = (
       zpl += `^FO${xPos},${lineY}^A0N,${nameFontSize},${nameFontSize}^FB${dataWidth},1,0,L^FD${line}^FS\n`;
     });
 
-    // Right column: QR code, vertically centered
-    const qrSectionX = xOffset + dataWidth + labelMarginSmall;
-    const rightAreaW = labelWidth - qrSectionX - 10;
+    // Right column: QR code, vertically centered (with right margin)
+    const qrSectionX = xOffset + dataWidth + nameToQrGap;
+    const rightAreaW = labelWidth - qrSectionX - rightMargin;
     const qrApproxW = qrCodeSize * 30;
     const qrX =
       qrSectionX + Math.max(0, Math.floor((rightAreaW - qrApproxW) / 2));
