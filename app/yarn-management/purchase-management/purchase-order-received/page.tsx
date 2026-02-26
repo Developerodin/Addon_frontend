@@ -923,15 +923,23 @@ const PurchaseOrderReceivedPage = () => {
 
             <div className="flex flex-wrap items-center gap-2">
               {/* Search Bar */}
-              <div className="relative">
+              <div className="relative w-3/4 min-w-[200px]">
+                <style dangerouslySetInnerHTML={{ __html: `
+                  input.purchase-order-received-search:focus {
+                    border-width: 2px !important;
+                    border-color: #4b5563 !important;
+                    outline: none !important;
+                    box-shadow: none !important;
+                  }
+                `}} />
                 <input
                   type="text"
-                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-32 placeholder:text-gray-400 transition-all font-medium"
+                  className="purchase-order-received-search w-full bg-white border-2 border-gray-600 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:!border-2 focus:!border-gray-600 focus:outline-none placeholder:text-gray-600 transition-all font-medium"
                   placeholder="Search"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
-                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
               </div>
             </div>
           </div>

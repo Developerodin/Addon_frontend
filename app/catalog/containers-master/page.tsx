@@ -12,7 +12,7 @@ import {
   type UpdateContainerBody,
 } from "@/shared/services/containersMasterService";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
-import { printContainerLabels, connectQZ, getDefaultPrinter, isQZLoaded } from "@/shared/utils/qzTray";
+import { printContainerLabels, connectQZ, getDefaultPrinter, isQZLoaded } from "@/shared/utils/qzTrayOther";
 
 function getPagination(current: number, total: number): (number | "...")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -48,7 +48,7 @@ const ContainersMasterPage = () => {
   const [printSelectedIds, setPrintSelectedIds] = useState<string[]>([]);
   const [isPrinting, setIsPrinting] = useState(false);
   const [printSettings, setPrintSettings] = useState({
-    paperSize: '50mm * 70mm' as '4x6' | '6x4' | '50mm * 70mm',
+    paperSize: '50mm * 70mm' as '4x6' | '6x4' | '50mm * 70mm' | '50mm * 25mm',
     paperWidth: 398,
     paperHeight: 558,
     labelsPerPage: 1,
@@ -205,8 +205,10 @@ const ContainersMasterPage = () => {
     setShowPrintModal(true);
   };
 
-  const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mm * 70mm') => {
-    if (size === '50mm * 70mm') {
+  const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mm * 70mm' | '50mm * 25mm') => {
+    if (size === '50mm * 25mm') {
+      setPrintSettings((s) => ({ ...s, paperSize: size, paperWidth: 398, paperHeight: 199, qrCodeSize: 4 }));
+    } else if (size === '50mm * 70mm') {
       setPrintSettings((s) => ({ ...s, paperSize: size, paperWidth: 398, paperHeight: 558 }));
     } else if (size === '4x6') {
       setPrintSettings((s) => ({ ...s, paperSize: size, paperWidth: 812, paperHeight: 1218 }));
@@ -219,7 +221,10 @@ const ContainersMasterPage = () => {
     const s = printSettings;
     let newWidth = s.paperWidth;
     let newHeight = s.paperHeight;
-    if (s.paperSize === '50mm * 70mm') {
+    if (s.paperSize === '50mm * 25mm') {
+      newWidth = orientation === 'horizontal' ? 199 : 398;
+      newHeight = orientation === 'horizontal' ? 398 : 199;
+    } else if (s.paperSize === '50mm * 70mm') {
       newWidth = orientation === 'horizontal' ? 558 : 398;
       newHeight = orientation === 'horizontal' ? 398 : 558;
     } else {
@@ -670,6 +675,17 @@ const ContainersMasterPage = () => {
                           className="w-4 h-4 text-purple-600 focus:ring-purple-500"
                         />
                         <span className="ml-2 text-sm text-gray-700">50mm × 70mm</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paperSize"
+                          value="50mm * 25mm"
+                          checked={printSettings.paperSize === '50mm * 25mm'}
+                          onChange={() => handlePaperSizeChange('50mm * 25mm')}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">50mm × 25mm</span>
                       </label>
                     </div>
                   </div>
