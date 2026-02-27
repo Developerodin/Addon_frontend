@@ -54,8 +54,9 @@ const ContainersMasterPage = () => {
     labelsPerPage: 1,
     columnsPerRow: 1,
     firstLabelTopMargin: 0,
-    qrCodeSize: 6,
-    detailsFontSize: 24,
+    // Default sizes tuned specifically for 50×70mm labels
+    qrCodeSize: 12,
+    detailsFontSize: 35,
     orientation: 'vertical' as 'horizontal' | 'vertical',
   });
 
@@ -207,13 +208,47 @@ const ContainersMasterPage = () => {
 
   const handlePaperSizeChange = (size: '4x6' | '6x4' | '50mm * 70mm' | '50mm * 25mm') => {
     if (size === '50mm * 25mm') {
-      setPrintSettings((s) => ({ ...s, paperSize: size, paperWidth: 398, paperHeight: 199, qrCodeSize: 4 }));
+      setPrintSettings((s) => ({
+        ...s,
+        paperSize: size,
+        paperWidth: 398,
+        paperHeight: 199,
+        // Original compact label defaults
+        qrCodeSize: 4,
+        detailsFontSize: 24,
+      }));
     } else if (size === '50mm * 70mm') {
-      setPrintSettings((s) => ({ ...s, paperSize: size, paperWidth: 398, paperHeight: 558 }));
+      // For 50mm × 70mm labels we lock in the
+      // larger QR and name font so the user
+      // doesn't need to adjust manually.
+      setPrintSettings((s) => ({
+        ...s,
+        paperSize: size,
+        paperWidth: 398,
+        paperHeight: 558,
+        qrCodeSize: 12,
+        detailsFontSize: 35,
+      }));
     } else if (size === '4x6') {
-      setPrintSettings((s) => ({ ...s, paperSize: size, paperWidth: 812, paperHeight: 1218 }));
+      // Restore original defaults for 4×6
+      setPrintSettings((s) => ({
+        ...s,
+        paperSize: size,
+        paperWidth: 812,
+        paperHeight: 1218,
+        qrCodeSize: 6,
+        detailsFontSize: 24,
+      }));
     } else {
-      setPrintSettings((s) => ({ ...s, paperSize: size, paperWidth: 1218, paperHeight: 812 }));
+      // 6×4: original defaults
+      setPrintSettings((s) => ({
+        ...s,
+        paperSize: size,
+        paperWidth: 1218,
+        paperHeight: 812,
+        qrCodeSize: 6,
+        detailsFontSize: 24,
+      }));
     }
   };
 
