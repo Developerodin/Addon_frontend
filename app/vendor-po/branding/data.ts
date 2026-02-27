@@ -1,4 +1,5 @@
 import type { BrandingQueueItem } from "./types";
+import { MOCK_VENDOR_POS } from "../raise/data";
 
 const STORAGE_KEY = "vendor-po-branding-queue";
 
@@ -6,7 +7,34 @@ export function getBrandingQueue(): BrandingQueueItem[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) {
+      const baseOrder = MOCK_VENDOR_POS[1] ?? MOCK_VENDOR_POS[0];
+      const firstLine = baseOrder?.lineItems?.[0];
+      if (!baseOrder || !firstLine) return [];
+
+      const freshQty = firstLine.receivedQty ?? firstLine.orderedQty;
+      if (!freshQty) return [];
+
+      const now = new Date().toISOString();
+      const year = new Date().getFullYear();
+
+      const seedItem: BrandingQueueItem = {
+        id: "br-mock-1",
+        grnNo: `GRN-${year}-0001`,
+        poNo: baseOrder.poNo,
+        vendorName: baseOrder.vendorName,
+        articleId: firstLine.articleId,
+        articleCode: firstLine.articleCode,
+        articleName: firstLine.articleName,
+        freshQty,
+        priority: baseOrder.priority,
+        receivedDate: now,
+        status: "Pending",
+      };
+
+      setBrandingQueue([seedItem]);
+      return [seedItem];
+    }
     return JSON.parse(raw);
   } catch {
     return [];
