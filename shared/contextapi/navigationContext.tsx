@@ -71,6 +71,16 @@ interface NavigationPermissions {
     'Stock': boolean;
     'Reports': boolean;
   };
+  'Vendor PO': {
+    'Vendor List': boolean;
+    'Vendor PO Raise': boolean;
+    'Vendor PO Receive': boolean;
+    Checking: boolean;
+    GRN: boolean;
+    Branding: boolean;
+    'Final Checking': boolean;
+    'Counting & Dispatch': boolean;
+  };
 }
 
 interface NavigationContextType {
@@ -149,6 +159,16 @@ const defaultPermissions: NavigationPermissions = {
     'Layout': false,
     'Stock': false,
     'Reports': false,
+  },
+  'Vendor PO': {
+    'Vendor List': false,
+    'Vendor PO Raise': false,
+    'Vendor PO Receive': false,
+    Checking: false,
+    GRN: false,
+    Branding: false,
+    'Final Checking': false,
+    'Counting & Dispatch': false,
   },
 };
 
@@ -231,7 +251,11 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         'Warehouse Management': {
           ...defaultPermissions['Warehouse Management'],
           ...(user.navigation['Warehouse Management'] || {})
-        }
+        },
+        'Vendor PO': {
+          ...defaultPermissions['Vendor PO'],
+          ...(user.navigation['Vendor PO'] || {})
+        },
       };
       setPermissions(mergedPermissions);
       // Cache permissions for faster loading on refresh
@@ -289,11 +313,21 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       '/analytics': 'Analytics',
       '/replenishment': 'Replenishment Agent',
       '/filemanager': 'File Manager',
+      '/vendor-po': 'Vendor PO',
     };
 
     const permissionKey = pathMap[path];
     if (permissionKey && typeof permissions[permissionKey] === 'boolean') {
       return permissions[permissionKey] as boolean;
+    }
+
+    // Special handling for Vendor PO main menu - show if any Vendor PO permission is true
+    if (path === '/vendor-po') {
+      const vendorPO = (permissions as any)['Vendor PO'];
+      if (vendorPO && typeof vendorPO === 'object') {
+        return Object.values(vendorPO).some((permission: any) => permission === true);
+      }
+      return false;
     }
 
     // Special handling for yarn-master path
@@ -412,6 +446,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       '/production': 'Production Planning',
       '/yarn-management': 'Yarn Management',
       '/warehouse-management': 'Warehouse Management',
+      '/vendor-po': 'Vendor PO',
     };
 
     const parentKey = parentMap[parent];

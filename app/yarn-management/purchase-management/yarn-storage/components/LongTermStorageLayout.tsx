@@ -1250,7 +1250,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     setStorageLimit(val);
                     setStoragePage(1);
                   }}
-                  className="text-sm border border-gray-300 rounded px-2 py-1"
+                  className="text-sm border border-gray-300 rounded pl-2 pr-8 py-1 bg-white appearance-none bg-[length:12px_12px] bg-[right_0.35rem_center] bg-no-repeat"
+                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")" }}
                 >
                   {PAGE_SIZE_OPTIONS.map((n) => (
                     <option key={n} value={n}>{n}</option>
@@ -1504,7 +1505,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                         setStorageLimit(val);
                         setStoragePage(1);
                       }}
-                      className="text-xs border border-gray-300 rounded px-2 py-1"
+                      className="text-xs border border-gray-300 rounded pl-2 pr-8 py-1 bg-white appearance-none bg-[length:10px_10px] bg-[right_0.35rem_center] bg-no-repeat"
+                      style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")" }}
                     >
                       {PAGE_SIZE_OPTIONS.map((n) => (
                         <option key={n} value={n}>{n}</option>

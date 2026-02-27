@@ -170,6 +170,10 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               const childName = child.title;
               return hasSubPermission('/warehouse-management', childName);
             }
+            if (child.path.startsWith('/vendor-po/')) {
+              const childName = child.title;
+              return hasSubPermission('/vendor-po', childName);
+            }
           }
           return false;
         });
@@ -321,6 +325,10 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             if (child.path.startsWith('/warehouse-management/')) {
               const childName = child.title;
               return hasSubPermission('/warehouse-management', childName);
+            }
+            if (child.path.startsWith('/vendor-po/')) {
+              const childName = child.title;
+              return hasSubPermission('/vendor-po', childName);
             }
           }
           return false;

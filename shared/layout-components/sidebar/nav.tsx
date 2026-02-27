@@ -43,6 +43,15 @@ const PickPackIcon = <i className="ri ri-handbag-line side-menu__icon" style={{ 
 const LayoutIcon = <i className="ri ri-layout-grid-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const StockIcon = <i className="ri ri-stack-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const ReportsIcon = <i className="ri ri-file-chart-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const VendorPOIcon = <i className="ri ri-truck-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const VendorListIcon = <i className="ri ri-list-unordered side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const RaiseIcon = <i className="ri ri-upload-2-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const ReceiveIcon = <i className="ri ri-download-2-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const CheckingIcon = <i className="ri ri-check-double-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const GRNIcon = <i className="ri ri-file-text-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const BrandingIcon = <i className="ri ri-price-tag-3-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const FinalCheckIcon = <i className="ri ri-task-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const DispatchIcon = <i className="ri ri-truck-fill side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 // Badges if needed
 const badge = (
   <span className="badge !bg-warning/10 !text-warning !py-[0.25rem] !px-[0.45rem] !text-[0.75em] ms-1">
@@ -463,6 +472,80 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Yarn Return",
+      },
+    ],
+  },
+  {
+    icon: VendorPOIcon,
+    title: "Vendor PO",
+    type: "sub",
+    active: false,
+    selected: false,
+    path: "/vendor-po",
+    children: [
+      {
+        icon: VendorListIcon,
+        path: "/vendor-po/vendor-list",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Vendor List",
+      },
+      {
+        icon: RaiseIcon,
+        path: "/vendor-po/raise",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Vendor PO Raise",
+      },
+      {
+        icon: ReceiveIcon,
+        path: "/vendor-po/receive",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Vendor PO Receive",
+      },
+      {
+        icon: CheckingIcon,
+        path: "/vendor-po/checking",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Checking",
+      },
+      {
+        icon: GRNIcon,
+        path: "/vendor-po/grn",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "GRN",
+      },
+      {
+        icon: BrandingIcon,
+        path: "/vendor-po/branding",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Branding",
+      },
+      {
+        icon: FinalCheckIcon,
+        path: "/vendor-po/final-checking",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Final Checking",
+      },
+      {
+        icon: DispatchIcon,
+        path: "/vendor-po/counting",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Counting & Dispatch",
       },
     ],
   },
