@@ -82,7 +82,6 @@ const VendorListPage = () => {
   }, [vendors, searchQuery, statusFilter]);
 
   const hasActiveFilters = searchQuery !== "" || statusFilter !== "";
-
   const clearFilters = () => {
     setSearchQuery("");
     setStatusFilter("");

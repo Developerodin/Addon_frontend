@@ -71,13 +71,9 @@ const VendorPORaisePage = () => {
       const matchesStatus = !statusFilter || order.status === statusFilter;
       const matchesPriority = !priorityFilter || order.priority === priorityFilter;
       const matchesVendor = !vendorFilter || order.vendorId === vendorFilter || order.vendorName === vendorFilter;
-      const poDate = new Date(order.poDate).getTime();
-      const matchesDate =
-        (!startDate || poDate >= new Date(startDate).setHours(0, 0, 0, 0)) &&
-        (!endDate || poDate <= new Date(endDate).setHours(23, 59, 59, 999));
-      return matchesSearch && matchesStatus && matchesPriority && matchesVendor && matchesDate;
+      return matchesSearch && matchesStatus && matchesPriority && matchesVendor;
     });
-  }, [orders, searchTerm, statusFilter, priorityFilter, vendorFilter, startDate, endDate]);
+  }, [orders, searchTerm, statusFilter, priorityFilter, vendorFilter]);
 
   const uniqueVendors = useMemo(() => {
     const map = new Map<string, string>();
@@ -92,14 +88,6 @@ const VendorPORaisePage = () => {
     setStoredOrders(next);
     if (selectedOrder?.id === order.id) setSelectedOrder((prev) => (prev ? { ...prev, status: "Approved" } : null));
     toast.success(`PO ${order.poNo} approved`);
-  };
-
-  const handleClose = (order: VendorPO) => {
-    const next = orders.map((o) => (o.id === order.id ? { ...o, status: "Closed" as VendorPOStatus } : o));
-    setOrders(next);
-    setStoredOrders(next);
-    if (selectedOrder?.id === order.id) setSelectedOrder((prev) => (prev ? { ...prev, status: "Closed" } : null));
-    toast.success(`PO ${order.poNo} closed`);
   };
 
   return (
@@ -251,7 +239,6 @@ const VendorPORaisePage = () => {
                         <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor</th>
                         <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                         <th className="border border-gray-300 px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Qty</th>
-                        <th className="border border-gray-300 px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Received Qty</th>
                         <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
@@ -275,9 +262,6 @@ const VendorPORaisePage = () => {
                           </td>
                           <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                             {order.totalQty.toLocaleString()}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                            {order.receivedQty.toLocaleString()}
                           </td>
                           <td className="border border-gray-300 px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
@@ -314,18 +298,6 @@ const VendorPORaisePage = () => {
                                   title="Approve"
                                 >
                                   Approve
-                                </button>
-                              )}
-                              {order.status !== "Closed" && order.status !== "Draft" && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (window.confirm(`Close PO ${order.poNo}?`)) handleClose(order);
-                                  }}
-                                  className="text-xs border border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100 rounded px-3 py-1 h-7 font-medium"
-                                  title="Close"
-                                >
-                                  Close
                                 </button>
                               )}
                             </div>

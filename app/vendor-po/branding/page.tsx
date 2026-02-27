@@ -386,7 +386,6 @@ const BrandingPage = () => {
                             <div className="space-y-1">
                               <div className="font-medium text-gray-900">{row.grnNo}</div>
                               <div className="text-sm text-gray-500">{row.poNo}</div>
-                              <div className="text-sm text-gray-500">{row.vendorName}</div>
                               <div className="text-xs text-gray-400">
                                 Received: {new Date(row.receivedDate).toLocaleString()}
                               </div>
@@ -499,7 +498,7 @@ const BrandingPage = () => {
                 <i className="ri-close-line text-xl"></i>
               </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
               <div>
                 <label className="text-sm font-medium text-gray-600">GRN No</label>
                 <div className="mt-1 font-medium text-gray-900">{selectedItem.grnNo}</div>
@@ -507,7 +506,6 @@ const BrandingPage = () => {
               <div>
                 <label className="text-sm font-medium text-gray-600">PO No</label>
                 <div className="mt-1 text-gray-900">{selectedItem.poNo}</div>
-                <div className="text-sm text-gray-500 mt-0.5">{selectedItem.vendorName}</div>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-600">Received Date</label>

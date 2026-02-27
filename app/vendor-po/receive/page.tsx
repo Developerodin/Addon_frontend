@@ -79,11 +79,7 @@ const VendorPOReceivePage = () => {
         !statusFilter ||
         (statusFilter === "Pending" && isPending) ||
         (statusFilter !== "Pending" && order.status === statusFilter);
-      const poDate = new Date(order.poDate).getTime();
-      const matchesDate =
-        (!startDate || poDate >= new Date(startDate).setHours(0, 0, 0, 0)) &&
-        (!endDate || poDate <= new Date(endDate).setHours(23, 59, 59, 999));
-      return matchesSearch && matchesStatus && matchesDate;
+      return matchesSearch && matchesStatus;
     });
   }, [orders, searchTerm, statusFilter, startDate, endDate]);
 
@@ -248,9 +244,6 @@ const VendorPOReceivePage = () => {
                           Ordered Qty
                         </th>
                         <th className="border border-gray-300 px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Received Qty
-                        </th>
-                        <th className="border border-gray-300 px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Pending Qty
                         </th>
                         <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -277,9 +270,6 @@ const VendorPOReceivePage = () => {
                             </td>
                             <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                               {order.totalQty.toLocaleString()}
-                            </td>
-                            <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                              {(order.receivedQty ?? 0).toLocaleString()}
                             </td>
                             <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                               {pendingQty.toLocaleString()}
