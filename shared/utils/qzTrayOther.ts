@@ -136,8 +136,10 @@ export const generateZPLContainerLabel = (
   } = options;
 
   const labelMargin = 30;
-  const qrW = qrCodeSize * 30;
-  const gap = 20;
+  // QR code width estimation: most container barcodes are very short and fit in QR Version 1 (21x21 modules).
+  // Using a factor of 21 (instead of 25) shifts the QR code further right for perfect centering.
+  const qrW = qrCodeSize * 21;
+  const gap = 50;  // Increased from 20 to 50 to add more space between QR and name as requested
   const displayName = (containerName || barcode || "").trim() || barcode;
 
   // Detect small side‑by‑side layout (e.g. ~50×25mm labels)
@@ -188,14 +190,37 @@ export const generateZPLContainerLabel = (
     Math.floor(contentWidth / (nameFontSize * 0.55))
   );
 
-  let zpl = "";
-  const curY = yOffset + labelMargin;
-  zpl += `^FO${xOffset + Math.max(0, Math.floor((labelWidth - qrW) / 2))},${curY}^BQN,2,${qrCodeSize}^FDQA,${barcode}^FS\n`;
-  let textY = curY + qrW + gap;
   const lines = wrapText(displayName, maxChars);
+  const textBlockHeight = lines.length * (nameFontSize + 8);
+  const totalBlockHeight = qrW + gap + textBlockHeight;
 
+  // Vertically center the whole QR + text block within the label
+  let startY =
+    yOffset +
+    Math.max(
+      labelMargin,
+      Math.floor((labelHeight - totalBlockHeight) / 2)
+    );
+
+  // Fine‑tune for tall labels (e.g. 50×70mm with big QR and font)
+  // Many thermal printers add a hidden top margin; nudging the
+  // block upwards here keeps it visually centered on the sticker.
+  if (labelHeight >= 500 && qrW >= 300 && nameFontSize >= 30) {
+    startY = Math.max(labelMargin, startY - 30);
+  }
+
+  let zpl = "";
+  const qrY = startY;
+  const qrX =
+    xOffset +
+    labelMargin +
+    Math.floor((contentWidth - qrW) / 2);
+  zpl += `^FO${qrX},${qrY}^BQN,2,${qrCodeSize}^FDQA,${barcode}^FS\n`;
+
+  let textY = qrY + qrW + gap;
   for (const line of lines) {
-    zpl += `^FO${xOffset + labelMargin},${textY}^A0N,${nameFontSize},${nameFontSize}^FB${contentWidth},1,0,C^FD${line}^FS\n`;
+    zpl += `^FO${xOffset + labelMargin
+      },${textY}^A0N,${nameFontSize},${nameFontSize}^FB${contentWidth},1,0,C^FD${line}^FS\n`;
     textY += nameFontSize + 8;
   }
   return zpl;
