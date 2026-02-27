@@ -113,6 +113,8 @@ const SecondaryCheckingFloorSupervisorPage = () => {
     m3ToM2: number,
     m4ToM3: number
   }}>({});
+  /** Additional quantity to add to M2/M3/M4 (empty inputs). API receives previous + this. */
+  const [transferM2M3M4, setTransferM2M3M4] = useState<{[key: string]: { m2: number; m3: number; m4: number }}>({});
   const [showLogs, setShowLogs] = useState(false);
   const [showLogsSection, setShowLogsSection] = useState(false);
   const [selectedLogArticleId, setSelectedLogArticleId] = useState<string>('');
@@ -340,6 +342,12 @@ const SecondaryCheckingFloorSupervisorPage = () => {
       }
     });
     setUpdateData(initialData);
+    const transferInit: {[key: string]: { m2: number; m3: number; m4: number }} = {};
+    order.articles.forEach(article => {
+      const articleId = article.id || article._id;
+      if (articleId) transferInit[articleId] = { m2: 0, m3: 0, m4: 0 };
+    });
+    setTransferM2M3M4(transferInit);
     setShowLogs(false);
     setShowUpdateModal(true);
   };
@@ -391,6 +399,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
     setSelectedOrder(null);
     setUpdateData({});
     setShiftInputs({});
+    setTransferM2M3M4({});
     setShowUpdateContainerModal(false);
     setUpdateContainerBarcode("");
     setUpdateContainerCheckStatus("idle");
@@ -580,6 +589,17 @@ const SecondaryCheckingFloorSupervisorPage = () => {
     }));
   };
 
+  /** Change additional transfer quantity for M2/M3/M4 (added to previous value in API). */
+  const handleTransferM2M3M4Change = (articleId: string, field: 'm2' | 'm3' | 'm4', value: number) => {
+    setTransferM2M3M4(prev => ({
+      ...prev,
+      [articleId]: {
+        ...prev[articleId],
+        [field]: Math.max(0, value)
+      }
+    }));
+  };
+
   const handleRepairStatusChange = (articleId: string, value: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected') => {
     setUpdateData(prev => ({
       ...prev,
@@ -727,22 +747,28 @@ const SecondaryCheckingFloorSupervisorPage = () => {
         if (!articleId) return null;
         
         const update = updateData[articleId];
+        const addM2 = transferM2M3M4[articleId]?.m2 ?? 0;
+        const addM3 = transferM2M3M4[articleId]?.m3 ?? 0;
+        const addM4 = transferM2M3M4[articleId]?.m4 ?? 0;
+        const totalM2 = (update?.m2Quantity ?? 0) + addM2;
+        const totalM3 = (update?.m3Quantity ?? 0) + addM3;
+        const totalM4 = (update?.m4Quantity ?? 0) + addM4;
         if (update && (
           update.remarks !== (article.remarks || '') ||
           update.m1Quantity !== article.m1Quantity ||
-          update.m2Quantity !== article.m2Quantity ||
-          update.m3Quantity !== article.m3Quantity ||
-          update.m4Quantity !== article.m4Quantity ||
+          totalM2 !== article.m2Quantity ||
+          totalM3 !== article.m3Quantity ||
+          totalM4 !== article.m4Quantity ||
           update.repairStatus !== article.repairStatus ||
           update.repairRemarks !== (article.repairRemarks || '')
         )) {
-          // Use new bulk quality inspection API for M1-M4 updates
+          // Use new bulk quality inspection API for M1-M4 updates (m2/m3/m4 = previous + transfer input)
           if (update.m1Quantity !== article.m1Quantity || 
-              update.m2Quantity !== article.m2Quantity || 
-              update.m3Quantity !== article.m3Quantity || 
-              update.m4Quantity !== article.m4Quantity) {
+              totalM2 !== article.m2Quantity || 
+              totalM3 !== article.m3Quantity || 
+              totalM4 !== article.m4Quantity) {
             
-            const inspectedQuantity = update.m1Quantity + update.m2Quantity + update.m3Quantity + update.m4Quantity;
+            const inspectedQuantity = update.m1Quantity + totalM2 + totalM3 + totalM4;
             
             try {
               const qualityResponse = await productionService.updateQualityInspection(
@@ -750,9 +776,9 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                 {
                   inspectedQuantity,
                   m1Quantity: update.m1Quantity,
-                  m2Quantity: update.m2Quantity,
-                  m3Quantity: update.m3Quantity,
-                  m4Quantity: update.m4Quantity,
+                  m2Quantity: totalM2,
+                  m3Quantity: totalM3,
+                  m4Quantity: totalM4,
                   remarks: update.remarks,
                   floor: "SecondaryChecking"
                 }
@@ -1510,7 +1536,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
             </section>
             <section className="mb-4 rounded-md border-2 border-gray-400 overflow-hidden">
               <div className="px-3 py-1.5 bg-gray-300 border-b-2 border-gray-400 text-[11px] font-bold text-gray-900">5. Quality categories — how many in each?</div>
-              <p className="px-3 py-1.5 text-[10px] text-gray-600 bg-gray-50 border-b-2 border-gray-300">After checking, enter how many pieces fall in each category. M1 = Good (goes to next floor) · M2 = Needs repair · M3 = Minor defects · M4 = Major defects.</p>
+              <p className="px-3 py-1.5 text-[10px] text-gray-600 bg-gray-50 border-b-2 border-gray-300">M1 = Good (goes to next floor). M2 = Needs repair · M3 = Minor defects · M4 = Major defects. Below, add quantity to transfer to M2/M3/M4; total sent to API = existing + your input.</p>
               <div className="p-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="border-2 border-green-300 rounded p-2 bg-green-50/50">
                   <label className="block text-[10px] font-bold text-green-800 mb-0.5">M1 Good</label>
@@ -1519,18 +1545,33 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                 </div>
                 <div className="border-2 border-yellow-400 rounded p-2 bg-yellow-50/50">
                   <label className="block text-[10px] font-bold text-yellow-800 mb-0.5">M2 Repair</label>
-                  <p className="text-[9px] text-yellow-800 mb-1">Needs repair</p>
-                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-yellow-300 rounded" value={currentUpdateData.m2Quantity} onChange={(value) => handleM2QuantityChange(articleId, value)} allowDecimals />
+                  <p className="text-[9px] text-yellow-800 mb-1">Existing: {currentUpdateData.m2Quantity}</p>
+                  <div className="text-[11px] text-gray-500 mb-1.5">Add quantity below</div>
                 </div>
                 <div className="border-2 border-orange-300 rounded p-2 bg-orange-50/50">
                   <label className="block text-[10px] font-bold text-orange-800 mb-0.5">M3 Minor</label>
-                  <p className="text-[9px] text-orange-800 mb-1">Minor defects</p>
-                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-orange-200 rounded" value={currentUpdateData.m3Quantity} onChange={(value) => handleM3QuantityChange(articleId, value)} allowDecimals />
+                  <p className="text-[9px] text-orange-800 mb-1">Existing: {currentUpdateData.m3Quantity}</p>
+                  <div className="text-[11px] text-gray-500 mb-1.5">Add quantity below</div>
                 </div>
                 <div className="border-2 border-red-300 rounded p-2 bg-red-50/50">
                   <label className="block text-[10px] font-bold text-red-800 mb-0.5">M4 Major</label>
-                  <p className="text-[9px] text-red-800 mb-1">Major defects</p>
-                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-red-200 rounded" value={currentUpdateData.m4Quantity} onChange={(value) => handleM4QuantityChange(articleId, value)} allowDecimals />
+                  <p className="text-[9px] text-red-800 mb-1">Existing: {currentUpdateData.m4Quantity}</p>
+                  <div className="text-[11px] text-gray-500 mb-1.5">Add quantity below</div>
+                </div>
+              </div>
+              <div className="px-3 py-1.5 border-t border-gray-300 bg-gray-100 text-[10px] font-bold text-gray-700">M2 / M3 / M4 — add quantity to transfer (empty = 0). Total in API = existing + below.</div>
+              <div className="p-2 grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-yellow-800 mb-0.5">M2 quantity</label>
+                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-yellow-300 rounded" value={transferM2M3M4[articleId]?.m2 ?? 0} onChange={(v) => handleTransferM2M3M4Change(articleId, 'm2', v)} allowDecimals placeholder="0" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-orange-800 mb-0.5">M3 quantity</label>
+                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-orange-200 rounded" value={transferM2M3M4[articleId]?.m3 ?? 0} onChange={(v) => handleTransferM2M3M4Change(articleId, 'm3', v)} allowDecimals placeholder="0" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-red-800 mb-0.5">M4 quantity</label>
+                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-red-200 rounded" value={transferM2M3M4[articleId]?.m4 ?? 0} onChange={(v) => handleTransferM2M3M4Change(articleId, 'm4', v)} allowDecimals placeholder="0" />
                 </div>
               </div>
             </section>
@@ -1635,13 +1676,25 @@ const SecondaryCheckingFloorSupervisorPage = () => {
               <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800">7. Summary — then click Update Order</div>
               <p className="px-3 py-1 text-[10px] text-gray-500 bg-gray-50 border-b border-gray-200">Totals below will be saved. Add remarks if needed.</p>
               <div className="p-2">
+                {(() => {
+                  const sumAddM2 = transferM2M3M4[articleId]?.m2 ?? 0;
+                  const sumAddM3 = transferM2M3M4[articleId]?.m3 ?? 0;
+                  const sumAddM4 = transferM2M3M4[articleId]?.m4 ?? 0;
+                  const sumTotalM2 = currentUpdateData.m2Quantity + sumAddM2;
+                  const sumTotalM3 = currentUpdateData.m3Quantity + sumAddM3;
+                  const sumTotalM4 = currentUpdateData.m4Quantity + sumAddM4;
+                  return (
+                <>
                 <div className="grid grid-cols-4 gap-2 text-center mb-2">
                   <div className="border-2 border-green-300 rounded py-1.5 bg-green-50 text-[11px] font-bold text-green-800">M1: {currentUpdateData.m1Quantity}</div>
-                  <div className="border-2 border-yellow-300 rounded py-1.5 bg-yellow-50 text-[11px] font-bold text-yellow-800">M2: {currentUpdateData.m2Quantity}</div>
-                  <div className="border-2 border-orange-300 rounded py-1.5 bg-orange-50 text-[11px] font-bold text-orange-800">M3: {currentUpdateData.m3Quantity}</div>
-                  <div className="border-2 border-red-300 rounded py-1.5 bg-red-50 text-[11px] font-bold text-red-800">M4: {currentUpdateData.m4Quantity}</div>
+                  <div className="border-2 border-yellow-300 rounded py-1.5 bg-yellow-50 text-[11px] font-bold text-yellow-800">M2: {sumTotalM2}</div>
+                  <div className="border-2 border-orange-300 rounded py-1.5 bg-orange-50 text-[11px] font-bold text-orange-800">M3: {sumTotalM3}</div>
+                  <div className="border-2 border-red-300 rounded py-1.5 bg-red-50 text-[11px] font-bold text-red-800">M4: {sumTotalM4}</div>
                 </div>
-                <div className="text-center text-[11px] text-gray-600 border-t-2 border-gray-200 pt-1.5">Total checked: {currentUpdateData.m1Quantity + currentUpdateData.m2Quantity + currentUpdateData.m3Quantity + currentUpdateData.m4Quantity} / {article.plannedQuantity}</div>
+                <div className="text-center text-[11px] text-gray-600 border-t-2 border-gray-200 pt-1.5">Total checked: {currentUpdateData.m1Quantity + sumTotalM2 + sumTotalM3 + sumTotalM4} / {article.plannedQuantity}</div>
+                </>
+                  );
+                })()}
                 <div className="mt-2">
                   <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Remarks</label>
                   <textarea className="w-full py-1.5 px-2 text-[11px] border-2 border-gray-300 rounded resize-none" rows={2} placeholder="Remarks for this article..." value={currentUpdateData.remarks} onChange={(e) => handleRemarksChange(articleId, e.target.value)} />
@@ -1670,6 +1723,14 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                   });
                   if (invalid) {
                     toast.error("Cannot submit: Some articles have M1 quantities exceeding remaining quantities");
+                    return;
+                  }
+                  const hasAnyM1 = selectedOrder.articles.some(article => {
+                    const articleId = article.id || article._id;
+                    return articleId && (updateData[articleId]?.m1Quantity ?? 0) > 0;
+                  });
+                  if (!hasAnyM1) {
+                    handleUpdateSubmit();
                     return;
                   }
                   setUpdateContainerBarcode("");
