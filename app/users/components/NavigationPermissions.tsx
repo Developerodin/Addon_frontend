@@ -84,6 +84,17 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Reports', label: 'Reports' }
   ]
 
+  const vendorPOSections = [
+    { key: 'Vendor List', label: 'Vendor List' },
+    { key: 'Vendor PO Raise', label: 'Vendor PO Raise' },
+    { key: 'Vendor PO Receive', label: 'Vendor PO Receive' },
+    { key: 'Checking', label: 'Checking' },
+    { key: 'GRN', label: 'GRN' },
+    { key: 'Branding', label: 'Branding' },
+    { key: 'Final Checking', label: 'Final Checking' },
+    { key: 'Counting & Dispatch', label: 'Counting & Dispatch' }
+  ]
+
   return (
     <div className="pt-6 border-t border-gray-200">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">Navigation Permissions</h3>
@@ -217,6 +228,23 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
                   type="checkbox"
                   checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
                   onChange={(e) => onChange('Warehouse Management', subsection.key, null, e.target.checked)}
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-md font-medium text-gray-900 mb-3">Vendor PO</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+            {vendorPOSections.map((subsection) => (
+              <label key={subsection.key} className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={(navigation['Vendor PO'] as any)?.[subsection.key] === true}
+                  onChange={(e) => onChange('Vendor PO', subsection.key, null, e.target.checked)}
                   className="rounded border-gray-300 text-primary focus:ring-primary"
                 />
                 <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>

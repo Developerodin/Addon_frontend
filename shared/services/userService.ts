@@ -68,6 +68,16 @@ export interface NavigationPermissions {
     Stock: boolean;
     Reports: boolean;
   };
+  'Vendor PO': {
+    'Vendor List': boolean;
+    'Vendor PO Raise': boolean;
+    'Vendor PO Receive': boolean;
+    Checking: boolean;
+    GRN: boolean;
+    Branding: boolean;
+    'Final Checking': boolean;
+    'Counting & Dispatch': boolean;
+  };
 }
 
 export interface User {

@@ -13,6 +13,7 @@ import {
   updateMachineOrderAssignment,
   OrderStatus,
   type MachineOrderAssignment,
+  type OrderStatusType,
 } from "@/shared/services/machineOrderAssignmentService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
@@ -80,7 +81,9 @@ interface EditOrderFormData {
 const EditOrderContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const orderId = searchParams?.get('id') ?? null;
+  const orderId =
+    searchParams?.get('id') ??
+    (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('id') : null);
   
   const [order, setOrder] = useState<ProductionOrder | null>(null);
   const [formData, setFormData] = useState<EditOrderFormData>({
@@ -112,14 +115,22 @@ const EditOrderContent = () => {
   /** Machine ID -> assignment (for modal: PO count, article numbers; and for submit sync) */
   const [assignmentsByMachineId, setAssignmentsByMachineId] = useState<Map<string, MachineOrderAssignment>>(new Map());
 
-  // Load order data and machines
+  // Load order data and machines (same APIs as add page: listMachineOrderAssignments, getMachineActiveNeedleMap via fetchMachines)
   useEffect(() => {
     if (orderId) {
       loadOrderAndMachines();
-    } else {
-      toast.error('Order ID is required');
-      router.push('/production/supervisor');
+      return;
     }
+    const timeoutId = setTimeout(() => {
+      const id =
+        searchParams?.get('id') ??
+        (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('id') : null);
+      if (!id) {
+        toast.error('Order ID is required');
+        router.push('/production/supervisor');
+      }
+    }, 200);
+    return () => clearTimeout(timeoutId);
   }, [orderId]);
 
   // Fetch assignments (machine -> assignment with productionOrderItems for modal + submit sync). Returns map so loadOrder can use it for queuePriority.
@@ -731,7 +742,33 @@ const EditOrderContent = () => {
       const response = await productionService.updateOrder(orderId, updateData);
       
       if (response.success) {
-        // Sync machine-order-assignments: update/add/remove this order's items per machine
+        // Refetch order so we have all articles (including newly added) with Mongo _ids for machine-assignment sync
+        let createdArticles: any[] = [];
+        const orderRes = await productionService.getOrder(orderId);
+        if (orderRes.success && orderRes.data?.articles?.length) {
+          createdArticles = orderRes.data.articles;
+        }
+        if (createdArticles.length === 0) {
+          const raw = response.data as any;
+          createdArticles = raw?.articles ?? raw?.data?.articles ?? raw?.order?.articles ?? [];
+        }
+        const MONGO_ID_REGEX = /^[a-fA-F0-9]{24}$/;
+        const getRealArticleId = (formArticle: Article, formIndex: number): string | null => {
+          // Prefer position (PATCH response usually keeps same order as request)
+          let fromApi = createdArticles[formIndex];
+          const matchByArticle = (a: any) =>
+            (a?.articleNumber ?? a?.factoryCode ?? '').toString() === (formArticle.articleNumber ?? '').toString() &&
+            (a?.plannedQuantity ?? 0) === (formArticle.plannedQuantity ?? 0);
+          if (!fromApi || !matchByArticle(fromApi)) {
+            fromApi = createdArticles.find(matchByArticle) ?? createdArticles.find(
+              (a: any) => (a?.articleNumber ?? a?.factoryCode ?? '').toString() === (formArticle.articleNumber ?? '').toString()
+            );
+          }
+          const rawId = typeof fromApi === 'string' ? fromApi : (fromApi?._id ?? fromApi?.id);
+          return typeof rawId === 'string' && MONGO_ID_REGEX.test(rawId) ? rawId : null;
+        };
+
+        // Sync machine-order-assignments: send full payload (all existing items + all this order's items including new), same shape as add page API
         const toMid = (m: string | object | undefined) =>
           !m ? '' : typeof m === 'object' ? (m as { id?: string }).id ?? (m as { _id?: string })._id ?? '' : String(m);
         const currentMachineIds = new Set(
@@ -744,20 +781,26 @@ const EditOrderContent = () => {
         });
 
         let syncErrors = 0;
-        // Remove this order from machines that no longer have any article on them
+        // Remove this order from machines that no longer have any article on them (send full list without this order)
         for (const mid of Array.from(previousMachineIds)) {
           if (currentMachineIds.has(mid)) continue;
           const assn = assignmentsByMachineId.get(mid);
           if (!assn?.id) continue;
           const itemsWithoutThisOrder = (assn.productionOrderItems ?? []).filter((i) => String(i.productionOrder) !== String(orderId));
+          const payloadItems = itemsWithoutThisOrder.map((i) => ({
+            productionOrder: String(i.productionOrder ?? ''),
+            article: String(i.article ?? ''),
+            status: (i.status ?? OrderStatus.PENDING) as OrderStatusType,
+            priority: i.priority,
+          }));
           try {
-            await updateMachineOrderAssignment(assn.id, { productionOrderItems: itemsWithoutThisOrder });
+            await updateMachineOrderAssignment(assn.id, { productionOrderItems: payloadItems });
           } catch (e) {
             syncErrors++;
             console.warn("Failed to remove order from assignment", mid, e);
           }
         }
-        // Add/update this order's articles on each selected machine
+        // Add/update: send full payload = existing items (other orders) + all this order's items (updated + newly added), same as add page
         for (const mid of Array.from(currentMachineIds)) {
           const assn = await getAssignmentByMachineId(mid).catch(() => null);
           if (!assn?.id) {
@@ -767,15 +810,30 @@ const EditOrderContent = () => {
           }
           const currentItems = assn.productionOrderItems ?? [];
           const itemsWithoutThisOrder = currentItems.filter((i) => String(i.productionOrder) !== String(orderId));
-          const newItems = formData.articles
-            .filter((a) => toMid(a.machineId) === mid)
-            .map((a, i) => ({
+          const payloadOther = itemsWithoutThisOrder.map((i) => ({
+            productionOrder: String(i.productionOrder ?? ''),
+            article: String(i.article ?? ''),
+            status: (i.status ?? OrderStatus.PENDING) as OrderStatusType,
+            priority: i.priority,
+          }));
+          const articlesOnThisMachine = formData.articles.filter((a) => toMid(a.machineId) === mid);
+          const newItems: { productionOrder: string; article: string; priority: number; status: OrderStatusType }[] = [];
+          for (let i = 0; i < articlesOnThisMachine.length; i++) {
+            const a = articlesOnThisMachine[i];
+            const formIndex = formData.articles.indexOf(a);
+            const articleId = getRealArticleId(a, formIndex);
+            if (!articleId) {
+              console.warn("Edit: no real article id for form article", a.articleNumber, "at index", formIndex);
+              continue;
+            }
+            newItems.push({
               productionOrder: orderId!,
-              article: a.id,
+              article: articleId,
               priority: a.queuePriority != null && a.queuePriority >= 1 ? a.queuePriority : i + 1,
               status: OrderStatus.PENDING,
-            }));
-          const merged = [...itemsWithoutThisOrder, ...newItems];
+            });
+          }
+          const merged = [...payloadOther, ...newItems];
           try {
             await updateMachineOrderAssignment(assn.id, { productionOrderItems: merged });
           } catch (e) {
