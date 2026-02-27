@@ -10,7 +10,7 @@ import NumericInput from "@/shared/utils/numericInput";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
-import { containersMasterService, type ContainerMaster } from "@/shared/services/containersMasterService";
+import { containersMasterService, type ContainerMaster, isPopulatedActiveArticle } from "@/shared/services/containersMasterService";
 import { teamMasterService, type TeamMaster } from "@/shared/services/teamMasterService";
 
 type SiliconTab = "orders" | "article-view" | "my-team";
@@ -59,7 +59,7 @@ const SiliconFloorSupervisorPage = () => {
   const [showUpdateContainerModal, setShowUpdateContainerModal] = useState(false);
   const [updateContainerBarcode, setUpdateContainerBarcode] = useState("");
   const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "ok">("idle");
-  const [updateContainerFetched, setUpdateContainerFetched] = useState<{ activeArticle?: string; activeFloor?: string } | null>(null);
+  const [updateContainerFetched, setUpdateContainerFetched] = useState<{ activeArticle?: string | { articleNumber?: string; [k: string]: unknown }; activeFloor?: string } | null>(null);
   const [updateContainerArticleId, setUpdateContainerArticleId] = useState("");
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Boarding");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
@@ -154,7 +154,7 @@ const SiliconFloorSupervisorPage = () => {
         .getByBarcode(barcode)
         .then((container) => {
           if (cancelled) return;
-          const hasActive = !!(container.activeArticle?.trim() || container.activeFloor?.trim());
+          const hasActive = !!(container.activeFloor?.trim() || isPopulatedActiveArticle(container.activeArticle) || (typeof container.activeArticle === 'string' && container.activeArticle.trim()));
           if (hasActive) {
             setUpdateContainerCheckStatus("already-filled");
             setUpdateContainerFetched({ activeArticle: container.activeArticle, activeFloor: container.activeFloor });
@@ -289,10 +289,15 @@ const SiliconFloorSupervisorPage = () => {
     setContainerScanned(null);
     try {
       const container = await containersMasterService.getByBarcode(barcode);
-      const articleId = container.activeArticle?.trim();
-      const article = articleId ? findArticleInOrders(articleId) ?? null : null;
+      let article: Article | null = null;
+      if (isPopulatedActiveArticle(container.activeArticle)) {
+        article = container.activeArticle as unknown as Article;
+      } else if (typeof container.activeArticle === 'string') {
+        const articleId = container.activeArticle.trim();
+        article = articleId ? findArticleInOrders(articleId) ?? null : null;
+        if (!article && articleId) toast.error("Article not found in current orders.");
+      }
       setContainerScanned({ container, article });
-      if (!article && articleId) toast.error("Article not found in current orders.");
       if (normalizeFloor(container.activeFloor) !== normalizeFloor(CURRENT_FLOOR)) {
         toast.error(`This container belongs to "${container.activeFloor ?? "unknown"}", not ${CURRENT_FLOOR}. Accept Article disabled.`);
       }
@@ -968,7 +973,15 @@ const SiliconFloorSupervisorPage = () => {
                 />
                 {updateContainerCheckStatus === "loading" && <p className="text-[11px] text-gray-500">Checking...</p>}
                 {updateContainerCheckStatus === "not-found" && <p className="text-[11px] text-red-600">Container not found.</p>}
-                {updateContainerCheckStatus === "already-filled" && <p className="text-[11px] text-amber-600">Container already has article/floor. Use another or clear it first.</p>}
+                {updateContainerCheckStatus === "already-filled" && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">
+                  This container is not empty. It is assigned to <strong>{updateContainerFetched?.activeFloor ?? 'unknown'}</strong>
+                  {updateContainerFetched?.activeArticle && typeof updateContainerFetched.activeArticle === 'object' && 'articleNumber' in updateContainerFetched.activeArticle
+                    ? ` with article <strong>${updateContainerFetched.activeArticle.articleNumber}</strong>`
+                    : ''}
+                  . Use another container.
+                </p>
+              )}
                 {updateContainerCheckStatus === "ok" && <p className="text-[11px] text-green-600">Container is empty and ready.</p>}
               </div>
               <div className="grid grid-cols-2 gap-2 mb-3">
@@ -1001,9 +1014,11 @@ const SiliconFloorSupervisorPage = () => {
                     const articleId = updateContainerArticleId;
                     const floor = updateContainerNextFloor.trim();
                     if (!barcode || !articleId || !floor) return;
+                    const article = selectedOrder?.articles?.find((a) => a._id === articleId || a.id === articleId);
+                    const activeArticleMongoId = article?._id ?? articleId;
                     setUpdateContainerSubmitting(true);
                     try {
-                      await containersMasterService.updateByBarcode(barcode, { activeArticle: articleId, activeFloor: floor });
+                      await containersMasterService.updateByBarcode(barcode, { activeArticle: activeArticleMongoId, activeFloor: floor });
                       toast.success("Container updated");
                       setShowUpdateContainerModal(false);
                       setUpdateContainerBarcode("");
@@ -1050,17 +1065,26 @@ const SiliconFloorSupervisorPage = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* Container details from API */}
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200 text-[12px] text-gray-900 space-y-1">
+                    <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider mb-2">Container</h4>
+                    <div><span className="font-bold text-[#495057]">Name:</span> {containerScanned.container.containerName ?? containerScanned.container.barcode ?? "—"}</div>
+                    <div><span className="font-bold text-[#495057]">Barcode:</span> {containerScanned.container.barcode}</div>
+                    <div><span className="font-bold text-[#495057]">Status:</span> {containerScanned.container.status ?? "—"}</div>
+                    <div><span className="font-bold text-[#495057]">Active floor:</span> {containerScanned.container.activeFloor ?? "—"}</div>
+                  </div>
+                  <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Article details</h4>
+                  <div className="p-2 bg-gray-50 rounded border border-gray-200 text-[12px] text-gray-900">
+                    <div><span className="font-bold text-[#495057]">Article number:</span> {isPopulatedActiveArticle(containerScanned.container.activeArticle) ? containerScanned.container.activeArticle.articleNumber : containerScanned.article?.articleNumber ?? "—"}</div>
+                    <div><span className="font-bold text-[#495057]">Quantity:</span> {containerScanned.container.quantity ?? "—"}</div>
+                  </div>
                   {!containerBelongsToCurrentFloor && (
                     <div className="p-2 rounded border-2 border-red-400 bg-red-50 text-[11px] text-red-800">
                       This container is assigned to <strong>{containerScanned.container.activeFloor || "unknown"}</strong>, not {CURRENT_FLOOR}. Accept Article is disabled.
                     </div>
                   )}
-                  <p className="text-[11px] text-gray-700">Container: <strong>{containerScanned.container.barcode}</strong></p>
                   {containerScanned.article ? (
                     <>
-                      <div className={`p-2 rounded border text-[12px] ${containerBelongsToCurrentFloor ? "bg-gray-50 border-gray-200 text-gray-900" : "bg-red-50/50 border-2 border-red-400 text-gray-900"}`}>
-                        <p className="text-[11px] text-green-700">Article found: <strong>{containerScanned.article.articleNumber}</strong></p>
-                      </div>
                       <button type="button" onClick={handleAcceptArticleQuantity} disabled={acceptArticleLoading || !containerBelongsToCurrentFloor} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                         {acceptArticleLoading ? "..." : "Accept article quantity (Silicon)"}
                       </button>

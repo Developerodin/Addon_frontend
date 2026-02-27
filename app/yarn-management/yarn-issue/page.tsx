@@ -684,7 +684,8 @@ const YarnIssuePage = () => {
     }
   };
 
-  // Fetch BOMs for all articles when order is selected
+  // Fetch BOMs for all articles when order is selected (or when machine changes and orders are replaced).
+  // Include `orders` in deps so when we switch machine we read the new orders, not a stale closure.
   useEffect(() => {
     const fetchAllArticleBOMs = async () => {
       if (!selectedOrderId) {
@@ -693,6 +694,11 @@ const YarnIssuePage = () => {
 
       const selectedOrder = orders.find((o) => o.id === selectedOrderId);
       if (!selectedOrder || !selectedOrder.articles || selectedOrder.articles.length === 0) {
+        return;
+      }
+
+      // Already loaded BOM for this order (e.g. after setOrders in this same effect) – avoid refetch loop
+      if (selectedOrder.articleBoms && selectedOrder.articleBoms.size > 0) {
         return;
       }
 
@@ -775,8 +781,7 @@ const YarnIssuePage = () => {
     };
 
     fetchAllArticleBOMs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedOrderId]);
+  }, [selectedOrderId, orders]);
 
   // Update displayed BOM when article selection changes
   useEffect(() => {

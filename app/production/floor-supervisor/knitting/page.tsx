@@ -18,7 +18,7 @@ import {
   type OrderStatusType,
   type ProductionOrderItem,
 } from "@/shared/services/machineOrderAssignmentService";
-import { containersMasterService } from "@/shared/services/containersMasterService";
+import { containersMasterService, isPopulatedActiveArticle } from "@/shared/services/containersMasterService";
 import { PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 type KnittingTab = "orders" | "machine-view" | "article-view";
 
@@ -67,12 +67,13 @@ const KnittingFloorSupervisorPage = () => {
   const [showContainerModal, setShowContainerModal] = useState(false);
   const [containerBarcode, setContainerBarcode] = useState('');
   const [containerArticleId, setContainerArticleId] = useState('');
+  const [containerQuantity, setContainerQuantity] = useState<string>('');
   const [containerNextFloor, setContainerNextFloor] = useState('');
   const [pendingWeightForContainer, setPendingWeightForContainer] = useState<number | undefined>(undefined);
   const [containerSubmitting, setContainerSubmitting] = useState(false);
   /** After barcode enter/scan: idle | loading | not-found | already-filled | ok. Only allow update when ok. */
   const [containerCheckStatus, setContainerCheckStatus] = useState<'idle' | 'loading' | 'not-found' | 'already-filled' | 'ok'>('idle');
-  const [containerFetched, setContainerFetched] = useState<{ activeArticle?: string; activeFloor?: string } | null>(null);
+  const [containerFetched, setContainerFetched] = useState<{ activeArticle?: string | { articleNumber?: string; [k: string]: unknown }; activeFloor?: string } | null>(null);
   /** Complete confirmation: show article summary and "Do you really want to complete?" before marking status Completed. */
   const [showCompleteConfirmModal, setShowCompleteConfirmModal] = useState(false);
   const [completeConfirmData, setCompleteConfirmData] = useState<{
@@ -169,7 +170,11 @@ const KnittingFloorSupervisorPage = () => {
         .getByBarcode(barcode)
         .then((container) => {
           if (cancelled) return;
-          const hasActive = !!(container.activeArticle?.trim() || container.activeFloor?.trim());
+          const hasActive = !!(
+            container.activeFloor?.trim() ||
+            isPopulatedActiveArticle(container.activeArticle) ||
+            (typeof container.activeArticle === 'string' && container.activeArticle.trim())
+          );
           if (hasActive) {
             setContainerCheckStatus('already-filled');
             setContainerFetched({ activeArticle: container.activeArticle, activeFloor: container.activeFloor });
@@ -191,6 +196,13 @@ const KnittingFloorSupervisorPage = () => {
       clearTimeout(t);
     };
   }, [showContainerModal, containerBarcode]);
+
+  // When article changes in container modal, pre-fill quantity from that article's knitting done (updateData)
+  useEffect(() => {
+    if (!showContainerModal || !containerArticleId) return;
+    setContainerQuantity(String(updateData[containerArticleId]?.completedQuantity ?? 0));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only sync when article selection changes, not when updateData ref changes
+  }, [showContainerModal, containerArticleId]);
 
   // Filter orders and articles based on received quantity
   const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
@@ -287,6 +299,7 @@ const KnittingFloorSupervisorPage = () => {
     setWeightInput('');
     setShowContainerModal(false);
     setContainerBarcode('');
+    setContainerQuantity('');
     setContainerArticleId('');
     setContainerNextFloor('');
     setPendingWeightForContainer(undefined);
@@ -1316,7 +1329,9 @@ const KnittingFloorSupervisorPage = () => {
                         setPendingWeightForContainer(w);
                         if (selectedOrder?.articles?.length) {
                           const first = selectedOrder.articles[0];
-                          setContainerArticleId(first._id || first.id || '');
+                          const firstId = first.id || first._id || '';
+                          setContainerArticleId(firstId);
+                          setContainerQuantity(String(updateData[firstId]?.completedQuantity ?? 0));
                         }
                         setContainerNextFloor('Linking');
                         setShowContainerModal(true);
@@ -1332,7 +1347,7 @@ const KnittingFloorSupervisorPage = () => {
 
             {/* Container modal – after weight: barcode, article, next floor; then PATCH container and submit order update */}
             {showContainerModal && selectedOrder && (
-              <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40" onClick={() => { setShowContainerModal(false); setPendingWeightForContainer(undefined); setContainerCheckStatus('idle'); setContainerFetched(null); }} aria-hidden>
+              <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40" onClick={() => { setShowContainerModal(false); setPendingWeightForContainer(undefined); setContainerCheckStatus('idle'); setContainerFetched(null); setContainerQuantity(''); }} aria-hidden>
                 <div className="bg-white rounded-lg shadow-xl border border-gray-300 w-full max-w-sm p-4 flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
                   <h4 className="text-[13px] font-bold text-gray-800 border-b border-gray-200 pb-2">Container & transfer floor</h4>
                   <p className="text-[11px] text-gray-600">Enter or scan container barcode. We will check if it is free before allowing update.</p>
@@ -1353,31 +1368,37 @@ const KnittingFloorSupervisorPage = () => {
                     )}
                     {containerCheckStatus === 'already-filled' && (
                       <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">
-                        This container is already filled{containerFetched?.activeFloor ? ` for floor: ${containerFetched.activeFloor}` : ''}. Use another container.
+                        This container is not empty. It is assigned to <strong>{containerFetched?.activeFloor ?? 'unknown'}</strong>
+                        {containerFetched?.activeArticle && typeof containerFetched.activeArticle === 'object' && 'articleNumber' in containerFetched.activeArticle
+                          ? ` with article <strong>${containerFetched.activeArticle.articleNumber}</strong>`
+                          : ''}
+                        . Use another container.
                       </p>
                     )}
                     {containerCheckStatus === 'ok' && (
-                      <p className="text-[11px] text-green-600 mt-1">Container is available. Select article and floor below.</p>
+                      <p className="text-[11px] text-green-600 mt-1">Container is available. Select floor below.</p>
                     )}
                   </div>
                   <div className={containerCheckStatus !== 'ok' ? 'opacity-60 pointer-events-none' : ''}>
                     <label className="block text-[11px] font-semibold text-gray-600 mb-1">Article</label>
-                    <select
-                      value={containerArticleId}
-                      onChange={(e) => setContainerArticleId(e.target.value)}
+                    <input
+                      type="text"
+                      readOnly
+                      value={selectedOrder.articles.find((a) => a._id === containerArticleId || a.id === containerArticleId)?.articleNumber ?? (selectedOrder.articles[0]?.articleNumber ?? '—')}
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-[12px] bg-gray-100 text-gray-700 cursor-not-allowed"
+                    />
+                  </div>
+                  <div className={containerCheckStatus !== 'ok' ? 'opacity-60 pointer-events-none' : ''}>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Quantity</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="From knitting done"
+                      value={containerQuantity}
+                      onChange={(e) => setContainerQuantity(e.target.value)}
                       className="w-full border border-gray-300 rounded px-3 py-2 text-[12px] focus:ring-1 focus:ring-purple-300 focus:border-purple-500"
-                    >
-                      <option value="">Select article</option>
-                      {selectedOrder.articles.map((a) => {
-                        const id = a._id || a.id;
-                        if (!id) return null;
-                        return (
-                          <option key={id} value={id}>
-                            {a.articleNumber || id}
-                          </option>
-                        );
-                      })}
-                    </select>
+                    />
+                    <p className="text-[10px] text-gray-500 mt-0.5">Pre-filled from knitting done (editable)</p>
                   </div>
                   <div className={containerCheckStatus !== 'ok' ? 'opacity-60 pointer-events-none' : ''}>
                     <label className="block text-[11px] font-semibold text-gray-600 mb-1">Next floor (transferring to)</label>
@@ -1394,7 +1415,7 @@ const KnittingFloorSupervisorPage = () => {
                   <div className="flex justify-end gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => { setShowContainerModal(false); setPendingWeightForContainer(undefined); setContainerCheckStatus('idle'); setContainerFetched(null); }}
+                      onClick={() => { setShowContainerModal(false); setPendingWeightForContainer(undefined); setContainerCheckStatus('idle'); setContainerFetched(null); setContainerQuantity(''); }}
                       className="px-3 py-1.5 text-[11px] font-bold text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
                     >
                       Cancel
@@ -1407,12 +1428,25 @@ const KnittingFloorSupervisorPage = () => {
                         const articleId = containerArticleId;
                         const floor = containerNextFloor.trim();
                         if (!barcode || !articleId || !floor) return;
+                        const article = selectedOrder?.articles?.find((a) => a._id === articleId || a.id === articleId);
+                        const activeArticleMongoId = article?._id ?? articleId;
+                        const qtyNum = containerQuantity.trim() ? parseInt(containerQuantity.trim(), 10) : NaN;
+                        const qty = containerQuantity.trim() === '' ? (updateData[articleId]?.completedQuantity ?? 0) : (Number.isFinite(qtyNum) && qtyNum >= 0 ? qtyNum : NaN);
+                        if (!Number.isFinite(qty) || qty < 0) {
+                          toast.error('Please enter a valid quantity (0 or greater)');
+                          return;
+                        }
                         setContainerSubmitting(true);
                         try {
-                          await containersMasterService.updateByBarcode(barcode, { activeArticle: articleId, activeFloor: floor });
+                          await containersMasterService.updateByBarcode(barcode, {
+                            activeArticle: activeArticleMongoId,
+                            activeFloor: floor,
+                            quantity: qty,
+                          });
                           toast.success('Container updated');
                           setShowContainerModal(false);
                           setContainerBarcode('');
+                          setContainerQuantity('');
                           setContainerArticleId('');
                           setContainerNextFloor('');
                           setContainerCheckStatus('idle');

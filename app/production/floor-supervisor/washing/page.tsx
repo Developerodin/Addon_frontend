@@ -9,7 +9,7 @@ import NumericInput from "@/shared/utils/numericInput";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
-import { containersMasterService, type ContainerMaster } from "@/shared/services/containersMasterService";
+import { containersMasterService, type ContainerMaster, isPopulatedActiveArticle } from "@/shared/services/containersMasterService";
 import { teamMasterService, type TeamMaster } from "@/shared/services/teamMasterService";
 import type { Article } from "@/shared/services/productionService";
 
@@ -60,8 +60,9 @@ const WashingFloorSupervisorPage = () => {
   const [showUpdateContainerModal, setShowUpdateContainerModal] = useState(false);
   const [updateContainerBarcode, setUpdateContainerBarcode] = useState("");
   const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "ok">("idle");
-  const [updateContainerFetched, setUpdateContainerFetched] = useState<{ activeArticle?: string; activeFloor?: string } | null>(null);
+  const [updateContainerFetched, setUpdateContainerFetched] = useState<{ activeArticle?: string | { articleNumber?: string; [k: string]: unknown }; activeFloor?: string } | null>(null);
   const [updateContainerArticleId, setUpdateContainerArticleId] = useState("");
+  const [updateContainerQuantity, setUpdateContainerQuantity] = useState("");
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Boarding");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
 
@@ -126,7 +127,7 @@ const WashingFloorSupervisorPage = () => {
         .getByBarcode(barcode)
         .then((container) => {
           if (cancelled) return;
-          const hasActive = !!(container.activeArticle?.trim() || container.activeFloor?.trim());
+          const hasActive = !!(container.activeFloor?.trim() || isPopulatedActiveArticle(container.activeArticle) || (typeof container.activeArticle === 'string' && container.activeArticle.trim()));
           if (hasActive) {
             setUpdateContainerCheckStatus("already-filled");
             setUpdateContainerFetched({ activeArticle: container.activeArticle, activeFloor: container.activeFloor });
@@ -148,6 +149,12 @@ const WashingFloorSupervisorPage = () => {
       clearTimeout(t);
     };
   }, [showUpdateContainerModal, updateContainerBarcode]);
+
+  // When article changes in modal, sync quantity from that article's washing completed (updateData)
+  useEffect(() => {
+    if (!showUpdateContainerModal || !updateContainerArticleId) return;
+    setUpdateContainerQuantity(String(updateData[updateContainerArticleId]?.completedQuantity ?? 0));
+  }, [showUpdateContainerModal, updateContainerArticleId]);
 
   // Filter orders and articles based on received quantity
   const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
@@ -296,10 +303,15 @@ const WashingFloorSupervisorPage = () => {
     setContainerScanned(null);
     try {
       const container = await containersMasterService.getByBarcode(barcode);
-      const articleId = container.activeArticle?.trim();
-      const article = articleId ? findArticleInOrders(articleId) ?? null : null;
+      let article: Article | null = null;
+      if (isPopulatedActiveArticle(container.activeArticle)) {
+        article = container.activeArticle as unknown as Article;
+      } else if (typeof container.activeArticle === 'string') {
+        const articleId = container.activeArticle.trim();
+        article = articleId ? findArticleInOrders(articleId) ?? null : null;
+        if (!article && articleId) toast.error("Article not found in current orders.");
+      }
       setContainerScanned({ container, article });
-      if (!article && articleId) toast.error("Article not found in current orders.");
       if (normalizeFloor(container.activeFloor) !== normalizeFloor(CURRENT_FLOOR)) {
         toast.error(`This container belongs to "${container.activeFloor ?? "unknown"}", not ${CURRENT_FLOOR}. Accept Article disabled.`);
       }
@@ -939,7 +951,9 @@ const WashingFloorSupervisorPage = () => {
                   setUpdateContainerCheckStatus("idle");
                   setUpdateContainerFetched(null);
                   const first = selectedOrder.articles[0];
-                  setUpdateContainerArticleId(first?._id || first?.id || "");
+                  const firstId = first?.id || first?._id || "";
+                  setUpdateContainerArticleId(firstId);
+                  setUpdateContainerQuantity(String(updateData[firstId]?.completedQuantity ?? 0));
                   setUpdateContainerNextFloor("Boarding");
                   setShowUpdateContainerModal(true);
                 }}
@@ -965,45 +979,68 @@ const WashingFloorSupervisorPage = () => {
       {/* Scan bag/container before submit – then run handleUpdateSubmit */}
       {showUpdateContainerModal && selectedOrder && (
         <>
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-[60]" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }} aria-hidden />
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-[60]" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }} aria-hidden />
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <div className="bg-white rounded-lg shadow-xl border border-gray-200 max-w-md w-full p-4 flex flex-col">
               <h4 className="text-sm font-bold text-gray-800 mb-3">Scan bag/container</h4>
-              <p className="text-[11px] text-gray-600 mb-3">Scan the container that will move to the next floor. Then select article and next floor, and click Update & submit order.</p>
+              <p className="text-[11px] text-gray-600 mb-3">Scan the container for washing completed articles. Quantity comes from washing completed quantity. Select article and next floor, then Update & submit order.</p>
               <div className="space-y-2 mb-3">
+                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Container barcode</label>
                 <input
                   type="text"
                   className="w-full border border-gray-200 rounded px-3 py-2 text-[11px] focus:ring-0 focus:border-purple-300 placeholder:text-gray-400 font-medium"
-                  placeholder="Barcode..."
+                  placeholder="Scan or enter barcode..."
                   value={updateContainerBarcode}
                   onChange={(e) => setUpdateContainerBarcode(e.target.value)}
                 />
                 {updateContainerCheckStatus === "loading" && <p className="text-[11px] text-gray-500">Checking...</p>}
                 {updateContainerCheckStatus === "not-found" && <p className="text-[11px] text-red-600">Container not found.</p>}
-                {updateContainerCheckStatus === "already-filled" && <p className="text-[11px] text-amber-600">Container already has article/floor. Use another or clear it first.</p>}
+                {updateContainerCheckStatus === "already-filled" && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">
+                  This container is not empty. It is assigned to <strong>{updateContainerFetched?.activeFloor ?? 'unknown'}</strong>
+                  {updateContainerFetched?.activeArticle && typeof updateContainerFetched.activeArticle === 'object' && 'articleNumber' in updateContainerFetched.activeArticle
+                    ? ` with article <strong>${updateContainerFetched.activeArticle.articleNumber}</strong>`
+                    : ''}
+                  . Use another container.
+                </p>
+              )}
                 {updateContainerCheckStatus === "ok" && <p className="text-[11px] text-green-600">Container is empty and ready.</p>}
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Article</label>
+              <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
+                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Article in container</label>
+                {selectedOrder.articles.length === 1 ? (
+                  <div className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] bg-gray-50 text-gray-700">
+                    {selectedOrder.articles[0].articleNumber || selectedOrder.articles[0].id || selectedOrder.articles[0]._id || "—"}
+                  </div>
+                ) : (
                   <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-gray-300" value={updateContainerArticleId} onChange={(e) => setUpdateContainerArticleId(e.target.value)}>
-                    {selectedOrder.articles.map((a) => (
-                      <option key={a._id || a.id} value={a._id || a.id}>{a.articleNumber || a._id || a.id}</option>
-                    ))}
+                    <option value="">Select article</option>
+                    {selectedOrder.articles.map((a) => { const id = a.id || a._id; if (!id) return null; return <option key={id} value={id}>{a.articleNumber || id}</option>; })}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Next floor</label>
-                  <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-gray-300" value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)}>
-                    <option value="Boarding">Boarding</option>
-                    <option value="Final Checking">Final Checking</option>
-                    <option value="Branding">Branding</option>
-                    <option value="Warehouse">Warehouse</option>
-                  </select>
-                </div>
+                )}
+              </div>
+              <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
+                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Quantity (washing completed)</label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="Washing completed quantity"
+                  value={updateContainerQuantity}
+                  onChange={(e) => setUpdateContainerQuantity(e.target.value)}
+                  className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:ring-0 focus:border-purple-300"
+                />
+              </div>
+              <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
+                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Next floor</label>
+                <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-gray-300" value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)}>
+                  <option value="Boarding">Boarding</option>
+                  <option value="Final Checking">Final Checking</option>
+                  <option value="Branding">Branding</option>
+                  <option value="Warehouse">Warehouse</option>
+                </select>
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
-                <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }}>Cancel</button>
+                <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }}>Cancel</button>
                 <button
                   type="button"
                   disabled={updateContainerCheckStatus !== "ok" || !updateContainerBarcode.trim() || !updateContainerArticleId || !updateContainerNextFloor.trim() || updateContainerSubmitting}
@@ -1013,13 +1050,22 @@ const WashingFloorSupervisorPage = () => {
                     const articleId = updateContainerArticleId;
                     const floor = updateContainerNextFloor.trim();
                     if (!barcode || !articleId || !floor) return;
+                    const qtyNum = updateContainerQuantity.trim() ? parseInt(updateContainerQuantity.trim(), 10) : NaN;
+                    const qty = updateContainerQuantity.trim() === "" ? (updateData[articleId]?.completedQuantity ?? 0) : (Number.isFinite(qtyNum) && qtyNum >= 0 ? qtyNum : NaN);
+                    if (!Number.isFinite(qty) || qty < 0) {
+                      toast.error("Please enter a valid quantity (0 or greater)");
+                      return;
+                    }
+                    const article = selectedOrder?.articles?.find((a) => a._id === articleId || a.id === articleId);
+                    const activeArticleMongoId = article?._id ?? articleId;
                     setUpdateContainerSubmitting(true);
                     try {
-                      await containersMasterService.updateByBarcode(barcode, { activeArticle: articleId, activeFloor: floor });
+                      await containersMasterService.updateByBarcode(barcode, { activeArticle: activeArticleMongoId, activeFloor: floor, quantity: qty });
                       toast.success("Container updated");
                       setShowUpdateContainerModal(false);
                       setUpdateContainerBarcode("");
                       setUpdateContainerArticleId("");
+                      setUpdateContainerQuantity("");
                       setUpdateContainerNextFloor("Boarding");
                       setUpdateContainerCheckStatus("idle");
                       setUpdateContainerFetched(null);
@@ -1063,21 +1109,26 @@ const WashingFloorSupervisorPage = () => {
                 </div>
                   ) : (
                 <div className="space-y-4">
+                  {/* Container details from API */}
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200 text-[12px] text-gray-900 space-y-1">
+                    <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider mb-2">Container</h4>
+                    <div><span className="font-bold text-[#495057]">Name:</span> {containerScanned.container.containerName ?? containerScanned.container.barcode ?? "—"}</div>
+                    <div><span className="font-bold text-[#495057]">Barcode:</span> {containerScanned.container.barcode}</div>
+                    <div><span className="font-bold text-[#495057]">Status:</span> {containerScanned.container.status ?? "—"}</div>
+                    <div><span className="font-bold text-[#495057]">Active floor:</span> {containerScanned.container.activeFloor ?? "—"}</div>
+                  </div>
                   <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Article details</h4>
+                  <div className="p-2 bg-gray-50 rounded border border-gray-200 text-[12px] text-gray-900">
+                    <div><span className="font-bold text-[#495057]">Article number:</span> {isPopulatedActiveArticle(containerScanned.container.activeArticle) ? containerScanned.container.activeArticle.articleNumber : containerScanned.article?.articleNumber ?? "—"}</div>
+                    <div><span className="font-bold text-[#495057]">Quantity:</span> {containerScanned.container.quantity ?? "—"}</div>
+                  </div>
                   {!containerBelongsToCurrentFloor && (
                     <div className="p-2 rounded border-2 border-red-400 bg-red-50 text-[11px] text-red-800">
                       This container is assigned to <strong>{containerScanned.container.activeFloor || "unknown"}</strong>, not {CURRENT_FLOOR}. Accept Article is disabled.
                     </div>
                   )}
-                  <p className="text-[11px] text-gray-700">Container: <strong>{containerScanned.container.barcode}</strong></p>
                   {containerScanned.article ? (
                     <>
-                      <div className={`p-2 rounded border text-[12px] text-gray-900 ${containerBelongsToCurrentFloor ? "bg-gray-50 border-gray-200" : "bg-red-50/50 border-2 border-red-400"}`}>
-                        <div><span className="font-bold text-[#495057]">Article:</span> {containerScanned.article.articleNumber}</div>
-                        <div><span className="font-bold text-[#495057]">Order:</span> {(containerScanned.article as any).orderId ?? "—"}</div>
-                        <div><span className="font-bold text-[#495057]">Planned:</span> {containerScanned.article.plannedQuantity}</div>
-                        <div><span className="font-bold text-[#495057]">Washing received:</span> {(containerScanned.article as any).floorQuantities?.washing?.received ?? 0}</div>
-                      </div>
                       <button type="button" onClick={handleAcceptArticleQuantity} disabled={acceptArticleLoading || !containerBelongsToCurrentFloor} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                         {acceptArticleLoading ? "..." : "Accept article quantity (Washing)"}
                       </button>

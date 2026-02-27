@@ -3,15 +3,35 @@ import Cookies from 'js-cookie';
 
 export type ContainerStatus = 'Active' | 'Inactive';
 
+/** Populated article when GET /barcode/:barcode returns activeArticle as object */
+export interface ContainerActiveArticlePopulated {
+  _id: string;
+  id?: string;
+  articleNumber: string;
+  orderId?: string;
+  plannedQuantity?: number;
+  floorQuantities?: Record<string, { received?: number; completed?: number; remaining?: number; transferred?: number }>;
+  [key: string]: unknown;
+}
+
 export interface ContainerMaster {
   _id: string;
   barcode: string;
   containerName?: string;
   status: ContainerStatus;
-  activeArticle?: string;
+  activeArticle?: string | ContainerActiveArticlePopulated;
   activeFloor?: string;
+  /** Quantity from container barcode API response */
+  quantity?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** True when activeArticle is the populated object from API */
+export function isPopulatedActiveArticle(
+  activeArticle: string | ContainerActiveArticlePopulated | undefined
+): activeArticle is ContainerActiveArticlePopulated {
+  return Boolean(activeArticle && typeof activeArticle === 'object' && 'articleNumber' in activeArticle);
 }
 
 export interface ContainersListParams {
@@ -40,10 +60,11 @@ export interface UpdateContainerBody {
   status?: ContainerStatus;
 }
 
-/** Body for PATCH /barcode/:barcode – set active article and floor on container */
+/** Body for PATCH /barcode/:barcode – set active article, floor and optional quantity on container */
 export interface UpdateContainerByBarcodeBody {
   activeArticle: string; // MongoDB ObjectId
   activeFloor: string;   // non-empty floor name
+  quantity?: number;    // optional quantity (e.g. for knitting transfer)
 }
 
 const getAccessToken = (): string | null => {
