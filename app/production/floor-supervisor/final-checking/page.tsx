@@ -229,6 +229,21 @@ const FinalCheckingFloorSupervisorPage = () => {
     });
   };
 
+  /** Max M1 user can transfer = Remaining − (M2 + M3 + M4). */
+  const getActualRemainingForArticle = (article: Article): number => {
+    const articleId = article.id || article._id;
+    if (!articleId) return 0;
+    const fc = article.floorQuantities?.finalChecking;
+    const received = fc?.received || 0;
+    const transferred = fc?.transferred || 0;
+    const remaining = received - transferred;
+    const update = updateData[articleId];
+    const totalM2 = (update?.m2Quantity ?? 0) + (transferM2M3M4[articleId]?.m2 ?? 0);
+    const totalM3 = (update?.m3Quantity ?? 0) + (transferM2M3M4[articleId]?.m3 ?? 0);
+    const totalM4 = (update?.m4Quantity ?? 0) + (transferM2M3M4[articleId]?.m4 ?? 0);
+    return Math.max(0, remaining - (totalM2 + totalM3 + totalM4));
+  };
+
   // Apply filtering to orders
   const paginatedOrders = filterOrdersByReceivedQuantity(orders);
 
@@ -542,14 +557,12 @@ const FinalCheckingFloorSupervisorPage = () => {
       if (!articleId) return false;
       const update = updateData[articleId];
       if (!update) return false;
-      const received = article.floorQuantities?.finalChecking?.received || 0;
-      const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
-      const remaining = received - transferred; // Use transferred instead of current M1
-      return update.m1Quantity > remaining;
+      const actualRemaining = getActualRemainingForArticle(article);
+      return update.m1Quantity > actualRemaining;
     });
 
     if (invalidArticles.length > 0) {
-      toast.error('M1 quantity cannot exceed received quantity for some articles');
+      toast.error('Cannot submit: Some articles have M1 exceeding remaining (Remaining − M2−M3−M4)');
       return;
     }
 
@@ -1454,28 +1467,38 @@ const FinalCheckingFloorSupervisorPage = () => {
                   </tbody>
                 </table>
               </div>
+              {(() => {
+                const totalM2 = currentUpdateData.m2Quantity + (transferM2M3M4[articleId]?.m2 ?? 0);
+                const totalM3 = currentUpdateData.m3Quantity + (transferM2M3M4[articleId]?.m3 ?? 0);
+                const totalM4 = currentUpdateData.m4Quantity + (transferM2M3M4[articleId]?.m4 ?? 0);
+                const actualRemainingForTransfer = Math.max(0, remaining - (totalM2 + totalM3 + totalM4));
+                return (
+                  <p className="px-3 py-1 text-[10px] text-gray-600 bg-amber-50 border-t border-gray-200">Remaining for M1 transfer = Remaining − (M2+M3+M4) = <strong>{actualRemainingForTransfer}</strong> (max you can enter below).</p>
+                );
+              })()}
             </section>
             <section className="mb-4 rounded-md border-2 border-green-300 overflow-hidden">
               <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Good quality (M1) — how many to send to next floor?</div>
-              <p className="px-3 py-1 text-[10px] text-gray-600 bg-green-50/50 border-b border-green-200">Only good-quality pieces (M1) go to the next floor. Enter the quantity you are transferring now. Cannot exceed Remaining above.</p>
+              <p className="px-3 py-1 text-[10px] text-gray-600 bg-green-50/50 border-b border-green-200">Max = Remaining − (M2+M3+M4). You cannot transfer more than that.</p>
               <div className="p-2">
                 <div className="flex flex-wrap items-center gap-3">
                   <div>
                     <label className="text-[10px] font-bold text-green-800 block mb-0.5">Quantity to transfer</label>
                     {(() => {
-                      const isFullyTransferred = remaining <= 0;
+                      const actualRemaining = getActualRemainingForArticle(article);
+                      const isFullyTransferred = actualRemaining <= 0;
                       return (
                         <>
-                          <span className="text-[10px] text-gray-500 block mb-0.5">(Max: {remaining})</span>
+                          <span className="text-[10px] text-gray-500 block mb-0.5">(Max: {actualRemaining})</span>
                           <NumericInput
-                            className={`py-1.5 px-2 text-[12px] w-24 border-2 rounded ${isFullyTransferred ? "bg-gray-100 border-gray-300 cursor-not-allowed" : currentUpdateData.m1Quantity > remaining ? "border-red-500" : "border-gray-300"}`}
+                            className={`py-1.5 px-2 text-[12px] w-24 border-2 rounded ${isFullyTransferred ? "bg-gray-100 border-gray-300 cursor-not-allowed" : currentUpdateData.m1Quantity > actualRemaining ? "border-red-500" : "border-gray-300"}`}
                             value={currentUpdateData.m1Quantity}
-                            onChange={(value) => { if (!isFullyTransferred && value <= remaining) handleM1QuantityChange(articleId, value); }}
-                            placeholder={isFullyTransferred ? "Done" : `Max ${remaining}`}
+                            onChange={(value) => { if (!isFullyTransferred && value <= actualRemaining) handleM1QuantityChange(articleId, value); }}
+                            placeholder={isFullyTransferred ? "Done" : `Max ${actualRemaining}`}
                             disabled={isFullyTransferred}
                             allowDecimals
                           />
-                          {isFullyTransferred ? <div className="text-[10px] text-green-600 mt-0.5 font-medium">✓ All transferred</div> : currentUpdateData.m1Quantity > remaining ? <div className="text-[10px] text-red-600 font-medium">Max {remaining}</div> : null}
+                          {isFullyTransferred ? <div className="text-[10px] text-green-600 mt-0.5 font-medium">✓ No quantity left to transfer</div> : currentUpdateData.m1Quantity > actualRemaining ? <div className="text-[10px] text-red-600 font-medium">Max {actualRemaining}</div> : null}
                         </>
                       );
                     })()}
@@ -1489,8 +1512,13 @@ const FinalCheckingFloorSupervisorPage = () => {
               <div className="p-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="border-2 border-green-300 rounded p-2 bg-green-50/50">
                   <label className="block text-[10px] font-bold text-green-800 mb-0.5">M1 Good</label>
-                  <p className="text-[9px] text-green-700 mb-1">Passes to next floor</p>
-                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-green-200 rounded" value={currentUpdateData.m1Quantity} onChange={(v) => handleM1QuantityChange(articleId, v)} allowDecimals />
+                  <p className="text-[9px] text-green-700 mb-1">Passes to next floor (max: {getActualRemainingForArticle(article)})</p>
+                  <NumericInput
+                    className="py-1.5 px-2 text-[12px] w-full border-2 border-green-200 rounded"
+                    value={currentUpdateData.m1Quantity}
+                    onChange={(v) => { const max = getActualRemainingForArticle(article); if (v <= max) handleM1QuantityChange(articleId, v); }}
+                    allowDecimals
+                  />
                 </div>
                 <div className="border-2 border-yellow-400 rounded p-2 bg-yellow-50/50">
                   <label className="block text-[10px] font-bold text-yellow-800 mb-0.5">M2 Repair</label>
@@ -1665,13 +1693,11 @@ const FinalCheckingFloorSupervisorPage = () => {
                     if (!articleId) return false;
                     const update = updateData[articleId];
                     if (!update) return false;
-                    const received = article.floorQuantities?.finalChecking?.received || 0;
-                    const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
-                    const remaining = received - transferred;
-                    return update.m1Quantity > remaining;
+                    const actualRemaining = getActualRemainingForArticle(article);
+                    return update.m1Quantity > actualRemaining;
                   });
                   if (invalid) {
-                    toast.error("Cannot submit: Some articles have M1 quantities exceeding remaining quantities");
+                    toast.error("Cannot submit: Some articles have M1 exceeding remaining (Remaining − M2−M3−M4)");
                     return;
                   }
                   const hasAnyM1 = selectedOrder.articles.some(article => {
@@ -1697,10 +1723,8 @@ const FinalCheckingFloorSupervisorPage = () => {
                   if (!articleId) return false;
                   const update = updateData[articleId];
                   if (!update) return false;
-                  const received = article.floorQuantities?.finalChecking?.received || 0;
-                  const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
-                  const remaining = received - transferred;
-                  return update.m1Quantity > remaining;
+                  const actualRemaining = getActualRemainingForArticle(article);
+                  return update.m1Quantity > actualRemaining;
                 })}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 shadow-sm disabled:opacity-50"
               >
