@@ -11,7 +11,7 @@ import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuan
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
 import { containersMasterService, type ContainerMaster, isPopulatedActiveArticle } from "@/shared/services/containersMasterService";
-import { teamMasterService, type TeamMaster } from "@/shared/services/teamMasterService";
+import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 
 type SiliconTab = "orders" | "article-view" | "my-team";
 
@@ -61,6 +61,7 @@ const SiliconFloorSupervisorPage = () => {
   const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "ok">("idle");
   const [updateContainerFetched, setUpdateContainerFetched] = useState<{ activeArticle?: string | { articleNumber?: string; [k: string]: unknown }; activeFloor?: string } | null>(null);
   const [updateContainerArticleId, setUpdateContainerArticleId] = useState("");
+  const [updateContainerQuantity, setUpdateContainerQuantity] = useState("");
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Boarding");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
 
@@ -176,6 +177,12 @@ const SiliconFloorSupervisorPage = () => {
       clearTimeout(t);
     };
   }, [showUpdateContainerModal, updateContainerBarcode]);
+
+  // When article changes in modal, sync quantity from that article's silicon completed (updateData)
+  useEffect(() => {
+    if (!showUpdateContainerModal || !updateContainerArticleId) return;
+    setUpdateContainerQuantity(String(updateData[updateContainerArticleId]?.completedQuantity ?? 0));
+  }, [showUpdateContainerModal, updateContainerArticleId]);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -933,7 +940,9 @@ const SiliconFloorSupervisorPage = () => {
                   setUpdateContainerCheckStatus("idle");
                   setUpdateContainerFetched(null);
                   const first = selectedOrder.articles[0];
-                  setUpdateContainerArticleId(first?._id || first?.id || "");
+                  const firstId = first?.id || first?._id || "";
+                  setUpdateContainerArticleId(firstId);
+                  setUpdateContainerQuantity(String(updateData[firstId]?.completedQuantity ?? 0));
                   setUpdateContainerNextFloor("Boarding");
                   setShowUpdateContainerModal(true);
                 }}
@@ -958,16 +967,17 @@ const SiliconFloorSupervisorPage = () => {
 
       {showUpdateContainerModal && selectedOrder && (
         <>
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-[60]" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }} aria-hidden />
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-[60]" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }} aria-hidden />
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <div className="bg-white rounded-lg shadow-xl border border-gray-200 max-w-md w-full p-4 flex flex-col">
               <h4 className="text-sm font-bold text-gray-800 mb-3">Scan bag/container</h4>
-              <p className="text-[11px] text-gray-600 mb-3">Scan the container that will move to the next floor. Then select article and next floor, and click Update & submit order.</p>
+              <p className="text-[11px] text-gray-600 mb-3">Scan the container for silicon completed articles. Quantity comes from Silicon completed in the update order modal. Select article and next floor, then Update & submit order.</p>
               <div className="space-y-2 mb-3">
+                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Container barcode</label>
                 <input
                   type="text"
                   className="w-full border border-gray-200 rounded px-3 py-2 text-[11px] focus:ring-0 focus:border-purple-300 placeholder:text-gray-400 font-medium"
-                  placeholder="Barcode..."
+                  placeholder="Scan or enter barcode..."
                   value={updateContainerBarcode}
                   onChange={(e) => setUpdateContainerBarcode(e.target.value)}
                 />
@@ -984,27 +994,38 @@ const SiliconFloorSupervisorPage = () => {
               )}
                 {updateContainerCheckStatus === "ok" && <p className="text-[11px] text-green-600">Container is empty and ready.</p>}
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Article</label>
+              <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
+                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Article in container</label>
+                {selectedOrder.articles.length === 1 ? (
+                  <div className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] bg-gray-50 text-gray-700">
+                    {selectedOrder.articles[0].articleNumber || selectedOrder.articles[0].id || selectedOrder.articles[0]._id || "—"}
+                  </div>
+                ) : (
                   <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300" value={updateContainerArticleId} onChange={(e) => setUpdateContainerArticleId(e.target.value)}>
-                    {selectedOrder.articles.map((a) => (
-                      <option key={a._id || a.id} value={a._id || a.id}>{a.articleNumber || a._id || a.id}</option>
-                    ))}
+                    <option value="">Select article</option>
+                    {selectedOrder.articles.map((a) => { const id = a.id || a._id; if (!id) return null; return <option key={id} value={id}>{a.articleNumber || id}</option>; })}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Next floor</label>
-                  <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300" value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)}>
-                    <option value="Boarding">Boarding</option>
-                    <option value="Final Checking">Final Checking</option>
-                    <option value="Branding">Branding</option>
-                    <option value="Warehouse">Warehouse</option>
-                  </select>
-                </div>
+                )}
+              </div>
+              <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
+                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Quantity (silicon completed)</label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="Silicon completed quantity"
+                  value={updateContainerQuantity}
+                  onChange={(e) => setUpdateContainerQuantity(e.target.value)}
+                  className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:ring-0 focus:border-purple-300"
+                />
+              </div>
+              <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
+                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Next floor</label>
+                <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300" value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)}>
+                  {PRODUCTION_FLOORS.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select>
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
-                <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); }}>Cancel</button>
+                <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }}>Cancel</button>
                 <button
                   type="button"
                   disabled={updateContainerCheckStatus !== "ok" || !updateContainerBarcode.trim() || !updateContainerArticleId || !updateContainerNextFloor.trim() || updateContainerSubmitting}
@@ -1014,15 +1035,22 @@ const SiliconFloorSupervisorPage = () => {
                     const articleId = updateContainerArticleId;
                     const floor = updateContainerNextFloor.trim();
                     if (!barcode || !articleId || !floor) return;
+                    const qtyNum = updateContainerQuantity.trim() ? parseInt(updateContainerQuantity.trim(), 10) : NaN;
+                    const qty = updateContainerQuantity.trim() === "" ? (updateData[articleId]?.completedQuantity ?? 0) : (Number.isFinite(qtyNum) && qtyNum >= 0 ? qtyNum : NaN);
+                    if (!Number.isFinite(qty) || qty < 0) {
+                      toast.error("Please enter a valid quantity (0 or greater)");
+                      return;
+                    }
                     const article = selectedOrder?.articles?.find((a) => a._id === articleId || a.id === articleId);
                     const activeArticleMongoId = article?._id ?? articleId;
                     setUpdateContainerSubmitting(true);
                     try {
-                      await containersMasterService.updateByBarcode(barcode, { activeArticle: activeArticleMongoId, activeFloor: floor });
+                      await containersMasterService.updateByBarcode(barcode, { activeArticle: activeArticleMongoId, activeFloor: floor, quantity: qty });
                       toast.success("Container updated");
                       setShowUpdateContainerModal(false);
                       setUpdateContainerBarcode("");
                       setUpdateContainerArticleId("");
+                      setUpdateContainerQuantity("");
                       setUpdateContainerNextFloor("Boarding");
                       setUpdateContainerCheckStatus("idle");
                       setUpdateContainerFetched(null);
