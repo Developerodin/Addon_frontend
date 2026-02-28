@@ -576,6 +576,7 @@ const EditPurchasePage = () => {
             onCancel={handleCancel}
             isSubmitting={isSubmitting}
             submitButtonText="Update Purchase Order"
+            showEditWarning
           />
         </div>
       </div>

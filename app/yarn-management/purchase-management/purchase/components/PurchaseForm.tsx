@@ -70,6 +70,8 @@ interface PurchaseFormProps {
   onCancel: () => void;
   isSubmitting?: boolean;
   submitButtonText?: string;
+  /** When true, shows a red warning that updating PO may affect lots/packlist data. Used on edit page. */
+  showEditWarning?: boolean;
 }
 
 interface SupplierYarnOption {
@@ -88,7 +90,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   onSubmit,
   onCancel,
   isSubmitting = false,
-  submitButtonText = "Submit to Supplier"
+  submitButtonText = "Submit to Supplier",
+  showEditWarning = false,
 }) => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -1495,6 +1498,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {showEditWarning && (
+        <div
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-3 py-2.5 text-xs text-red-800"
+        >
+          <strong className="font-semibold">Warning:</strong> Updating this PO may affect lots data and packlist data.
+          After updating, verify and fix packlist and lots, and confirm all details.
+        </div>
+      )}
       {/* Purchase Header Information */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
