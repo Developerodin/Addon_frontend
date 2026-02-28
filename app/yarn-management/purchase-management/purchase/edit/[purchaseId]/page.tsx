@@ -495,6 +495,7 @@ const EditPurchasePage = () => {
         };
 
         return {
+          ...(item.id && { _id: String(item.id) }),
           yarn: String(item.yarnId),
           yarnName: item.yarnName,
           sizeCount: String(resolveSizeCount()),

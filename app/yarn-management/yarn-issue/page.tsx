@@ -1105,6 +1105,14 @@ const YarnIssuePage = () => {
 
       const coneDetails = await response.json();
 
+      if (coneDetails.issueStatus === "issued") {
+        const msg = "This cone is already issued. Not available right now.";
+        setScanYarnMismatchError(msg);
+        toast.error(msg);
+        setBarcodeLoading(false);
+        return;
+      }
+
       // Validate scanned cone matches the yarn selected for issue
       const coneYarnName =
         (typeof coneDetails.yarn === "object" && coneDetails.yarn?.yarnName) || coneDetails.yarnName || "";

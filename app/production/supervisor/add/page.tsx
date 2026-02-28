@@ -806,16 +806,17 @@ const AddOrderPage = () => {
                               <div className="flex gap-1">
                                 <input
                                   type="text"
-                                  className={`form-control form-control-sm flex-1 text-xs py-1 px-2 h-8 ${errors[`article_${index}_articleNumber`] ? 'border-red-500' : ''}`}
+                                  readOnly
+                                  className={`form-control form-control-sm flex-1 text-xs py-1 px-2 h-8 bg-gray-50 cursor-pointer ${errors[`article_${index}_articleNumber`] ? 'border-red-500' : ''}`}
                                   value={article.articleNumber}
-                                  onChange={(e) => handleArticleChange(index, 'articleNumber', e.target.value)}
-                                  placeholder="Factory Code"
+                                  onClick={() => openProductModal(index)}
+                                  placeholder="Click search to select article"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => openProductModal(index)}
                                   className="flex items-center justify-center w-8 h-8 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
-                                  title="Select Factory Code"
+                                  title="Search & select article"
                                 >
                                   <i className="ri-search-line text-xs"></i>
                                 </button>

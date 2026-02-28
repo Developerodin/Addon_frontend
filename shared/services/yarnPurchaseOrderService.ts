@@ -88,6 +88,7 @@ export interface PurchaseOrderQueryParams {
 }
 
 export interface PurchaseOrderItemPayload {
+  _id?: string; // Required for PATCH: existing line items must include _id so backend can update them
   yarn: string;
   yarnName: string;
   sizeCount: string;
