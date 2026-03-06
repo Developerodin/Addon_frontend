@@ -1417,9 +1417,47 @@ const ProductListPage = () => {
 
           setImportProgress(75);
 
-          // Send bulk import request
+          // For updates (rows with ID), fetch existing product and merge attributes, bom, processes so they are not cleared by backend
+          const BATCH_SIZE = 10;
+          const toMerge = transformedProducts.filter((p: any) => p.id);
+          const existingMap = new Map<string, Product>();
+          if (toMerge.length > 0) {
+            for (let i = 0; i < toMerge.length; i += BATCH_SIZE) {
+              const batch = toMerge.slice(i, i + BATCH_SIZE);
+              const fetched = await Promise.all(
+                batch.map((p: any) =>
+                  axios.get(`${API_ENDPOINTS.products}/${p.id}`).then((r) => r.data).catch(() => null)
+                )
+              );
+              fetched.forEach((existing: Product | null, idx) => {
+                const id = batch[idx].id;
+                if (existing && id) existingMap.set(id, existing);
+              });
+            }
+          }
+
+          const mergedProducts = transformedProducts.map((productData: any) => {
+            const id = productData.id;
+            if (!id) return productData;
+            const existing = existingMap.get(id);
+            if (!existing) return productData;
+
+            // Merge attributes: keep existing, overwrite with Excel (e.g. Needles)
+            const mergedAttributes = { ...(existing.attributes || {}) };
+            if (productData.attributes && typeof productData.attributes === 'object') {
+              Object.assign(mergedAttributes, productData.attributes);
+            }
+            const payload: any = { ...productData };
+            payload.attributes = Object.keys(mergedAttributes).length > 0 ? mergedAttributes : undefined;
+            // Preserve BOM and processes so backend does not clear them
+            if (existing.bom && existing.bom.length > 0) payload.bom = existing.bom;
+            if (existing.processes && existing.processes.length > 0) payload.processes = existing.processes;
+            return payload;
+          });
+
+          // Send bulk import request (with merged data for updates)
           const response = await axios.post(`${API_ENDPOINTS.products}/bulk-import`, {
-            products: transformedProducts,
+            products: mergedProducts,
             batchSize: 50, // You can adjust this if needed
           });
 
@@ -2173,8 +2211,43 @@ const ProductListPage = () => {
         setImportProgress(null);
         return;
       }
+
+      // For updates (rows with id), fetch existing product and merge attributes, bom, processes so they are not cleared
+      const withId = products.filter((p: ProductBulkRow) => p.id);
+      const existingById = new Map<string, Product>();
+      const BATCH = 10;
+      for (let i = 0; i < withId.length; i += BATCH) {
+        const batch = withId.slice(i, i + BATCH);
+        const results = await Promise.all(
+          batch.map((p) =>
+            axios.get(`${API_ENDPOINTS.products}/${(p as ProductBulkRow & { id: string }).id}`).then((r) => r.data as Product).catch(() => null)
+          )
+        );
+        results.forEach((ex, idx) => {
+          const id = (batch[idx] as ProductBulkRow & { id: string }).id;
+          if (ex && id) existingById.set(id, ex);
+        });
+      }
+
+      const mergedForUpsert = products.map((p) => {
+        const row = { ...p } as ProductBulkRow & { bom?: ProductBOM[]; processes?: ProductProcess[] };
+        const id = (p as ProductBulkRow & { id?: string }).id;
+        if (!id) return row;
+        const existing = existingById.get(id);
+        if (!existing) return row;
+        // Merge attributes so we don't wipe other attributes
+        const mergedAttrs = { ...(existing.attributes || {}) };
+        if ((p as ProductBulkRow).attributes && typeof (p as ProductBulkRow).attributes === 'object') {
+          Object.assign(mergedAttrs, (p as ProductBulkRow).attributes);
+        }
+        row.attributes = Object.keys(mergedAttrs).length > 0 ? (mergedAttrs as { Needles?: string }) : undefined;
+        if (existing.bom?.length) row.bom = existing.bom;
+        if (existing.processes?.length) row.processes = existing.processes;
+        return row;
+      });
+
       setImportProgress(50);
-      const result = await productService.bulkUpsert(products, 50);
+      const result = await productService.bulkUpsert(mergedForUpsert as ProductBulkRow[], 50);
       setImportProgress(100);
       setTimeout(() => {
         setImportProgress(null);
