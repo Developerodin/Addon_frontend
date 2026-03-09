@@ -685,12 +685,6 @@ const EditProductPage = () => {
     console.log('Form Data:', formData);
     console.log('User Type - isDesign:', isDesign, 'isProduction:', isProduction, 'isFinal:', isFinal);
 
-      // Helper: at least one style code selected (has styleCodeId)
-    const validateStyleCodes = (codes: typeof formData.styleCodes) => {
-      if (!codes || codes.length === 0) return false;
-      return codes.some(sc => sc.styleCodeId && String(sc.styleCodeId).trim());
-    };
-
     // Validate required fields based on user type
     if (isProduction) {
       // Production user: Factory Code required only when not outsourced
@@ -699,13 +693,7 @@ const EditProductPage = () => {
         return;
       }
     } else if (isFinal) {
-      // Final user: Style Codes array and Description required
-      const hasValidStyleCodes = validateStyleCodes(formData.styleCodes);
-      console.log('Final User Validation - hasValidStyleCodes:', hasValidStyleCodes, 'description:', formData.description);
-      if (!hasValidStyleCodes || !formData.description || formData.description.trim() === '') {
-        alert('Please fill in all required fields. At least one style code entry with styleCode, eanCode, and mrp is required.');
-        return;
-      }
+      // Final user: no required-field validation on frontend
     } else if (isDesign) {
       const outsourced = formData.productionType === 'outsourced';
       const needCodes = !outsourced;
@@ -721,13 +709,11 @@ const EditProductPage = () => {
         return;
       }
     } else {
-      const hasValidStyleCodes = validateStyleCodes(formData.styleCodes);
       const outsourced = formData.productionType === 'outsourced';
       const needCodeFields = !outsourced;
       if (!formData.name || formData.name.trim() === '' || !formData.category ||
-          (needCodeFields && (!formData.factoryCode || formData.factoryCode.trim() === '')) ||
-          !hasValidStyleCodes || !formData.description || formData.description.trim() === '') {
-        alert('Please fill in all required fields. At least one style code is required.');
+          (needCodeFields && (!formData.factoryCode || formData.factoryCode.trim() === ''))) {
+        alert('Please fill in all required fields.');
         return;
       }
       if (needCodeFields && (
@@ -1101,7 +1087,6 @@ const EditProductPage = () => {
                             className="form-control"
                             value={formData.description}
                             onChange={handleInputChange}
-                            required
                             rows={4}
                           />
                         </div>
@@ -1297,7 +1282,6 @@ const EditProductPage = () => {
                                 className="form-control"
                                 value={formData.description}
                                 onChange={handleInputChange}
-                                required
                                 rows={4}
                               />
                             </div>

@@ -457,6 +457,90 @@ const ProductListPage = () => {
     }
   };
 
+  /** Export ALL products (paginated fetch) in same format as Export - for large catalogs e.g. 6000+ */
+  const handleExportAll = async () => {
+    try {
+      setExportProgress(0);
+      setIsLoading(true);
+      const PAGE_SIZE = 1000;
+      let allProducts: Product[] = [];
+      let page = 1;
+      let totalPages = 1;
+
+      // Paginate through all products
+      do {
+        const response = await axios.get(
+          `${API_ENDPOINTS.products}?page=${page}&limit=${PAGE_SIZE}`
+        );
+        const data = response.data as ProductsResponse;
+        allProducts = [...allProducts, ...(data.results || [])];
+        totalPages = data.totalPages ?? 1;
+        setExportProgress(Math.min(15, Math.round((page / totalPages) * 15)));
+        page++;
+      } while (page <= totalPages);
+
+      if (allProducts.length === 0) {
+        toast.error('No products found to export');
+        setExportProgress(null);
+        setIsLoading(false);
+        return;
+      }
+
+      setExportProgress(20);
+      const progressTimer2 = animateProgress(20, 40, 400);
+      const [categoriesResponse, attributesResponse] = await Promise.all([
+        axios.get(`${API_BASE_URL}/categories?page=1&limit=10000`),
+        axios.get(`${API_BASE_URL}/product-attributes?page=1&limit=10000`)
+      ]);
+      const allCategories = categoriesResponse.data.results || [];
+      const allAttributes = attributesResponse.data.results || [];
+      clearInterval(progressTimer2);
+      setExportProgress(50);
+
+      const categoryNameMapping: Record<string, string> = {};
+      allCategories.forEach((category: any) => {
+        categoryNameMapping[category.id] = category.name;
+      });
+      const attributeValueIdToName: Record<string, string> = {};
+      allAttributes.forEach((attr: any) => {
+        (attr.optionValues || []).forEach((value: any) => {
+          const valueId = value.id || value._id || value.valueId;
+          if (valueId && (value.name != null || value.value != null)) {
+            attributeValueIdToName[String(valueId)] = value.name ?? value.value ?? '';
+          }
+        });
+      });
+      setExportProgress(60);
+
+      const wb = XLSX.utils.book_new();
+      const exportOptions = { styleCodeLookup, attributeValueIdToName };
+      const exportData = allProducts.map((product, index) => {
+        if (index % 200 === 0) {
+          setExportProgress(60 + Math.floor((index / allProducts.length) * 25));
+        }
+        return buildExportData(product, categoryNameMapping, exportOptions);
+      });
+      setExportProgress(85);
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Products');
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data2 = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      setExportProgress(95);
+      saveAs(data2, `products_all_${new Date().toISOString().split('T')[0]}.xlsx`);
+      setExportProgress(100);
+      setTimeout(() => {
+        setExportProgress(null);
+        toast.success(`All ${allProducts.length} products exported successfully`);
+      }, 500);
+    } catch (error) {
+      console.error('Error exporting all products:', error);
+      setExportProgress(null);
+      toast.error('Error exporting all products. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
   const handleExportByAttributes = async () => {
     try {
       setExportProgress(0);
@@ -2489,13 +2573,16 @@ const ProductListPage = () => {
               </button>
               {showMoreExports && (
                 <div className="flex flex-wrap gap-2 mt-2 w-full">
-                  <span className="text-[11px] font-bold text-gray-500 self-center mr-1">Process Excel:</span>
+                  {/* <button type="button" onClick={handleExportAll} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 text-[11px] font-bold rounded hover:bg-purple-100" disabled={isLoading}>
+                    <i className="ri-download-2-line text-xs"></i> Export All
+                  </button> */}
+                  {/* <span className="text-[11px] font-bold text-gray-500 self-center mr-1">Process Excel:</span>
                   <button type="button" onClick={handleProcessExcelExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold rounded hover:bg-amber-100" disabled={isLoading}>
                     <i className="ri-download-2-line text-xs"></i> Process Excel Export
                   </button>
                   <button type="button" onClick={() => processExcelFileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold rounded hover:bg-amber-100" disabled={isLoading}>
                     <i className="ri-file-excel-2-line text-xs"></i> Process Excel Import
-                  </button>
+                  </button> */}
                   <button type="button" onClick={handleExportByAttributes} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-600 border border-sky-100 text-[11px] font-bold rounded hover:bg-sky-100" disabled={isLoading}>
                     <i className="ri-download-2-line text-xs"></i> Export by Attributes
                   </button>

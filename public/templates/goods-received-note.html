@@ -176,11 +176,12 @@
 
 <body>
     <div class="grn-container">
-        <div class="header-title" id="page-title">PURCHASE INVOICE</div>
+        <div class="header-title" id="page-title">GOODS RECEIPT NOTE</div>
 
         <table class="header-grid">
             <tr>
-                <td colspan="4" rowspan="2" style="width: 50%;">
+                <td colspan="4" rowspan="3" style="width: 50%;">
+                    <div class="label-cell">VENDOR NAME & ADDRESS</div>
                     <div class="company-name" id="supplier-name">SUTLEJ TEXTILES AND INDUSTRIES LIM</div>
                     <div id="supplier-address">
                         UNIT-CHENAB TEXTILE MILLS National<br>
@@ -194,61 +195,33 @@
                     </div>
                 </td>
                 <td colspan="2" style="width: 25%; height: 22px;">
-                    <div class="label-cell">Invoice No. :</div>
-                    <div class="value-cell" id="invoice-no">P/25-26/00702</div>
+                    <div class="label-cell">PO NO.</div>
+                    <div class="value-cell" id="po-no">P/25-26/00702</div>
                 </td>
                 <td colspan="2" style="width: 25%; height: 22px;">
-                    <div class="label-cell">Dated</div>
-                    <div class="value-cell" id="invoice-date">16-02-2026</div>
+                    <div class="label-cell">PO Date</div>
+                    <div class="value-cell" id="po-date">16-02-2026</div>
                 </td>
             </tr>
             <tr>
                 <td colspan="2" style="height: 22px;">
-                    <div class="label-cell">Delivery Note</div>
-                    <div class="value-cell" id="delivery-note"></div>
+                    <div class="label-cell">Vendor Invoice NO.</div>
+                    <div class="value-cell" id="vendor-invoice-no"></div>
                 </td>
                 <td colspan="2" style="height: 22px;">
-                    <div class="label-cell">Mode/Terms of Payment</div>
-                    <div class="value-cell" id="payment-terms"></div>
-                </td>
-            </tr>
-            <tr>
-                <td colspan="4" rowspan="4" class="no-border-top">
-                    <div class="label-cell">Consignee</div>
-                    <div class="company-name" id="consignee-name">ADDON HOLDINGS PRIVATE LIMITED</div>
-                    <div id="consignee-address">
-                        B/7, GF Asmeeta Textile Park Addl Kalyan<br>
-                        Bhiwandi MIDC Area, Village Kon, Bhiwandi, Pin -<br>
-                        421302 MAHARASHTRA
-                    </div>
-                    <div style="margin-top: 5px;">
-                        <b>State Code:</b> <span id="consignee-state-code">27</span><br>
-                        <b>Contact No.</b> <span id="consignee-contact">02522-297432</span><br>
-                        <b>E-Mail:-</b> <span id="consignee-email">designer1@addbr.com</span>
-                    </div>
-                </td>
-                <td colspan="2" style="height: 22px;">
-                    <div class="label-cell">Suppliers Ref</div>
-                    <div class="value-cell" id="supplier-ref"></div>
-                </td>
-                <td colspan="2" style="height: 22px;">
-                    <div class="label-cell">Other References/PO No:</div>
-                    <div class="value-cell" id="other-ref"></div>
+                    <div class="label-cell">Vendor Invoice Date</div>
+                    <div class="value-cell" id="vendor-invoice-date"></div>
                 </td>
             </tr>
             <tr>
                 <td colspan="2" style="height: 22px;">
-                    <div class="label-cell">Buyers Order No.</div>
-                    <div class="value-cell" id="po-no"></div>
+                    <div class="label-cell">GRN NO.</div>
+                    <div class="value-cell" id="grn-no"></div>
                 </td>
                 <td colspan="2" style="height: 22px;">
-                    <div class="label-cell">Delivery Note Date</div>
-                    <div class="value-cell" id="delivery-date"></div>
+                    <div class="label-cell">GRN DATE</div>
+                    <div class="value-cell" id="grn-date"></div>
                 </td>
-            </tr>
-            <tr>
-                <td colspan="2" style="height: 40px;" class="no-border-top"></td>
-                <td colspan="2" style="height: 40px;" class="no-border-top"></td>
             </tr>
         </table>
 
@@ -258,7 +231,7 @@
                     <th class="col-sr">SR.<br>No.</th>
                     <th class="col-color">SHADE CODE</th>
                     <th class="col-desc">DESCRIPTION OF GOODS</th>
-                    <th class="col-qty">QTY</th>
+                    <th class="col-qty">RECEIVED<br>QTY</th>
                     <th class="col-rate">RATE</th>
                     <th class="col-per">PER</th>
                     <th class="col-amount">AMOUNT</th>
@@ -278,7 +251,7 @@
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="3" class="text-right text-bold">TOTAL QTY :</td>
+                    <td colspan="3" class="text-right text-bold">TOTAL RECEIVED QTY :</td>
                     <td class="text-right text-bold" id="total-qty">0.0000</td>
                     <td colspan="2" class="text-right text-bold">TOTAL AMOUNT</td>
                     <td class="text-right text-bold" id="total-amount">0.00</td>
