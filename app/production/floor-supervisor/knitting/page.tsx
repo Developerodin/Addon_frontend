@@ -914,7 +914,17 @@ const KnittingFloorSupervisorPage = () => {
                         <div className="text-[12px] font-medium text-gray-600">{order.articles.length} Article{order.articles.length !== 1 ? 's' : ''} · Qty {order.articles.reduce((s, a) => s + (a.plannedQuantity || 0), 0).toLocaleString()}</div>
                         {order.articles.some(a => a.floorQuantities?.knitting) && (
                           <div className="text-[10px] text-blue-600 mt-0.5">
-                            R:{order.articles.reduce((s, a) => s + (a.floorQuantities?.knitting?.received || 0), 0)} Trf:{order.articles.reduce((s, a) => s + (a.floorQuantities?.knitting?.transferred || 0), 0)} Rem:{order.articles.reduce((s, a) => s + (a.floorQuantities?.knitting?.remaining || 0), 0)}
+                            R:{order.articles.reduce((s, a) => s + (a.floorQuantities?.knitting?.received || 0), 0)}{" "}
+                            Trf:{order.articles.reduce((s, a) => s + (a.floorQuantities?.knitting?.transferred || 0), 0)}{" "}
+                            Rem:{order.articles.reduce((s, a) => {
+                              const knitting = a.floorQuantities?.knitting;
+                              if (!knitting) return s;
+                              const received = knitting.received || 0;
+                              const transferred = knitting.transferred || 0;
+                              const m4 = knitting.m4Quantity || 0;
+                              const remaining = Math.max(0, received - transferred - m4);
+                              return s + remaining;
+                            }, 0)}
                           </div>
                         )}
                         {order.articles.some(a => a.floorQuantities?.knitting?.m4Quantity) && (
@@ -1037,7 +1047,7 @@ const KnittingFloorSupervisorPage = () => {
                       const plannedQty = article.plannedQuantity || 0;
                       const receivedQty = article.floorQuantities?.knitting?.received || 0;
                       const transferredQty = article.floorQuantities?.knitting?.transferred || 0;
-                      const remainingQty = article.floorQuantities?.knitting?.remaining || 0;
+                      const remainingQty = Math.max(0, receivedQty - transferredQty - currentM4FromArticle);
                       const displayCompleted = isReadOnly ? completedQty : (currentUpdateData.completedQuantity || 0);
                       const isOverproduction = displayCompleted > plannedQty;
                       const isFirstReadOnly = isReadOnly && idx === updateModalReadOnlyFromIndex;

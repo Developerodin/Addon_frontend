@@ -260,6 +260,14 @@
                     <td colspan="6" class="text-right" style="padding: 1px 4px; font-size: 8px;">Round Off Minus</td>
                     <td class="text-right" id="round-off" style="padding: 1px 4px; font-size: 8px;">0.00</td>
                 </tr>
+                <tr>
+                    <td colspan="6" class="text-right" style="padding: 1px 4px; font-size: 8px;">Shipping Charges</td>
+                    <td class="text-right" id="shipping-charges" style="padding: 1px 4px; font-size: 8px;">0.00</td>
+                </tr>
+                <tr>
+                    <td colspan="6" class="text-right" style="padding: 1px 4px; font-size: 8px;">Discount</td>
+                    <td class="text-right" id="discount-amount" style="padding: 1px 4px; font-size: 8px;">0.00</td>
+                </tr>
             </tfoot>
         </table>
 
@@ -308,20 +316,8 @@
         </table>
 
         <div class="footer-section">
-            <div style="margin-bottom: 8px;">
-                <b>Net Amount Total :-</b> <span id="total-in-words">Zero Only.</span>
-            </div>
-            <div style="margin-bottom: 8px;">
-                <b>NARRATION:</b> <span id="narration"></span>
-            </div>
-            <div style="margin-bottom: 10px;">
-                <b>GSTIN :</b> <span id="consignee-gst">27AAACA8827A1ZZ</span>
-            </div>
-
-            <div class="declaration">
-                <b style="text-decoration: underline;">Declaration</b><br>
-                We declare that this invoice shows the actual price of the<br>
-                goods described and that all particulars are true and correct.
+            <div style="margin-bottom: 8px; min-height: 100px;">
+                <b>Discrepancy Details:</b> <span id="discrepancy-details"></span>
             </div>
 
             <div class="signature-area">
