@@ -921,48 +921,53 @@ const AddOrderPage = () => {
                 {formData.articles.some(article => article.bom && article.bom.length > 0) && (
                   <div className="border-t pt-4 mt-4">
                     <h3 className="text-base font-semibold text-gray-900 mb-4">Article BOM</h3>
-                    <div className="space-y-4">
+                    <div className="space-y-2">
                       {formData.articles.map((article, articleIndex) => {
                         if (!article.bom || article.bom.length === 0 || article.plannedQuantity === 0) return null;
                         
                         return (
-                          <div key={article.id} className="border rounded-lg p-3 bg-gray-50">
-                            <h4 className="text-sm font-semibold text-gray-700 mb-2">
-                              Article: {article.articleNumber || 'N/A'} (Qty: {article.plannedQuantity})
-                            </h4>
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full text-xs">
-                                <thead className="bg-gray-100">
-                                  <tr>
-                                    <th className="px-2 py-1 text-left">Yarn Name</th>
-                                    <th className="px-2 py-1 text-right">Per Unit (g)</th>
-                                    <th className="px-2 py-1 text-right">Total Required (g)</th>
-                                    <th className="px-2 py-1 text-right">Total Required (kg)</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white">
-                                  {article.bom.map((bomItem, bomIndex) => {
-                                    // Use yarnCatalogId if available, otherwise fall back to materialId
-                                    const yarnCatalogId = bomItem.yarnCatalogId || bomItem.materialId || '';
-                                    const yarn = yarnCatalogId ? yarnCatalogs[yarnCatalogId] : null;
-                                    const yarnName = bomItem.yarnName || bomItem.materialName || yarn?.yarnName || 'Unknown Yarn';
-                                    const perUnitGrams = bomItem.quantity || 0;
-                                    const totalGrams = perUnitGrams * article.plannedQuantity;
-                                    const totalKg = totalGrams / 1000;
-                                    
-                                    return (
-                                      <tr key={bomIndex} className="border-b">
-                                        <td className="px-2 py-1">{yarnName}</td>
-                                        <td className="px-2 py-1 text-right">{perUnitGrams.toFixed(2)}</td>
-                                        <td className="px-2 py-1 text-right">{totalGrams.toFixed(2)}</td>
-                                        <td className="px-2 py-1 text-right">{totalKg.toFixed(3)}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
+                          <details key={article.id} className="border rounded-lg bg-gray-50 group">
+                            <summary className="px-3 py-2.5 cursor-pointer list-none flex items-center gap-2 hover:bg-gray-100 rounded-lg select-none">
+                              <span className="text-sm font-semibold text-gray-700">
+                                Article: {article.articleNumber || 'N/A'} (Qty: {article.plannedQuantity})
+                              </span>
+                              <i className="ri-arrow-down-s-line text-base text-gray-600 shrink-0 transition-transform duration-200 group-open:rotate-180" aria-hidden />
+                            </summary>
+                            <div className="px-3 pb-3 pt-0 border-t border-gray-200">
+                              <div className="overflow-x-auto mt-2">
+                                <table className="min-w-full text-xs">
+                                  <thead className="bg-gray-100">
+                                    <tr>
+                                      <th className="px-2 py-1 text-left">Yarn Name</th>
+                                      <th className="px-2 py-1 text-right">Per Unit (g)</th>
+                                      <th className="px-2 py-1 text-right">Total Required (g)</th>
+                                      <th className="px-2 py-1 text-right">Total Required (kg)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="bg-white">
+                                    {article.bom.map((bomItem, bomIndex) => {
+                                      // Use yarnCatalogId if available, otherwise fall back to materialId
+                                      const yarnCatalogId = bomItem.yarnCatalogId || bomItem.materialId || '';
+                                      const yarn = yarnCatalogId ? yarnCatalogs[yarnCatalogId] : null;
+                                      const yarnName = bomItem.yarnName || bomItem.materialName || yarn?.yarnName || 'Unknown Yarn';
+                                      const perUnitGrams = bomItem.quantity || 0;
+                                      const totalGrams = perUnitGrams * article.plannedQuantity;
+                                      const totalKg = totalGrams / 1000;
+                                      
+                                      return (
+                                        <tr key={bomIndex} className="border-b">
+                                          <td className="px-2 py-1">{yarnName}</td>
+                                          <td className="px-2 py-1 text-right">{perUnitGrams.toFixed(2)}</td>
+                                          <td className="px-2 py-1 text-right">{totalGrams.toFixed(2)}</td>
+                                          <td className="px-2 py-1 text-right">{totalKg.toFixed(3)}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
                             </div>
-                          </div>
+                          </details>
                         );
                       })}
                     </div>
@@ -972,27 +977,36 @@ const AddOrderPage = () => {
                 {/* Total BOM Requirements Section */}
                 {calculateTotalBOM().length > 0 && (
                   <div className="border-t pt-4 mt-4">
-                    <h3 className="text-base font-semibold text-gray-900 mb-4">Total BOM Requirements</h3>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-xs">
-                        <thead className="bg-gray-100">
-                          <tr>
-                            <th className="px-2 py-2 text-left">Yarn Name</th>
-                            <th className="px-2 py-2 text-right">Total Required (g)</th>
-                            <th className="px-2 py-2 text-right">Total Required (kg)</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                          {calculateTotalBOM().map((item) => (
-                            <tr key={item.yarnCatalogId} className="border-b">
-                              <td className="px-2 py-2 font-medium">{item.yarnName}</td>
-                              <td className="px-2 py-2 text-right">{item.totalGrams.toFixed(2)}</td>
-                              <td className="px-2 py-2 text-right">{item.totalKg.toFixed(3)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <details className="border rounded-lg bg-gray-50 group">
+                      <summary className="px-3 py-2.5 cursor-pointer list-none flex items-center gap-2 hover:bg-gray-100 rounded-lg select-none">
+                        <h3 className="text-base font-semibold text-gray-900 m-0">
+                          Total BOM Requirements
+                        </h3>
+                        <i className="ri-arrow-down-s-line text-base text-gray-600 shrink-0 transition-transform duration-200 group-open:rotate-180" aria-hidden />
+                      </summary>
+                      <div className="px-3 pb-3 pt-0 border-t border-gray-200">
+                        <div className="overflow-x-auto mt-2">
+                          <table className="min-w-full text-xs">
+                            <thead className="bg-gray-100">
+                              <tr>
+                                <th className="px-2 py-2 text-left">Yarn Name</th>
+                                <th className="px-2 py-2 text-right">Total Required (g)</th>
+                                <th className="px-2 py-2 text-right">Total Required (kg)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white">
+                              {calculateTotalBOM().map((item) => (
+                                <tr key={item.yarnCatalogId} className="border-b">
+                                  <td className="px-2 py-2 font-medium">{item.yarnName}</td>
+                                  <td className="px-2 py-2 text-right">{item.totalGrams.toFixed(2)}</td>
+                                  <td className="px-2 py-2 text-right">{item.totalKg.toFixed(3)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </details>
                   </div>
                 )}
 
