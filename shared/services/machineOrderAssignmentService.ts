@@ -77,6 +77,8 @@ export interface ProductionOrderItemPopulated {
   articleNumber?: string;
   status?: string;
   priority?: number;
+  /** Yarn issue status: Pending, In Progress, Completed */
+  yarnIssueStatus?: string;
 }
 
 /** Assignment shape from GET /top-items (items have populated order and article) */
@@ -239,6 +241,7 @@ export async function getTopItemsAssignments(): Promise<MachineOrderAssignmentTo
           articleNumber: item.articleNumber ?? item.article?.articleNumber,
           status: item.status,
           priority: item.priority,
+          yarnIssueStatus: item.yarnIssueStatus,
         }))
       : [],
     isActive: row.isActive !== false,

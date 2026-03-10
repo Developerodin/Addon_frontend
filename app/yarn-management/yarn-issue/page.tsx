@@ -39,6 +39,8 @@ interface YarnTransaction {
   transactionConeCount: number;
   orderId?: string;
   orderno: string;
+  articleId?: string;
+  articleNumber?: string;
   createdAt: string;
   updatedAt: string;
   __v: number;
@@ -139,18 +141,27 @@ type YarnSortField =
 
 const ISSUE_TOLERANCE_DEFAULT = 0.2;
 
-/** Match by production order _id when present; fallback to orderno for legacy transactions. */
+/** Optional filter to scope issued qty to a specific article. When omitted, sums across all articles in the order. */
+type ArticleFilter = { articleId?: string; articleNumber?: string } | undefined;
+
+/** Match by production order _id when present; fallback to orderno for legacy transactions.
+ * When articleFilter is provided, also filters by articleId (or articleNumber for legacy transactions without articleId).
+ */
 const getIssuedQty = (
   requirement: YarnRequirement,
   transactions: YarnTransaction[],
-  order: { id: string; orderNumber: string }
+  order: { id: string; orderNumber: string },
+  articleFilter?: ArticleFilter
 ) => {
   return transactions
     .filter(
       (t) =>
         t.yarnName === requirement.yarnName &&
         t.transactionType === "yarn_issued" &&
-        (t.orderId ? t.orderId === order.id : t.orderno === order.orderNumber)
+        (t.orderId ? t.orderId === order.id : t.orderno === order.orderNumber) &&
+        (!articleFilter ||
+          (articleFilter.articleId && String(t.articleId) === String(articleFilter.articleId)) ||
+          (articleFilter.articleNumber && String(t.articleNumber) === String(articleFilter.articleNumber)))
     )
     .reduce((sum, t) => sum + t.transactionNetWeight, 0);
 };
@@ -158,9 +169,10 @@ const getIssuedQty = (
 const getRequirementStatus = (
   requirement: YarnRequirement,
   transactions: YarnTransaction[],
-  order: { id: string; orderNumber: string }
+  order: { id: string; orderNumber: string },
+  articleFilter?: ArticleFilter
 ): RequirementStatus => {
-  const issued = getIssuedQty(requirement, transactions, order);
+  const issued = getIssuedQty(requirement, transactions, order, articleFilter);
   const issuedInGrams = issued * 1000; // Convert kg to grams for comparison
   if (issuedInGrams === 0) {
     return "Not Issued";
@@ -171,6 +183,24 @@ const getRequirementStatus = (
   }
 
   return "Issued";
+};
+
+/** Get article filter for a requirement. When single article: use selectedArticleId. When "all": extract articleId from requirement.id (format "articleId-req-..."). */
+const getArticleFilterForRequirement = (
+  requirement: YarnRequirement,
+  selectedArticleId: string | null,
+  selectedOrder: ProductionOrder | null
+): ArticleFilter => {
+  if (!selectedOrder?.articles) return undefined;
+  if (selectedArticleId && selectedArticleId !== "all") {
+    const article = selectedOrder.articles.find((a) => String(a.id || a._id) === String(selectedArticleId));
+    return article ? { articleId: article._id ?? article.id, articleNumber: article.articleNumber } : undefined;
+  }
+  // "all" view: requirement.id is "articleId-req-..." so first segment is articleId
+  const articleId = requirement.id.split("-")[0];
+  if (!articleId) return undefined;
+  const article = selectedOrder.articles.find((a) => String(a.id || a._id) === String(articleId));
+  return { articleId: article?._id ?? article?.id ?? articleId, articleNumber: article?.articleNumber };
 };
 
 const getOrderStatus = (order: ProductionOrder, transactions: YarnTransaction[]): RequirementStatus => {
@@ -975,12 +1005,12 @@ const YarnIssuePage = () => {
           bValue = b.requiredQty;
           break;
         case "issuedQty":
-          aValue = getIssuedQty(a, allYarnTransactions, selectedOrder);
-          bValue = getIssuedQty(b, allYarnTransactions, selectedOrder);
+          aValue = getIssuedQty(a, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(a, selectedArticleId, selectedOrder));
+          bValue = getIssuedQty(b, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(b, selectedArticleId, selectedOrder));
           break;
         case "status":
-          aValue = getRequirementStatus(a, allYarnTransactions, selectedOrder);
-          bValue = getRequirementStatus(b, allYarnTransactions, selectedOrder);
+          aValue = getRequirementStatus(a, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(a, selectedArticleId, selectedOrder));
+          bValue = getRequirementStatus(b, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(b, selectedArticleId, selectedOrder));
           break;
         default:
           aValue = 0;
@@ -997,13 +1027,13 @@ const YarnIssuePage = () => {
     });
 
     return data;
-  }, [selectedOrder, sortField, sortDirection, allYarnTransactions]);
+  }, [selectedOrder, selectedArticleId, sortField, sortDirection, allYarnTransactions]);
 
   /** True when a single article is selected and every BOM requirement for it is fully issued. */
   const allBomIssuedForCurrentArticle = useMemo(() => {
     if (!selectedOrder || !selectedArticleId || selectedArticleId === "all" || !selectedOrder.bom?.length) return false;
     return selectedOrder.bom.every((r) =>
-      getRequirementStatus(r, allYarnTransactions, selectedOrder) === "Issued"
+      getRequirementStatus(r, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(r, selectedArticleId, selectedOrder)) === "Issued"
     );
   }, [selectedOrder, selectedArticleId, allYarnTransactions]);
 
@@ -1018,6 +1048,31 @@ const YarnIssuePage = () => {
     });
     return match?.itemId ?? match?.id ?? null;
   }, [selectedMachineAssignment, selectedOrderId, selectedArticleId]);
+
+  /** Issue button disabled when yarnIssueStatus is "Pending" for the article. */
+  const isIssueDisabledForRequirement = useCallback(
+    (requirement: YarnRequirement): boolean => {
+      if (!selectedMachineAssignment || !selectedOrderId) return false;
+      const items = selectedMachineAssignment.productionOrderItems ?? [];
+      let articleId: string | null = null;
+      if (selectedArticleId && selectedArticleId !== "all") {
+        articleId = selectedArticleId;
+      } else {
+        // All view: requirement.id format is "articleId-req-..."
+        const firstPart = requirement.id.split("-")[0];
+        const hasArticle = selectedOrder?.articles?.some((a) => a.id === firstPart || a._id === firstPart);
+        if (hasArticle) articleId = firstPart;
+      }
+      if (!articleId) return false;
+      const item = items.find((i) => {
+        const poId = typeof i.productionOrder === "string" ? i.productionOrder : (i.productionOrder?.id ?? i.productionOrder?._id);
+        const artId = typeof i.article === "string" ? i.article : (i.article?.id ?? i.article?._id);
+        return String(poId) === String(selectedOrderId) && String(artId) === String(articleId);
+      });
+      return (item?.yarnIssueStatus ?? "") === "Pending";
+    },
+    [selectedMachineAssignment, selectedOrderId, selectedArticleId, selectedOrder?.articles]
+  );
 
   const canMarkYarnIssueCompleted = Boolean(
     assignmentItemIdForCurrent && selectedMachineAssignment?.id
@@ -1190,7 +1245,8 @@ const YarnIssuePage = () => {
     // For now, we'll use the yarnCode which should be the yarnCatalogId
     const yarnCatalogId = activeRequirement.yarnCode;
 
-    const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder);
+    const activeArticleFilter = getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder);
+    const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder, activeArticleFilter);
     const currentIssuedInGrams = currentIssued * 1000;
 
     setSubmittingTransaction(true);
@@ -1617,16 +1673,26 @@ const YarnIssuePage = () => {
                             </thead>
                             <tbody>
                               {sortedRequirements.map((requirement) => {
-                                const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder);
+                                const articleFilter = getArticleFilterForRequirement(requirement, selectedArticleId, selectedOrder);
+                                const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder, articleFilter);
                                 const issuedQtyInGrams = issuedQty * 1000;
                                 const remaining = Math.max(requirement.requiredQty - issuedQtyInGrams, 0);
-                                const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder);
+                                const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder, articleFilter);
                                 const isActive = activeRequirementId === requirement.id;
+                                const issueDisabled = isIssueDisabledForRequirement(requirement);
                                 return (
                                   <tr key={requirement.id} className={`hover:bg-gray-50/50 transition-colors ${isActive ? "bg-purple-50" : ""}`}>
                                     <td className="pl-[10px] pr-1.5 py-2 border border-gray-200">
                                       <div className="flex items-center gap-1.5">
-                                        <button type="button" className={`inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-bold rounded transition-colors ${isActive ? "bg-purple-600 text-white" : "border border-purple-200 text-purple-700 hover:bg-purple-50"}`} onClick={() => handleStartIssuing(requirement.id)}>Issue</button>
+                                        <button
+                                          type="button"
+                                          disabled={issueDisabled}
+                                          title={issueDisabled ? "Yarn issue status is Pending for this article" : undefined}
+                                          className={`inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-bold rounded transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 ${!issueDisabled && (isActive ? "bg-purple-600 text-white" : "border border-purple-200 text-purple-700 hover:bg-purple-50")}`}
+                                          onClick={() => handleStartIssuing(requirement.id)}
+                                        >
+                                          Issue
+                                        </button>
                                         {status === "Issued" && <span className="text-[11px] text-gray-500 italic">Fully Issued</span>}
                                       </div>
                                     </td>
@@ -1702,16 +1768,26 @@ const YarnIssuePage = () => {
                         </thead>
                         <tbody>
                           {sortedRequirements.map((requirement) => {
-                            const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder);
+                            const articleFilter = getArticleFilterForRequirement(requirement, selectedArticleId, selectedOrder);
+                            const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder, articleFilter);
                             const issuedQtyInGrams = issuedQty * 1000;
                             const remaining = Math.max(requirement.requiredQty - issuedQtyInGrams, 0);
-                            const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder);
+                            const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder, articleFilter);
                             const isActive = activeRequirementId === requirement.id;
+                            const issueDisabled = isIssueDisabledForRequirement(requirement);
                             return (
                               <tr key={requirement.id} className={`hover:bg-gray-50/50 transition-colors ${isActive ? "bg-purple-50" : ""}`}>
                                 <td className="pl-[10px] pr-1.5 py-2 border border-gray-200">
                                   <div className="flex items-center gap-1.5">
-                                    <button type="button" className={`inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-bold rounded transition-colors ${isActive ? "bg-purple-600 text-white" : "border border-purple-200 text-purple-700 hover:bg-purple-50"}`} onClick={() => handleStartIssuing(requirement.id)}>Issue</button>
+                                    <button
+                                      type="button"
+                                      disabled={issueDisabled}
+                                      title={issueDisabled ? "Yarn issue status is Pending for this article" : undefined}
+                                      className={`inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-bold rounded transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 ${!issueDisabled && (isActive ? "bg-purple-600 text-white" : "border border-purple-200 text-purple-700 hover:bg-purple-50")}`}
+                                      onClick={() => handleStartIssuing(requirement.id)}
+                                    >
+                                      Issue
+                                    </button>
                                     {status === "Issued" && <span className="text-[11px] text-gray-500 italic">Fully Issued</span>}
                                   </div>
                                 </td>
@@ -1790,10 +1866,10 @@ const YarnIssuePage = () => {
                         </div>
                         <span
                           className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
-                            getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" })
+                            getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder))
                           )}`}
                         >
-                          {getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" })}
+                          {getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder))}
                         </span>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
@@ -1806,7 +1882,7 @@ const YarnIssuePage = () => {
                         <div className="bg-white rounded p-3 border border-gray-100">
                           <p className="text-gray-500">Issued</p>
                           <p className="text-sm font-medium text-blue-600">
-                            {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }) * 1000)}
+                            {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder)) * 1000)}
                           </p>
                         </div>
                       </div>
@@ -2191,9 +2267,9 @@ const YarnIssuePage = () => {
                     </p>
                     <p className="text-xs text-gray-600 mt-1">
                       <span className="font-semibold">Required:</span> {formatKgDisplay(activeRequirement.requiredQty)} |{" "}
-                      <span className="font-semibold">Issued:</span> {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder) * 1000)} |{" "}
+                      <span className="font-semibold">Issued:</span> {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder)) * 1000)} |{" "}
                       <span className="font-semibold">Remaining:</span>{" "}
-                      {formatKgDisplay(Math.max(activeRequirement.requiredQty - (getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder) * 1000), 0))}
+                      {formatKgDisplay(Math.max(activeRequirement.requiredQty - (getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder)) * 1000), 0))}
                     </p>
                   </div>
                 )}
