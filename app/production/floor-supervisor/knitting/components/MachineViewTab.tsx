@@ -26,8 +26,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
   const [rows, setRows] = useState<MachineOrderAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
-  const [totalPages, setTotalPages] = useState(1);
+  const [limit, setLimit] = useState(100);
   const [totalResults, setTotalResults] = useState(0);
   const [filterMachine, setFilterMachine] = useState("");
   const [filterNeedle, setFilterNeedle] = useState("");
@@ -144,28 +143,74 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
     [poDetailsAssignment]
   );
 
+  /** Create placeholder row for machine without assignment (keeps K001, K002... sequence) */
+  const createPlaceholder = useCallback(
+    (m: { id: string; machineCode?: string; name?: string }): MachineOrderAssignment => ({
+      id: `placeholder-${m.id}`,
+      machine: { id: m.id, machineCode: m.machineCode, name: m.name },
+      activeNeedle: "",
+      productionOrderItems: [],
+      isActive: false,
+    }),
+    []
+  );
+
   const fetchList = useCallback(async () => {
     try {
       setIsLoading(true);
+      // 1. Fetch machines (source of order: K001, K002, K003...)
+      const machinesRes = await machinesService.getMachines(1, 500, "");
+      const machinesList = (machinesRes.results ?? []).map((m: any) => ({
+        id: m.id ?? m._id,
+        machineCode: m.machineCode,
+        name: m.name,
+      }));
+      machinesList.sort((a: { machineCode?: string }, b: { machineCode?: string }) =>
+        (a.machineCode ?? "").localeCompare(b.machineCode ?? "", undefined, { numeric: true })
+      );
+      setMachines(machinesList);
+
+      // 2. Fetch ALL assignments (limit 500 to get full set for merging)
       const data = await listMachineOrderAssignments({
-        page,
-        limit,
+        page: 1,
+        limit: 500,
         machine: filterMachine || undefined,
         activeNeedle: filterNeedle || undefined,
         isActive: filterActive === "" ? undefined : filterActive,
       });
-      setRows(data.results);
-      setTotalPages(data.totalPages);
-      setTotalResults(data.totalResults);
+
+      const assignmentByMachineId = new Map<string, MachineOrderAssignment>();
+      for (const a of data.results ?? []) {
+        const mid = typeof a.machine === "object" && a.machine
+          ? (a.machine as { id?: string }).id ?? (a.machine as { _id?: string })._id
+          : a.machine;
+        if (mid) assignmentByMachineId.set(String(mid), a);
+      }
+
+      // 3. Build rows in machine sequence (K001, K002, K003...)
+      const filteredMachines = machinesList.filter((m) => !filterMachine || m.id === filterMachine);
+      const orderedRows: MachineOrderAssignment[] = [];
+      for (const m of filteredMachines) {
+        const assignment = assignmentByMachineId.get(m.id);
+        if (assignment) {
+          orderedRows.push(assignment);
+        } else {
+          if (filterNeedle) continue;
+          if (filterActive === true) continue;
+          orderedRows.push(createPlaceholder(m));
+        }
+      }
+
+      setRows(orderedRows);
+      setTotalResults(orderedRows.length);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load machine assignments");
       setRows([]);
-      setTotalPages(1);
       setTotalResults(0);
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, filterMachine, filterNeedle, filterActive]);
+  }, [filterMachine, filterNeedle, filterActive, createPlaceholder]);
 
   useEffect(() => {
     fetchList();
@@ -175,18 +220,13 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
     setPage(1);
   }, [filterMachine, filterNeedle, filterActive]);
 
-  useEffect(() => {
-    machinesService.getMachines(1, 500, "").then((res) => {
-      const list = res.results ?? [];
-      setMachines(
-        list.map((m: any) => ({
-          id: m.id ?? m._id,
-          machineCode: m.machineCode,
-          name: m.name,
-        }))
-      );
-    }).catch(() => setMachines([]));
-  }, []);
+  /** Client-side pagination: slice rows for current page */
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * limit;
+    return rows.slice(start, start + limit);
+  }, [rows, page, limit]);
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(totalResults / limit)), [totalResults, limit]);
 
   const filteredMachinesForDrawer = useMemo(() => {
     const q = machineSearch.trim().toLowerCase();
@@ -250,7 +290,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
           }}
           className="bg-white border border-gray-300 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
         >
-          <option value={10}>Show 10</option>
+          <option value={10}>10</option>
           <option value={20}>20</option>
           <option value={50}>50</option>
           <option value={100}>100</option>
@@ -347,7 +387,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
       )}
 
       <AssignmentsCards
-        rows={rows}
+        rows={paginatedRows}
         page={page}
         limit={limit}
         totalResults={totalResults}
@@ -357,8 +397,12 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
         readOnly
         columnsPerRow={5}
         cardClickable={false}
-        onPencilClick={onOpenEditModal}
+        onPencilClick={(a) => {
+          if (a.id.startsWith("placeholder-")) return;
+          onOpenEditModal?.(a);
+        }}
         onCardClick={async (a) => {
+          if (a.id.startsWith("placeholder-")) return;
           setPoDetailsAssignment(a);
           try {
             const full = await getMachineOrderAssignment(a.id);
