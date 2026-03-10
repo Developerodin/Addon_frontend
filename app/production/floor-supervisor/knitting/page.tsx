@@ -938,7 +938,7 @@ const KnittingFloorSupervisorPage = () => {
                       <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-300">
                         <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100">
                           <button className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100" onClick={() => handleViewOrder(order)} title="View"><i className="ri-eye-line text-xs"></i></button>
-                          <button className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100" onClick={() => handleUpdateOrder(order)} title="Update"><i className="ri-edit-line text-xs"></i></button>
+                          {/* <button className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100" onClick={() => handleUpdateOrder(order)} title="Update"><i className="ri-edit-line text-xs"></i></button> */}
                         </div>
                       </td>
                     </tr>

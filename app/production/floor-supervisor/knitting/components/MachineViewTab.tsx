@@ -13,7 +13,36 @@ import {
   type OrderStatusType,
 } from "@/shared/services/machineOrderAssignmentService";
 import { machinesService } from "@/shared/services/machinesService";
-import AssignmentsCards from "@/app/catalog/needle-configuration/components/AssignmentsCards";
+
+function machineLabel(a: MachineOrderAssignment): string {
+  const m = a.machine;
+  if (typeof m === "object" && m) {
+    return (m as { machineCode?: string; name?: string; id?: string }).machineCode
+      ?? (m as { name?: string }).name
+      ?? (m as { id?: string }).id ?? "-";
+  }
+  return typeof m === "string" ? m : "-";
+}
+
+function needleOptionsCount(a: MachineOrderAssignment): number {
+  const m = a.machine;
+  if (typeof m !== "object" || !m) return 0;
+  const config = (m as { needleSizeConfig?: unknown[] }).needleSizeConfig;
+  if (Array.isArray(config)) return config.filter((c: unknown) => (c as { needleSize?: unknown })?.needleSize).length;
+  if ((m as { needleSize?: unknown }).needleSize) return 1;
+  return 0;
+}
+
+function getItemCounts(a: MachineOrderAssignment): { poCount: number; articleCount: number } {
+  const items = a.productionOrderItems ?? [];
+  const poIds = items.map((i) => {
+    const po = i.productionOrder;
+    if (typeof po === "string") return po;
+    const obj = po as { id?: string; _id?: string };
+    return obj?.id ?? obj?._id ?? "";
+  }).filter(Boolean);
+  return { poCount: new Set(poIds).size, articleCount: items.length };
+}
 
 export interface MachineViewTabProps {
   /** When user clicks pencil on a machine card, open the same data-entry modal (priority order editable, upcoming read-only). */
@@ -27,8 +56,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(100);
-  const [totalResults, setTotalResults] = useState(0);
-  const [filterMachine, setFilterMachine] = useState("");
+  const [filterMachineSearch, setFilterMachineSearch] = useState("");
   const [filterNeedle, setFilterNeedle] = useState("");
   const [filterActive, setFilterActive] = useState<boolean | "">("");
 
@@ -36,12 +64,9 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
   const [poDetailsAssignment, setPoDetailsAssignment] = useState<MachineOrderAssignment | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [savingOrder, setSavingOrder] = useState(false);
-  const [zoomedCardIndex, setZoomedCardIndex] = useState<number | null>(null);
   const [updatingStatusItemId, setUpdatingStatusItemId] = useState<string | null>(null);
   const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
   const [yarnMenuOpenItemId, setYarnMenuOpenItemId] = useState<string | null>(null);
-  const [machineDrawerOpen, setMachineDrawerOpen] = useState(false);
-  const [machineSearch, setMachineSearch] = useState("");
 
   const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
     OrderStatus.PENDING,
@@ -174,8 +199,6 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
       const data = await listMachineOrderAssignments({
         page: 1,
         limit: 500,
-        machine: filterMachine || undefined,
-        activeNeedle: filterNeedle || undefined,
         isActive: filterActive === "" ? undefined : filterActive,
       });
 
@@ -188,9 +211,8 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
       }
 
       // 3. Build rows in machine sequence (K001, K002, K003...)
-      const filteredMachines = machinesList.filter((m) => !filterMachine || m.id === filterMachine);
       const orderedRows: MachineOrderAssignment[] = [];
-      for (const m of filteredMachines) {
+      for (const m of machinesList) {
         const assignment = assignmentByMachineId.get(m.id);
         if (assignment) {
           orderedRows.push(assignment);
@@ -202,7 +224,6 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
       }
 
       setRows(orderedRows);
-      setTotalResults(orderedRows.length);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load machine assignments");
       setRows([]);
@@ -210,7 +231,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
     } finally {
       setIsLoading(false);
     }
-  }, [filterMachine, filterNeedle, filterActive, createPlaceholder]);
+  }, [filterActive, createPlaceholder]);
 
   useEffect(() => {
     fetchList();
@@ -218,33 +239,27 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
 
   useEffect(() => {
     setPage(1);
-  }, [filterMachine, filterNeedle, filterActive]);
+  }, [filterMachineSearch, filterNeedle, filterActive]);
 
-  /** Client-side pagination: slice rows for current page */
+  /** Client-side filter by machine code/name and active needle search */
+  const filteredRows = useMemo(() => {
+    const machineQ = filterMachineSearch.trim().toLowerCase();
+    const needleQ = filterNeedle.trim().toLowerCase();
+    if (!machineQ && !needleQ) return rows;
+    return rows.filter((r) => {
+      if (machineQ && !machineLabel(r).toLowerCase().includes(machineQ)) return false;
+      if (needleQ && !(r.activeNeedle ?? "").toLowerCase().includes(needleQ)) return false;
+      return true;
+    });
+  }, [rows, filterMachineSearch, filterNeedle]);
+
+  /** Client-side pagination: slice filtered rows for current page */
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * limit;
-    return rows.slice(start, start + limit);
-  }, [rows, page, limit]);
+    return filteredRows.slice(start, start + limit);
+  }, [filteredRows, page, limit]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(totalResults / limit)), [totalResults, limit]);
-
-  const filteredMachinesForDrawer = useMemo(() => {
-    const q = machineSearch.trim().toLowerCase();
-    if (!q) return machines;
-    return machines.filter(
-      (m) =>
-        (m.machineCode ?? "").toLowerCase().includes(q) ||
-        (m.name ?? "").toLowerCase().includes(q) ||
-        (m.id ?? "").toLowerCase().includes(q)
-    );
-  }, [machines, machineSearch]);
-
-  const selectedMachineLabel =
-    filterMachine === ""
-      ? "All machines"
-      : machines.find((m) => m.id === filterMachine)?.machineCode ??
-        machines.find((m) => m.id === filterMachine)?.name ??
-        "Selected";
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredRows.length / limit)), [filteredRows.length, limit]);
 
   return (
     <>
@@ -258,21 +273,26 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
           <i className={`ri-refresh-line text-xs ${isLoading ? "animate-spin" : ""}`} />
           Refresh
         </button>
-        <button
-          type="button"
-          onClick={() => setMachineDrawerOpen(true)}
-          className="flex items-center justify-between gap-2 bg-white border border-gray-300 text-[11px] font-medium rounded px-3 py-1.5 min-w-[160px] hover:bg-gray-50 text-left"
-        >
-          <span className="truncate">{selectedMachineLabel}</span>
-          <i className="ri-arrow-down-s-line text-gray-500 shrink-0" />
-        </button>
-        <input
-          type="text"
-          value={filterNeedle}
-          onChange={(e) => setFilterNeedle(e.target.value)}
-          placeholder="Active needle"
-          className="bg-white border border-gray-300 pl-3 pr-3 py-1.5 text-[11px] rounded w-32 placeholder:text-gray-400"
-        />
+        <div className="relative flex-1 min-w-[140px] max-w-[200px]">
+          <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+          <input
+            type="text"
+            value={filterMachineSearch}
+            onChange={(e) => setFilterMachineSearch(e.target.value)}
+            placeholder="Search machine code..."
+            className="bg-white border border-gray-300 pl-8 pr-3 py-1.5 text-[11px] rounded w-full placeholder:text-gray-600 focus:ring-1 focus:ring-purple-300 focus:border-purple-500"
+          />
+        </div>
+        <div className="relative flex-1 min-w-[120px] max-w-[180px]">
+          <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+          <input
+            type="text"
+            value={filterNeedle}
+            onChange={(e) => setFilterNeedle(e.target.value)}
+            placeholder="Search active needle..."
+            className="bg-white border border-gray-300 pl-8 pr-3 py-1.5 text-[11px] rounded w-full placeholder:text-gray-600 focus:ring-1 focus:ring-purple-300 focus:border-purple-500"
+          />
+        </div>
         <select
           value={filterActive === "" ? "" : filterActive ? "true" : "false"}
           onChange={(e) => setFilterActive(e.target.value === "" ? "" : e.target.value === "true")}
@@ -297,122 +317,145 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
         </select>
       </div>
 
-      {/* Machine select — side drawer with search */}
-      {machineDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex">
-          <div
-            className="absolute inset-0 z-0 bg-black/50"
-            onClick={() => {
-              setMachineDrawerOpen(false);
-              setMachineSearch("");
-            }}
-            aria-hidden
-          />
-          <div
-            className="relative z-10 ml-auto w-full max-w-md h-full bg-white shadow-xl flex flex-col border-l border-gray-300"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-3 border-b border-gray-300 flex justify-between items-center shrink-0">
-              <h3 className="text-sm font-bold text-gray-800">Select machine</h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setMachineDrawerOpen(false);
-                  setMachineSearch("");
-                }}
-                className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-300 rounded hover:bg-gray-100"
-              >
-                <i className="ri-close-line text-sm" />
-              </button>
-            </div>
-            <div className="p-3 border-b border-gray-300 shrink-0">
-              <input
-                type="text"
-                className="bg-white border border-gray-300 text-[11px] rounded px-3 py-1.5 w-full focus:ring-0 focus:border-purple-500 focus:ring-1 focus:ring-purple-300"
-                placeholder="Search by machine name or code..."
-                value={machineSearch}
-                onChange={(e) => setMachineSearch(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="flex-1 overflow-y-auto min-h-0">
-              <ul className="p-2 space-y-0.5">
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFilterMachine("");
-                      setMachineDrawerOpen(false);
-                      setMachineSearch("");
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded text-[11px] font-medium transition-colors ${
-                      filterMachine === ""
-                        ? "bg-purple-100 text-purple-800 border border-purple-200"
-                        : "bg-gray-50 text-gray-700 border border-transparent hover:bg-gray-100"
-                    }`}
-                  >
-                    All machines
-                  </button>
-                </li>
-                {filteredMachinesForDrawer.map((m) => {
-                  const label = m.machineCode ?? m.name ?? m.id;
-                  const isSelected = filterMachine === m.id;
-                  return (
-                    <li key={m.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFilterMachine(m.id);
-                          setMachineDrawerOpen(false);
-                          setMachineSearch("");
-                        }}
-                        className={`w-full text-left px-3 py-2 rounded text-[11px] font-medium transition-colors ${
-                          isSelected
-                            ? "bg-purple-100 text-purple-800 border border-purple-200"
-                            : "bg-gray-50 text-gray-700 border border-transparent hover:bg-gray-100"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-              {filteredMachinesForDrawer.length === 0 && machineSearch.trim() && (
-                <p className="p-4 text-[11px] text-gray-500 text-center">No machines match &quot;{machineSearch}&quot;</p>
-              )}
-            </div>
+      {/* Excel-like table: machines as rows */}
+      <div className="border border-gray-300 rounded overflow-hidden bg-white">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 min-h-[300px]">
+            <div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-600 border-t-transparent mb-4" />
+            <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
           </div>
-        </div>
-      )}
-
-      <AssignmentsCards
-        rows={paginatedRows}
-        page={page}
-        limit={limit}
-        totalResults={totalResults}
-        totalPages={totalPages}
-        isLoading={isLoading}
-        onPageChange={setPage}
-        readOnly
-        columnsPerRow={5}
-        cardClickable={false}
-        onPencilClick={(a) => {
-          if (a.id.startsWith("placeholder-")) return;
-          onOpenEditModal?.(a);
-        }}
-        onCardClick={async (a) => {
-          if (a.id.startsWith("placeholder-")) return;
-          setPoDetailsAssignment(a);
-          try {
-            const full = await getMachineOrderAssignment(a.id);
-            setPoDetailsAssignment(full);
-            setRows((prev) => prev.map((r) => (r.id === a.id ? full : r)));
-          } catch {
-            // keep list assignment if refetch fails
-          }
-        }}
-      />
+        ) : filteredRows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 min-h-[300px] text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <i className="ri-inbox-line text-2xl text-gray-300" />
+            </div>
+            <h3 className="text-sm font-bold text-gray-400 mb-1">
+              {rows.length === 0 ? "No assignments" : "No matches"}
+            </h3>
+            <p className="text-xs text-gray-400">
+              {rows.length === 0 ? "No machines with assignments." : "Try a different search for machine or needle."}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs border-collapse">
+                <thead className="bg-gray-100 border-b border-gray-300">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Machine</th>
+                    <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Active Needle</th>
+                    <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Needle Options</th>
+                    <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">POs</th>
+                    <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Articles</th>
+                    <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Status</th>
+                    <th className="px-2 py-1.5 text-center font-semibold text-gray-700 whitespace-nowrap">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {paginatedRows.map((row) => {
+                    const { poCount, articleCount } = getItemCounts(row);
+                    const needleCount = needleOptionsCount(row);
+                    const isPlaceholder = row.id.startsWith("placeholder-");
+                    return (
+                      <tr
+                        key={row.id}
+                        className={`hover:bg-gray-50 transition-colors ${!isPlaceholder ? "cursor-pointer" : ""}`}
+                        onClick={async () => {
+                          if (isPlaceholder) return;
+                          setPoDetailsAssignment(row);
+                          try {
+                            const full = await getMachineOrderAssignment(row.id);
+                            setPoDetailsAssignment(full);
+                            setRows((prev) => prev.map((r) => (r.id === row.id ? full : r)));
+                          } catch {
+                            // keep list assignment if refetch fails
+                          }
+                        }}
+                      >
+                        <td className="px-2 py-1.5 border-r border-gray-300 font-medium text-gray-900">
+                          {machineLabel(row)}
+                        </td>
+                        <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">
+                          {row.activeNeedle || "—"}
+                        </td>
+                        <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">
+                          {needleCount}
+                        </td>
+                        <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">
+                          {poCount}
+                        </td>
+                        <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">
+                          {articleCount}
+                        </td>
+                        <td className="px-2 py-1.5 text-center border-r border-gray-300">
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            row.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"
+                          }`}>
+                            {row.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          {!isPlaceholder && (
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => onOpenEditModal?.(row)}
+                                className="flex items-center justify-center rounded bg-purple-100 text-purple-600 hover:bg-purple-200 w-7 h-7"
+                                title="Edit"
+                              >
+                                <i className="ri-pencil-line text-sm" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setPoDetailsAssignment(row);
+                                  try {
+                                    const full = await getMachineOrderAssignment(row.id);
+                                    setPoDetailsAssignment(full);
+                                    setRows((prev) => prev.map((r) => (r.id === row.id ? full : r)));
+                                  } catch {}
+                                }}
+                                className="flex items-center justify-center rounded bg-gray-100 text-gray-600 hover:bg-gray-200 w-7 h-7"
+                                title="PO details"
+                              >
+                                <i className="ri-settings-3-line text-sm" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-3 flex flex-wrap items-center justify-between gap-4 border-t border-gray-200 bg-gray-50">
+              <div className="text-[11px] font-medium text-[#495057]">
+                Showing {filteredRows.length === 0 ? 0 : (page - 1) * limit + 1}–{Math.min(page * limit, filteredRows.length)} of {filteredRows.length} entries
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page <= 1}
+                  className="px-3 py-1.5 text-[11px] font-bold text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed rounded border border-gray-200"
+                >
+                  Prev
+                </button>
+                <span className="text-[11px] font-medium text-gray-600">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(Math.min(totalPages, page + 1))}
+                  disabled={page >= totalPages}
+                  className="px-3 py-1.5 text-[11px] font-bold text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed rounded border border-gray-200"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* PO details – right-side drawer, ~49% width (30% less than before) */}
       {poDetailsAssignment && (
@@ -425,12 +468,12 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
               backgroundSize: "20px 20px",
             }}
           >
-            <div className="p-6 pb-2 shrink-0">
+            <div className="p-4 pb-2 shrink-0">
               <div className="flex items-center justify-between mb-1">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">PO details</h1>
+                <h1 className="text-lg font-bold tracking-tight text-slate-800 dark:text-slate-100">PO details</h1>
                 <button
                   type="button"
-                  onClick={() => { setPoDetailsAssignment(null); setZoomedCardIndex(null); }}
+                  onClick={() => setPoDetailsAssignment(null)}
                   className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500 dark:text-slate-400"
                 >
                   <i className="ri-close-line text-xl" />
@@ -440,11 +483,11 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                 const all = poDetailsAssignment.productionOrderItems ?? [];
                 const hasPrioritized = all.some((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD);
                 return hasPrioritized ? (
-                  <p className="text-slate-500 dark:text-slate-400 text-sm">Drag cards to change priority</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs">Drag rows to change priority</p>
                 ) : null;
               })()}
             </div>
-            <div className="flex-1 overflow-y-auto p-6 relative">
+            <div className="flex-1 overflow-y-auto p-4 relative">
               {savingOrder && (
                 <div className="mb-3 text-[11px] text-amber-600 font-medium flex items-center gap-1">
                   <span className="animate-spin rounded-full h-3 w-3 border-2 border-amber-500 border-t-transparent" />
@@ -459,66 +502,62 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                     .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
                   const onHoldItems = all.filter((i) => i.status === OrderStatus.ON_HOLD);
                   const noPriorityItems = all.filter((i) => i.priority == null && i.status !== OrderStatus.ON_HOLD);
+                  const allOrdered = [...prioritizedItems, ...onHoldItems, ...noPriorityItems];
 
-                  const cardStyle = {
-                    background: "linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9))",
-                    backdropFilter: "blur(8px)",
-                    boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.2)",
-                    border: "1px solid rgba(255, 255, 255, 0.18)",
-                  } as const;
-                  const onHoldCardStyle = {
-                    background: "linear-gradient(135deg, rgba(100, 116, 139, 0.9), rgba(71, 85, 105, 0.9))",
-                    backdropFilter: "blur(8px)",
-                    boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.15)",
-                    border: "1px solid rgba(255, 255, 255, 0.18)",
-                  } as const;
-
-                  const renderCard = (
-                    item: (typeof all)[0],
-                    opts: {
-                      canDrag: boolean;
-                      displayPriority: number;
-                      showAskForYarn: boolean;
-                      statusOptionIdx: number;
-                      showConnector: boolean;
-                      style: React.CSSProperties;
-                      onDragStart?: () => void;
-                      onDragEnd?: () => void;
-                      onDragOver?: (e: React.DragEvent) => void;
-                      onDragLeave?: (e: React.DragEvent) => void;
-                      onDrop?: (e: React.DragEvent) => void;
-                    }
-                  ) => (
-                    <div key={item.itemId ?? `${item.productionOrder}-${item.article}`} className="relative">
-                      {opts.showConnector && (
-                        <div
-                          className="absolute left-9 top-10 bottom-0 w-px border-l-2 border-dashed border-indigo-400/40 z-0"
-                          style={{ bottom: "-24px" }}
-                          aria-hidden
-                        />
-                      )}
-                      <div
-                        draggable={opts.canDrag}
-                        onDragStart={opts.onDragStart}
-                        onDragEnd={opts.onDragEnd}
-                        onDragOver={opts.onDragOver}
-                        onDragLeave={opts.onDragLeave}
-                        onDrop={opts.onDrop}
-                        className={`relative z-10 rounded-[30px] p-3 text-white transition-all duration-200 active:scale-[0.98] ${
-                          opts.canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-default"
-                        } ring-0`}
-                        style={opts.style}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className="w-7 h-7 shrink-0 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px]">
-                              {opts.displayPriority}
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                              <div className="flex items-center gap-2 mb-1.5 flex-nowrap">
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <i className="ri-flag-line text-white/80 text-[10px] shrink-0" title="Order status" />
-                                  <span className="text-[8px] text-white/70 uppercase tracking-wider">Order</span>
+                  return (
+                    <div className="border border-gray-300 rounded overflow-hidden">
+                      <table className="min-w-full text-[11px] border-collapse">
+                        <thead className="bg-gray-100 border-b border-gray-300">
+                          <tr>
+                            <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 w-8">#</th>
+                            <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300">Order · Article</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Status</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Yarn</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 w-6" title="Drag to reorder" />
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {allOrdered.map((item, idx) => {
+                            const isPrioritized = prioritizedItems.includes(item);
+                            const isFirst = idx === 0 && isPrioritized;
+                            const canDrag = isPrioritized && !(item.status === OrderStatus.IN_PROGRESS && prioritizedItems.indexOf(item) === 0);
+                            const statusOptionIdx = isPrioritized ? prioritizedItems.indexOf(item) : 1;
+                            const showAskForYarn = isPrioritized && prioritizedItems.indexOf(item) <= 1;
+                            return (
+                              <tr
+                                key={item.itemId ?? `${item.productionOrder}-${item.article}`}
+                                draggable={canDrag}
+                                onDragStart={() => canDrag && setDraggedIndex(idx)}
+                                onDragEnd={() => setDraggedIndex(null)}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  if (!canDrag) return;
+                                  e.currentTarget.classList.add("ring-1", "ring-indigo-400", "bg-indigo-50");
+                                }}
+                                onDragLeave={(e) => {
+                                  e.currentTarget.classList.remove("ring-1", "ring-indigo-400", "bg-indigo-50");
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.currentTarget.classList.remove("ring-1", "ring-indigo-400", "bg-indigo-50");
+                                  if (draggedIndex === null || !prioritizedItems.includes(item) || item.status === OrderStatus.IN_PROGRESS) return;
+                                  const fromPrioritizedIdx = prioritizedItems.findIndex((p) => allOrdered.indexOf(p) === draggedIndex);
+                                  const toPrioritizedIdx = prioritizedItems.indexOf(item);
+                                  if (fromPrioritizedIdx >= 0 && toPrioritizedIdx >= 0 && fromPrioritizedIdx !== toPrioritizedIdx) {
+                                    handleReorderItems(prioritizedItems, fromPrioritizedIdx, toPrioritizedIdx);
+                                  }
+                                }}
+                                className={`${canDrag ? "cursor-grab active:cursor-grabbing" : ""} hover:bg-gray-50`}
+                              >
+                                <td className="px-2 py-1.5 border-r border-gray-300 font-medium text-gray-600">
+                                  {item.priority ?? idx + 1}
+                                </td>
+                                <td className="px-2 py-1.5 border-r border-gray-300">
+                                  <span className="font-medium text-gray-900 truncate block">
+                                    {item.orderNumber ?? "—"} · {item.articleNumber ?? "—"}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-1.5 border-r border-gray-300">
                                   <select
                                     value={item.status ?? OrderStatus.PENDING}
                                     onChange={(e) => {
@@ -526,117 +565,38 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                                       if (item.itemId) handleItemStatusChange(item.itemId, val);
                                     }}
                                     disabled={!item.itemId || updatingStatusItemId === item.itemId}
-                                    className="bg-white/20 px-1.5 py-0.5 rounded-md text-[9px] font-medium text-white focus:ring-1 focus:ring-white/50 disabled:opacity-60 [&>option]:bg-gray-800 [&>option]:text-white max-w-[82px]"
+                                    className="bg-white border border-gray-300 px-1.5 py-0.5 rounded text-[10px] w-full max-w-[100px]"
                                   >
-                                    {getStatusOptionsForItem(opts.statusOptionIdx, item.status, item.yarnIssueStatus).map((opt) => (
+                                    {getStatusOptionsForItem(statusOptionIdx, item.status, item.yarnIssueStatus).map((opt) => (
                                       <option key={opt} value={opt}>{opt}</option>
                                     ))}
                                   </select>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <i className="ri-yarn-line text-white/80 text-[10px] shrink-0" title="Yarn status" />
-                                  <span className="text-[8px] text-white/70 uppercase tracking-wider">Yarn</span>
-                                  {opts.showAskForYarn ? (
+                                </td>
+                                <td className="px-2 py-1.5 border-r border-gray-300">
+                                  {showAskForYarn ? (
                                     <select
                                       value={item.yarnIssueStatus ? String(item.yarnIssueStatus) : ""}
                                       onChange={(e) => {
                                         if (e.target.value === "ask" && item.itemId) handleAskForYarn(item.itemId);
                                       }}
                                       disabled={!item.itemId || updatingYarnItemId === item.itemId}
-                                      className="bg-white/20 px-1.5 py-0.5 rounded-md text-[9px] font-medium text-white focus:ring-1 focus:ring-white/50 disabled:opacity-60 [&>option]:bg-gray-800 [&>option]:text-white max-w-[82px]"
+                                      className="bg-white border border-gray-300 px-1.5 py-0.5 rounded text-[10px] w-full max-w-[90px]"
                                     >
                                       <option value={item.yarnIssueStatus ? String(item.yarnIssueStatus) : ""}>{item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}</option>
                                       <option value="ask">Ask for yarn</option>
                                     </select>
                                   ) : (
-                                    <span className="bg-white/20 px-1.5 py-0.5 rounded-md text-[9px] font-medium">
-                                      {item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}
-                                    </span>
+                                    <span className="text-gray-600">{item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}</span>
                                   )}
-                                </div>
-                              </div>
-                              <h3 className="font-bold text-[10px] tracking-wide text-white truncate">
-                                {item.orderNumber ?? item.productionOrder ?? "—"} · {item.articleNumber ?? item.article ?? "—"}
-                              </h3>
-                            </div>
-                          </div>
-                          {opts.canDrag && (
-                            <i className="ri-draggable text-white/50 text-sm shrink-0 cursor-grab active:cursor-grabbing" aria-hidden />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-
-                  return (
-                    <div className="space-y-8">
-                      {prioritizedItems.length > 0 && (
-                        <div className="space-y-6">
-                          {prioritizedItems.map((item, idx) => {
-                            const isFirst = idx === 0;
-                            const canDrag = !(isFirst && item.status === OrderStatus.IN_PROGRESS);
-                            return renderCard(item, {
-                              canDrag,
-                              displayPriority: item.priority ?? idx + 1,
-                              showAskForYarn: idx <= 1,
-                              statusOptionIdx: idx,
-                              showConnector: idx < prioritizedItems.length - 1,
-                              style: cardStyle,
-                              onDragStart: () => canDrag && setDraggedIndex(idx),
-                              onDragEnd: () => setDraggedIndex(null),
-                              onDragOver: (e) => {
-                                e.preventDefault();
-                                if (idx === 0 && item.status === OrderStatus.IN_PROGRESS) return;
-                                e.currentTarget.classList.add("ring-2", "ring-indigo-400");
-                              },
-                              onDragLeave: (e) => e.currentTarget.classList.remove("ring-2", "ring-indigo-400"),
-                              onDrop: (e) => {
-                                e.preventDefault();
-                                e.currentTarget.classList.remove("ring-2", "ring-indigo-400");
-                                if (draggedIndex === null) return;
-                                if (idx === 0 && item.status === OrderStatus.IN_PROGRESS) return;
-                                handleReorderItems(prioritizedItems, draggedIndex, idx);
-                              },
-                            });
+                                </td>
+                                <td className="px-2 py-1.5 text-center">
+                                  {canDrag && <i className="ri-draggable text-gray-400 text-sm" aria-hidden />}
+                                </td>
+                              </tr>
+                            );
                           })}
-                        </div>
-                      )}
-
-                      {onHoldItems.length > 0 && (
-                        <div className="space-y-4">
-                          <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">On hold</h2>
-                          <div className="space-y-3">
-                            {onHoldItems.map((item, idx) =>
-                              renderCard(item, {
-                                canDrag: false,
-                                displayPriority: item.priority ?? idx + 1,
-                                showAskForYarn: false,
-                                statusOptionIdx: 1,
-                                showConnector: false,
-                                style: onHoldCardStyle,
-                              })
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {noPriorityItems.length > 0 && (
-                        <div className="space-y-4">
-                          <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">No priority</h2>
-                          <div className="space-y-3">
-                            {noPriorityItems.map((item, idx) =>
-                              renderCard(item, {
-                                canDrag: false,
-                                displayPriority: idx + 1,
-                                showAskForYarn: false,
-                                statusOptionIdx: 1,
-                                showConnector: false,
-                                style: cardStyle,
-                              })
-                            )}
-                          </div>
-                        </div>
-                      )}
+                        </tbody>
+                      </table>
                     </div>
                   );
                 })()

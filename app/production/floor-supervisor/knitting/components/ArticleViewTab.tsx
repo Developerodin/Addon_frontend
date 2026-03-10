@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { ProductionOrder, Article } from "@/shared/services/productionService";
+import { listMachineOrderAssignments } from "@/shared/services/machineOrderAssignmentService";
 
 export interface ArticleRow {
   article: Article;
@@ -34,6 +35,11 @@ function flattenOrdersToArticles(orders: ProductionOrder[]): ArticleRow[] {
   return rows;
 }
 
+function machineLabel(m: { machineCode?: string; name?: string; id?: string } | string): string {
+  if (typeof m === "string") return m;
+  return m?.machineCode ?? m?.name ?? m?.id ?? "—";
+}
+
 export default function ArticleViewTab({
   orders,
   onViewOrder,
@@ -42,6 +48,29 @@ export default function ArticleViewTab({
   getPriorityBadge,
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
+  const [articleToMachineMap, setArticleToMachineMap] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await listMachineOrderAssignments({ page: 1, limit: 500 });
+        const map = new Map<string, string>();
+        for (const a of data.results ?? []) {
+          const label = machineLabel(a.machine as { machineCode?: string; name?: string; id?: string });
+          for (const item of a.productionOrderItems ?? []) {
+            const orderId = typeof item.productionOrder === "string" ? item.productionOrder : (item.productionOrder as { id?: string; _id?: string })?.id ?? (item.productionOrder as { _id?: string })?._id ?? "";
+            const articleId = typeof item.article === "string" ? item.article : (item.article as { id?: string; _id?: string })?.id ?? (item.article as { _id?: string })?._id ?? "";
+            if (orderId && articleId) map.set(`${orderId}|${articleId}`, label);
+          }
+        }
+        if (!cancelled) setArticleToMachineMap(map);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const articleRows = useMemo(() => flattenOrdersToArticles(orders), [orders]);
 
@@ -87,43 +116,25 @@ export default function ArticleViewTab({
         </span>
       </div>
 
+      {/* Excel-like table: series-wise (one row per article) */}
       <div className="overflow-x-auto border border-gray-300 rounded">
-        <table className="w-full border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-50/30">
-              <th className="pl-2 pr-1 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
-                Article
-              </th>
-              <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
-                Order
-              </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
-                Planned
-              </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
-                Rcv
-              </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
-                Done
-              </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
-                Trf
-              </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
-                Rem
-              </th>
-              <th className="px-1.5 py-2 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300 bg-red-50">
-                M4
-              </th>
-              <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
-                Status
-              </th>
-              <th className="px-1.5 py-2 text-right pr-2 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">
-                Actions
-              </th>
+        <table className="min-w-full text-xs border-collapse">
+          <thead className="bg-gray-100 border-b border-gray-300">
+            <tr>
+              <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Article</th>
+              <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Order</th>
+              <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Machine</th>
+              <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Planned</th>
+              <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Rcv</th>
+              <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Done</th>
+              <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Trf</th>
+              <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Rem</th>
+              <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-red-50">M4</th>
+              <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Status</th>
+              <th className="px-2 py-1.5 text-right font-semibold text-gray-700 whitespace-nowrap">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="bg-white divide-y divide-gray-200">
             {filteredRows.map(({ article, order }) => {
               const planned = article.plannedQuantity ?? 0;
               const received = article.floorQuantities?.knitting?.received ?? 0;
@@ -134,18 +145,18 @@ export default function ArticleViewTab({
               const isOverproduction = completed > planned;
               const key = (article.id ?? article._id) + "-" + order.id;
               return (
-                <tr key={key} className="hover:bg-gray-50/50 transition-colors group">
-                  <td className="pl-2 pr-1 py-2 border border-gray-300">
-                    <div className="text-[12px] font-bold text-gray-900">{article.articleNumber ?? "—"}</div>
-                    <div className="text-[10px] text-gray-500">{article.linkingType ?? "N/A"}</div>
+                <tr key={key} className="hover:bg-gray-50 transition-colors group">
+                  <td className="px-2 py-1.5 border-r border-gray-300">
+                    <div className="font-medium text-gray-900">{article.articleNumber ?? "—"}</div>
+                    <div className="text-gray-500 text-[10px]">{article.linkingType ?? "N/A"}</div>
                     {article.knittingCode && (
                       <div className="text-[10px] text-gray-500 truncate" title={article.knittingCode}>
                         {article.knittingCode}
                       </div>
                     )}
                   </td>
-                  <td className="px-1.5 py-2 border border-gray-300">
-                    <div className="text-[12px] font-medium text-gray-800">{order.orderNumber ?? order.id}</div>
+                  <td className="px-2 py-1.5 border-r border-gray-300">
+                    <div className="font-medium text-gray-800">{order.orderNumber ?? order.id}</div>
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${getStatusBadge(order.status)}`}>
                       {order.status}
                     </span>
@@ -153,37 +164,28 @@ export default function ArticleViewTab({
                       {order.priority}
                     </span>
                   </td>
-                  <td className="px-1.5 py-2 text-center text-[12px] text-gray-700 border border-gray-300">
-                    {planned.toLocaleString()}
+                  <td className="px-2 py-1.5 border-r border-gray-300">
+                    <span className="font-medium text-gray-700">
+                      {articleToMachineMap.get(`${order.id ?? order._id}|${article.id ?? article._id}`) ?? "—"}
+                    </span>
                   </td>
-                  <td className="px-1.5 py-2 text-center text-[12px] text-blue-600 font-medium border border-gray-300">
-                    {received.toLocaleString()}
+                  <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{planned.toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-center border-r border-gray-300 text-blue-600 font-medium">{received.toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-center border-r border-gray-300">
+                    <span className="text-green-600 font-medium">{completed.toLocaleString()}</span>
+                    {isOverproduction && <div className="text-[10px] text-orange-600">+{completed - planned}</div>}
                   </td>
-                  <td className="px-1.5 py-2 text-center border border-gray-300">
-                    <span className="text-[12px] text-green-600 font-medium">{completed.toLocaleString()}</span>
-                    {isOverproduction && (
-                      <div className="text-[10px] text-orange-600">+{completed - planned}</div>
-                    )}
+                  <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferred.toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remaining.toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-center border-r border-gray-300 bg-red-50">
+                    {m4 > 0 ? <span className="text-red-600 font-medium">{m4.toLocaleString()}</span> : <span className="text-gray-400">—</span>}
                   </td>
-                  <td className="px-1.5 py-2 text-center text-[12px] text-green-600 font-medium border border-gray-300">
-                    {transferred.toLocaleString()}
-                  </td>
-                  <td className="px-1.5 py-2 text-center text-[12px] text-orange-600 font-medium border border-gray-300">
-                    {remaining.toLocaleString()}
-                  </td>
-                  <td className="px-1.5 py-2 text-center border border-gray-300 bg-red-50">
-                    {m4 > 0 ? (
-                      <span className="text-[12px] text-red-600 font-medium">{m4.toLocaleString()}</span>
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-1.5 py-2 border border-gray-300">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>
+                  <td className="px-2 py-1.5 border-r border-gray-300">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>
                       {order.status}
                     </span>
                   </td>
-                  <td className="px-1.5 py-2 text-right pr-2 border border-gray-300">
+                  <td className="px-2 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100">
                       <button
                         type="button"
@@ -192,14 +194,6 @@ export default function ArticleViewTab({
                         title="View order"
                       >
                         <i className="ri-eye-line text-xs" />
-                      </button>
-                      <button
-                        type="button"
-                        className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100"
-                        onClick={() => onUpdateOrder(order)}
-                        title="Update order"
-                      >
-                        <i className="ri-edit-line text-xs" />
                       </button>
                     </div>
                   </td>
