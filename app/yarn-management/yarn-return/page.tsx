@@ -1676,23 +1676,29 @@ const YarnReturnPage = () => {
           );
         }
 
-        // After return API 200: update assignment item yarn-return status to Completed
+        // After return API 200: update assignment item yarn-return status (In Progress or Completed)
+        // Call on every cone return: "In Progress" when some cones pending, "Completed" when all returned
         if (selectedMachineAssignmentId) {
           const items = getAssignmentItemsForOrder(updatedOrder.id);
           if (items.length > 0) {
             try {
+              const yarnReturnStatus = updatedOrder.status === "Returned" ? "Completed" : "In Progress";
               for (const item of items) {
                 await updateAssignmentItemYarnReturnStatus(
                   selectedMachineAssignmentId,
                   item.itemId,
-                  "Completed"
+                  yarnReturnStatus
                 );
               }
-              toast.success("Assignment item return status updated.");
+              toast.success(
+                yarnReturnStatus === "Completed"
+                  ? "Assignment item return status updated."
+                  : "Assignment item marked in progress."
+              );
               if (selectedMachineAssignment) loadOrdersForMachine(selectedMachineAssignment);
             } catch (err) {
               console.error("Assignment yarn-return status update failed:", err);
-              toast.error("Cones returned, but failed to mark order yarn-return as completed.");
+              toast.error("Cones returned, but failed to update assignment yarn-return status.");
             }
           } else {
             console.warn("Assignment yarn-return status not updated: no assignment items for order", updatedOrder.orderNumber);
