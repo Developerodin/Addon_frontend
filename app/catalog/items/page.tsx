@@ -2544,7 +2544,7 @@ const ProductListPage = () => {
                   <span className="ml-1.5 text-[10px] text-gray-600 font-medium">{exportProgress}%</span>
                 </div>
               )}
-              {selectedProducts.length > 0 && (
+              {/* {selectedProducts.length > 0 && (
                 <button
                   type="button"
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${"bg-red-50 text-red-600 border-red-100 hover:bg-red-100 shadow-sm"}`}
@@ -2554,7 +2554,7 @@ const ProductListPage = () => {
                   <i className="ri-delete-bin-line text-xs"></i>
                   Delete ({selectedProducts.length})
                 </button>
-              )}
+              )} */}
               <Link
                 href="/catalog/items/add"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
@@ -2691,9 +2691,9 @@ const ProductListPage = () => {
                         <Link href={`/catalog/items/${product.id}/edit`} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors" title="Edit">
                           <i className="ri-pencil-line text-xs"></i>
                         </Link>
-                        <button className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors" onClick={() => handleDelete(product.id)} title="Delete">
+                        {/* <button className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors" onClick={() => handleDelete(product.id)} title="Delete">
                           <i className="ri-delete-bin-line text-xs"></i>
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                   </tr>

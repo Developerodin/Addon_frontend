@@ -2397,53 +2397,55 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                     <i className="ri-add-line text-xs"></i>
                     Add Lot
                   </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (lots.length === 0) return;
-                      const totalCount = lots.length;
-                      const savedCount = lots.filter(l => isLotSaved(l.lotNumber)).length;
-                      if (typeof window !== 'undefined' && !window.confirm(`Delete all ${totalCount} lot(s)?${savedCount > 0 ? ` ${savedCount} saved lot(s) will be removed from the system via API.` : ''}`)) return;
-                      setIsDeletingAllLots(true);
-                      const poLabel = order.orderNumber || '';
-                      const currentLots = [...lots];
-                      try {
-                        for (let i = currentLots.length - 1; i >= 0; i--) {
-                          const lot = currentLots[i];
-                          if (lot.lotNumber?.trim() && isLotSaved(lot.lotNumber)) {
-                            await yarnPurchaseOrderService.deleteLot(poLabel, lot.lotNumber.trim());
+                  {false && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (lots.length === 0) return;
+                        const totalCount = lots.length;
+                        const savedCount = lots.filter(l => isLotSaved(l.lotNumber)).length;
+                        if (typeof window !== 'undefined' && !window.confirm(`Delete all ${totalCount} lot(s)?${savedCount > 0 ? ` ${savedCount} saved lot(s) will be removed from the system via API.` : ''}`)) return;
+                        setIsDeletingAllLots(true);
+                        const poLabel = order.orderNumber || '';
+                        const currentLots = [...lots];
+                        try {
+                          for (let i = currentLots.length - 1; i >= 0; i--) {
+                            const lot = currentLots[i];
+                            if (lot.lotNumber?.trim() && isLotSaved(lot.lotNumber)) {
+                              await yarnPurchaseOrderService.deleteLot(poLabel, lot.lotNumber.trim());
+                            }
+                            currentLots.splice(i, 1);
+                            setOriginalLots(prev => {
+                              if (!lot.lotNumber?.trim()) return prev;
+                              const next = new Map(prev);
+                              next.delete(lot.lotNumber.trim().toUpperCase());
+                              return next;
+                            });
+                            setLots(currentLots.length > 0 ? [...currentLots] : [{
+                              lotNumber: '',
+                              numberOfCones: 0,
+                              totalWeight: 0,
+                              numberOfBoxes: 0,
+                              poItems: [],
+                              status: 'lot_pending'
+                            }]);
                           }
-                          currentLots.splice(i, 1);
-                          setOriginalLots(prev => {
-                            if (!lot.lotNumber?.trim()) return prev;
-                            const next = new Map(prev);
-                            next.delete(lot.lotNumber.trim().toUpperCase());
-                            return next;
-                          });
-                          setLots(currentLots.length > 0 ? [...currentLots] : [{
-                            lotNumber: '',
-                            numberOfCones: 0,
-                            totalWeight: 0,
-                            numberOfBoxes: 0,
-                            poItems: [],
-                            status: 'lot_pending'
-                          }]);
+                          await onLotDeleted?.();
+                          toast.success('All lots deleted.');
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : 'Failed to delete lots');
+                        } finally {
+                          setIsDeletingAllLots(false);
                         }
-                        await onLotDeleted?.();
-                        toast.success('All lots deleted.');
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : 'Failed to delete lots');
-                      } finally {
-                        setIsDeletingAllLots(false);
-                      }
-                    }}
-                    disabled={isDeletingAllLots || lots.length === 0}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Delete all lots (saved lots removed via API one by one)"
-                  >
-                    {isDeletingAllLots ? <i className="ri-loader-4-line animate-spin text-xs"></i> : <i className="ri-delete-bin-line text-xs"></i>}
-                    {isDeletingAllLots ? 'Deleting...' : 'Delete all lots'}
-                  </button>
+                      }}
+                      disabled={isDeletingAllLots || lots.length === 0}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Delete all lots (saved lots removed via API one by one)"
+                    >
+                      {isDeletingAllLots ? <i className="ri-loader-4-line animate-spin text-xs"></i> : <i className="ri-delete-bin-line text-xs"></i>}
+                      {isDeletingAllLots ? 'Deleting...' : 'Delete all lots'}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2462,20 +2464,22 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                         </span>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (lotIsSaved) {
+                    {false && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (lotIsSaved) {
+                            setDeleteConfirmLotIndex(lotIndex);
+                            return;
+                          }
                           setDeleteConfirmLotIndex(lotIndex);
-                          return;
-                        }
-                        setDeleteConfirmLotIndex(lotIndex);
-                      }}
-                      className="p-1.5 rounded transition-colors text-red-600 hover:bg-red-100 hover:text-red-700"
-                      title="Delete lot"
-                    >
-                      <i className="ri-delete-bin-line text-base"></i>
-                    </button>
+                        }}
+                        className="p-1.5 rounded transition-colors text-red-600 hover:bg-red-100 hover:text-red-700"
+                        title="Delete lot"
+                      >
+                        <i className="ri-delete-bin-line text-base"></i>
+                      </button>
+                    )}
                   </div>
                   {lotIsSaved && (
                     <span className="text-[10px] text-gray-500 italic block -mt-1">Cannot edit - saved lots are read-only</span>

@@ -1037,7 +1037,7 @@ const PurchasePage = () => {
               </button> */}
 
               {/* Delete button */}
-              <button
+              {/* <button
                 onClick={handleBulkDelete}
                 disabled={isDeleting || selectedOrders.size === 0}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors ${selectedOrders.size > 0
@@ -1047,7 +1047,7 @@ const PurchasePage = () => {
               >
                 <i className="ri-delete-bin-line text-xs"></i>
                 Delete
-              </button>
+              </button> */}
             </div>
           </div>
 
@@ -1255,14 +1255,14 @@ const PurchasePage = () => {
                           >
                             <i className="ri-pencil-line text-xs"></i>
                           </Link>
-                          <button
+                          {/* <button
                             onClick={() => handleDeleteOrder(order)}
                             className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors"
                             title="Delete"
                             disabled={isDeleting}
                           >
                             <i className="ri-delete-bin-line text-xs"></i>
-                          </button>
+                          </button> */}
                           {(order.status === 'submitted to supplier' || order.status === 'goods partially received' || order.status === 'in transit') && (
                             <button
                               onClick={() => handleStatusUpdate(order.id, 'in transit')}
@@ -1675,7 +1675,7 @@ const PurchasePage = () => {
                                     <h4 className="text-xs font-semibold text-gray-800">
                                       Packlist Entry {index + 1}
                                     </h4>
-                                    <button
+                                    {/* <button
                                       type="button"
                                       onClick={() => handleDeletePacklistEntry(selectedOrder, index)}
                                       disabled={deletingPacklistIndex !== null}
@@ -1687,7 +1687,7 @@ const PurchasePage = () => {
                                       ) : (
                                         <i className="ri-delete-bin-line text-sm"></i>
                                       )}
-                                    </button>
+                                    </button> */}
                                   </div>
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {packlistEntry.packingNumber && (
