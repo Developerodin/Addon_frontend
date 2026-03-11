@@ -1650,7 +1650,6 @@ const YarnReturnPage = () => {
           totalNetWeight: weightPerCone,
           numberOfCones: 1,
           orderno: selectedOrder.orderNumber,
-          issuedTransactionId: cone.transactionId, // Link to original issue transaction
         };
 
         const response = await fetch(`${API_BASE_URL}/yarn-management/yarn-transactions`, {
