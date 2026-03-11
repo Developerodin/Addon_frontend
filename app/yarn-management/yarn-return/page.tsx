@@ -795,7 +795,7 @@ const YarnReturnPage = () => {
   const filteredReturnTransactions = useMemo(() => {
     return returnTransactions
       .filter((transaction) => {
-        // Filter by order number search
+        // Filter by order number or yarn name
         if (
           historySearchTerm &&
           !transaction.orderno
@@ -807,7 +807,7 @@ const YarnReturnPage = () => {
         ) {
           return false;
         }
-        
+
         // Filter by date range
         if (historyDateRange.from) {
           const fromDate = new Date(historyDateRange.from);
@@ -1657,17 +1657,25 @@ const YarnReturnPage = () => {
             coneYarnCode: cone.yarnCode,
             transactionId: cone.transactionId,
           });
-          throw new Error(`Invalid yarn ID for cone ${barcode}. Cannot create return transaction. Please ensure the cone was properly issued.`);
+          throw new Error(
+            `Invalid yarn ID for cone ${barcode}. Cannot create return transaction. Please ensure the cone was properly issued.`
+          );
         }
 
+        // Normalise to a plain string so backend Joi sees a string, not an object
+        const yarnIdString =
+          typeof yarnId === "string"
+            ? yarnId
+            : (yarnId as any)?._id ?? (yarnId as any)?.id ?? String(yarnId);
+
         console.log("📦 Using yarn ID for transaction:", {
-          yarnId,
+          yarnId: yarnIdString,
           yarnName: cone.yarnName,
           barcode,
         });
 
         const transactionData = {
-          yarn: yarnId, // Must be a valid MongoDB ObjectId
+          yarn: yarnIdString, // Must be a valid MongoDB ObjectId
           yarnName: cone.yarnName,
           transactionType: "yarn_returned",
           transactionDate: transactionDate,
