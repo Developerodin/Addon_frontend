@@ -1410,41 +1410,20 @@ const YarnReturnPage = () => {
         const userTearWeight = parseFloat(transactionForm.totalTearWeight) || 0;
         const tearWeight = coneTearWeight || userTearWeight; // Prefer cone's tearWeight, fallback to user input
         
-        // For empty cones: weights are 0
-        // For cones with remaining yarn: calculate remaining weight
-        let weightPerCone: number;
-        let tearWeightPerCone: number;
-        let totalWeightPerCone: number;
-        let returnWeight: number; // Remaining yarn weight to return
-        
+        // IMPORTANT: do not auto‑distribute by numberOfCones.
+        // Whatever user enters in the modal is per‑cone weight.
+        // We just pass those values through to:
+        // - the transaction payload, and
+        // - the cone PATCH payload.
+        let weightPerCone = totalNetWeight;      // modal "Total Net Weight"
+        let tearWeightPerCone = totalTearWeight; // modal "Total Tear Weight"
+        const totalWeightPerCone = totalWeight;  // modal "Total Weight"
+
+        // For empty cones we force everything to zero regardless of form values.
         if (isConeEmpty) {
-          // Empty cone: all weights are 0
           weightPerCone = 0;
           tearWeightPerCone = 0;
-          totalWeightPerCone = 0;
-          returnWeight = 0;
-          console.log("📦 Empty cone detected, setting all weights to 0:", barcode);
-        } else {
-          // Cone with remaining yarn: calculate remaining weight
-          // Remaining weight = coneWeight - issuedWeight - tearWeight
-          // Example: 25 - 2.2 - 0.5 = 22.3
-          returnWeight = Math.max(0, originalConeWeight - issuedWeight - tearWeight);
-          
-          // Use user input for transaction, but returnWeight is the calculated remaining weight
-          weightPerCone = totalNetWeight / numberOfCones;
-          tearWeightPerCone = totalTearWeight / numberOfCones;
-          totalWeightPerCone = totalWeight / numberOfCones;
-          
-          console.log("📦 Cone with remaining yarn, calculating weights:", {
-            barcode,
-            originalConeWeight,
-            issuedWeight,
-            tearWeight,
-            returnWeight, // This is the remaining weight (22.3)
-            weightPerCone, // From user input
-            tearWeightPerCone,
-            totalWeightPerCone,
-          });
+          console.log("📦 Empty cone detected, setting per-cone weights to 0:", barcode);
         }
 
         // Get yarn ID from cone data - it should be a MongoDB ObjectId
@@ -1628,14 +1607,18 @@ const YarnReturnPage = () => {
         // Prepare cone update data based on whether it's empty or has remaining yarn
         const coneUpdateData: any = {
           returnStatus: "returned",
-          returnWeight: returnWeight, // Use calculated remaining weight (coneWeight - issuedWeight - tearWeight)
+          // Business rule: the same net weight that is entered in the modal
+          // (per cone) should be sent as both `returnWeight` and `coneWeight`.
+          // Example: if total net weight is 2kg for one cone, we PATCH
+          // { coneWeight: 2, returnWeight: 2 }.
+          returnWeight: weightPerCone,
+          coneWeight: weightPerCone,
+          tearWeight: tearWeightPerCone,
         };
 
         if (isConeEmpty) {
-          // Empty cone: set coneWeight = 0, tearWeight = 0, don't update storage
-          coneUpdateData.coneWeight = 0;
-          coneUpdateData.tearWeight = 0;
-          // Don't update coneStorageId for empty cones
+          // Empty cone: keep coneWeight/returnWeight/tearWeight at 0
+          // and don't update storage.
           console.log("📦 Updating empty cone:", {
             coneId,
             barcode,
@@ -1644,11 +1627,6 @@ const YarnReturnPage = () => {
             returnWeight: 0,
           });
         } else {
-          // Cone with remaining yarn: update coneWeight to remaining weight, update storage location
-          // Remaining weight = originalConeWeight - issuedWeight - tearWeight
-          coneUpdateData.coneWeight = returnWeight; // Remaining weight (e.g., 22.3)
-          coneUpdateData.tearWeight = tearWeightPerCone;
-          
           // Update storage location with rack barcode
           const rackBarcode = rackBarcodes.get(barcode);
           if (rackBarcode) {
@@ -1661,10 +1639,9 @@ const YarnReturnPage = () => {
             originalConeWeight,
             issuedWeight,
             coneTearWeight: tearWeight,
-            calculatedReturnWeight: returnWeight, // 22.3
-            coneWeight: returnWeight, // Updated to remaining weight
+            coneWeight: coneUpdateData.coneWeight,
             transactionTearWeight: tearWeightPerCone,
-            returnWeight: returnWeight, // Same as remaining weight
+            returnWeight: coneUpdateData.returnWeight,
             coneStorageId: rackBarcode,
           });
         }
