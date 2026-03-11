@@ -832,11 +832,14 @@ const YarnReturnPage = () => {
     [selectedMachineAssignment]
   );
 
+  /** Normalize id for comparison (handles ObjectId vs string). */
+  const normId = (id: string | undefined): string => String(id ?? "").trim();
+
   /** Get assignment item for a specific (order, article) pair. Returns single item or null. */
   const getAssignmentItemForArticle = useCallback(
     (orderId: string, articleId: string): { itemId: string; articleNumber: string } | null => {
       const items = getAssignmentItemsForOrder(orderId);
-      const item = items.find((i) => i.articleId === articleId);
+      const item = items.find((i) => normId(i.articleId) === normId(articleId));
       return item ? { itemId: item.itemId, articleNumber: item.articleNumber } : null;
     },
     [getAssignmentItemsForOrder]
@@ -847,7 +850,7 @@ const YarnReturnPage = () => {
     (order: ProductionOrder, articleId: string | undefined): boolean => {
       const hasArticleCones = order.cones.some((c) => c.articleId);
       const conesForArticle = hasArticleCones
-        ? order.cones.filter((c) => c.articleId === articleId)
+        ? order.cones.filter((c) => normId(c.articleId) === normId(articleId))
         : order.cones; // No cones have articleId: assume 1:1 order-article
       if (conesForArticle.length === 0) return false;
       return conesForArticle.every((c) => c.status === "Returned");
@@ -1819,12 +1822,15 @@ const YarnReturnPage = () => {
             articleIdsToUpdate.push(...allItems.map((i) => i.articleId).filter(Boolean));
           }
           const uniqueArticleIds = Array.from(new Set(articleIdsToUpdate));
+          const pendingBefore = selectedOrder.cones.filter((c) => c.status !== "Returned").length;
+          const justReturnedLastBatch = results.length >= pendingBefore;
           if (uniqueArticleIds.length > 0) {
             try {
               for (const articleId of uniqueArticleIds) {
                 const item = getAssignmentItemForArticle(updatedOrder.id, articleId);
                 if (!item) continue;
                 const allReturned =
+                  justReturnedLastBatch ||
                   isArticleAllConesReturned(updatedOrder, articleId) ||
                   updatedOrder.status === "Returned";
                 const yarnReturnStatus = allReturned ? "Completed" : "In Progress";
