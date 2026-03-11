@@ -6,11 +6,9 @@ import Link from "next/link";
 import SummaryCards from "./components/SummaryCards";
 import LiveInventoryTable from "./components/LiveInventoryTable";
 import InventoryAlertsModal from "./components/InventoryAlertsModal";
-import POYarnDetailsModal from "./components/POYarnDetailsModal";
 import {
   YarnInventory,
   InventorySummary,
-  PendingDelivery,
   InventoryAlert,
 } from "./types";
 import { yarnInventoryService } from "./services/yarnInventoryService";
@@ -25,11 +23,8 @@ const DashboardPage = () => {
     inventoryAlerts: 0,
     inventoryValue: 0,
   });
-  const [pendingDeliveries, setPendingDeliveries] = useState<PendingDelivery[]>([]);
   const [alerts, setAlerts] = useState<InventoryAlert[]>([]);
   const [showAlertsModal, setShowAlertsModal] = useState(false);
-  const [selectedDelivery, setSelectedDelivery] = useState<PendingDelivery | null>(null);
-  const [showYarnDetailsModal, setShowYarnDetailsModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -108,29 +103,7 @@ const DashboardPage = () => {
           poSent: false, // Only pending deliveries
         });
 
-        // Transform requisitions to pending deliveries
-        const transformedDeliveries: PendingDelivery[] = requisitions
-          .filter((req) => !req.poSent)
-          .map((req) => ({
-            id: req._id,
-            yarnName: req.yarnName,
-            quantity: req.minQty - req.availableQty, // Quantity needed
-            expectedDate: new Date(
-              new Date(req.created).getTime() + 30 * 24 * 60 * 60 * 1000
-            )
-              .toISOString()
-              .split('T')[0], // 30 days from creation
-            supplier: 'Supplier', // Not available from API
-            poNumber: `PO-${req._id.slice(-6)}`,
-            yarns: [
-              {
-                yarnName: req.yarnName,
-                quantity: req.minQty - req.availableQty,
-                ratePerUnit: 0, // Not available from API
-                totalValue: 0, // Not available from API
-              },
-            ],
-          }));
+        const pendingDeliveriesCount = requisitions.filter((req) => !req.poSent).length;
 
         // Transform requisitions to alerts
         const transformedAlerts: InventoryAlert[] = requisitions
@@ -204,12 +177,11 @@ const DashboardPage = () => {
         );
 
         setInventory(transformedInventory);
-        setPendingDeliveries(transformedDeliveries);
         setAlerts(transformedAlerts);
         setSummary({
           totalStock: totalStock,
           purchaseYarn: totalStock, // Same as total stock
-          pendingDeliveries: transformedDeliveries.length,
+          pendingDeliveries: pendingDeliveriesCount,
           inventoryAlerts: transformedAlerts.length,
           inventoryValue: inventoryValue,
         });
@@ -322,52 +294,6 @@ const DashboardPage = () => {
           <SummaryCards summary={summary} />
         </div>
 
-        {pendingDeliveries.length > 0 && (
-          <>
-            <div className="p-[10px] pt-0">
-              <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <i className="ri-truck-line"></i> Recent PO Status ({pendingDeliveries.length})
-              </h3>
-            </div>
-            <div className="overflow-x-auto min-h-[120px]">
-              <table className="w-full border-collapse border border-gray-200">
-                <thead>
-                  <tr className="bg-gray-50/30">
-                    <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">PO Number</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Total Qty (kg)</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Expected Date</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Supplier</th>
-                    <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pendingDeliveries.map((delivery) => (
-                    <tr key={delivery.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{delivery.poNumber}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{delivery.quantity.toLocaleString()} kg</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{delivery.expectedDate}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-500 border border-gray-200">{delivery.supplier}</td>
-                      <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedDelivery(delivery);
-                            setShowYarnDetailsModal(true);
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors"
-                        >
-                          <i className="ri-eye-line text-sm"></i> Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="p-[10px] pt-2"></div>
-          </>
-        )}
-
         <LiveInventoryTable inventory={inventory} />
       </div>
 
@@ -375,16 +301,6 @@ const DashboardPage = () => {
         isOpen={showAlertsModal}
         onClose={() => setShowAlertsModal(false)}
         alerts={alerts}
-      />
-
-      <POYarnDetailsModal
-        isOpen={showYarnDetailsModal}
-        onClose={() => {
-          setShowYarnDetailsModal(false);
-          setSelectedDelivery(null);
-        }}
-        delivery={selectedDelivery}
-        inventory={inventory}
       />
     </div>
   );

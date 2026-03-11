@@ -82,6 +82,23 @@ interface ProductionOrder {
   hasIssuedTransactions?: boolean; // Track if order has issued transactions
 }
 
+/** Article row for article-wise display. Links to parent order for cones. */
+interface ArticleRow {
+  rowId: string;
+  articleId: string;
+  articleNumber: string;
+  orderId: string;
+  orderNumber: string;
+  productionOrder: string;
+  floor: string;
+  knittingSupervisor: string;
+  knittingCompletedAt: string;
+  status: OrderStatus;
+  cones: Cone[];
+  plannedQuantity: number;
+  yarnNames: string; // Comma-separated unique yarn names from cones
+}
+
 interface ReturnRecord {
   id: string;
   orderId: string;
@@ -222,6 +239,7 @@ const YarnReturnPage = () => {
   const [history, setHistory] = useState<ReturnRecord[]>([]);
   const [returnTransactions, setReturnTransactions] = useState<ReturnTransaction[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedArticleRowId, setSelectedArticleRowId] = useState<string | null>(null);
   const [activeConeId, setActiveConeId] = useState<string | null>(null);
   const [historySearchTerm, setHistorySearchTerm] = useState("");
   const [historyDateRange, setHistoryDateRange] = useState<{
@@ -395,6 +413,7 @@ const YarnReturnPage = () => {
         setHistory([]);
         setReturnTransactions((prev) => prev);
         setSelectedOrderId(null);
+        setSelectedArticleRowId(null);
         setSelectedMachineAssignmentId(assignment.id);
         setSelectedMachineAssignment(assignment);
         setOrdersLoading(false);
@@ -484,8 +503,15 @@ const YarnReturnPage = () => {
         const first = filtered[0];
         if (first?.id) {
           setSelectedOrderId(first.id);
+          const firstArticle = first.articles?.[0];
+          if (firstArticle) {
+            setSelectedArticleRowId(`${firstArticle.id}-${first.id}`);
+          } else {
+            setSelectedArticleRowId(first.id);
+          }
         } else {
           setSelectedOrderId(null);
+          setSelectedArticleRowId(null);
         }
       } catch (error) {
         console.error("Error loading orders for machine:", error);
@@ -557,6 +583,59 @@ const YarnReturnPage = () => {
     () => orders.find((order) => order.id === selectedOrderId) ?? null,
     [orders, selectedOrderId]
   );
+
+  // Build article rows from orders (article-wise display)
+  const articleRows = useMemo(() => {
+    const rows: ArticleRow[] = [];
+    for (const order of orders) {
+      const articles = order.articles?.length ? order.articles : [{ id: order.id, articleNumber: order.orderNumber, plannedQuantity: 0 } as Article];
+      const yarnNames = Array.from(new Set(order.cones.map((c) => c.yarnName).filter(Boolean))).join(", ");
+      for (const art of articles) {
+        rows.push({
+          rowId: `${art.id}-${order.id}`,
+          articleId: art.id,
+          articleNumber: art.articleNumber,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          productionOrder: order.productionOrder || order.orderNumber,
+          floor: order.floor,
+          knittingSupervisor: order.knittingSupervisor,
+          knittingCompletedAt: order.knittingCompletedAt,
+          status: order.status,
+          cones: order.cones,
+          plannedQuantity: art.plannedQuantity ?? 0,
+          yarnNames,
+        });
+      }
+    }
+    return rows;
+  }, [orders]);
+
+  // Pending article rows (articles whose parent order has pending cones)
+  const pendingArticles = useMemo(() => {
+    const pendingOrderIds = new Set(pendingOrders.map((o) => o.id));
+    return articleRows.filter((row) => pendingOrderIds.has(row.orderId));
+  }, [articleRows, pendingOrders]);
+
+  const selectedArticleRow = useMemo(
+    () => articleRows.find((r) => r.rowId === selectedArticleRowId) ?? null,
+    [articleRows, selectedArticleRowId]
+  );
+
+  // Sync selection to first pending article when current selection is not in pending list
+  useEffect(() => {
+    if (pendingArticles.length === 0) {
+      setSelectedOrderId(null);
+      setSelectedArticleRowId(null);
+      return;
+    }
+    const isSelectedPending = selectedArticleRowId && pendingArticles.some((a) => a.rowId === selectedArticleRowId);
+    if (!isSelectedPending) {
+      const first = pendingArticles[0];
+      setSelectedOrderId(first.orderId);
+      setSelectedArticleRowId(first.rowId);
+    }
+  }, [pendingArticles, selectedArticleRowId]);
 
   // Calculate pending cones (cones that haven't been returned)
   // Count based on return transactions history, not just cone status
@@ -644,7 +723,8 @@ const YarnReturnPage = () => {
     }
   }, [pendingOrders]);
 
-  const filteredOrders = useMemo(() => orders, [orders]);
+  // Only articles whose cones are pending for return
+  const filteredArticleRows = useMemo(() => pendingArticles, [pendingArticles]);
 
   const filteredReturnTransactions = useMemo(() => {
     return returnTransactions
@@ -755,8 +835,9 @@ const YarnReturnPage = () => {
     });
   };
 
-  const handleReturnConesClick = (orderId: string) => {
+  const handleReturnConesClick = (orderId: string, articleRowId?: string) => {
     setSelectedOrderId(orderId);
+    if (articleRowId) setSelectedArticleRowId(articleRowId);
     setShowScanReturnPanel(true);
     setBarcodeInput("");
     setScannedBarcodes([]);
@@ -1969,52 +2050,57 @@ const YarnReturnPage = () => {
               <div className="border border-gray-200 rounded overflow-hidden bg-white p-[10px]">
                 <div className="flex flex-col items-center justify-center py-16 text-center text-gray-500">
                   <i className="ri-settings-3-line text-5xl text-gray-300 mb-4"></i>
-                  <p className="text-[11px]">Select a machine to view its orders and cone returns.</p>
+                  <p className="text-[11px]">Select a machine to view its articles and cone returns.</p>
                 </div>
               </div>
             ) : ordersLoading ? (
               <div className="border border-gray-200 rounded overflow-hidden bg-white p-[10px]">
                 <div className="flex flex-col items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-600 border-t-transparent mb-2" />
-                  <p className="text-[11px] text-gray-500">Loading orders and cones...</p>
+                  <p className="text-[11px] text-gray-500">Loading articles and cones...</p>
                 </div>
               </div>
             ) : (
               <>
+                {pendingArticles.length > 0 && (
                 <div className="border border-gray-200 rounded overflow-hidden bg-white">
                   <button
                     type="button"
                     onClick={() => setOrderSelectOpen((o) => !o)}
                     className="w-full p-[10px] flex justify-between items-center border-b border-gray-100 bg-gray-50/50 hover:bg-gray-50 text-left"
                   >
-                    <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Select Order</h3>
+                    <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Select Article</h3>
                     <span className="text-gray-500 text-sm">
-                      {selectedOrder?.orderNumber ?? "—"} · {filteredOrders.length} order{filteredOrders.length !== 1 ? "s" : ""}
+                      {selectedArticleRow?.articleNumber ?? "—"} · {filteredArticleRows.length} article{filteredArticleRows.length !== 1 ? "s" : ""}
                     </span>
                     <i className={`ri-arrow-down-s-line text-lg text-gray-500 transition-transform ${orderSelectOpen ? "rotate-180" : ""}`} />
                   </button>
                   {orderSelectOpen && (
                     <div className="p-[10px] border-b border-gray-100">
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
-                        {filteredOrders.map((order) => {
-                          const orderReturnTransactions = returnTransactions.filter((tx) => tx.orderno === order.orderNumber);
+                        {filteredArticleRows.map((row) => {
+                          const orderReturnTransactions = returnTransactions.filter((tx) => tx.orderno === row.orderNumber);
                           const totalConesReturnedFromHistory = orderReturnTransactions.reduce((sum, tx) => sum + (tx.transactionConeCount || 1), 0);
-                          const totalConesInOrder = order.cones.length;
+                          const totalConesInOrder = row.cones.length;
                           const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
-                          const isSelected = selectedOrderId === order.id;
+                          const isSelected = selectedArticleRowId === row.rowId;
                           return (
                             <button
-                              key={order.id}
+                              key={row.rowId}
                               type="button"
-                              onClick={() => setSelectedOrderId(order.id)}
+                              onClick={() => {
+                                setSelectedOrderId(row.orderId);
+                                setSelectedArticleRowId(row.rowId);
+                              }}
                               className={`text-left rounded-lg border-2 p-2.5 transition-all ${
                                 isSelected
                                   ? "border-purple-500 bg-purple-50 shadow-sm ring-1 ring-purple-200"
                                   : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50/50"
                               }`}
                             >
-                              <div className="text-[12px] font-bold text-gray-900 truncate">{order.orderNumber}</div>
-                              <div className="text-[10px] text-gray-500 mt-0.5 truncate">{order.floor}</div>
+                              <div className="text-[12px] font-bold text-gray-900 truncate">{row.articleNumber}</div>
+                              <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={row.yarnNames || undefined}>{row.yarnNames || "—"}</div>
+                              <div className="text-[10px] text-gray-500 mt-0.5 truncate">PO: {row.orderNumber}</div>
                               <div className="text-[10px] text-gray-600 mt-1 font-medium">{actualPendingCones} pending</div>
                             </button>
                           );
@@ -2023,18 +2109,26 @@ const YarnReturnPage = () => {
                     </div>
                   )}
                 </div>
+                )}
 
-                {selectedMachineAssignment && (
+                {selectedMachineAssignment && pendingArticles.length > 0 && (
                   <div className="border border-gray-200 rounded overflow-hidden bg-white">
                     <div className="p-[10px] flex justify-between items-start gap-4 border-b border-gray-100">
                       <div className="min-w-0 flex-1">
                         <p className="text-[10px] font-medium text-purple-600 uppercase tracking-wider mb-0.5">
                           Machine: {machineLabel(selectedMachineAssignment)}
                         </p>
-                        {selectedOrder && (
+                        {(selectedOrder || selectedArticleRowId) && (
                           <>
-                            <h2 className="text-sm font-bold text-gray-800">{selectedOrder.orderNumber}</h2>
-                            <p className="text-[11px] text-gray-500 mt-0.5">{selectedOrder.floor}</p>
+                            <h2 className="text-sm font-bold text-gray-800">
+                              {selectedArticleRow?.articleNumber ?? selectedOrder?.orderNumber ?? "—"}
+                            </h2>
+                            <p className="text-[11px] text-gray-500 mt-0.5">
+                              {selectedArticleRow?.yarnNames ?? "—"}
+                            </p>
+                            <p className="text-[11px] text-gray-500">
+                              PO: {selectedOrder?.orderNumber ?? "—"} · {selectedOrder?.floor ?? "—"}
+                            </p>
                           </>
                         )}
                       </div>
@@ -2043,22 +2137,24 @@ const YarnReturnPage = () => {
                 )}
 
                 <div className="p-[10px] pt-0">
-                  <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Pending Cone Returns ({pendingOrders.length})</h3>
+                  <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Pending Cone Returns ({pendingArticles.length})</h3>
                 </div>
                 <div className="overflow-x-auto min-h-[200px]">
-                  {pendingOrders.length === 0 ? (
+                  {pendingArticles.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                       <div className="text-gray-400 mb-4">
                         <i className="ri-checkbox-circle-line text-5xl"></i>
                       </div>
                       <h3 className="text-xs font-bold text-gray-400 mb-1">All caught up!</h3>
-                      <p className="text-[11px] text-gray-500">No knitting-complete orders awaiting cone return for this machine.</p>
+                      <p className="text-[11px] text-gray-500">No knitting-complete articles awaiting cone return for this machine.</p>
                     </div>
                   ) : (
                     <table className="w-full border-collapse border border-gray-200">
                       <thead>
                         <tr className="bg-gray-50/30">
-                          <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
+                          <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Article</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
                           <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Floor</th>
                           <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Knitting Completed</th>
                           <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Supervisor</th>
@@ -2068,24 +2164,26 @@ const YarnReturnPage = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {pendingOrders.map((order) => {
-                          const orderReturnTransactions = returnTransactions.filter((tx) => tx.orderno === order.orderNumber);
+                        {pendingArticles.map((row) => {
+                          const orderReturnTransactions = returnTransactions.filter((tx) => tx.orderno === row.orderNumber);
                           const totalConesReturnedFromHistory = orderReturnTransactions.reduce((sum, tx) => sum + (tx.transactionConeCount || 1), 0);
-                          const totalConesInOrder = order.cones.length;
+                          const totalConesInOrder = row.cones.length;
                           const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
                           return (
-                            <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
-                              <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{order.productionOrder}</td>
-                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{order.floor}</td>
-                              <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(order.knittingCompletedAt).toLocaleString()}</td>
-                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{order.knittingSupervisor}</td>
+                            <tr key={row.rowId} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{row.articleNumber}</td>
+                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.yarnNames || "—"}</td>
+                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.productionOrder}</td>
+                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.floor}</td>
+                              <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(row.knittingCompletedAt).toLocaleString()}</td>
+                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.knittingSupervisor}</td>
                               <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{actualPendingCones} pending</td>
                               <td className="px-1.5 py-2 border border-gray-200">
-                                <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${statusBadgeColor(order.status)}`}>{order.status}</span>
+                                <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${statusBadgeColor(row.status)}`}>{row.status}</span>
                               </td>
                               <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200">
                                 <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                                  <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors" onClick={() => handleReturnConesClick(order.id)}>
+                                  <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors" onClick={() => handleReturnConesClick(row.orderId, row.rowId)}>
                                     <i className="ri-reply-line text-sm"></i> Return Cones
                                   </button>
                                 </div>
@@ -2193,9 +2291,11 @@ const YarnReturnPage = () => {
                 <div className="flex justify-between items-center">
                   <div>
                     <h3 className="box-title text-lg">Scan &amp; Return</h3>
-                    {selectedOrder && (
+                    {(selectedOrder || selectedArticleRowId) && (
                       <p className="text-xs text-gray-500 mt-1">
-                        {selectedOrder.productionOrder}
+                        {selectedArticleRow?.articleNumber ?? selectedOrder?.productionOrder ?? "—"}
+                        {selectedArticleRow?.yarnNames && ` · ${selectedArticleRow.yarnNames}`}
+                        {selectedOrder?.orderNumber && ` · PO: ${selectedOrder.orderNumber}`}
                       </p>
                     )}
                   </div>
@@ -2225,7 +2325,7 @@ const YarnReturnPage = () => {
                 {!selectedOrder ? (
                   <div className="text-center py-12 text-sm text-gray-500">
                     <i className="ri-focus-2-line text-4xl text-gray-300 mb-2"></i>
-                    <p>Select an order to start returning cones.</p>
+                    <p>Select an article to start returning cones.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -2233,7 +2333,10 @@ const YarnReturnPage = () => {
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="text-sm font-semibold text-gray-900">
-                            {selectedOrder.productionOrder}
+                            {selectedArticleRow?.articleNumber ?? selectedOrder.productionOrder}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {selectedArticleRow?.yarnNames ?? "—"}
                           </p>
                           <p className="text-xs text-gray-500">
                             Floor: {selectedOrder.floor}
