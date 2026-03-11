@@ -279,11 +279,48 @@ const YarnReturnPage = () => {
   const [fetchingWeight, setFetchingWeight] = useState(false);
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Return");
 
-  // When return modal opens, fetch latest weight from scale (localhost or 192.168.0.28) and pre-fill
+  // When return modal opens:
+  // - auto-fill Tear Weight from scanned cone data (if available)
+  // - fetch latest weight from scale (localhost or 192.168.0.28) and pre-fill Total/Net
   useEffect(() => {
     if (!showReturnModal) return;
     let cancelled = false;
     (async () => {
+      // Prefer tearWeight from scanned cone(s). We treat modal values as per-cone,
+      // so only auto-fill when there's exactly 1 cone, or when all scanned cones
+      // have the same tearWeight.
+      const tearCandidates = scannedBarcodes
+        .map((b) => {
+          const cd = scannedConeData.get(b);
+          const tw = cd?.coneDetails?.tearWeight ?? cd?.tearWeight;
+          return typeof tw === "number" && Number.isFinite(tw) ? tw : null;
+        })
+        .filter((x): x is number => x !== null);
+
+      const shouldAutofillTear =
+        tearCandidates.length > 0 &&
+        (scannedBarcodes.length === 1 ||
+          (tearCandidates.length === scannedBarcodes.length &&
+            tearCandidates.every((tw) => tw === tearCandidates[0])));
+
+      const tearFromCone = shouldAutofillTear ? tearCandidates[0] : null;
+
+      if (tearFromCone != null) {
+        setTransactionForm((prev) => {
+          // Don't override if user already entered a value
+          const existing = parseFloat(prev.totalTearWeight);
+          if (!Number.isNaN(existing) && existing > 0) return prev;
+          return {
+            ...prev,
+            totalTearWeight: tearFromCone.toFixed(2),
+            // keep totalNetWeight consistent if totalWeight already exists
+            totalNetWeight: prev.totalWeight
+              ? (Math.max(0, (parseFloat(prev.totalWeight) || 0) - tearFromCone)).toFixed(2)
+              : prev.totalNetWeight,
+          };
+        });
+      }
+
       const w = await fetchWeightLatest();
       if (cancelled || w == null || w <= 0) return;
       setTransactionForm((prev) => {
@@ -296,7 +333,7 @@ const YarnReturnPage = () => {
       });
     })();
     return () => { cancelled = true; };
-  }, [showReturnModal]);
+  }, [showReturnModal, scannedBarcodes, scannedConeData]);
 
   /** Fetch cones + return tx for one order. Used when loading orders from completed-items. */
   const fetchOrderWithCones = useCallback(
