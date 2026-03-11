@@ -256,6 +256,7 @@ const YarnReturnPage = () => {
   const [orderSelectOpen, setOrderSelectOpen] = useState(true);
   const [submittingReturn, setSubmittingReturn] = useState(false);
   const [showScanReturnPanel, setShowScanReturnPanel] = useState(false);
+  const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [scannedBarcodes, setScannedBarcodes] = useState<string[]>([]);
   const [scannedConeData, setScannedConeData] = useState<Map<string, any>>(new Map());
@@ -369,26 +370,51 @@ const YarnReturnPage = () => {
         console.warn("Fetch transactions for order", orderNumber, err);
       }
 
+      // Filter by orderId: API returns all tx for orderno, but multiple production orders can share same orderno
+      const txOrderId = (tx: any) =>
+        tx.orderId ?? tx.order?._id ?? tx.order?.id ?? (typeof tx.order === "string" ? tx.order : undefined);
+      issuedTransactions = issuedTransactions.filter((tx: any) => {
+        const oid = txOrderId(tx);
+        return !oid || String(oid) === String(orderId);
+      });
+      returnedTransactions = returnedTransactions.filter((tx: any) => {
+        const oid = tx.orderId ?? tx.order?._id ?? tx.order?.id ?? (typeof tx.order === "string" ? tx.order : undefined);
+        return !oid || String(oid) === String(orderId);
+      });
+
       const conesMap = new Map<string, Cone>();
+      const coneIdToTxIds = new Map<string, string[]>();
       issuedTransactions.forEach((tx: any) => {
         if (tx.transactionType !== "yarn_issued") return;
-        const coneBarcode = tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`;
-        const coneId = coneBarcode;
-        const returnedTx = returnedTransactions.find(
-          (rt: any) =>
-            (tx.coneBarcode && rt.coneBarcode ? rt.coneBarcode === tx.coneBarcode : rt.issuedTransactionId === (tx._id || tx.id)) &&
-            rt.transactionType === "yarn_returned"
-        );
+        const txId = tx._id || tx.id;
+        const coneIds = Array.isArray(tx.conesIdsArray) && tx.conesIdsArray.length > 0
+          ? tx.conesIdsArray
+          : [tx.coneBarcode || tx.barcode || `TX-${txId}`];
+        coneIds.forEach((cid: string) => {
+          if (!coneIdToTxIds.has(cid)) coneIdToTxIds.set(cid, []);
+          coneIdToTxIds.get(cid)!.push(txId);
+        });
+      });
+      issuedTransactions.forEach((tx: any) => {
+        if (tx.transactionType !== "yarn_issued") return;
         const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
         const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
         const articleId = tx.articleId ?? tx.article?._id ?? tx.article?.id ?? (typeof tx.article === "string" ? tx.article : undefined);
-        for (let i = 0; i < numberOfCones; i++) {
-          const coneIndex = numberOfCones > 1 ? i + 1 : 0;
-          const uniqueConeId = numberOfCones > 1 ? `${coneId}-${coneIndex}` : coneId;
-          const uniqueBarcode = numberOfCones > 1 ? `${coneBarcode}-${coneIndex}` : coneBarcode;
-          conesMap.set(uniqueConeId, {
+        const coneIds = Array.isArray(tx.conesIdsArray) && tx.conesIdsArray.length > 0
+          ? tx.conesIdsArray
+          : [tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`];
+        coneIds.forEach((coneId: string, idx: number) => {
+          if (conesMap.has(coneId)) return;
+          const txIdsForCone = coneIdToTxIds.get(coneId) || [];
+          const returnedTx = returnedTransactions.find(
+            (rt: any) =>
+              (rt.conesIdsArray?.includes?.(coneId) || rt.coneBarcode === coneId || txIdsForCone.includes(rt.issuedTransactionId)) &&
+              rt.transactionType === "yarn_returned"
+          );
+          const uniqueConeId = coneIds.length > 1 ? `${coneId}-${idx + 1}` : coneId;
+          conesMap.set(coneId, {
             id: uniqueConeId,
-            barcode: uniqueBarcode,
+            barcode: coneId,
             yarnCode: tx.yarn?.id || tx.yarn || "N/A",
             yarnName: tx.yarnName || "Unknown Yarn",
             yarnType: tx.yarn?.yarnType?.name || "Unknown",
@@ -401,7 +427,7 @@ const YarnReturnPage = () => {
             yarnCatalogId: tx.yarn?.id || tx.yarn,
             articleId,
           });
-        }
+        });
       });
       const cones = Array.from(conesMap.values());
       const lastUpdated = meta.updatedAt || meta.createdAt || new Date().toISOString();
@@ -2028,12 +2054,22 @@ const YarnReturnPage = () => {
 
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px] border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
-            <h1 className="text-sm font-bold text-gray-800">Yarn Return</h1>
-            <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
-              {pendingOrders.length}
-            </span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+              <h1 className="text-sm font-bold text-gray-800">Yarn Return</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {pendingOrders.length}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowHistoryDrawer(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors"
+            >
+              <i className="ri-history-line text-sm"></i>
+              History
+            </button>
           </div>
         </div>
 
@@ -2266,71 +2302,6 @@ const YarnReturnPage = () => {
                       </tbody>
                     </table>
                   )}
-                </div>
-
-                <div className="border-t border-gray-100">
-                  <div className="p-[10px] flex flex-wrap items-center justify-between gap-4">
-                    <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Return History &amp; Tracking</h3>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="text"
-                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-40 min-w-[100px] placeholder:text-gray-400 font-medium"
-                placeholder="Search order or yarn..."
-                value={historySearchTerm}
-                onChange={(event) => setHistorySearchTerm(event.target.value)}
-              />
-              <input
-                type="date"
-                className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300 w-32"
-                value={historyDateRange.from}
-                onChange={(event) => setHistoryDateRange((prev) => ({ ...prev, from: event.target.value }))}
-              />
-              <input
-                type="date"
-                className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300 w-32"
-                value={historyDateRange.to}
-                onChange={(event) => setHistoryDateRange((prev) => ({ ...prev, to: event.target.value }))}
-              />
-            </div>
-          </div>
-          <div className="overflow-x-auto min-h-[200px]">
-            {filteredReturnTransactions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <i className="ri-time-line text-4xl text-gray-300 mb-2"></i>
-                <h3 className="text-xs font-bold text-gray-400 mb-1">No Records</h3>
-                <p className="text-[11px] text-gray-500">Adjust filters or process cone returns to see records here.</p>
-              </div>
-            ) : (
-              <table className="w-full border-collapse border border-gray-200">
-                <thead>
-                  <tr className="bg-gray-50/30">
-                    <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transaction Date</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Net (kg)</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Total (kg)</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tear (kg)</th>
-                    <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cones</th>
-                    <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Created At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredReturnTransactions.map((transaction) => (
-                    <tr key={transaction._id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{transaction.orderno}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.transactionDate).toLocaleDateString()}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.yarnName}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionNetWeight?.toFixed(2) || "0.00"}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTotalWeight?.toFixed(2) || "0.00"}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTearWeight?.toFixed(2) || "0.00"}</td>
-                      <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionConeCount || 1}</td>
-                      <td className="px-1.5 py-2 text-right pr-[10px] text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.createdAt).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
                 </div>
               </>
             )}
@@ -2924,6 +2895,91 @@ const YarnReturnPage = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* History Drawer - always accessible via top History button */}
+      {showHistoryDrawer && (
+        <>
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity"
+            onClick={() => setShowHistoryDrawer(false)}
+            aria-hidden="true"
+          />
+          <div className="fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col">
+            <div className="flex-shrink-0 p-[10px] border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-base font-bold text-gray-800">Return History &amp; Tracking</h3>
+              <button
+                type="button"
+                onClick={() => setShowHistoryDrawer(false)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                aria-label="Close"
+              >
+                <i className="ri-close-line text-xl"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-[10px]">
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-40 min-w-[100px] placeholder:text-gray-400 font-medium"
+                  placeholder="Search order or yarn..."
+                  value={historySearchTerm}
+                  onChange={(event) => setHistorySearchTerm(event.target.value)}
+                />
+                <input
+                  type="date"
+                  className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300 w-32"
+                  value={historyDateRange.from}
+                  onChange={(event) => setHistoryDateRange((prev) => ({ ...prev, from: event.target.value }))}
+                />
+                <input
+                  type="date"
+                  className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300 w-32"
+                  value={historyDateRange.to}
+                  onChange={(event) => setHistoryDateRange((prev) => ({ ...prev, to: event.target.value }))}
+                />
+              </div>
+              <div className="overflow-x-auto">
+                {filteredReturnTransactions.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <i className="ri-time-line text-4xl text-gray-300 mb-2"></i>
+                    <h3 className="text-xs font-bold text-gray-400 mb-1">No Records</h3>
+                    <p className="text-[11px] text-gray-500">Adjust filters or process cone returns to see records here.</p>
+                  </div>
+                ) : (
+                  <table className="w-full border-collapse border border-gray-200">
+                    <thead>
+                      <tr className="bg-gray-50/30">
+                        <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
+                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transaction Date</th>
+                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Net (kg)</th>
+                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Total (kg)</th>
+                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tear (kg)</th>
+                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cones</th>
+                        <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Created At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredReturnTransactions.map((transaction) => (
+                        <tr key={transaction._id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{transaction.orderno}</td>
+                          <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.transactionDate).toLocaleDateString()}</td>
+                          <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.yarnName}</td>
+                          <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionNetWeight?.toFixed(2) || "0.00"}</td>
+                          <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTotalWeight?.toFixed(2) || "0.00"}</td>
+                          <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTearWeight?.toFixed(2) || "0.00"}</td>
+                          <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionConeCount || 1}</td>
+                          <td className="px-1.5 py-2 text-right pr-[10px] text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.createdAt).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
     </div>
