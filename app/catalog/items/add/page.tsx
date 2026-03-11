@@ -504,12 +504,6 @@ const AddProductPage = () => {
     console.log('Attributes:', formData);
     console.log('User Type - isDesign:', isDesign, 'isProduction:', isProduction, 'isFinal:', isFinal);
 
-    // Helper: at least one style code selected (has styleCodeId)
-    const validateStyleCodes = (codes: typeof styleCodes) => {
-      if (!codes || codes.length === 0) return false;
-      return codes.some(sc => (sc as { styleCodeId?: string }).styleCodeId && String((sc as { styleCodeId?: string }).styleCodeId).trim());
-    };
-
     // Validate required fields based on user type
     if (isProduction) {
       // Production user: Factory Code required only when not outsourced
@@ -518,13 +512,7 @@ const AddProductPage = () => {
         return;
       }
     } else if (isFinal) {
-      // Final user: Style Codes array and Description required
-      const hasValidStyleCodes = validateStyleCodes(styleCodes);
-      console.log('Final User Validation - hasValidStyleCodes:', hasValidStyleCodes, 'description:', generalForm.description);
-      if (!hasValidStyleCodes || !generalForm.description || generalForm.description.trim() === '') {
-        alert('Please fill in all required fields. At least one style code entry with styleCode, eanCode, and mrp is required.');
-        return;
-      }
+      // Final user: Style Codes and Description are optional
     } else if (isDesign) {
       const outsourced = generalForm.productionType === 'outsourced';
       if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category) {
@@ -539,12 +527,10 @@ const AddProductPage = () => {
         return;
       }
     } else {
-      const hasValidStyleCodes = validateStyleCodes(styleCodes);
       const outsourced = generalForm.productionType === 'outsourced';
       if (!generalForm.name || generalForm.name.trim() === '' || !generalForm.category ||
-          (!outsourced && (!generalForm.factoryCode || generalForm.factoryCode.trim() === '')) ||
-          !hasValidStyleCodes || !generalForm.description || generalForm.description.trim() === '') {
-        alert('Please fill in all required fields. At least one style code is required.');
+          (!outsourced && (!generalForm.factoryCode || generalForm.factoryCode.trim() === ''))) {
+        alert('Please fill in all required fields.');
         return;
       }
       if (!outsourced && (
@@ -592,9 +578,10 @@ const AddProductPage = () => {
         // Production user: Only Factory Code
         productData.factoryCode = generalForm.factoryCode.trim();
       } else if (isFinal) {
-        // Final user: Style Codes (IDs only) and Description
-        productData.styleCodes = styleCodeIds;
-        productData.description = generalForm.description.trim();
+        // Final user: Style Codes and Description are optional
+        if (styleCodeIds.length > 0) productData.styleCodes = styleCodeIds;
+        const description = generalForm.description.trim();
+        if (description) productData.description = description;
       } else if (isDesign) {
         // Design user: Basic fields (optional when outsourced)
         productData.name = generalForm.name.trim();
@@ -612,8 +599,9 @@ const AddProductPage = () => {
         productData.vendorCode = generalForm.vendorCode?.trim() ?? '';
         productData.category = generalForm.category;
         productData.factoryCode = generalForm.factoryCode.trim();
-        productData.styleCodes = styleCodeIds;
-        productData.description = generalForm.description.trim();
+        if (styleCodeIds.length > 0) productData.styleCodes = styleCodeIds;
+        const description = generalForm.description.trim();
+        if (description) productData.description = description;
       }
 
       console.log('=== PRODUCT DATA TO BE SENT ===');
@@ -909,7 +897,7 @@ const AddProductPage = () => {
                           </div>
                           <div>
                             <div className="flex justify-between items-center mb-4">
-                              <label className="form-label">Style Codes *</label>
+                              <label className="form-label">Style Codes</label>
                               <button
                                 type="button"
                                 onClick={handleAddStyleCode}
@@ -938,7 +926,7 @@ const AddProductPage = () => {
                                   </div>
                                   <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                     <div>
-                                      <label className="form-label">Style Code *</label>
+                                      <label className="form-label">Style Code</label>
                                       <input
                                         type="text"
                                         className="form-control cursor-pointer"
@@ -992,13 +980,12 @@ const AddProductPage = () => {
                             </div>
                           </div>
                           <div>
-                            <label className="form-label">Description *</label>
+                            <label className="form-label">Description</label>
                             <textarea 
                               className="form-control" 
                               rows={4}
                               value={generalForm.description}
                               onChange={(e) => handleGeneralChange('description', e.target.value)}
-                              required
                             ></textarea>
                           </div>
                         </div>
@@ -1079,7 +1066,7 @@ const AddProductPage = () => {
                                 </div>
                                 <div className="col-span-12">
                                   <div className="flex justify-between items-center mb-4">
-                                    <label className="form-label">Style Codes *</label>
+                                    <label className="form-label">Style Codes</label>
                                     <button
                                       type="button"
                                       onClick={handleAddStyleCode}
@@ -1108,7 +1095,7 @@ const AddProductPage = () => {
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                           <div>
-                                            <label className="form-label">Style Code *</label>
+                                            <label className="form-label">Style Code</label>
                                             <input
                                               type="text"
                                               className="form-control cursor-pointer"
@@ -1116,21 +1103,19 @@ const AddProductPage = () => {
                                               readOnly
                                               onClick={() => { setStyleCodeModalIndex(index); setStyleCodeModalOpen(true); }}
                                               placeholder="Click to browse style codes..."
-                                              required
                                             />
                                           </div>
                                           <div>
-                                            <label className="form-label">EAN Code *</label>
+                                            <label className="form-label">EAN Code</label>
                                             <input
                                               type="text"
                                               className="form-control"
                                               value={styleCodeItem.eanCode}
                                               onChange={(e) => handleStyleCodeChange(index, 'eanCode', e.target.value)}
-                                              required
                                             />
                                           </div>
                                           <div>
-                                            <label className="form-label">MRP *</label>
+                                            <label className="form-label">MRP</label>
                                             <input
                                               type="number"
                                               step="0.01"
@@ -1138,7 +1123,6 @@ const AddProductPage = () => {
                                               className="form-control"
                                               value={styleCodeItem.mrp}
                                               onChange={(e) => handleStyleCodeChange(index, 'mrp', e.target.value)}
-                                              required
                                             />
                                           </div>
                                           <div>
@@ -1173,13 +1157,12 @@ const AddProductPage = () => {
                                   </div>
                                 </div>
                                 <div>
-                                  <label className="form-label">Description *</label>
+                                  <label className="form-label">Description</label>
                                   <textarea 
                                     className="form-control" 
                                     rows={4}
                                     value={generalForm.description}
                                     onChange={(e) => handleGeneralChange('description', e.target.value)}
-                                    required
                                   ></textarea>
                                 </div>
                               </>

@@ -95,7 +95,7 @@ const API_ENDPOINTS = {
 const EditProductPage = () => {
   const params = useParams();
   const router = useRouter();
-  const productId = params.id as string;
+  const productId = (params as any)?.id as string;
   const { user } = useSelector((state: any) => state.auth);
   const isDesign = isDesignUser(user);
   const isProduction = isProductionUser(user);
@@ -998,7 +998,7 @@ const EditProductPage = () => {
                         </div>
                         <div className="md:col-span-2">
                           <div className="flex justify-between items-center mb-4">
-                            <label className="form-label">Style Codes *</label>
+                            <label className="form-label">Style Codes</label>
                             <button
                               type="button"
                               onClick={addStyleCode}
@@ -1027,7 +1027,7 @@ const EditProductPage = () => {
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                   <div>
-                                    <label className="form-label">Style Code *</label>
+                                    <label className="form-label">Style Code</label>
                                     <input
                                       type="text"
                                       className="form-control cursor-pointer"
@@ -1038,7 +1038,7 @@ const EditProductPage = () => {
                                     />
                                   </div>
                                   <div>
-                                    <label className="form-label">EAN Code *</label>
+                                    <label className="form-label">EAN Code</label>
                                     <input
                                       type="text"
                                       className="form-control bg-gray-50"
@@ -1047,7 +1047,7 @@ const EditProductPage = () => {
                                     />
                                   </div>
                                   <div>
-                                    <label className="form-label">MRP *</label>
+                                    <label className="form-label">MRP</label>
                                     <input
                                       type="number"
                                       step="0.01"
@@ -1081,7 +1081,7 @@ const EditProductPage = () => {
                           </div>
                         </div>
                         <div className="md:col-span-2">
-                          <label className="form-label">Description *</label>
+                          <label className="form-label">Description</label>
                           <textarea
                             name="description"
                             className="form-control"
@@ -1193,7 +1193,7 @@ const EditProductPage = () => {
                             </div>
                             <div className="md:col-span-2">
                               <div className="flex justify-between items-center mb-4">
-                                <label className="form-label">Style Codes *</label>
+                                <label className="form-label">Style Codes</label>
                                 <button
                                   type="button"
                                   onClick={addStyleCode}
@@ -1222,7 +1222,7 @@ const EditProductPage = () => {
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                       <div>
-                                        <label className="form-label">Style Code *</label>
+                                        <label className="form-label">Style Code</label>
                                         <input
                                           type="text"
                                           className="form-control cursor-pointer"
@@ -1233,7 +1233,7 @@ const EditProductPage = () => {
                                         />
                                       </div>
                                       <div>
-                                        <label className="form-label">EAN Code *</label>
+                                        <label className="form-label">EAN Code</label>
                                         <input
                                           type="text"
                                           className="form-control bg-gray-50"
@@ -1242,7 +1242,7 @@ const EditProductPage = () => {
                                         />
                                       </div>
                                       <div>
-                                        <label className="form-label">MRP *</label>
+                                        <label className="form-label">MRP</label>
                                         <input
                                           type="number"
                                           step="0.01"
@@ -1276,7 +1276,7 @@ const EditProductPage = () => {
                               </div>
                             </div>
                             <div className="md:col-span-2">
-                              <label className="form-label">Description *</label>
+                              <label className="form-label">Description</label>
                               <textarea
                                 name="description"
                                 className="form-control"
