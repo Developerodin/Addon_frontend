@@ -1824,7 +1824,9 @@ const YarnReturnPage = () => {
               for (const articleId of uniqueArticleIds) {
                 const item = getAssignmentItemForArticle(updatedOrder.id, articleId);
                 if (!item) continue;
-                const allReturned = isArticleAllConesReturned(updatedOrder, articleId);
+                const allReturned =
+                  isArticleAllConesReturned(updatedOrder, articleId) ||
+                  updatedOrder.status === "Returned";
                 const yarnReturnStatus = allReturned ? "Completed" : "In Progress";
                 await updateAssignmentItemYarnReturnStatus(
                   selectedMachineAssignmentId,
