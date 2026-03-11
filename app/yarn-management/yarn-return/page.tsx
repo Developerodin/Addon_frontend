@@ -42,6 +42,7 @@ interface Cone {
   lastReturnedAt?: string;
   transactionId?: string; // ID of the issued transaction
   yarnCatalogId?: string; // Yarn catalog ID for return transaction
+  articleId?: string; // Article this cone belongs to (from issued tx)
 }
 
 interface Article {
@@ -380,6 +381,7 @@ const YarnReturnPage = () => {
         );
         const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
         const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
+        const articleId = tx.articleId ?? tx.article?._id ?? tx.article?.id ?? (typeof tx.article === "string" ? tx.article : undefined);
         for (let i = 0; i < numberOfCones; i++) {
           const coneIndex = numberOfCones > 1 ? i + 1 : 0;
           const uniqueConeId = numberOfCones > 1 ? `${coneId}-${coneIndex}` : coneId;
@@ -397,6 +399,7 @@ const YarnReturnPage = () => {
             lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
             transactionId: tx._id || tx.id,
             yarnCatalogId: tx.yarn?.id || tx.yarn,
+            articleId,
           });
         }
       });
@@ -806,7 +809,7 @@ const YarnReturnPage = () => {
 
   /** Get assignment item ids and article numbers for an order (for yarn-return-status API). Must be before any early return (hooks order). */
   const getAssignmentItemsForOrder = useCallback(
-    (orderId: string): { itemId: string; articleNumber: string }[] => {
+    (orderId: string): { itemId: string; articleNumber: string; articleId: string }[] => {
       const assignment = selectedMachineAssignment;
       if (!assignment?.id || !assignment.productionOrderItems?.length) return [];
       return assignment.productionOrderItems
@@ -815,15 +818,41 @@ const YarnReturnPage = () => {
           const oid = typeof po === "string" ? po : (po?.id ?? (po as { _id?: string })?._id ?? "");
           return oid === orderId;
         })
-        .map((item) => ({
-          itemId: item.itemId ?? (item as { id?: string }).id ?? "",
-          articleNumber: item.articleNumber ?? (typeof item.article === "object" && item.article
-            ? (item.article as { articleNumber?: string }).articleNumber ?? ""
-            : ""),
-        }))
+        .map((item) => {
+          const art = item.article;
+          const aid = typeof art === "string" ? art : (art as { id?: string; _id?: string })?.id ?? (art as { _id?: string })?._id ?? "";
+          return {
+            itemId: item.itemId ?? (item as { id?: string }).id ?? "",
+            articleNumber: item.articleNumber ?? (typeof art === "object" && art ? (art as { articleNumber?: string }).articleNumber ?? "" : ""),
+            articleId: aid,
+          };
+        })
         .filter((x) => x.itemId);
     },
     [selectedMachineAssignment]
+  );
+
+  /** Get assignment item for a specific (order, article) pair. Returns single item or null. */
+  const getAssignmentItemForArticle = useCallback(
+    (orderId: string, articleId: string): { itemId: string; articleNumber: string } | null => {
+      const items = getAssignmentItemsForOrder(orderId);
+      const item = items.find((i) => i.articleId === articleId);
+      return item ? { itemId: item.itemId, articleNumber: item.articleNumber } : null;
+    },
+    [getAssignmentItemsForOrder]
+  );
+
+  /** Check if all cones for a specific article are returned. Uses articleId on cones; when no cones have articleId, uses order-level (1:1 order-article). */
+  const isArticleAllConesReturned = useCallback(
+    (order: ProductionOrder, articleId: string | undefined): boolean => {
+      const hasArticleCones = order.cones.some((c) => c.articleId);
+      const conesForArticle = hasArticleCones
+        ? order.cones.filter((c) => c.articleId === articleId)
+        : order.cones; // No cones have articleId: assume 1:1 order-article
+      if (conesForArticle.length === 0) return false;
+      return conesForArticle.every((c) => c.status === "Returned");
+    },
+    []
   );
 
   const isInitialLoad = machineAssignmentsLoading || (ordersLoading && orders.length === 0);
@@ -1311,7 +1340,7 @@ const YarnReturnPage = () => {
           returnStatus: coneDetails.returnStatus,
         });
         
-        // Create a cone object from the API response
+        // Create a cone object from the API response (use selectedArticleRow.articleId when user selected article for return)
         cone = {
           id: coneDetails._id || coneDetails.id || value,
           barcode: coneDetails.barcode || value,
@@ -1320,13 +1349,14 @@ const YarnReturnPage = () => {
           yarnType: coneDetails.yarn?.yarnType?.name || "Unknown",
           issuedWeight: coneDetails.issueWeight || 0,
           returnedWeight: coneDetails.returnWeight,
-          balanceWeight: coneDetails.issueWeight && coneDetails.returnWeight 
+          balanceWeight: coneDetails.issueWeight && coneDetails.returnWeight
             ? Math.max(coneDetails.issueWeight - coneDetails.returnWeight, 0)
             : undefined,
           status: coneDetails.returnStatus === "returned" ? "Returned" as ConeStatus : "Awaiting" as ConeStatus,
           lastReturnedAt: coneDetails.returnDate,
           transactionId: coneDetails.transactionId,
           yarnCatalogId: coneDetails.yarn?.id || coneDetails.yarn,
+          articleId: coneDetails.articleId ?? selectedArticleRow?.articleId,
         };
         
         console.log("✅ Created cone object:", {
@@ -1771,22 +1801,42 @@ const YarnReturnPage = () => {
           );
         }
 
-        // After return API 200: update assignment item yarn-return status (In Progress or Completed)
-        // Call on every cone return: "In Progress" when some cones pending, "Completed" when all returned
+        // After return API 200: update assignment item yarn-return status per ARTICLE (not whole order)
+        // Only update articles we returned for. "Completed" when all cones for that article returned, else "In Progress"
         if (selectedMachineAssignmentId) {
-          const items = getAssignmentItemsForOrder(updatedOrder.id);
-          if (items.length > 0) {
+          const articleIdsToUpdate = Array.from(
+            new Set(
+              results
+                .map((r) => r.cone.articleId)
+                .filter(Boolean) as string[]
+            )
+          );
+          if (articleIdsToUpdate.length === 0 && selectedArticleRow?.articleId) {
+            articleIdsToUpdate.push(selectedArticleRow.articleId);
+          }
+          if (articleIdsToUpdate.length === 0) {
+            const allItems = getAssignmentItemsForOrder(updatedOrder.id);
+            articleIdsToUpdate.push(...allItems.map((i) => i.articleId).filter(Boolean));
+          }
+          const uniqueArticleIds = Array.from(new Set(articleIdsToUpdate));
+          if (uniqueArticleIds.length > 0) {
             try {
-              const yarnReturnStatus = updatedOrder.status === "Returned" ? "Completed" : "In Progress";
-              for (const item of items) {
+              for (const articleId of uniqueArticleIds) {
+                const item = getAssignmentItemForArticle(updatedOrder.id, articleId);
+                if (!item) continue;
+                const allReturned = isArticleAllConesReturned(updatedOrder, articleId);
+                const yarnReturnStatus = allReturned ? "Completed" : "In Progress";
                 await updateAssignmentItemYarnReturnStatus(
                   selectedMachineAssignmentId,
                   item.itemId,
                   yarnReturnStatus
                 );
               }
+              const anyCompleted = uniqueArticleIds.some((aid) =>
+                isArticleAllConesReturned(updatedOrder, aid)
+              );
               toast.success(
-                yarnReturnStatus === "Completed"
+                anyCompleted
                   ? "Assignment item return status updated."
                   : "Assignment item marked in progress."
               );
@@ -1796,7 +1846,7 @@ const YarnReturnPage = () => {
               toast.error("Cones returned, but failed to update assignment yarn-return status.");
             }
           } else {
-            console.warn("Assignment yarn-return status not updated: no assignment items for order", updatedOrder.orderNumber);
+            console.warn("Assignment yarn-return status not updated: no article ids for order", updatedOrder.orderNumber);
           }
         } else {
           console.warn("Assignment yarn-return status not updated: no selected machine assignment");
