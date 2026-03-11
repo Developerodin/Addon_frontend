@@ -86,6 +86,23 @@ export interface ProductionArticleDetail extends Article {
   machineId?: string | ArticleMachineRef;
 }
 
+/** Process from GET /production/articles/:articleId/processes */
+export interface ArticleProcess {
+  _id: string;
+  name: string;
+  type?: string;
+  description?: string;
+  sortOrder: number;
+  status?: string;
+  steps?: unknown[];
+}
+
+/** Response from GET /production/articles/:articleId/processes */
+export interface ArticleProcessesResponse {
+  articleNumber: string;
+  processes: ArticleProcess[];
+}
+
 export interface CreateOrderRequest {
   priority: 'Urgent' | 'High' | 'Medium' | 'Low';
   articles: {
@@ -149,6 +166,8 @@ export type ProductionFloorName =
 
 export interface FloorReceivedDataBody {
   floor: ProductionFloorName;
+  /** Required for container accept flow – adds to floor's received and moves article to receiving floor */
+  quantity?: number;
   receivedData: {
     receivedStatusFromPreviousFloor?: string;
     receivedInContainerId?: string | null;
@@ -471,6 +490,12 @@ class ProductionService {
     }
 
     return response as ApiResponse<ProductionOrder>;
+  }
+
+  /** GET /production/articles/:articleId/processes – article processes (floors) from Product */
+  async getArticleProcesses(articleId: string): Promise<ApiResponse<ArticleProcessesResponse>> {
+    if (!articleId) throw new Error('articleId is required');
+    return this.request<ArticleProcessesResponse>(`/articles/${articleId}/processes`);
   }
 
   /** GET /production/articles/:articleId – full article with orderId & machineId populated */

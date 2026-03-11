@@ -5,7 +5,7 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import TransferModal from "@/shared/components/production/TransferModal";
 import { productionService, ProductionOrder, FloorOrderFilters, type Article } from "@/shared/services/productionService";
-import { getNextFloor, FloorType } from "@/shared/utils/productionUtils";
+import { getNextFloor, FloorType, getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import MachineViewTab from "./components/MachineViewTab";
@@ -20,7 +20,6 @@ import {
   type ProductionOrderItem,
 } from "@/shared/services/machineOrderAssignmentService";
 import { containersMasterService, isPopulatedActiveArticle } from "@/shared/services/containersMasterService";
-import { PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 type KnittingTab = "orders" | "machine-view" | "article-view" | "planning";
 
 const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
@@ -198,12 +197,23 @@ const KnittingFloorSupervisorPage = () => {
     };
   }, [showContainerModal, containerBarcode]);
 
-  // When article changes in container modal, pre-fill quantity from that article's knitting done (updateData)
+  // When article changes in container modal, pre-fill quantity and next floor from article processes
   useEffect(() => {
-    if (!showContainerModal || !containerArticleId) return;
+    if (!showContainerModal || !containerArticleId || !selectedOrder) return;
     setContainerQuantity(String(updateData[containerArticleId]?.completedQuantity ?? 0));
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- only sync when article selection changes, not when updateData ref changes
-  }, [showContainerModal, containerArticleId]);
+    const mongoId = getArticleMongoId(containerArticleId, selectedOrder.articles);
+    if (!mongoId) return;
+    let cancelled = false;
+    productionService.getArticleProcesses(mongoId).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data?.processes) {
+        const next = resolveNextFloorFromProcesses(res.data.processes, "Knitting", "Linking");
+        setContainerNextFloor(next);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only sync when article selection changes
+  }, [showContainerModal, containerArticleId, selectedOrder?.articles]);
 
   // Filter orders and articles based on received quantity
   const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
@@ -1411,16 +1421,14 @@ const KnittingFloorSupervisorPage = () => {
                     <p className="text-[10px] text-gray-500 mt-0.5">Pre-filled from knitting done (editable)</p>
                   </div>
                   <div className={containerCheckStatus !== 'ok' ? 'opacity-60 pointer-events-none' : ''}>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Next floor (transferring to)</label>
-                    <select
-                      value={containerNextFloor}
-                      onChange={(e) => setContainerNextFloor(e.target.value)}
-                      className="w-full border border-gray-300 rounded px-3 py-2 text-[12px] focus:ring-1 focus:ring-purple-300 focus:border-purple-500"
-                    >
-                      {PRODUCTION_FLOORS.map((f) => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
-                    </select>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Next floor (from article process)</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={containerNextFloor || '—'}
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-[12px] bg-gray-100 text-gray-700 cursor-not-allowed"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-0.5">Set automatically from article process flow</p>
                   </div>
                   <div className="flex justify-end gap-2 pt-1">
                     <button

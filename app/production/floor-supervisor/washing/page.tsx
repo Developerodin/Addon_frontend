@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
+import { getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 import NumericInput from "@/shared/utils/numericInput";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 import ArticleViewTab from "./components/ArticleViewTab";
@@ -150,11 +151,22 @@ const WashingFloorSupervisorPage = () => {
     };
   }, [showUpdateContainerModal, updateContainerBarcode]);
 
-  // When article changes in modal, sync quantity from that article's washing completed (updateData)
+  // When article changes in modal, sync quantity and next floor from article processes
   useEffect(() => {
-    if (!showUpdateContainerModal || !updateContainerArticleId) return;
+    if (!showUpdateContainerModal || !updateContainerArticleId || !selectedOrder) return;
     setUpdateContainerQuantity(String(updateData[updateContainerArticleId]?.completedQuantity ?? 0));
-  }, [showUpdateContainerModal, updateContainerArticleId]);
+    const mongoId = getArticleMongoId(updateContainerArticleId, selectedOrder.articles);
+    if (!mongoId) return;
+    let cancelled = false;
+    productionService.getArticleProcesses(mongoId).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data?.processes) {
+        const next = resolveNextFloorFromProcesses(res.data.processes, "Washing", "Boarding");
+        setUpdateContainerNextFloor(next);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [showUpdateContainerModal, updateContainerArticleId, selectedOrder?.articles]);
 
   // Filter orders and articles based on received quantity
   const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
@@ -332,6 +344,7 @@ const WashingFloorSupervisorPage = () => {
     try {
       const res = await productionService.updateArticleFloorReceivedData(articleId, {
         floor: "Washing",
+        quantity: containerScanned.container.quantity ?? 0,
         receivedData: {
           receivedStatusFromPreviousFloor: "Completed",
           receivedInContainerId: containerScanned.container._id ?? null,
@@ -1031,13 +1044,9 @@ const WashingFloorSupervisorPage = () => {
                 />
               </div>
               <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
-                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Next floor</label>
-                <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-gray-300" value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)}>
-                  <option value="Boarding">Boarding</option>
-                  <option value="Final Checking">Final Checking</option>
-                  <option value="Branding">Branding</option>
-                  <option value="Warehouse">Warehouse</option>
-                </select>
+                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Next floor (from article process)</label>
+                <input type="text" readOnly value={updateContainerNextFloor || "—"} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] bg-gray-100 text-gray-700 cursor-not-allowed" />
+                <p className="text-[10px] text-gray-500 mt-0.5">Set automatically from article process flow</p>
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
                 <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }}>Cancel</button>

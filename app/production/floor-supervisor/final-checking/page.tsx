@@ -7,7 +7,7 @@ import { productionService, ProductionOrder, FloorOrderFilters, Article } from "
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import RepairTransferModal from "@/shared/components/production/RepairTransferModal";
-import { getPreviousFloor } from "@/shared/utils/productionUtils";
+import { getPreviousFloor, getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
@@ -204,11 +204,22 @@ const FinalCheckingFloorSupervisorPage = () => {
     };
   }, [showUpdateContainerModal, updateContainerBarcode]);
 
-  // When article changes in modal, sync quantity from that article's M1 good (updateData)
+  // When article changes in modal, sync quantity and next floor from article processes
   useEffect(() => {
-    if (!showUpdateContainerModal || !updateContainerArticleId) return;
+    if (!showUpdateContainerModal || !updateContainerArticleId || !selectedOrder) return;
     setUpdateContainerQuantity(String(updateData[updateContainerArticleId]?.m1Quantity ?? 0));
-  }, [showUpdateContainerModal, updateContainerArticleId]);
+    const mongoId = getArticleMongoId(updateContainerArticleId, selectedOrder.articles);
+    if (!mongoId) return;
+    let cancelled = false;
+    productionService.getArticleProcesses(mongoId).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data?.processes) {
+        const next = resolveNextFloorFromProcesses(res.data.processes, "Final Checking", "Warehouse");
+        setUpdateContainerNextFloor(next);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [showUpdateContainerModal, updateContainerArticleId, selectedOrder?.articles]);
 
   // Filter orders and articles based on received quantity
   const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
@@ -729,6 +740,11 @@ const FinalCheckingFloorSupervisorPage = () => {
     return null;
   }, [orders]);
 
+  const CURRENT_FLOOR = "Final Checking";
+  const normalizeFloor = (f: string | undefined) => (f ?? "").replace(/\s+/g, "").toLowerCase();
+  const containerBelongsToCurrentFloor =
+    containerScanned && normalizeFloor(containerScanned.container.activeFloor) === normalizeFloor(CURRENT_FLOOR);
+
   const handleScanContainerClick = () => {
     setContainerScanned(null);
     setContainerScanBarcode("");
@@ -751,6 +767,9 @@ const FinalCheckingFloorSupervisorPage = () => {
         if (!article && articleId) toast.error("Article not found in current orders.");
       }
       setContainerScanned({ container, article });
+      if (normalizeFloor(container.activeFloor) !== normalizeFloor(CURRENT_FLOOR)) {
+        toast.error(`This container belongs to "${container.activeFloor ?? "unknown"}", not ${CURRENT_FLOOR}. Accept Article disabled.`);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("404")) toast.error("Container not found for this barcode.");
@@ -768,6 +787,7 @@ const FinalCheckingFloorSupervisorPage = () => {
     try {
       const res = await productionService.updateArticleFloorReceivedData(articleId, {
         floor: "Final Checking",
+        quantity: containerScanned.container.quantity ?? 0,
         receivedData: {
           receivedStatusFromPreviousFloor: "Completed",
           receivedInContainerId: containerScanned.container._id ?? null,
@@ -1188,11 +1208,16 @@ const FinalCheckingFloorSupervisorPage = () => {
                   </div>
                   {containerScanned.article ? (
                     <>
+                      {!containerBelongsToCurrentFloor && (
+                        <div className="p-2 rounded border-2 border-red-400 bg-red-50 text-[11px] text-red-800">
+                          This container is assigned to <strong>{containerScanned.container.activeFloor || "unknown"}</strong>, not {CURRENT_FLOOR}. Accept Article is disabled.
+                        </div>
+                      )}
                       <button
                         type="button"
-                        disabled={acceptArticleLoading}
+                        disabled={acceptArticleLoading || !containerBelongsToCurrentFloor}
                         onClick={handleAcceptArticleQuantity}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {acceptArticleLoading ? "Accepting..." : "Accept Article Quantity"}
                       </button>
@@ -1324,10 +1349,9 @@ const FinalCheckingFloorSupervisorPage = () => {
               />
             </div>
             <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
-              <label className="block text-[11px] font-semibold text-gray-600 mb-1">Next floor</label>
-              <select value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:border-teal-300">
-                {PRODUCTION_FLOORS.map((f) => <option key={f} value={f}>{f}</option>)}
-              </select>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1">Next floor (from article process)</label>
+              <input type="text" readOnly value={updateContainerNextFloor || "—"} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] bg-gray-100 text-gray-700 cursor-not-allowed" />
+              <p className="text-[10px] text-gray-500 mt-0.5">Set automatically from article process flow</p>
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>

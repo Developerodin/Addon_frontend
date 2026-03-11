@@ -8,7 +8,7 @@ import { productionService, ProductionOrder, FloorOrderFilters, type Article } f
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import RepairTransferModal from "@/shared/components/production/RepairTransferModal";
-import { getPreviousFloor } from "@/shared/utils/productionUtils";
+import { getPreviousFloor, getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
@@ -245,11 +245,22 @@ const CheckingFloorSupervisorPage = () => {
     };
   }, [showUpdateContainerModal, updateContainerBarcode]);
 
-  // When article changes in modal, sync quantity from that article's M1 good (updateData)
+  // When article changes in modal, sync quantity and next floor from article processes
   useEffect(() => {
-    if (!showUpdateContainerModal || !updateContainerArticleId) return;
+    if (!showUpdateContainerModal || !updateContainerArticleId || !selectedOrder) return;
     setUpdateContainerQuantity(String(updateData[updateContainerArticleId]?.m1Quantity ?? 0));
-  }, [showUpdateContainerModal, updateContainerArticleId]);
+    const mongoId = getArticleMongoId(updateContainerArticleId, selectedOrder.articles);
+    if (!mongoId) return;
+    let cancelled = false;
+    productionService.getArticleProcesses(mongoId).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data?.processes) {
+        const next = resolveNextFloorFromProcesses(res.data.processes, "Checking", "Washing");
+        setUpdateContainerNextFloor(next);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [showUpdateContainerModal, updateContainerArticleId, selectedOrder?.articles]);
 
   // Filter orders and articles based on received quantity for checking floor only
   const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
@@ -802,6 +813,7 @@ const CheckingFloorSupervisorPage = () => {
     try {
       const res = await productionService.updateArticleFloorReceivedData(articleId, {
         floor: "Checking",
+        quantity: containerScanned.container.quantity ?? 0,
         receivedData: {
           receivedStatusFromPreviousFloor: "Completed",
           receivedInContainerId: containerScanned.container._id ?? null,
@@ -1384,10 +1396,9 @@ const CheckingFloorSupervisorPage = () => {
               />
             </div>
             <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
-              <label className="block text-[11px] font-semibold text-gray-600 mb-1">Next floor</label>
-              <select value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px]">
-                {PRODUCTION_FLOORS.map((f) => <option key={f} value={f}>{f}</option>)}
-              </select>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1">Next floor (from article process)</label>
+              <input type="text" readOnly value={updateContainerNextFloor || "—"} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] bg-gray-100 text-gray-700 cursor-not-allowed" />
+              <p className="text-[10px] text-gray-500 mt-0.5">Set automatically from article process flow</p>
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>

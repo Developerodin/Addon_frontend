@@ -12,6 +12,7 @@ import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
 import { containersMasterService, type ContainerMaster, isPopulatedActiveArticle } from "@/shared/services/containersMasterService";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
+import { getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 
 type SiliconTab = "orders" | "article-view" | "my-team";
 
@@ -178,11 +179,22 @@ const SiliconFloorSupervisorPage = () => {
     };
   }, [showUpdateContainerModal, updateContainerBarcode]);
 
-  // When article changes in modal, sync quantity from that article's silicon completed (updateData)
+  // When article changes in modal, sync quantity and next floor from article processes
   useEffect(() => {
-    if (!showUpdateContainerModal || !updateContainerArticleId) return;
+    if (!showUpdateContainerModal || !updateContainerArticleId || !selectedOrder) return;
     setUpdateContainerQuantity(String(updateData[updateContainerArticleId]?.completedQuantity ?? 0));
-  }, [showUpdateContainerModal, updateContainerArticleId]);
+    const mongoId = getArticleMongoId(updateContainerArticleId, selectedOrder.articles);
+    if (!mongoId) return;
+    let cancelled = false;
+    productionService.getArticleProcesses(mongoId).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data?.processes) {
+        const next = resolveNextFloorFromProcesses(res.data.processes, "Silicon", "Branding");
+        setUpdateContainerNextFloor(next);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [showUpdateContainerModal, updateContainerArticleId, selectedOrder?.articles]);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -325,6 +337,7 @@ const SiliconFloorSupervisorPage = () => {
     try {
       const res = await productionService.updateArticleFloorReceivedData(articleId, {
         floor: "Silicon",
+        quantity: containerScanned.container.quantity ?? 0,
         receivedData: {
           receivedStatusFromPreviousFloor: "Completed",
           receivedInContainerId: containerScanned.container._id ?? null,
@@ -1019,10 +1032,9 @@ const SiliconFloorSupervisorPage = () => {
                 />
               </div>
               <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
-                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Next floor</label>
-                <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300" value={updateContainerNextFloor} onChange={(e) => setUpdateContainerNextFloor(e.target.value)}>
-                  {PRODUCTION_FLOORS.map((f) => <option key={f} value={f}>{f}</option>)}
-                </select>
+                <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Next floor (from article process)</label>
+                <input type="text" readOnly value={updateContainerNextFloor || "—"} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] bg-gray-100 text-gray-700 cursor-not-allowed" />
+                <p className="text-[10px] text-gray-500 mt-0.5">Set automatically from article process flow</p>
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
                 <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }}>Cancel</button>
