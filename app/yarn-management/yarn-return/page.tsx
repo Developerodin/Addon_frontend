@@ -283,6 +283,7 @@ const YarnReturnPage = () => {
   const [showScanReturnPanel, setShowScanReturnPanel] = useState(false);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState("");
+  const [scanError, setScanError] = useState<string | null>(null);
   const [scannedBarcodes, setScannedBarcodes] = useState<string[]>([]);
   const [scannedConeData, setScannedConeData] = useState<Map<string, any>>(new Map());
   const [rackBarcodes, setRackBarcodes] = useState<Map<string, string>>(new Map()); // Map cone barcode to rack barcode
@@ -1311,10 +1312,10 @@ const YarnReturnPage = () => {
     }
 
     // Handle cone barcode scanning
+    setScanError(null);
     // Check if barcode is already scanned
     if (scannedBarcodes.includes(value)) {
-      toast.error("This barcode has already been scanned.");
-      setBarcodeInput("");
+      setScanError("This barcode has already been scanned.");
       return;
     }
 
@@ -1344,14 +1345,31 @@ const YarnReturnPage = () => {
         orderConesCount: selectedOrder.cones.length,
         orderConesBarcodes: selectedOrder.cones.map(c => c.barcode),
       });
+
+      // Check if cone has been issued - only issued cones can be returned
+      const issueStatus = (coneDetails.issueStatus ?? coneDetails.issue_status ?? "").toString().toLowerCase();
+      if (issueStatus !== "issued") {
+        setScanError("This cone has not been issued and cannot be returned. Only issued cones can be returned.");
+        return;
+      }
       
       // Check if cone is already returned (from API response)
       if (coneDetails.returnStatus === "returned") {
-        console.log("⚠️ Cone already returned:", value);
-        toast("This cone has already been marked as returned.", {
-          icon: "ℹ️",
-        });
-        setBarcodeInput("");
+        setScanError("This cone has already been returned and cannot be returned again.");
+        return;
+      }
+
+      // Check if cone was already returned for this order/article (from return transactions)
+      const orderReturnTxs = returnTransactions.filter(
+        (tx) => (txOrderno(tx) ?? tx.orderno) === selectedOrder.orderNumber || txOrderId(tx) === selectedOrder.id
+      );
+      const returnedConeIds = new Set(
+        orderReturnTxs.flatMap((tx) => (tx as any).conesIdsArray ?? [])
+      );
+      const coneIdToCheck = String(coneDetails._id ?? coneDetails.id ?? value);
+      const coneIdRaw = coneIdToCheck.replace(/-\d+$/, "");
+      if (returnedConeIds.has(coneIdToCheck) || returnedConeIds.has(coneIdRaw)) {
+        setScanError("This cone has already been returned for this order and cannot be returned again.");
         return;
       }
 
@@ -1363,11 +1381,7 @@ const YarnReturnPage = () => {
       
       // If no pending cones, this order has no cones to return
       if (pendingCones.length === 0) {
-        console.log("⚠️ No pending cones in order:", selectedOrder.orderNumber);
-        toast("This order has no pending cones to return.", {
-          icon: "ℹ️",
-        });
-        setBarcodeInput("");
+        setScanError("This order has no pending cones to return.");
         return;
       }
       
@@ -1446,14 +1460,7 @@ const YarnReturnPage = () => {
 
       // Check if cone is already returned (double check)
       if (cone.status === "Returned" || coneDetails.returnStatus === "returned") {
-        console.log("⚠️ Cone already returned (double check):", {
-          coneStatus: cone.status,
-          apiReturnStatus: coneDetails.returnStatus,
-        });
-        toast("This cone has already been marked as returned.", {
-          icon: "ℹ️",
-        });
-        setBarcodeInput("");
+        setScanError("This cone has already been returned and cannot be returned again.");
         return;
       }
 
@@ -1467,13 +1474,14 @@ const YarnReturnPage = () => {
       });
 
       // Store pending cone data and show modal for user to select type
+      setScanError(null);
       setPendingConeBarcode(value);
       setPendingConeData({ coneDetails, cone, coneWeight });
       setBarcodeInput("");
       setShowConeTypeModal(true);
     } catch (error) {
       console.error("Error fetching cone:", error);
-      toast.error("Failed to fetch cone details. Please check the barcode.");
+      setScanError("Failed to fetch cone details. Please check the barcode.");
     } finally {
       setBarcodeLoading(false);
     }
@@ -2393,6 +2401,8 @@ const YarnReturnPage = () => {
             className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity"
             onClick={() => {
               setShowScanReturnPanel(false);
+              setBarcodeInput("");
+              setScanError(null);
               setScannedBarcodes([]);
               setScannedConeData(new Map());
               setRackBarcodes(new Map());
@@ -2423,6 +2433,7 @@ const YarnReturnPage = () => {
                     onClick={() => {
                       setShowScanReturnPanel(false);
                       setBarcodeInput("");
+                      setScanError(null);
                       setScannedBarcodes([]);
                       setScannedConeData(new Map());
                       setRackBarcodes(new Map());
@@ -2619,15 +2630,24 @@ const YarnReturnPage = () => {
                         <div className="relative">
                           <input
                             type="text"
-                            className="form-control ps-10"
+                            className={`form-control ps-10 ${scanError ? "border-red-500 focus:border-red-500" : ""}`}
                             placeholder={scanningMode === "cone" ? "Scan or enter cone barcode" : "Scan or enter rack barcode"}
                             value={barcodeInput}
-                            onChange={(event) => setBarcodeInput(event.target.value)}
+                            onChange={(event) => {
+                              setBarcodeInput(event.target.value);
+                              if (scanError) setScanError(null);
+                            }}
                             disabled={barcodeLoading || storingCone || (scanningMode === "cone" && scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1"))}
                             autoFocus
                           />
                           <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                         </div>
+                        {scanError && scanningMode === "cone" && (
+                          <div className="flex items-center gap-2 text-red-600 text-sm font-medium">
+                            <i className="ri-error-warning-line text-base"></i>
+                            {scanError}
+                          </div>
+                        )}
                         <button
                           type="submit"
                           className="ti-btn ti-btn-primary w-full whitespace-normal break-words leading-tight px-4 py-2 text-sm"
