@@ -102,9 +102,35 @@ export async function bulkUpsertProducts(
   });
 }
 
+/** Product from POST /v1/products/by-factory-codes (attributes: Type, Season, etc.) */
+export interface ProductByFactoryCode {
+  _id?: string;
+  factoryCode?: string;
+  name?: string;
+  attributes?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+/**
+ * POST /v1/products/by-factory-codes
+ * Body: { factoryCodes: string[] } (max 500)
+ * Returns array of products with attributes (Type, Season, etc.)
+ */
+export async function getProductsByFactoryCodes(
+  factoryCodes: string[]
+): Promise<ProductByFactoryCode[]> {
+  if (!factoryCodes.length) return [];
+  const url = `${API_BASE_URL}/products/by-factory-codes`;
+  return request<ProductByFactoryCode[]>(url, {
+    method: 'POST',
+    body: JSON.stringify({ factoryCodes }),
+  });
+}
+
 export const productService = {
   bulkExport: bulkExportProducts,
   bulkUpsert: bulkUpsertProducts,
+  getByFactoryCodes: getProductsByFactoryCodes,
 };
 
 export default productService;

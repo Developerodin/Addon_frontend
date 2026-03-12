@@ -342,7 +342,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
               <table className="min-w-full text-xs border-collapse">
                 <thead className="bg-gray-100 border-b border-gray-300">
                   <tr>
-                    <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Machine</th>
+                    <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Machine</th>
                     <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Active Needle</th>
                     <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Needle Options</th>
                     <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">POs</th>
@@ -372,7 +372,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                           }
                         }}
                       >
-                        <td className="px-2 py-1.5 border-r border-gray-300 font-medium text-gray-900">
+                        <td className="px-2 py-1.5 text-center border-r border-gray-300 font-medium text-gray-900">
                           {machineLabel(row)}
                         </td>
                         <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">

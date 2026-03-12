@@ -10,6 +10,7 @@ import {
 } from "@/shared/services/machineOrderAssignmentService";
 import { machinesService } from "@/shared/services/machinesService";
 import { productionService, type ProductionOrder, type Article } from "@/shared/services/productionService";
+import { getProductsByFactoryCodes } from "@/shared/services/productService";
 
 export interface PlanningRow {
   machineId: string;
@@ -75,9 +76,8 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
         if (!assignment) continue;
         const items = (assignment.productionOrderItems ?? [])
           .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
-          .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
-          .slice(0, 2);
-        for (const item of items) {
+          .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+        for (const item of items.slice(0, 5)) {
           const oid = getOrderId(item);
           if (oid) orderIds.add(oid);
         }
@@ -100,6 +100,39 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
         for (const article of order.articles ?? []) {
           const aid = article.id ?? article._id;
           if (aid) articleByOrderArticle.set(`${oid}:${aid}`, article);
+        }
+      }
+
+      /** Collect factory codes from running articles only (In Progress) */
+      const runningFactoryCodes = new Set<string>();
+      for (const m of machinesList) {
+        const assignment = assignmentByMachineId.get(m.id);
+        if (!assignment) continue;
+        const items = (assignment.productionOrderItems ?? [])
+          .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
+          .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+        const runningItem = items.find((i) => i.status === OrderStatus.IN_PROGRESS);
+        if (runningItem) {
+          const runningArticle = articleByOrderArticle.get(`${getOrderId(runningItem)}:${getArticleId(runningItem)}`);
+          const fc = runningItem.articleNumber ?? runningArticle?.articleNumber ?? "";
+          if (fc.trim()) runningFactoryCodes.add(fc.trim());
+        }
+      }
+
+      /** Fetch products by factory codes for attributes (Type, Season) */
+      const productByFactoryCode = new Map<string, { Type?: string; Season?: string }>();
+      if (runningFactoryCodes.size > 0) {
+        try {
+          const products = await getProductsByFactoryCodes(Array.from(runningFactoryCodes));
+          for (const p of products) {
+            const fc = (p.factoryCode ?? "").trim();
+            if (fc) {
+              productByFactoryCode.set(fc.toLowerCase(), (p.attributes ?? {}) as { Type?: string; Season?: string });
+              productByFactoryCode.set(fc, (p.attributes ?? {}) as { Type?: string; Season?: string });
+            }
+          }
+        } catch {
+          // ignore – attributes optional
         }
       }
 
@@ -126,11 +159,12 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
 
         const items = (assignment.productionOrderItems ?? [])
           .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
-          .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
-          .slice(0, 2);
+          .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
 
-        const runningItem = items[0];
-        const nextItem = items[1];
+        /** RUNNING PLAN: only the item that is In Progress */
+        const runningItem = items.find((i) => i.status === OrderStatus.IN_PROGRESS);
+        /** NXT PLAN: the item that is Pending (to be started next) */
+        const nextItem = items.find((i) => i.status === OrderStatus.PENDING);
 
         const runningArticle = runningItem
           ? articleByOrderArticle.get(`${getOrderId(runningItem)}:${getArticleId(runningItem)}`)
@@ -139,14 +173,22 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
           ? articleByOrderArticle.get(`${getOrderId(nextItem)}:${getArticleId(nextItem)}`)
           : undefined;
 
-        const running = "-";
-        const type = "-";
+        /** Running article attributes (Type, Season) from products API */
+        const runningFactoryCode = runningItem
+          ? (runningItem.articleNumber ?? runningArticle?.articleNumber ?? "").trim()
+          : "";
+        const attrs = runningFactoryCode
+          ? productByFactoryCode.get(runningFactoryCode) ?? productByFactoryCode.get(runningFactoryCode.toLowerCase())
+          : undefined;
+        const running = attrs?.Season ?? "-";
+        const type = attrs?.Type ?? "-";
         const needle = (assignment.activeNeedle ?? "").trim() || "-";
-        const existingPlan = runningItem?.articleNumber ?? runningArticle?.articleNumber ?? "-";
+        const existingPlan = runningItem ? (runningItem.articleNumber ?? runningArticle?.articleNumber ?? "-") : "-";
         const existingQty =
           runningArticle?.plannedQuantity != null ? String(runningArticle.plannedQuantity) : "-";
-        const nextPlan = nextItem?.articleNumber ?? nextArticle?.articleNumber ?? "-";
-        const nextQty = nextArticle?.plannedQuantity != null ? String(nextArticle.plannedQuantity) : "-";
+        const nextPlan = nextItem ? (nextItem.articleNumber ?? nextArticle?.articleNumber ?? "-") : "-";
+        const nextQty =
+          nextArticle?.plannedQuantity != null ? String(nextArticle.plannedQuantity) : "-";
 
         planningRows.push({
           machineId: m.id,
