@@ -113,7 +113,8 @@ interface ReturnRecord {
 
 interface ReturnTransaction {
   _id: string;
-  orderno: string;
+  orderno?: string;
+  orderId?: string;
   yarnName: string;
   transactionType: string;
   transactionDate: string;
@@ -354,7 +355,7 @@ const YarnReturnPage = () => {
             { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
           ),
           fetch(
-            `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${orderNumber}`,
+            `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${orderId}`,
             { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
           ),
         ]);
@@ -552,7 +553,7 @@ const YarnReturnPage = () => {
           filtered.map(async (o) => {
             try {
               const res = await fetch(
-                `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${o.orderNumber}`,
+                `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${o.id}`,
                 { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
               );
               if (!res.ok) return;
@@ -560,7 +561,7 @@ const YarnReturnPage = () => {
               const txs = extractTransactions(data).filter((tx: any) => tx.transactionType === "yarn_returned") as ReturnTransaction[];
               allReturnTxs.push(...txs);
             } catch (err) {
-              console.warn("Fetch return tx for", o.orderNumber, err);
+              console.warn("Fetch return tx for", o.id, err);
             }
           })
         );
@@ -597,6 +598,31 @@ const YarnReturnPage = () => {
       loadOrdersForMachine(machineAssignments[0]);
     }
   }, [machineAssignmentsLoading, machineAssignments, selectedMachineAssignmentId, loadOrdersForMachine]);
+
+  // When no orders (no machines or no completed items), fetch all return transactions for history drawer
+  useEffect(() => {
+    if (!hasPermission) return;
+    const noOrders = !ordersLoading && orders.length === 0;
+    const noMachines = !machineAssignmentsLoading && machineAssignments.length === 0;
+    if (!noOrders && !noMachines) return;
+
+    const fetchAllReturnTransactions = async () => {
+      const token = getAccessToken();
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/yarn-management/yarn-transactions`,
+          { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const txs = extractTransactions(data).filter((tx: any) => tx.transactionType === "yarn_returned") as ReturnTransaction[];
+        setReturnTransactions(txs);
+      } catch (err) {
+        console.warn("Fetch all return transactions for history:", err);
+      }
+    };
+    fetchAllReturnTransactions();
+  }, [hasPermission, machineAssignmentsLoading, machineAssignments.length, ordersLoading, orders.length]);
 
   // Filter pending orders - exclude orders where all cones have been returned
   // Check both cone status and return transaction cone counts
@@ -798,10 +824,10 @@ const YarnReturnPage = () => {
         // Filter by order number or yarn name
         if (
           historySearchTerm &&
-          !transaction.orderno
+          !(transaction.orderno ?? "")
             .toLowerCase()
             .includes(historySearchTerm.toLowerCase()) &&
-          !transaction.yarnName
+          !(transaction.yarnName ?? "")
             .toLowerCase()
             .includes(historySearchTerm.toLowerCase())
         ) {
@@ -842,13 +868,13 @@ const YarnReturnPage = () => {
         .filter((item) => {
           const po = item.productionOrder;
           const oid = typeof po === "string" ? po : (po?.id ?? (po as { _id?: string })?._id ?? "");
-          return oid === orderId;
+          return String(oid) === String(orderId);
         })
         .map((item) => {
           const art = item.article;
           const aid = typeof art === "string" ? art : (art as { id?: string; _id?: string })?.id ?? (art as { _id?: string })?._id ?? "";
           return {
-            itemId: item.itemId ?? (item as { id?: string }).id ?? "",
+            itemId: item.itemId ?? (item as { id?: string; _id?: string }).id ?? (item as { _id?: string })._id ?? "",
             articleNumber: item.articleNumber ?? (typeof art === "object" && art ? (art as { articleNumber?: string }).articleNumber ?? "" : ""),
             articleId: aid,
           };
@@ -1838,30 +1864,32 @@ const YarnReturnPage = () => {
         }
 
         // After return API 200: update assignment item yarn-return status per ARTICLE (not whole order)
-        // Only update articles we returned for. "Completed" when all cones for that article returned, else "In Progress"
+        // "Completed" when all cones for that article returned, else "In Progress"
         if (selectedMachineAssignmentId) {
+          const allItems = getAssignmentItemsForOrder(updatedOrder.id);
           const articleIdsToUpdate = Array.from(
             new Set(
-              results
-                .map((r) => r.cone.articleId)
-                .filter(Boolean) as string[]
+              [
+                ...results.map((r) => r.cone.articleId).filter(Boolean),
+                ...(selectedArticleRow?.articleId ? [selectedArticleRow.articleId] : []),
+                ...allItems.map((i) => i.articleId).filter(Boolean),
+              ].map(String)
             )
           );
-          if (articleIdsToUpdate.length === 0 && selectedArticleRow?.articleId) {
-            articleIdsToUpdate.push(selectedArticleRow.articleId);
-          }
-          if (articleIdsToUpdate.length === 0) {
-            const allItems = getAssignmentItemsForOrder(updatedOrder.id);
-            articleIdsToUpdate.push(...allItems.map((i) => i.articleId).filter(Boolean));
-          }
-          const uniqueArticleIds = Array.from(new Set(articleIdsToUpdate));
+          const itemsToUpdate =
+            articleIdsToUpdate.length > 0
+              ? articleIdsToUpdate
+                  .map((aid) => getAssignmentItemForArticle(updatedOrder.id, aid))
+                  .filter((x): x is NonNullable<typeof x> => x != null)
+              : allItems
+                  .map((i) => ({ itemId: i.itemId, articleNumber: i.articleNumber }))
+                  .filter((x) => !!x.itemId);
           const pendingBefore = selectedOrder.cones.filter((c) => c.status !== "Returned").length;
           const justReturnedLastBatch = results.length >= pendingBefore;
-          if (uniqueArticleIds.length > 0) {
+          if (itemsToUpdate.length > 0) {
             try {
-              for (const articleId of uniqueArticleIds) {
-                const item = getAssignmentItemForArticle(updatedOrder.id, articleId);
-                if (!item) continue;
+              for (const item of itemsToUpdate) {
+                const articleId = allItems.find((i) => i.itemId === item.itemId)?.articleId;
                 const allReturned =
                   justReturnedLastBatch ||
                   isArticleAllConesReturned(updatedOrder, articleId) ||
@@ -1873,9 +1901,8 @@ const YarnReturnPage = () => {
                   yarnReturnStatus
                 );
               }
-              const anyCompleted = uniqueArticleIds.some((aid) =>
-                isArticleAllConesReturned(updatedOrder, aid)
-              );
+              const anyCompleted =
+                justReturnedLastBatch || updatedOrder.status === "Returned";
               toast.success(
                 anyCompleted
                   ? "Assignment item return status updated."
@@ -1887,7 +1914,7 @@ const YarnReturnPage = () => {
               toast.error("Cones returned, but failed to update assignment yarn-return status.");
             }
           } else {
-            console.warn("Assignment yarn-return status not updated: no article ids for order", updatedOrder.orderNumber);
+            console.warn("Assignment yarn-return status not updated: no items for order", updatedOrder.orderNumber);
           }
         } else {
           console.warn("Assignment yarn-return status not updated: no selected machine assignment");
@@ -1915,7 +1942,7 @@ const YarnReturnPage = () => {
             let returnedTransactions: any[] = [];
             try {
               const allTransactionsResponse = await fetch(
-                `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${selectedOrder.orderNumber}`,
+                `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${selectedOrder.id}`,
                 {
                   headers: {
                     "Content-Type": "application/json",
@@ -2012,14 +2039,14 @@ const YarnReturnPage = () => {
         // Also refresh all return transactions to ensure we have the latest data
         try {
           const token = getAccessToken();
-          const allOrderNumbers = Array.from(new Set(orders.map(o => o.orderNumber)));
+          const allOrderIds = Array.from(new Set(orders.map(o => o.id).filter(Boolean)));
           const allReturnTransactions: ReturnTransaction[] = [];
           
           await Promise.all(
-            allOrderNumbers.map(async (orderNumber) => {
+            allOrderIds.map(async (orderId) => {
               try {
                 const transactionsResponse = await fetch(
-                  `${API_BASE_URL}/yarn-management/yarn-transactions?orderno=${orderNumber}`,
+                  `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${orderId}`,
                   {
                     headers: {
                       "Content-Type": "application/json",
@@ -2037,7 +2064,7 @@ const YarnReturnPage = () => {
                   allReturnTransactions.push(...returnedTxs);
                 }
               } catch (err) {
-                console.warn(`Failed to refresh return transactions for order ${orderNumber}:`, err);
+                console.warn(`Failed to refresh return transactions for order ${orderId}:`, err);
               }
             })
           );
@@ -2970,7 +2997,7 @@ const YarnReturnPage = () => {
                     <tbody>
                       {filteredReturnTransactions.map((transaction) => (
                         <tr key={transaction._id} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{transaction.orderno}</td>
+                          <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{transaction.orderno ?? transaction.orderId ?? "-"}</td>
                           <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.transactionDate).toLocaleDateString()}</td>
                           <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.yarnName}</td>
                           <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionNetWeight?.toFixed(2) || "0.00"}</td>
