@@ -305,6 +305,7 @@ const YarnReturnPage = () => {
 
   const pendingToastShown = useRef(false);
   const [fetchingWeight, setFetchingWeight] = useState(false);
+  const [markingAllReturned, setMarkingAllReturned] = useState(false);
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Return");
 
   // When return modal opens:
@@ -614,6 +615,53 @@ const YarnReturnPage = () => {
     },
     [fetchOrderWithCones]
   );
+
+  /** Mark yarn return status as Completed for all items across all machines shown. */
+  const handleMarkAllReturned = useCallback(async () => {
+    if (machineAssignments.length === 0) {
+      toast.error("No machines to update.");
+      return;
+    }
+    setMarkingAllReturned(true);
+    try {
+      let updatedCount = 0;
+      for (const assignment of machineAssignments) {
+        const assignmentId = assignment.id ?? assignment._id;
+        if (!assignmentId) continue;
+        const items = assignment.productionOrderItems ?? [];
+        for (const item of items) {
+          const itemId = item.itemId ?? (item as { id?: string; _id?: string }).id ?? (item as { _id?: string })._id;
+          if (!itemId) continue;
+          await updateAssignmentItemYarnReturnStatus(assignmentId, itemId, "Completed");
+          updatedCount += 1;
+        }
+      }
+      if (updatedCount > 0) {
+        toast.success(`Marked ${updatedCount} item(s) as yarn return completed.`);
+        const list = await getCompletedItemsAssignments();
+        setMachineAssignments(list);
+        if (list.length === 0) {
+          setOrders([]);
+          setSelectedMachineAssignmentId(null);
+          setSelectedMachineAssignment(null);
+        } else if (selectedMachineAssignmentId) {
+          const stillSelected = list.find((a) => (a.id ?? a._id) === selectedMachineAssignmentId);
+          if (stillSelected) {
+            loadOrdersForMachine(stillSelected);
+          } else {
+            loadOrdersForMachine(list[0]);
+          }
+        }
+      } else {
+        toast("No items to update.");
+      }
+    } catch (err) {
+      console.error("Mark all returned failed:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to mark all as returned.");
+    } finally {
+      setMarkingAllReturned(false);
+    }
+  }, [machineAssignments, selectedMachineAssignmentId, loadOrdersForMachine]);
 
   // Default: select first machine when completed-items have loaded
   useEffect(() => {
@@ -2191,6 +2239,24 @@ const YarnReturnPage = () => {
           <div className="xl:col-span-1 flex flex-col border border-gray-200 rounded overflow-hidden bg-gray-50/30">
             <div className="p-[10px] border-b border-gray-200 bg-white">
               <h2 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Machines (completed items)</h2>
+              {/* <button
+                type="button"
+                onClick={handleMarkAllReturned}
+                disabled={markingAllReturned || machineAssignments.length === 0}
+                className="inline-flex items-center gap-1 px-2 py-1 bg-green-600 text-white text-[10px] font-bold rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {markingAllReturned ? (
+                  <>
+                    <span className="animate-spin">⟳</span>
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-check-double-line text-xs"></i>
+                    Mark All Returned
+                  </>
+                )}
+              </button> */}
             </div>
             <div className="p-[10px] flex-1 min-h-0 overflow-auto">
               <div className="relative mb-3">

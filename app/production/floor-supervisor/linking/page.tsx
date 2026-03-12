@@ -29,6 +29,8 @@ const LinkingFloorSupervisorPage = () => {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
+  /** When set (from article view), modal shows only this article. When null (from orders tab), shows all. */
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [updateData, setUpdateData] = useState<{[key: string]: {completedQuantity: number, remarks: string}}>({});
@@ -213,15 +215,17 @@ const LinkingFloorSupervisorPage = () => {
     }
   };
 
-  const handleViewOrder = (order: ProductionOrder) => {
+  const handleViewOrder = (order: ProductionOrder, article?: Article) => {
     setSelectedOrder(order);
+    setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
     setActiveViewTabIndex(0);
     setShowUpdateModal(false);
     setShowViewModal(true);
   };
 
-  const handleUpdateOrder = (order: ProductionOrder) => {
+  const handleUpdateOrder = (order: ProductionOrder, article?: Article) => {
     setSelectedOrder(order);
+    setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
     setActiveUpdateTabIndex(0);
     // Initialize update data with current values
     const initialData: {[key: string]: {completedQuantity: number, remarks: string}} = {};
@@ -243,6 +247,7 @@ const LinkingFloorSupervisorPage = () => {
   const closeViewModal = () => {
     setShowViewModal(false);
     setSelectedOrder(null);
+    setSelectedArticleId(null);
     setShowLogsSection(false);
     setSelectedLogArticleId('');
     setArticleLogs([]);
@@ -285,6 +290,7 @@ const LinkingFloorSupervisorPage = () => {
   const closeUpdateModal = () => {
     setShowUpdateModal(false);
     setSelectedOrder(null);
+    setSelectedArticleId(null);
     setUpdateData({});
     setShowUpdateContainerModal(false);
     setUpdateContainerBarcode("");
@@ -1029,7 +1035,11 @@ const LinkingFloorSupervisorPage = () => {
       )}
 
       {/* Order drawer (Update / View) — design spec: 10px padding, text-sm title, same table/button styles */}
-      {(showUpdateModal || showViewModal) && selectedOrder && (
+      {(showUpdateModal || showViewModal) && selectedOrder && (() => {
+        const modalArticles = selectedArticleId
+          ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId)
+          : selectedOrder.articles;
+        return (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { closeUpdateModal(); closeViewModal(); }} aria-hidden />
           <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
@@ -1076,7 +1086,7 @@ const LinkingFloorSupervisorPage = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white">
-                    {selectedOrder.articles.map((article, idx) => {
+                    {modalArticles.map((article, idx) => {
                       const articleId = article.id || article._id;
                       if (!articleId) return null;
                       const currentUpdateData = updateData[articleId] || { completedQuantity: article.completedQuantity || 0, remarks: article.remarks || '' };
@@ -1127,7 +1137,7 @@ const LinkingFloorSupervisorPage = () => {
               <button
                 onClick={() => {
                   if (!selectedOrder) return;
-                  const invalid = selectedOrder.articles.some(article => {
+                  const invalid = modalArticles.some(article => {
                     const articleId = article.id || article._id;
                     if (!articleId) return false;
                     const update = updateData[articleId];
@@ -1144,7 +1154,7 @@ const LinkingFloorSupervisorPage = () => {
                   setUpdateContainerBarcode("");
                   setUpdateContainerCheckStatus("idle");
                   setUpdateContainerFetched(null);
-                  const first = selectedOrder.articles[0];
+                  const first = modalArticles[0];
                   const firstId = first?.id || first?._id || "";
                   setUpdateContainerArticleId(firstId);
                   setUpdateContainerQuantity(String(updateData[firstId]?.completedQuantity ?? 0));
@@ -1152,7 +1162,7 @@ const LinkingFloorSupervisorPage = () => {
                   setShowUpdateContainerModal(true);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm"
-                disabled={isLoading || selectedOrder.articles.some(article => {
+                disabled={isLoading || modalArticles.some(article => {
                   const articleId = article.id || article._id;
                   if (!articleId) return false;
                   const update = updateData[articleId];
@@ -1216,7 +1226,7 @@ const LinkingFloorSupervisorPage = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white">
-                      {selectedOrder.articles.map((article, idx) => {
+                      {modalArticles.map((article, idx) => {
                         const plannedQty = article.plannedQuantity || 0;
                         const receivedQty = article.floorQuantities?.linking?.received || 0;
                         const completedQty = article.completedQuantity || 0;
@@ -1255,7 +1265,7 @@ const LinkingFloorSupervisorPage = () => {
                     <h5 className="text-[11px] font-bold text-gray-800">Article Logs {articleLogs.length > 0 && `(${articleLogs.length})`}</h5>
                     <select className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 w-48" value={selectedLogArticleId} onChange={(e) => handleLogsArticleSelect(e.target.value)}>
                       <option value="">Choose article...</option>
-                      {selectedOrder.articles.map((article) => {
+                      {modalArticles.map((article) => {
                         const aid = article._id || article.id;
                         const r = article.floorQuantities?.linking?.received || 0;
                         return <option key={aid} value={aid}>{article.articleNumber || `Article ${aid}`} (R:{r})</option>;
@@ -1296,10 +1306,13 @@ const LinkingFloorSupervisorPage = () => {
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
 
       {/* Scan container/bag before update – like knitting */}
-      {showUpdateContainerModal && selectedOrder && (
+      {showUpdateContainerModal && selectedOrder && (() => {
+        const containerModalArticles = selectedArticleId ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId) : selectedOrder.articles;
+        return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }} aria-hidden>
           <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-sm p-[10px] flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
             <h4 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2">Scan bag / container</h4>
@@ -1322,14 +1335,14 @@ const LinkingFloorSupervisorPage = () => {
             </div>
             <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
               <label className="block text-[11px] font-semibold text-gray-600 mb-1">Article in container</label>
-              {selectedOrder.articles.length === 1 ? (
+              {containerModalArticles.length === 1 ? (
                 <div className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] bg-gray-50 text-gray-700">
-                  {selectedOrder.articles[0].articleNumber || selectedOrder.articles[0].id || selectedOrder.articles[0]._id || "—"}
+                  {containerModalArticles[0].articleNumber || containerModalArticles[0].id || containerModalArticles[0]._id || "—"}
                 </div>
               ) : (
                 <select value={updateContainerArticleId} onChange={(e) => setUpdateContainerArticleId(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px]">
                   <option value="">Select article</option>
-                  {selectedOrder.articles.map((a) => { const id = a.id || a._id; if (!id) return null; return <option key={id} value={id}>{a.articleNumber || id}</option>; })}
+                  {containerModalArticles.map((a) => { const id = a.id || a._id; if (!id) return null; return <option key={id} value={id}>{a.articleNumber || id}</option>; })}
                 </select>
               )}
             </div>
@@ -1358,7 +1371,8 @@ const LinkingFloorSupervisorPage = () => {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
     </div>
   );

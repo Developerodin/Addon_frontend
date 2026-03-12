@@ -17,8 +17,8 @@ export interface ArticleRow {
 
 export interface ArticleViewTabProps {
   orders: ProductionOrder[];
-  onViewOrder: (order: ProductionOrder) => void;
-  onUpdateOrder: (order: ProductionOrder) => void;
+  onViewOrder: (order: ProductionOrder, article?: { id?: string; _id?: string }) => void;
+  onUpdateOrder: (order: ProductionOrder, article?: { id?: string; _id?: string }) => void;
   getStatusBadge: (status: string) => string;
   getPriorityBadge: (priority: string) => string;
   activeArticleId?: string | null;
@@ -198,7 +198,7 @@ export default function ArticleViewTab({
                       <button
                         type="button"
                         className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100 transition-opacity"
-                        onClick={() => onViewOrder(order)}
+                        onClick={() => onViewOrder(order, article)}
                         title="View order"
                       >
                         <i className="ri-eye-line text-xs" />
@@ -206,7 +206,7 @@ export default function ArticleViewTab({
                       <button
                         type="button"
                         className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-opacity"
-                        onClick={() => onUpdateOrder(order)}
+                        onClick={() => onUpdateOrder(order, article)}
                         title="Update order"
                       >
                         <i className="ri-edit-line text-xs" />

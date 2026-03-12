@@ -28,6 +28,8 @@ const SiliconFloorSupervisorPage = () => {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
+  /** When set (from article view), modal shows only this article. When null (from orders tab), shows all. */
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [updateData, setUpdateData] = useState<{[key: string]: {completedQuantity: number, remarks: string}}>({});
@@ -213,14 +215,16 @@ const SiliconFloorSupervisorPage = () => {
     }
   };
 
-  const handleViewOrder = (order: ProductionOrder) => {
+  const handleViewOrder = (order: ProductionOrder, article?: Article) => {
     setSelectedOrder(order);
+    setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
     setActiveViewTabIndex(0);
     setShowViewModal(true);
   };
 
-  const handleUpdateOrder = (order: ProductionOrder) => {
+  const handleUpdateOrder = (order: ProductionOrder, article?: Article) => {
     setSelectedOrder(order);
+    setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
     setActiveUpdateTabIndex(0);
     // Initialize update data with current values
     const initialData: {[key: string]: {completedQuantity: number, remarks: string}} = {};
@@ -241,6 +245,7 @@ const SiliconFloorSupervisorPage = () => {
   const closeViewModal = () => {
     setShowViewModal(false);
     setSelectedOrder(null);
+    setSelectedArticleId(null);
     setShowLogsSection(false);
     setSelectedLogArticleId('');
     setArticleLogs([]);
@@ -283,6 +288,7 @@ const SiliconFloorSupervisorPage = () => {
   const closeUpdateModal = () => {
     setShowUpdateModal(false);
     setSelectedOrder(null);
+    setSelectedArticleId(null);
     setUpdateData({});
     setShowUpdateContainerModal(false);
     setUpdateContainerBarcode("");
@@ -843,7 +849,9 @@ const SiliconFloorSupervisorPage = () => {
       </div>
 
       {/* Update Order – right-side drawer; footer opens Scan bag/container then submit */}
-      {showUpdateModal && selectedOrder && (
+      {showUpdateModal && selectedOrder && (() => {
+        const modalArticles = selectedArticleId ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId) : selectedOrder.articles;
+        return (
         <>
           <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={closeUpdateModal} aria-hidden />
           <div className="fixed right-0 top-0 h-full w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200">
@@ -885,7 +893,7 @@ const SiliconFloorSupervisorPage = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {selectedOrder.articles.map((article, idx) => {
+                    {modalArticles.map((article, idx) => {
                       const articleId = article.id || article._id;
                       if (!articleId) return null;
                       const currentUpdateData = updateData[articleId] || { completedQuantity: 0, remarks: article.remarks || '' };
@@ -935,7 +943,7 @@ const SiliconFloorSupervisorPage = () => {
               <button
                 onClick={() => {
                   if (!selectedOrder) return;
-                  const invalid = selectedOrder.articles.some(article => {
+                  const invalid = modalArticles.some(article => {
                     const articleId = article.id || article._id;
                     if (!articleId) return false;
                     const update = updateData[articleId];
@@ -952,7 +960,7 @@ const SiliconFloorSupervisorPage = () => {
                   setUpdateContainerBarcode("");
                   setUpdateContainerCheckStatus("idle");
                   setUpdateContainerFetched(null);
-                  const first = selectedOrder.articles[0];
+                  const first = modalArticles[0];
                   const firstId = first?.id || first?._id || "";
                   setUpdateContainerArticleId(firstId);
                   setUpdateContainerQuantity(String(updateData[firstId]?.completedQuantity ?? 0));
@@ -960,7 +968,7 @@ const SiliconFloorSupervisorPage = () => {
                   setShowUpdateContainerModal(true);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-50"
-                disabled={selectedOrder.articles.some(article => {
+                disabled={modalArticles.some(article => {
                   const articleId = article.id || article._id;
                   if (!articleId) return false;
                   const update = updateData[articleId];
@@ -976,9 +984,12 @@ const SiliconFloorSupervisorPage = () => {
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
 
-      {showUpdateContainerModal && selectedOrder && (
+      {showUpdateContainerModal && selectedOrder && (() => {
+        const containerModalArticles = selectedArticleId ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId) : selectedOrder.articles;
+        return (
         <>
           <div className="fixed inset-0 bg-black bg-opacity-50 z-[60]" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }} aria-hidden />
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -1009,14 +1020,14 @@ const SiliconFloorSupervisorPage = () => {
               </div>
               <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
                 <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Article in container</label>
-                {selectedOrder.articles.length === 1 ? (
+                {containerModalArticles.length === 1 ? (
                   <div className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] bg-gray-50 text-gray-700">
-                    {selectedOrder.articles[0].articleNumber || selectedOrder.articles[0].id || selectedOrder.articles[0]._id || "—"}
+                    {containerModalArticles[0].articleNumber || containerModalArticles[0].id || containerModalArticles[0]._id || "—"}
                   </div>
                 ) : (
                   <select className="w-full border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300" value={updateContainerArticleId} onChange={(e) => setUpdateContainerArticleId(e.target.value)}>
                     <option value="">Select article</option>
-                    {selectedOrder.articles.map((a) => { const id = a.id || a._id; if (!id) return null; return <option key={id} value={id}>{a.articleNumber || id}</option>; })}
+                    {containerModalArticles.map((a) => { const id = a.id || a._id; if (!id) return null; return <option key={id} value={id}>{a.articleNumber || id}</option>; })}
                   </select>
                 )}
               </div>
@@ -1166,7 +1177,8 @@ const SiliconFloorSupervisorPage = () => {
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
 
       {confirmAssignModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
@@ -1181,7 +1193,9 @@ const SiliconFloorSupervisorPage = () => {
       )}
 
       {/* View Order Modal */}
-      {showViewModal && selectedOrder && (
+      {showViewModal && selectedOrder && (() => {
+        const modalArticles = selectedArticleId ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId) : selectedOrder.articles;
+        return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl border border-gray-200 max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
@@ -1242,7 +1256,7 @@ const SiliconFloorSupervisorPage = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {selectedOrder.articles.map((article, idx) => {
+                      {modalArticles.map((article, idx) => {
                         const plannedQty = article.plannedQuantity || 0;
                         const receivedQty = article.floorQuantities?.silicon?.received || 0;
                         const completedQty = article.floorQuantities?.silicon?.completed || 0;
@@ -1303,7 +1317,7 @@ const SiliconFloorSupervisorPage = () => {
                         onChange={(e) => handleLogsArticleSelect(e.target.value)}
                       >
                         <option value="">Choose an article...</option>
-                        {selectedOrder.articles.map((article) => {
+                        {modalArticles.map((article) => {
                           const articleId = article._id || article.id;
                           const receivedQty = article.floorQuantities?.silicon?.received || 0;
                           return (
@@ -1432,7 +1446,8 @@ const SiliconFloorSupervisorPage = () => {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

@@ -98,6 +98,8 @@ const SecondaryCheckingFloorSupervisorPage = () => {
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
+  /** When set (from article view), modal shows only this article. When null (from orders tab), shows all. */
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [updateData, setUpdateData] = useState<{[key: string]: {
     remarks: string,
     m1Quantity: number,
@@ -334,14 +336,16 @@ const SecondaryCheckingFloorSupervisorPage = () => {
     }
   };
 
-  const handleViewOrder = (order: ProductionOrder) => {
+  const handleViewOrder = (order: ProductionOrder, article?: Article) => {
     setSelectedOrder(order);
+    setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
     setActiveViewTabIndex(0);
     setShowViewModal(true);
   };
 
-  const handleUpdateOrder = (order: ProductionOrder) => {
+  const handleUpdateOrder = (order: ProductionOrder, article?: Article) => {
     setSelectedOrder(order);
+    setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
     setActiveUpdateTabIndex(0);
     // Initialize update data with current values
     const initialData: {[key: string]: {
@@ -382,6 +386,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
   const closeViewModal = () => {
     setShowViewModal(false);
     setSelectedOrder(null);
+    setSelectedArticleId(null);
     setShowLogsSection(false);
     setSelectedLogArticleId('');
     setArticleLogs([]);
@@ -424,6 +429,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
   const closeUpdateModal = () => {
     setShowUpdateModal(false);
     setSelectedOrder(null);
+    setSelectedArticleId(null);
     setUpdateData({});
     setShiftInputs({});
     setTransferM2M3M4({});
@@ -1338,7 +1344,9 @@ const SecondaryCheckingFloorSupervisorPage = () => {
       )}
 
       {/* Scan bag/container before update order – modal */}
-      {showUpdateContainerModal && selectedOrder && (
+      {showUpdateContainerModal && selectedOrder && (() => {
+        const containerModalArticles = selectedArticleId ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId) : selectedOrder.articles;
+        return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }} aria-hidden>
           <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-sm p-[10px] flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
             <h4 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2">Scan bag / container</h4>
@@ -1361,14 +1369,14 @@ const SecondaryCheckingFloorSupervisorPage = () => {
             </div>
             <div className={updateContainerCheckStatus !== "ok" ? "opacity-60 pointer-events-none" : ""}>
               <label className="block text-[11px] font-semibold text-gray-600 mb-1">Article in container</label>
-              {selectedOrder.articles.length === 1 ? (
+              {containerModalArticles.length === 1 ? (
                 <div className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] bg-gray-50 text-gray-700">
-                  {selectedOrder.articles[0].articleNumber || selectedOrder.articles[0].id || selectedOrder.articles[0]._id || "—"}
+                  {containerModalArticles[0].articleNumber || containerModalArticles[0].id || containerModalArticles[0]._id || "—"}
                 </div>
               ) : (
                 <select value={updateContainerArticleId} onChange={(e) => setUpdateContainerArticleId(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:border-purple-300">
                   <option value="">Select article</option>
-                  {selectedOrder.articles.map((a) => { const id = a.id || a._id; if (!id) return null; return <option key={id} value={id}>{a.articleNumber || id}</option>; })}
+                  {containerModalArticles.map((a) => { const id = a.id || a._id; if (!id) return null; return <option key={id} value={id}>{a.articleNumber || id}</option>; })}
                 </select>
               )}
             </div>
@@ -1434,10 +1442,13 @@ const SecondaryCheckingFloorSupervisorPage = () => {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Update Order – drawer, clear sections & user guidance */}
-      {showUpdateModal && selectedOrder && (
+      {showUpdateModal && selectedOrder && (() => {
+        const modalArticles = selectedArticleId ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId) : selectedOrder.articles;
+        return (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={closeUpdateModal} aria-hidden />
           <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l-2 border-gray-300">
@@ -1468,7 +1479,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
             <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
               <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">2. Choose article to update</div>
               <div className="p-2 flex gap-1.5 flex-wrap">
-                {selectedOrder.articles.map((article, idx) => (
+                {modalArticles.map((article, idx) => (
                   <button
                     key={article.id}
                     type="button"
@@ -1484,7 +1495,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
               </div>
             </section>
               {(() => {
-                const article = selectedOrder.articles[activeUpdateTabIndex];
+                const article = modalArticles[activeUpdateTabIndex];
                 if (!article) return null;
                 const articleId = article.id || article._id;
                 if (!articleId) return null;
@@ -1746,7 +1757,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
               <button
                 type="button"
                 onClick={() => {
-                  const invalid = selectedOrder.articles.some(article => {
+                  const invalid = modalArticles.some(article => {
                     const articleId = article.id || article._id;
                     if (!articleId) return false;
                     const update = updateData[articleId];
@@ -1758,7 +1769,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                     toast.error("Cannot submit: Some articles have M1 exceeding remaining (Remaining − M2−M3−M4)");
                     return;
                   }
-                  const hasAnyM1 = selectedOrder.articles.some(article => {
+                  const hasAnyM1 = modalArticles.some(article => {
                     const articleId = article.id || article._id;
                     return articleId && (updateData[articleId]?.m1Quantity ?? 0) > 0;
                   });
@@ -1769,7 +1780,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                   setUpdateContainerBarcode("");
                   setUpdateContainerCheckStatus("idle");
                   setUpdateContainerFetched(null);
-                  const first = selectedOrder.articles[0];
+                  const first = modalArticles[0];
                   const firstId = first?.id || first?._id || "";
                   setUpdateContainerArticleId(firstId);
                   setUpdateContainerQuantity(String(updateData[firstId]?.m1Quantity ?? 0));
@@ -1778,7 +1789,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-50"
                 disabled={
-                  selectedOrder.articles.some(article => {
+                  modalArticles.some(article => {
                     const articleId = article.id || article._id;
                     if (!articleId) return false;
                     const update = updateData[articleId];
@@ -1793,10 +1804,13 @@ const SecondaryCheckingFloorSupervisorPage = () => {
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
 
       {/* View Order Modal */}
-      {showViewModal && selectedOrder && (
+      {showViewModal && selectedOrder && (() => {
+        const modalArticles = selectedArticleId ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId) : selectedOrder.articles;
+        return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
@@ -1845,7 +1859,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
               {/* Article Tabs */}
               <div className="mb-4">
                 <div className="flex gap-2 overflow-x-auto pb-2">
-                  {selectedOrder.articles.map((article, idx) => (
+                  {modalArticles.map((article, idx) => (
                     <button
                       key={article.id}
                       className={`px-3 py-2 text-sm font-medium rounded-md whitespace-nowrap focus:outline-none ${
@@ -1864,7 +1878,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
 
               {/* Active Article Details */}
               {(() => {
-                const article = selectedOrder.articles[activeViewTabIndex];
+                const article = modalArticles[activeViewTabIndex];
                 if (!article) return null;
                 
                 const secondaryCheckingFloor = getSecondaryCheckingFloorData(article);
@@ -2000,7 +2014,7 @@ const SecondaryCheckingFloorSupervisorPage = () => {
                         onChange={(e) => handleLogsArticleSelect(e.target.value)}
                       >
                         <option value="">Choose an article...</option>
-                        {selectedOrder.articles.map((article) => {
+                        {modalArticles.map((article) => {
                           const articleId = article._id || article.id;
                           const receivedQty = article.floorQuantities?.secondaryChecking?.received || 0;
                           return (
@@ -2128,7 +2142,8 @@ const SecondaryCheckingFloorSupervisorPage = () => {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Repair Transfer Modal */}
       {showRepairModal && selectedRepairArticle && (
