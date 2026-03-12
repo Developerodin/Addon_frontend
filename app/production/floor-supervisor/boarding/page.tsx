@@ -878,7 +878,8 @@ const BoardingFloorSupervisorPage = () => {
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
 
       {showContainerScanDrawer && (
         <>
@@ -930,8 +931,7 @@ const BoardingFloorSupervisorPage = () => {
             <div className="flex-1 overflow-y-auto p-[10px]">{!activeArticleId && <p className="text-[11px] text-amber-600 mb-2">Scan container and accept article first to assign.</p>}{assignTeamLoading ? <p className="text-[11px] text-gray-500">Loading team...</p> : <ul className="space-y-2">{assignTeamMembers.map((m) => (<li key={m._id} className="flex items-center justify-between gap-2 border border-gray-200 rounded p-2"><span className="text-[12px] font-medium text-gray-900">{m.teamMemberName}</span><button type="button" onClick={() => handleAssignToMember(m)} disabled={!activeArticleId || assigningInProgress} className="px-2 py-1 text-[10px] font-bold rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">Assign</button></li>))}</ul>}</div>
           </div>
         </>
-        );
-      })()}
+      )}
 
       {confirmAssignModal && (
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"><div className="bg-white rounded-lg shadow-xl p-4 max-w-sm w-full"><p className="text-sm text-gray-800 mb-4">Assign active article to <strong>{confirmAssignModal.teamMemberName}</strong>?</p><div className="flex justify-end gap-2"><button type="button" className="px-3 py-1.5 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50" onClick={() => setConfirmAssignModal(null)}>Cancel</button><button type="button" className="px-3 py-1.5 text-[11px] font-bold rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50" onClick={handleConfirmAssign} disabled={assigningInProgress}>{assigningInProgress ? "..." : "Confirm"}</button></div></div></div>

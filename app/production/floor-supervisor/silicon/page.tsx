@@ -1092,7 +1092,8 @@ const SiliconFloorSupervisorPage = () => {
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
 
       {showContainerScanDrawer && (
         <>
@@ -1177,8 +1178,7 @@ const SiliconFloorSupervisorPage = () => {
             </div>
           </div>
         </>
-        );
-      })()}
+      )}
 
       {confirmAssignModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">

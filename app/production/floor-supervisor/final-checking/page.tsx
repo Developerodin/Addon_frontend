@@ -1407,7 +1407,8 @@ const FinalCheckingFloorSupervisorPage = () => {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Update Order – drawer, clear sections & user guidance */}
       {showUpdateModal && selectedOrder && (() => {
