@@ -32,6 +32,8 @@ export interface ProductionOrderItem {
   articleNumber?: string;
   /** Yarn issue status – from API; updated via PATCH .../items/:itemId/yarn-issue-status */
   yarnIssueStatus?: YarnIssueStatusType | string;
+  /** Yarn return status – from API; updated via PATCH .../items/:itemId/yarn-return-status */
+  yarnReturnStatus?: YarnReturnStatusType | string;
 }
 
 export interface MachineOrderAssignment {

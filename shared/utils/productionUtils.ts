@@ -3,6 +3,7 @@ import type { ArticleProcess } from "@/shared/services/productionService";
 import { PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 
 export type FloorType = 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Final Checking' | 'Branding' | 'Warehouse';
+export type LinkingType = 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
 
 /** Normalize floor name for comparison (lowercase, no spaces) */
 const normalizeFloorName = (f: string) => (f ?? "").trim().replace(/\s+/g, "").toLowerCase();
@@ -62,10 +63,12 @@ function findCurrentFloorIndex(canonicalOrder: readonly string[], currentFloor: 
  * so that flow is correct even when API sortOrder is wrong (e.g. Branding → Final Checking
  * before Ready to Dispatch, or Boarding skipping Secondary Checking). Returns the process
  * name for the next floor that exists in the article's processes, or null if current is last.
+ * @param skipLinking - when true, skip Linking floor (for Auto Linking articles leaving Knitting)
  */
 export function getNextFloorFromProcesses(
   processes: ArticleProcess[],
-  currentFloor: string
+  currentFloor: string,
+  skipLinking = false
 ): string | null {
   if (!processes?.length) return null;
   const canonicalOrder = [...PRODUCTION_FLOORS];
@@ -74,6 +77,7 @@ export function getNextFloorFromProcesses(
   // Find first process that maps to a floor after current in canonical order
   for (let i = currentIdx + 1; i < canonicalOrder.length; i++) {
     const targetFloor = canonicalOrder[i];
+    if (skipLinking && normalizeFloorName(targetFloor) === normalizeFloorName("Linking")) continue;
     const matching = processes.find((p) => processMapsToFloor(p.name, targetFloor));
     if (matching) return matching.name;
   }
@@ -99,17 +103,21 @@ export function getArticleMongoId(
 /**
  * Resolve next floor: use process-based next if available, else fallback.
  * Matches result against PRODUCTION_FLOORS for consistency.
+ * @param linkingType - when 'Auto Linking' and currentFloor is Knitting, skips Linking (auto articles go to next floor)
  */
 export function resolveNextFloorFromProcesses(
   processes: ArticleProcess[] | null | undefined,
   currentFloor: string,
-  fallback: string
+  fallback: string,
+  linkingType?: LinkingType
 ): string {
-  const next = processes ? getNextFloorFromProcesses(processes, currentFloor) : null;
+  const skipLinking =
+    linkingType === "Auto Linking" &&
+    normalizeFloorName(currentFloor) === normalizeFloorName("Knitting");
+  const next = processes ? getNextFloorFromProcesses(processes, currentFloor, skipLinking) : null;
   if (!next) return fallback;
   return mapProcessNameToFloor(next);
 }
-export type LinkingType = 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
 
 /**
  * Get the next floor in the production flow based on current floor and linking type

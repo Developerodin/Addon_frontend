@@ -8,6 +8,7 @@ import {
   updateAssignmentItemsPriorities,
   updateAssignmentItemStatus,
   updateAssignmentItemYarnIssueStatus,
+  updateAssignmentItemYarnReturnStatus,
   OrderStatus,
   type MachineOrderAssignment,
   type OrderStatusType,
@@ -66,6 +67,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
   const [savingOrder, setSavingOrder] = useState(false);
   const [updatingStatusItemId, setUpdatingStatusItemId] = useState<string | null>(null);
   const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
+  const [updatingYarnReturnItemId, setUpdatingYarnReturnItemId] = useState<string | null>(null);
   const [yarnMenuOpenItemId, setYarnMenuOpenItemId] = useState<string | null>(null);
 
   const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
@@ -76,15 +78,11 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
     OrderStatus.CANCELLED,
   ];
 
-  /** Only first-priority item can be set to In Progress / Completed; and only when yarn issue is Completed. */
+  /** First-priority item can be set to In Progress / Completed (including when yarn not yet done). Others: Pending, On Hold, Cancelled only. */
   const getStatusOptionsForItem = useCallback(
-    (idx: number, currentStatus?: OrderStatusType, yarnIssueStatus?: string | null): OrderStatusType[] => {
+    (idx: number, currentStatus?: OrderStatusType, _yarnIssueStatus?: string | null): OrderStatusType[] => {
       const restricted = [OrderStatus.PENDING, OrderStatus.ON_HOLD, OrderStatus.CANCELLED];
-      if (idx === 0) {
-        const yarnCompleted = (yarnIssueStatus ?? "") === "Completed";
-        if (!yarnCompleted) return restricted;
-        return ORDER_STATUS_OPTIONS;
-      }
+      if (idx === 0) return ORDER_STATUS_OPTIONS; // First item: full options including Completed
       const current = currentStatus ?? OrderStatus.PENDING;
       if (current === OrderStatus.IN_PROGRESS || current === OrderStatus.COMPLETED) {
         return [current, ...restricted.filter((s) => s !== current)];
@@ -113,21 +111,41 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
     [poDetailsAssignment]
   );
 
-  const handleAskForYarn = useCallback(
-    async (itemId: string) => {
+  const YARN_STATUS_OPTIONS = ["Not Started", "In Progress", "Completed"] as const;
+  const handleYarnStatusChange = useCallback(
+    async (itemId: string, newStatus: string) => {
       if (!poDetailsAssignment?.id || !itemId) return;
       setYarnMenuOpenItemId(null);
       setUpdatingYarnItemId(itemId);
       try {
-        const updated = await updateAssignmentItemYarnIssueStatus(poDetailsAssignment.id, itemId, "In Progress");
+        const updated = await updateAssignmentItemYarnIssueStatus(poDetailsAssignment.id, itemId, newStatus);
         setPoDetailsAssignment(updated);
         setRows((prev) => prev.map((r) => (r.id === poDetailsAssignment.id ? updated : r)));
-        toast.success("Yarn issue status set to In Progress");
+        toast.success(`Yarn status set to ${newStatus}`);
       } catch (e) {
         const message = e instanceof Error ? e.message : "Failed to update yarn issue status";
         alert(message);
       } finally {
         setUpdatingYarnItemId(null);
+      }
+    },
+    [poDetailsAssignment]
+  );
+
+  const handleYarnReturnStatusChange = useCallback(
+    async (itemId: string, newStatus: string) => {
+      if (!poDetailsAssignment?.id || !itemId) return;
+      setUpdatingYarnReturnItemId(itemId);
+      try {
+        const updated = await updateAssignmentItemYarnReturnStatus(poDetailsAssignment.id, itemId, newStatus);
+        setPoDetailsAssignment(updated);
+        setRows((prev) => prev.map((r) => (r.id === poDetailsAssignment.id ? updated : r)));
+        toast.success(`Yarn return status set to ${newStatus}`);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Failed to update yarn return status";
+        alert(message);
+      } finally {
+        setUpdatingYarnReturnItemId(null);
       }
     },
     [poDetailsAssignment]
@@ -227,7 +245,6 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load machine assignments");
       setRows([]);
-      setTotalResults(0);
     } finally {
       setIsLoading(false);
     }
@@ -462,7 +479,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setPoDetailsAssignment(null)} aria-hidden />
           <div
-            className="fixed inset-y-0 right-0 w-full max-w-[380px] shadow-2xl z-50 flex flex-col animate-slide-in-right overflow-hidden bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl border-l border-white/30 dark:border-slate-700/50"
+            className="fixed inset-y-0 right-0 w-full max-w-[520px] shadow-2xl z-50 flex flex-col animate-slide-in-right overflow-hidden bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl border-l border-white/30 dark:border-slate-700/50"
             style={{
               backgroundImage: "radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.15) 1px, transparent 0)",
               backgroundSize: "20px 20px",
@@ -513,6 +530,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                             <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300">Order · Article</th>
                             <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Status</th>
                             <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Yarn</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Yarn Return</th>
                             <th className="px-2 py-1.5 text-center font-semibold text-gray-700 w-6" title="Drag to reorder" />
                           </tr>
                         </thead>
@@ -577,16 +595,39 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                                     <select
                                       value={item.yarnIssueStatus ? String(item.yarnIssueStatus) : ""}
                                       onChange={(e) => {
-                                        if (e.target.value === "ask" && item.itemId) handleAskForYarn(item.itemId);
+                                        const val = e.target.value;
+                                        if (item.itemId && val) handleYarnStatusChange(item.itemId, val);
                                       }}
                                       disabled={!item.itemId || updatingYarnItemId === item.itemId}
-                                      className="bg-white border border-gray-300 px-1.5 py-0.5 rounded text-[10px] w-full max-w-[90px]"
+                                      className="bg-white border border-gray-300 px-1.5 py-0.5 rounded text-[10px] w-full max-w-[100px]"
                                     >
-                                      <option value={item.yarnIssueStatus ? String(item.yarnIssueStatus) : ""}>{item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}</option>
-                                      <option value="ask">Ask for yarn</option>
+                                      <option value="">—</option>
+                                      {YARN_STATUS_OPTIONS.map((opt) => (
+                                        <option key={opt} value={opt}>{opt}</option>
+                                      ))}
                                     </select>
                                   ) : (
                                     <span className="text-gray-600">{item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}</span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 border-r border-gray-300">
+                                  {item.itemId ? (
+                                    <select
+                                      value={item.yarnReturnStatus ? String(item.yarnReturnStatus) : ""}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val) handleYarnReturnStatusChange(item.itemId!, val);
+                                      }}
+                                      disabled={updatingYarnReturnItemId === item.itemId}
+                                      className="bg-white border border-gray-300 px-1.5 py-0.5 rounded text-[10px] w-full min-w-[110px]"
+                                    >
+                                      <option value="">—</option>
+                                      <option value="Pending">Pending</option>
+                                      <option value="In Progress">In Progress</option>
+                                      <option value="Completed">Completed</option>
+                                    </select>
+                                  ) : (
+                                    <span className="text-gray-600">{item.yarnReturnStatus ? String(item.yarnReturnStatus) : "—"}</span>
                                   )}
                                 </td>
                                 <td className="px-2 py-1.5 text-center">

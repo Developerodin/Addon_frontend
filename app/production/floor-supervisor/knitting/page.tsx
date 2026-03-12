@@ -5,7 +5,7 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import TransferModal from "@/shared/components/production/TransferModal";
 import { productionService, ProductionOrder, FloorOrderFilters, type Article } from "@/shared/services/productionService";
-import { getNextFloor, FloorType, getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
+import { getNextFloor, FloorType, getArticleMongoId, resolveNextFloorFromProcesses, type LinkingType } from "@/shared/utils/productionUtils";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import MachineViewTab from "./components/MachineViewTab";
@@ -201,13 +201,19 @@ const KnittingFloorSupervisorPage = () => {
   useEffect(() => {
     if (!showContainerModal || !containerArticleId || !selectedOrder) return;
     setContainerQuantity(String(updateData[containerArticleId]?.completedQuantity ?? 0));
+    const article = selectedOrder.articles.find((a) => a._id === containerArticleId || a.id === containerArticleId);
+    const linkingType = /auto/i.test(String(article?.linkingType ?? ""))
+      ? ("Auto Linking" as const)
+      : /rosso/i.test(String(article?.linkingType ?? ""))
+        ? ("Rosso Linking" as const)
+        : ("Hand Linking" as const);
     const mongoId = getArticleMongoId(containerArticleId, selectedOrder.articles);
     if (!mongoId) return;
     let cancelled = false;
     productionService.getArticleProcesses(mongoId).then((res) => {
       if (cancelled) return;
       if (res.success && res.data?.processes) {
-        const next = resolveNextFloorFromProcesses(res.data.processes, "Knitting", "Linking");
+        const next = resolveNextFloorFromProcesses(res.data.processes, "Knitting", "Linking", linkingType);
         setContainerNextFloor(next);
       }
     }).catch(() => {});
@@ -1352,8 +1358,16 @@ const KnittingFloorSupervisorPage = () => {
                           const firstId = first.id || first._id || '';
                           setContainerArticleId(firstId);
                           setContainerQuantity(String(updateData[firstId]?.completedQuantity ?? 0));
+                          const rawLinking = first?.linkingType ?? '';
+                          const linkingType: LinkingType =
+                            /auto/i.test(String(rawLinking)) ? 'Auto Linking' :
+                            /rosso/i.test(String(rawLinking)) ? 'Rosso Linking' :
+                            'Hand Linking';
+                          const nextFloor = getNextFloor('Knitting' as FloorType, linkingType) ?? 'Linking';
+                          setContainerNextFloor(nextFloor);
+                        } else {
+                          setContainerNextFloor('Linking');
                         }
-                        setContainerNextFloor('Linking');
                         setShowContainerModal(true);
                       }}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
