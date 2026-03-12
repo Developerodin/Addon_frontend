@@ -139,6 +139,34 @@ class YarnConeService {
       body: JSON.stringify(payload),
     });
   }
+
+  /** GET /by-storage-location/:storageLocation - Cones at given coneStorageId (no limit) */
+  async getConesByStorageLocation(coneStorageId: string): Promise<YarnCone[]> {
+    if (!coneStorageId) throw new Error("Storage location (coneStorageId) is required");
+    const data = await this.makeRequest<YarnCone[] | { results?: YarnCone[] }>(
+      `/by-storage-location/${encodeURIComponent(coneStorageId)}`
+    );
+    return Array.isArray(data) ? data : (data.results ?? []);
+  }
+
+  /** GET /without-storage-location - Cones without a storage location */
+  async getConesWithoutStorageLocation(): Promise<YarnCone[]> {
+    const data = await this.makeRequest<YarnCone[] | { results?: YarnCone[] }>(
+      "/without-storage-location"
+    );
+    return Array.isArray(data) ? data : (data.results ?? []);
+  }
+
+  /** PATCH /set-storage-location - Set storage location for cones */
+  async setStorageLocationForCones(
+    coneIds: string[],
+    coneStorageId: string
+  ): Promise<{ message?: string; updatedCount?: number }> {
+    return this.makeRequest("/set-storage-location", {
+      method: "PATCH",
+      body: JSON.stringify({ coneIds, coneStorageId }),
+    });
+  }
 }
 
 const yarnConeService = new YarnConeService();

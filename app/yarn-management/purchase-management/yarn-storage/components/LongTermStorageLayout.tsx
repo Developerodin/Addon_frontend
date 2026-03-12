@@ -8,6 +8,7 @@ import AllocateBoxDrawer from "./AllocateBoxDrawer";
 import BulkAllocateExcelImport from "./BulkAllocateExcelImport";
 import RackDetailsModal from "./RackDetailsModal";
 import RackTransferModal from "./RackTransferModal";
+import ZoneReportDrawer from "./ZoneReportDrawer";
 import { RackLocation, PackedBox } from "../types";
 import storageSlotService, {
   StorageSlot,
@@ -15,6 +16,7 @@ import storageSlotService, {
   BoxInSlot,
   ConeInSlot,
 } from "@/shared/services/storageSlotService";
+import { fetchRackDetailsFromYarnApis } from "../utils/rackDetailsApi";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
 import { printRacks } from "@/shared/utils/qzTray";
@@ -105,6 +107,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
   // Add Racks drawer (right-side)
   const [showAddRacksDrawer, setShowAddRacksDrawer] = useState(false);
+  const [showReportDrawer, setShowReportDrawer] = useState(false);
   const [addRacksForm, setAddRacksForm] = useState({
     storageType: "longterm" as "longterm" | "shortterm",
     sectionCode: "B7-02",
@@ -138,7 +141,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       setIsSearchingByBarcode(true);
       setSearchResultRack(null);
       try {
-        const details = await storageSlotService.getSlotDetailsByBarcode(q);
+        const details = await fetchRackDetailsFromYarnApis(q, "LT", null);
         const slot = details.storageSlot;
         const data = details.type === "boxes" ? (details.data as BoxInSlot[]) : [];
         const rack: RackLocation = {
@@ -524,14 +527,13 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           r.rackCode?.toUpperCase() === rackCodeUpper
       );
 
-      // 2. Fallback: Try fetching rack details from API if not found on current page
+      // 2. Fallback: Fetch from yarn APIs if not found on current page
       if (!rack) {
         try {
-          console.log("[LongTermStorage] Rack not found on current page, fetching from API:", rackCodeUpper);
-          const details = await storageSlotService.getSlotDetailsByBarcode(rackCodeUpper);
+          console.log("[LongTermStorage] Rack not found on current page, fetching from yarn APIs:", rackCodeUpper);
+          const details = await fetchRackDetailsFromYarnApis(rackCodeUpper, "LT", null);
           const slot = details.storageSlot;
           const data = details.type === "boxes" ? (details.data as BoxInSlot[]) : [];
-          // API slots can hold multiple boxes; only block if slot is inactive
           rack = {
             id: slot._id,
             rackCode: slot.label,
@@ -544,7 +546,6 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
             currentBoxes: data.length,
             status: slot.isActive ? "Available" : "Maintenance",
           };
-          // Cache the details for future use
           setRackSlotDetails((prev) => new Map(prev).set(slot._id, details));
         } catch (apiErr) {
           console.error("[LongTermStorage] Failed to find rack via API:", apiErr);
@@ -576,7 +577,12 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       handleStoreBox(selectedBox.id, rack.id);
 
       try {
-        const details = await storageSlotService.getSlotDetailsByBarcode(rack.barcode);
+        const slot = storageSlots.find((s) => s._id === rack.id);
+        const details = await fetchRackDetailsFromYarnApis(
+          rack.barcode ?? rack.rackCode,
+          "LT",
+          slot ?? null
+        );
         setRackSlotDetails((prev) => {
           const newMap = new Map(prev);
           newMap.set(rack.id, details);
@@ -650,11 +656,15 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       setIsLoadingRackDetails(true);
       setIsRackModalOpen(true);
 
-      // Use cached details if available, otherwise fetch
+      // Use cached details if available, otherwise fetch from yarn-boxes/yarn-cones APIs
       let details = rackSlotDetails.get(rack.id);
       if (!details) {
-        details = await storageSlotService.getSlotDetailsByBarcode(rack.barcode);
-        // Cache the details
+        const slot = storageSlots.find((s) => s._id === rack.id);
+        details = await fetchRackDetailsFromYarnApis(
+          rack.barcode ?? rack.rackCode,
+          "LT",
+          slot ?? null
+        );
         setRackSlotDetails((prev) => {
           const newMap = new Map(prev);
           newMap.set(rack.id, details!);
@@ -702,9 +712,13 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       if (racksToRefresh.length > 0) {
         const refreshPromises = racksToRefresh.map(async (rackBarcode) => {
           try {
-            const details = await storageSlotService.getSlotDetailsByBarcode(rackBarcode);
-            // Find the rack ID
             const rack = racks.find((r) => r.barcode === rackBarcode);
+            const slot = rack ? storageSlots.find((s) => s._id === rack.id) : null;
+            const details = await fetchRackDetailsFromYarnApis(
+              rackBarcode,
+              "LT",
+              slot ?? null
+            );
             if (rack) {
               setRackSlotDetails((prev) => {
                 const newMap = new Map(prev);
@@ -712,7 +726,6 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                 return newMap;
               });
 
-              // If rack details modal is open for this rack, update it
               if (isRackModalOpen && rackDetails?.storageSlot?.barcode === rackBarcode) {
                 setRackDetails(details);
               }
@@ -725,9 +738,14 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
       } else {
         // Fallback: refresh all racks if no specific racks provided
         const racksWithBarcodes = racks.filter((rack) => rack.barcode);
-        const refreshPromises = racksWithBarcodes.map(async (rack) => {
+        const         refreshPromises = racksWithBarcodes.map(async (rack) => {
           try {
-            const details = await storageSlotService.getSlotDetailsByBarcode(rack.barcode);
+            const slot = storageSlots.find((s) => s._id === rack.id);
+            const details = await fetchRackDetailsFromYarnApis(
+              rack.barcode ?? rack.rackCode,
+              "LT",
+              slot ?? null
+            );
             setRackSlotDetails((prev) => {
               const newMap = new Map(prev);
               newMap.set(rack.id, details);
@@ -1223,6 +1241,15 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               >
                 <i className="ri-file-excel-2-line me-1 text-green-600"></i>
                 Download Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowReportDrawer(true)}
+                className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+                title="Open zone report"
+              >
+                <i className="ri-file-list-3-line me-1 text-primary"></i>
+                Report
               </button>
               <button
                 type="button"
@@ -1856,6 +1883,14 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
           </div>
         </div>
       )}
+
+      {/* Report drawer (right-side) */}
+      <ZoneReportDrawer
+        isOpen={showReportDrawer}
+        onClose={() => setShowReportDrawer(false)}
+        zoneType="LT"
+        zoneLabel="Long-Term Storage"
+      />
 
       {/* Add Racks drawer (right-side) */}
       {showAddRacksDrawer && (

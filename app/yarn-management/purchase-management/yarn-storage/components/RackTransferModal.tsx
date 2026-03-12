@@ -4,7 +4,8 @@ import { toast } from "react-hot-toast";
 import BarcodeScanner from "./BarcodeScanner";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 import { RackLocation } from "../types";
-import storageSlotService, { BoxInSlot } from "@/shared/services/storageSlotService";
+import { BoxInSlot } from "@/shared/services/storageSlotService";
+import { fetchRackDetailsFromYarnApis } from "../utils/rackDetailsApi";
 
 export type TransferType = "LT_TO_LT" | "ST_TO_ST" | "LT_TO_ST";
 
@@ -102,12 +103,14 @@ const RackTransferModal: React.FC<RackTransferModalProps> = ({
 
       setIsLoadingRackBoxes(true);
       try {
-        const details = await storageSlotService.getSlotDetailsByBarcode(
-          sourceRack.barcode
+        const zoneType = transferType === "ST_TO_ST" ? "ST" : "LT";
+        const details = await fetchRackDetailsFromYarnApis(
+          sourceRack.barcode,
+          zoneType,
+          null
         );
         if (details.type === "boxes") {
-          const boxes = details.data as any[];
-          setRackBoxes(boxes);
+          setRackBoxes(details.data as BoxInSlot[]);
         } else {
           setRackBoxes([]);
         }

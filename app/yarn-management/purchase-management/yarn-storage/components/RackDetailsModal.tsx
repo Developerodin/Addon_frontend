@@ -7,10 +7,14 @@ import {
   ConeInSlot,
   SlotDetailsResponse,
   StorageHistoryResponse,
-  TransferHistoryItem,
 } from "@/shared/services/storageSlotService";
 import storageSlotService from "@/shared/services/storageSlotService";
 import { RackLocation } from "../types";
+import {
+  exportBoxesToExcel,
+  exportConesToExcel,
+} from "../utils/storageReportUtils";
+import StorageReportModal from "./StorageReportModal";
 
 interface RackDetailsModalProps {
   isOpen: boolean;
@@ -42,7 +46,21 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
   const [activeTab, setActiveTab] = useState<"details" | "history">("details");
   const [historyData, setHistoryData] = useState<StorageHistoryResponse | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [reportDropdownOpen, setReportDropdownOpen] = useState(false);
+  const [reportModalView, setReportModalView] = useState<"summary" | "full" | null>(null);
+  const reportDropdownRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Close report dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (reportDropdownRef.current && !reportDropdownRef.current.contains(e.target as Node)) {
+        setReportDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const getRackLocation = (): RackLocation | null => {
     if (!slot) return null;
@@ -57,6 +75,32 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
       currentBoxes: boxes?.length || cones?.length || 0,
       status: slot.isActive ? "Available" : "Maintenance",
     };
+  };
+
+  const handleDownloadExcel = () => {
+    if (!slot) return;
+    setReportDropdownOpen(false);
+    try {
+      if (dataType === "boxes") {
+        exportBoxesToExcel(slot, boxes, zoneType);
+      } else {
+        exportConesToExcel(slot, cones, zoneType);
+      }
+      toast.success("Report downloaded as Excel");
+    } catch (err) {
+      console.error("Excel export failed:", err);
+      toast.error("Failed to download Excel");
+    }
+  };
+
+  const handleViewSummary = () => {
+    setReportDropdownOpen(false);
+    setReportModalView("summary");
+  };
+
+  const handleViewFullReport = () => {
+    setReportDropdownOpen(false);
+    setReportModalView("full");
   };
 
   // Fetch history when History tab is selected
@@ -469,7 +513,44 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
 
           {/* Footer — per UI spec: flex justify-end p-[10px] border-t border-gray-200; primary bg-purple-600 */}
           <div className="p-[10px] border-t border-gray-200 bg-white flex justify-between items-center shrink-0 flex-wrap gap-2">
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
+              {/* Report dropdown */}
+              <div className="relative" ref={reportDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setReportDropdownOpen((o) => !o)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm"
+                >
+                  <i className="ri-file-list-3-line text-xs"></i>
+                  Report
+                  <i className={`ri-arrow-down-s-line text-xs transition-transform ${reportDropdownOpen ? "rotate-180" : ""}`}></i>
+                </button>
+                {reportDropdownOpen && (
+                  <div className="absolute left-0 bottom-full mb-1 w-48 bg-white border border-gray-200 rounded shadow-lg py-1 z-10">
+                    <button
+                      onClick={handleDownloadExcel}
+                      className="w-full px-3 py-2 text-left text-[11px] font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <i className="ri-file-excel-2-line text-green-600"></i>
+                      Download Excel
+                    </button>
+                    <button
+                      onClick={handleViewSummary}
+                      className="w-full px-3 py-2 text-left text-[11px] font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <i className="ri-pie-chart-line text-primary"></i>
+                      View Summary
+                    </button>
+                    <button
+                      onClick={handleViewFullReport}
+                      className="w-full px-3 py-2 text-left text-[11px] font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <i className="ri-file-text-line"></i>
+                      View Full Report
+                    </button>
+                  </div>
+                )}
+              </div>
               {zoneType === "LT" && onTransferLTToLT && (
                 <button
                   onClick={() => {
@@ -512,6 +593,20 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Report modals (Summary / Full Report) */}
+      {reportModalView && (
+        <StorageReportModal
+          isOpen={!!reportModalView}
+          onClose={() => setReportModalView(null)}
+          slot={slot}
+          boxes={dataType === "boxes" ? boxes : undefined}
+          cones={dataType === "cones" ? cones : undefined}
+          dataType={dataType}
+          zoneType={zoneType}
+          view={reportModalView}
+        />
+      )}
     </>
   );
 };

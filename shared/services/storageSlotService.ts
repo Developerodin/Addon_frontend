@@ -22,6 +22,33 @@ export interface StorageSlotsResponse {
   totalResults?: number;
 }
 
+/** Slot with boxes and cones from GET /slots/with-contents */
+export interface SlotWithContents {
+  _id: string;
+  label: string;
+  barcode: string;
+  zoneCode: string;
+  sectionCode?: string;
+  shelfNumber: number;
+  floorNumber: number;
+  boxes: BoxInSlot[];
+  cones: ConeInSlot[];
+  boxCount: number;
+  coneCount: number;
+  zoneType?: string;
+  remainingWeight?: {
+    totalWeight: number;
+    totalNetWeight: number;
+    yarns: Array<{ yarnName?: string; totalWeight?: number }>;
+  };
+}
+
+export interface SlotsWithContentsResponse {
+  results: SlotWithContents[];
+  totalResults: number;
+  zoneCode?: string;
+}
+
 export interface AddRacksResponse {
   sectionCode: string;
   zoneCode: string;
@@ -263,6 +290,33 @@ class StorageSlotService {
     return this.makeRequest<SlotDetailsResponse>(`/slots/barcode/${barcode}`, {
       method: "GET",
     });
+  }
+
+  /**
+   * GET /slots/with-contents - All slots with boxes and cones in one response (no pagination).
+   * Query params: zone (LT, ST), shelf, floor, isActive
+   */
+  async getSlotsWithContents(params?: {
+    zone?: string;
+    shelf?: number;
+    floor?: number;
+    isActive?: boolean;
+  }): Promise<SlotsWithContentsResponse> {
+    const search = new URLSearchParams();
+    if (params?.zone) search.set("zone", params.zone);
+    if (params?.shelf != null) search.set("shelf", String(params.shelf));
+    if (params?.floor != null) search.set("floor", String(params.floor));
+    if (params?.isActive != null) search.set("isActive", String(params.isActive));
+    const query = search.toString();
+    const endpoint = `/slots/with-contents${query ? `?${query}` : ""}`;
+    const data = await this.makeRequest<SlotsWithContentsResponse>(endpoint, {
+      method: "GET",
+    });
+    return {
+      results: data.results ?? [],
+      totalResults: data.totalResults ?? data.results?.length ?? 0,
+      zoneCode: data.zoneCode,
+    };
   }
 
   async getSlotHistory(storageLocation: string): Promise<StorageHistoryResponse> {

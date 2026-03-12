@@ -12,12 +12,14 @@ import storageSlotService, {
   BoxInSlot,
   ConeInSlot,
 } from "@/shared/services/storageSlotService";
+import { fetchRackDetailsFromYarnApis } from "../utils/rackDetailsApi";
 import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
 import { printRacks } from "@/shared/utils/qzTray";
 import BarcodeScanner from "./BarcodeScanner";
 import RackDetailsModal from "./RackDetailsModal";
 import RackTransferModal from "./RackTransferModal";
 import ConeTransferModal from "./ConeTransferModal";
+import ZoneReportDrawer from "./ZoneReportDrawer";
 import {
   ShortTermInventory,
   PackedBox,
@@ -68,6 +70,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   const [showInternalTransferModal, setShowInternalTransferModal] = useState(false);
   const [rackSlotDetails, setRackSlotDetails] = useState<Map<string, SlotDetailsResponse>>(new Map());
   const [loadingSlotDetails, setLoadingSlotDetails] = useState<Set<string>>(new Set());
+  const [showReportDrawer, setShowReportDrawer] = useState(false);
 
   // Search by rack code or barcode (current-page filter + global API lookup, 5s debounce)
   const [rackSearchQuery, setRackSearchQuery] = useState("");
@@ -224,7 +227,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
       setIsSearchingByBarcode(true);
       setSearchResultRack(null);
       try {
-        const details = await storageSlotService.getSlotDetailsByBarcode(q);
+        const details = await fetchRackDetailsFromYarnApis(q, "ST", null);
         const slot = details.storageSlot;
         const data = details.type === "boxes" ? (details.data as BoxInSlot[]) : (details.data as ConeInSlot[]);
         const rack: RackLocation = {
@@ -413,10 +416,14 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     try {
       setIsLoadingRackDetails(true);
       setIsRackModalOpen(true);
-      // Use cache if already fetched, otherwise fetch once on click
       let details = rackSlotDetails.get(rack.id);
       if (!details) {
-        details = await storageSlotService.getSlotDetailsByBarcode(rack.barcode);
+        const slot = storageSlots.find((s) => s._id === rack.id);
+        details = await fetchRackDetailsFromYarnApis(
+          rack.barcode ?? rack.rackCode,
+          "ST",
+          slot ?? null
+        );
         setRackSlotDetails((prev) => new Map(prev).set(rack.id, details!));
       }
       setRackDetails(details);
@@ -451,9 +458,13 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
       if (racksToRefresh.length > 0) {
         const refreshPromises = racksToRefresh.map(async (rackBarcode) => {
           try {
-            const details = await storageSlotService.getSlotDetailsByBarcode(rackBarcode);
-            // Find the rack ID
             const rack = racks.find((r) => r.barcode === rackBarcode);
+            const slot = rack ? storageSlots.find((s) => s._id === rack.id) : null;
+            const details = await fetchRackDetailsFromYarnApis(
+              rackBarcode,
+              "ST",
+              slot ?? null
+            );
             if (rack) {
               setRackSlotDetails((prev) => {
                 const newMap = new Map(prev);
@@ -467,11 +478,15 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         });
         await Promise.all(refreshPromises);
       } else {
-        // If no specific racks provided, refresh all (fallback)
         const racksWithBarcodes = racks.filter((rack) => rack.barcode);
         const refreshPromises = racksWithBarcodes.map(async (rack) => {
           try {
-            const details = await storageSlotService.getSlotDetailsByBarcode(rack.barcode);
+            const slot = storageSlots.find((s) => s._id === rack.id);
+            const details = await fetchRackDetailsFromYarnApis(
+              rack.barcode ?? rack.rackCode,
+              "ST",
+              slot ?? null
+            );
             setRackSlotDetails((prev) => {
               const newMap = new Map(prev);
               newMap.set(rack.id, details);
@@ -1220,6 +1235,15 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
             </button>
             <button
               type="button"
+              onClick={() => setShowReportDrawer(true)}
+              className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+              title="Open zone report"
+            >
+              <i className="ri-file-list-3-line me-1 text-primary"></i>
+              Report
+            </button>
+            <button
+              type="button"
               onClick={() => setShowPrintBarcodeModal(true)}
               className="ti-btn ti-btn-primary text-xs px-3 py-1.5 ml-2"
               title="Print rack barcodes"
@@ -1517,6 +1541,14 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         }}
         availableRacks={racks}
         onTransferComplete={handleTransferComplete}
+      />
+
+      {/* Report drawer */}
+      <ZoneReportDrawer
+        isOpen={showReportDrawer}
+        onClose={() => setShowReportDrawer(false)}
+        zoneType="ST"
+        zoneLabel="Short-Term Storage"
       />
 
       {/* Print Barcode Modal */}

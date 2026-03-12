@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import BarcodeScanner from "./BarcodeScanner";
 import yarnConeService, { YarnCone } from "@/shared/services/yarnConeService";
-import storageSlotService from "@/shared/services/storageSlotService";
+import { fetchRackDetailsFromYarnApis } from "../utils/rackDetailsApi";
 import { RackLocation } from "../types";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import Cookies from "js-cookie";
@@ -97,12 +97,12 @@ const ConeTransferModal: React.FC<ConeTransferModalProps> = ({
         return;
       }
 
-      // Get source rack info
+      // Get source rack info from yarn APIs
       try {
-        const slotDetails = await storageSlotService.getSlotDetailsByBarcode(cone.coneStorageId);
+        const details = await fetchRackDetailsFromYarnApis(cone.coneStorageId, "ST", null);
         setSourceRackInfo({
           barcode: cone.coneStorageId,
-          label: slotDetails.storageSlot?.label || cone.coneStorageId,
+          label: details.storageSlot?.label || cone.coneStorageId,
         });
       } catch (error) {
         console.error("Failed to fetch source rack info:", error);

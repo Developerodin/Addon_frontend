@@ -265,6 +265,34 @@ class YarnBoxService {
     return this.makeRequest<YarnBox>(`/barcode/${barcode}`);
   }
 
+  /** GET /by-storage-location/:storageLocation - Boxes at given storage location (no limit) */
+  async getBoxesByStorageLocation(storageLocation: string): Promise<YarnBox[]> {
+    if (!storageLocation) throw new Error('Storage location is required');
+    const data = await this.makeRequest<YarnBox[] | { results?: YarnBox[] }>(
+      `/by-storage-location/${encodeURIComponent(storageLocation)}`
+    );
+    return Array.isArray(data) ? data : (data.results ?? []);
+  }
+
+  /** GET /without-storage-location - Boxes without a storage location */
+  async getBoxesWithoutStorageLocation(): Promise<YarnBox[]> {
+    const data = await this.makeRequest<YarnBox[] | { results?: YarnBox[] }>(
+      '/without-storage-location'
+    );
+    return Array.isArray(data) ? data : (data.results ?? []);
+  }
+
+  /** PATCH /set-storage-location - Set storage location for boxes */
+  async setStorageLocationForBoxes(
+    boxIds: string[],
+    storageLocation: string
+  ): Promise<{ message?: string; updatedCount?: number }> {
+    return this.makeRequest('/set-storage-location', {
+      method: 'PATCH',
+      body: JSON.stringify({ boxIds, storageLocation }),
+    });
+  }
+
   async updateYarnBox(boxId: string, payload: UpdateYarnBoxPayload): Promise<YarnBox> {
     if (!boxId) {
       throw new Error('Box ID is required');
