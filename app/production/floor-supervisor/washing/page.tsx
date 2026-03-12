@@ -68,6 +68,7 @@ const WashingFloorSupervisorPage = () => {
   const [updateContainerQuantity, setUpdateContainerQuantity] = useState("");
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Boarding");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
+  const [showAllArticles, setShowAllArticles] = useState(false);
 
   // Load washing floor orders from API
   const loadOrders = async () => {
@@ -170,27 +171,19 @@ const WashingFloorSupervisorPage = () => {
     return () => { cancelled = true; };
   }, [showUpdateContainerModal, updateContainerArticleId, selectedOrder?.articles]);
 
-  // Filter orders and articles based on received quantity
-  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
+  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[], showAll: boolean): ProductionOrder[] => {
     return orders.map(order => {
-      // Filter articles that have received quantity > 0
       const filteredArticles = order.articles.filter(article => {
-        const receivedQuantity = article.floorQuantities?.washing?.received || 0;
-        return receivedQuantity > 0;
+        const received = article.floorQuantities?.washing?.received || 0;
+        const transferred = article.floorQuantities?.washing?.transferred || 0;
+        const remaining = article.floorQuantities?.washing?.remaining ?? (received - transferred);
+        return showAll ? received > 0 : remaining > 0;
       });
-      
-      return {
-        ...order,
-        articles: filteredArticles
-      };
-    }).filter(order => {
-      // Only show orders that have at least one article with received quantity > 0
-      return order.articles.length > 0;
-    });
+      return { ...order, articles: filteredArticles };
+    }).filter(order => order.articles.length > 0);
   };
 
-  // Apply filtering to orders
-  const paginatedOrders = filterOrdersByReceivedQuantity(orders);
+  const paginatedOrders = filterOrdersByReceivedQuantity(orders, showAllArticles);
 
   const getWashingFloorData = (article: Article) => ({
     floor: "washing" as const,
@@ -669,28 +662,34 @@ const WashingFloorSupervisorPage = () => {
           </div>
 
           {/* Tabs: Orders | Article view | My Team */}
-          <div className="flex border-b border-gray-300 mb-0">
-            <button
-              type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setActiveTab("orders")}
-            >
-              Orders
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "article-view" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setActiveTab("article-view")}
-            >
-              Article view
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "my-team" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setActiveTab("my-team")}
-            >
-              My Team
-            </button>
+          <div className="flex items-center justify-between border-b border-gray-300 mb-0">
+            <div className="flex">
+              <button
+                type="button"
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setActiveTab("orders")}
+              >
+                Orders
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "article-view" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setActiveTab("article-view")}
+              >
+                Article view
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "my-team" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setActiveTab("my-team")}
+              >
+                My Team
+              </button>
+            </div>
+            <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white cursor-pointer hover:bg-gray-50 mr-2">
+              <input type="checkbox" checked={showAllArticles} onChange={(e) => setShowAllArticles(e.target.checked)} className="rounded border-gray-300" />
+              Show all
+            </label>
           </div>
         </div>
 
@@ -708,6 +707,7 @@ const WashingFloorSupervisorPage = () => {
               activeArticleId={activeArticleId}
               onAssignClick={handleOpenAssignDrawer}
               onScanContainerClick={handleScanContainerClick}
+              showAllArticles={showAllArticles}
             />
           ) : (
             <>

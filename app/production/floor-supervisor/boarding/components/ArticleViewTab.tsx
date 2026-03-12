@@ -9,7 +9,6 @@ export interface ArticleRow {
 }
 
 export interface ArticleViewTabProps {
-  /** Orders already filtered by boarding received > 0. */
   orders: ProductionOrder[];
   onViewOrder: (order: ProductionOrder, article?: Article) => void;
   onUpdateOrder: (order: ProductionOrder, article?: Article) => void;
@@ -18,15 +17,14 @@ export interface ArticleViewTabProps {
   activeArticleId?: string | null;
   onAssignClick?: () => void;
   onScanContainerClick?: () => void;
+  showAllArticles?: boolean;
+  onShowAllArticlesChange?: (show: boolean) => void;
 }
 
 function flattenOrdersToArticles(orders: ProductionOrder[]): ArticleRow[] {
   const rows: ArticleRow[] = [];
   for (const order of orders) {
-    for (const article of order.articles) {
-      const received = (article as any).floorQuantities?.boarding?.received ?? 0;
-      if (received > 0) rows.push({ article, order });
-    }
+    for (const article of order.articles) rows.push({ article, order });
   }
   return rows;
 }
@@ -40,6 +38,8 @@ export default function ArticleViewTab({
   activeArticleId = null,
   onAssignClick,
   onScanContainerClick,
+  showAllArticles = false,
+  onShowAllArticlesChange,
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
   const articleRows = useMemo(() => flattenOrdersToArticles(orders), [orders]);
@@ -80,6 +80,12 @@ export default function ArticleViewTab({
           <button type="button" onClick={onScanContainerClick} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-green-600 text-white hover:bg-green-700 shadow-sm">
             <i className="ri-barcode-line text-xs" /> Scan Container
           </button>
+        )}
+        {onShowAllArticlesChange && (
+          <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" checked={showAllArticles} onChange={(e) => onShowAllArticlesChange(e.target.checked)} className="rounded border-gray-300" />
+            Show all
+          </label>
         )}
         <div className="relative flex-1 min-w-[140px] max-w-[240px]">
           <input type="text" className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-green-300 w-full placeholder:text-gray-400 font-medium" placeholder="Search article, order..." value={articleSearch} onChange={(e) => setArticleSearch(e.target.value)} />

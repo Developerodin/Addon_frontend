@@ -67,6 +67,7 @@ const BoardingFloorSupervisorPage = () => {
   const [updateContainerQuantity, setUpdateContainerQuantity] = useState("");
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Secondary Checking");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
+  const [showAllArticles, setShowAllArticles] = useState(false);
 
   // Load boarding floor orders from API
   const loadOrders = async () => {
@@ -164,27 +165,19 @@ const BoardingFloorSupervisorPage = () => {
     return () => { cancelled = true; };
   }, [showUpdateContainerModal, updateContainerArticleId, selectedOrder?.articles]);
 
-  // Filter orders and articles based on received quantity
-  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
+  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[], showAll: boolean): ProductionOrder[] => {
     return orders.map(order => {
-      // Filter articles that have received quantity > 0
       const filteredArticles = order.articles.filter(article => {
-        const receivedQuantity = article.floorQuantities?.boarding?.received || 0;
-        return receivedQuantity > 0;
+        const received = article.floorQuantities?.boarding?.received || 0;
+        const transferred = article.floorQuantities?.boarding?.transferred || 0;
+        const remaining = article.floorQuantities?.boarding?.remaining ?? (received - transferred);
+        return showAll ? received > 0 : remaining > 0;
       });
-      
-      return {
-        ...order,
-        articles: filteredArticles
-      };
-    }).filter(order => {
-      // Only show orders that have at least one article with received quantity > 0
-      return order.articles.length > 0;
-    });
+      return { ...order, articles: filteredArticles };
+    }).filter(order => order.articles.length > 0);
   };
 
-  // Apply filtering to orders
-  const paginatedOrders = filterOrdersByReceivedQuantity(orders);
+  const paginatedOrders = filterOrdersByReceivedQuantity(orders, showAllArticles);
 
   const getBoardingFloorData = (article: Article) => ({ floor: "boarding" as const, data: article.floorQuantities?.boarding });
 
@@ -624,17 +617,23 @@ const BoardingFloorSupervisorPage = () => {
             <div className="bg-yellow-50 border border-yellow-100 rounded p-2 flex items-center justify-between"><span className="text-[10px] font-bold text-yellow-700 uppercase tracking-wide">Pending</span><span className="text-sm font-bold text-yellow-900">{orders.filter(o => o.status === 'Pending').length}</span></div>
             <div className="bg-red-50 border border-red-100 rounded p-2 flex items-center justify-between"><span className="text-[10px] font-bold text-red-700 uppercase tracking-wide">On Hold</span><span className="text-sm font-bold text-red-900">{orders.filter(o => o.status === 'On Hold').length}</span></div>
           </div>
-          <div className="flex border-b border-gray-300 mb-0">
-            <button type="button" className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-green-600 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"}`} onClick={() => setActiveTab("orders")}>Orders</button>
-            <button type="button" className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "article-view" ? "border-green-600 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"}`} onClick={() => setActiveTab("article-view")}>Article view</button>
-            <button type="button" className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "my-team" ? "border-green-600 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"}`} onClick={() => setActiveTab("my-team")}>My Team</button>
+          <div className="flex items-center justify-between border-b border-gray-300 mb-0">
+            <div className="flex">
+              <button type="button" className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-green-600 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"}`} onClick={() => setActiveTab("orders")}>Orders</button>
+              <button type="button" className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "article-view" ? "border-green-600 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"}`} onClick={() => setActiveTab("article-view")}>Article view</button>
+              <button type="button" className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "my-team" ? "border-green-600 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"}`} onClick={() => setActiveTab("my-team")}>My Team</button>
+            </div>
+            <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white cursor-pointer hover:bg-gray-50 mr-2">
+              <input type="checkbox" checked={showAllArticles} onChange={(e) => setShowAllArticles(e.target.checked)} className="rounded border-gray-300" />
+              Show all
+            </label>
           </div>
         </div>
         <div className="min-h-[300px]">
           {activeTab === "my-team" ? (
             <MyTeamTab />
           ) : activeTab === "article-view" ? (
-            <ArticleViewTab orders={paginatedOrders} onViewOrder={handleViewOrder} onUpdateOrder={handleUpdateOrder} getStatusBadge={getStatusBadge} getPriorityBadge={getPriorityBadge} activeArticleId={activeArticleId} onAssignClick={handleOpenAssignDrawer} onScanContainerClick={handleScanContainerClick} />
+            <ArticleViewTab orders={paginatedOrders} onViewOrder={handleViewOrder} onUpdateOrder={handleUpdateOrder} getStatusBadge={getStatusBadge} getPriorityBadge={getPriorityBadge} activeArticleId={activeArticleId} onAssignClick={handleOpenAssignDrawer} onScanContainerClick={handleScanContainerClick} showAllArticles={showAllArticles} />
           ) : (
             <>
           <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-300">

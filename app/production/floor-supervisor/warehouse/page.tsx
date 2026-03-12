@@ -78,6 +78,7 @@ const WarehouseFloorSupervisorPage = () => {
   const [logsLoading, setLogsLoading] = useState(false);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  const [showAllArticles, setShowAllArticles] = useState(false);
 
   // Load warehouse floor orders from API
   const loadOrders = async () => {
@@ -119,27 +120,19 @@ const WarehouseFloorSupervisorPage = () => {
     return () => clearTimeout(timeoutId);
   }, [currentPage, itemsPerPage, filters, searchQuery]);
 
-  // Filter orders and articles based on received quantity
-  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
+  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[], showAll: boolean): ProductionOrder[] => {
     return orders.map(order => {
-      // Filter articles that have received quantity > 0
       const filteredArticles = order.articles.filter(article => {
-        const receivedQuantity = article.floorQuantities?.warehouse?.received || 0;
-        return receivedQuantity > 0;
+        const received = article.floorQuantities?.warehouse?.received || 0;
+        const transferred = article.floorQuantities?.warehouse?.transferred || 0;
+        const remaining = article.floorQuantities?.warehouse?.remaining ?? (received - transferred);
+        return showAll ? received > 0 : remaining > 0;
       });
-      
-      return {
-        ...order,
-        articles: filteredArticles
-      };
-    }).filter(order => {
-      // Only show orders that have at least one article with received quantity > 0
-      return order.articles.length > 0;
-    });
+      return { ...order, articles: filteredArticles };
+    }).filter(order => order.articles.length > 0);
   };
 
-  // Apply filtering to orders
-  const paginatedOrders = filterOrdersByReceivedQuantity(orders);
+  const paginatedOrders = filterOrdersByReceivedQuantity(orders, showAllArticles);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -511,6 +504,10 @@ const WarehouseFloorSupervisorPage = () => {
                 <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                   {/* Filter Toggle and Actions */}
                   <div className="flex items-center gap-3 flex-shrink-0 order-2 sm:order-1">
+                    <label className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded cursor-pointer hover:bg-gray-50 ti-btn-secondary">
+                      <input type="checkbox" checked={showAllArticles} onChange={(e) => setShowAllArticles(e.target.checked)} className="rounded border-gray-300" />
+                      Show all
+                    </label>
                     <button
                       type="button"
                       className={`ti-btn ${showFilters ? 'ti-btn-primary' : 'ti-btn-secondary'}`}

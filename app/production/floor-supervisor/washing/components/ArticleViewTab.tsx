@@ -9,28 +9,22 @@ export interface ArticleRow {
 }
 
 export interface ArticleViewTabProps {
-  /** Orders already filtered by washing received > 0. */
   orders: ProductionOrder[];
   onViewOrder: (order: ProductionOrder, article?: Article) => void;
   onUpdateOrder: (order: ProductionOrder, article?: Article) => void;
   getStatusBadge: (status: string) => string;
   getPriorityBadge: (priority: string) => string;
-  /** Article id that was accepted via container scan – row gets blue border and Assign button. */
   activeArticleId?: string | null;
   onAssignClick?: () => void;
   onScanContainerClick?: () => void;
+  showAllArticles?: boolean;
+  onShowAllArticlesChange?: (show: boolean) => void;
 }
 
-/** Flattens orders into one row per article for washing floor (washing received > 0). */
 function flattenOrdersToArticles(orders: ProductionOrder[]): ArticleRow[] {
   const rows: ArticleRow[] = [];
   for (const order of orders) {
-    for (const article of order.articles) {
-      const received = (article as any).floorQuantities?.washing?.received ?? 0;
-      if (received > 0) {
-        rows.push({ article, order });
-      }
-    }
+    for (const article of order.articles) rows.push({ article, order });
   }
   return rows;
 }
@@ -44,6 +38,8 @@ export default function ArticleViewTab({
   activeArticleId = null,
   onAssignClick,
   onScanContainerClick,
+  showAllArticles = false,
+  onShowAllArticlesChange,
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
 
@@ -74,6 +70,12 @@ export default function ArticleViewTab({
               Scan Container
             </button>
           )}
+          {onShowAllArticlesChange && (
+            <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white hover:bg-gray-50 cursor-pointer">
+              <input type="checkbox" checked={showAllArticles} onChange={(e) => onShowAllArticlesChange(e.target.checked)} className="rounded border-gray-300" />
+              Show all
+            </label>
+          )}
         </div>
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
@@ -98,6 +100,12 @@ export default function ArticleViewTab({
             <i className="ri-barcode-line text-xs" />
             Scan Container
           </button>
+        )}
+        {onShowAllArticlesChange && (
+          <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" checked={showAllArticles} onChange={(e) => onShowAllArticlesChange(e.target.checked)} className="rounded border-gray-300" />
+            Show all
+          </label>
         )}
         <div className="relative flex-1 min-w-[140px] max-w-[240px]">
           <input

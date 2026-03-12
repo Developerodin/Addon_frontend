@@ -75,6 +75,9 @@ const LinkingFloorSupervisorPage = () => {
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Checking");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
 
+  /** When false (default): show only articles with remaining > 0. When true: show all with received > 0. */
+  const [showAllArticles, setShowAllArticles] = useState(false);
+
   // Load linking floor orders from API
   const loadOrders = async () => {
     setIsLoading(true);
@@ -176,27 +179,21 @@ const LinkingFloorSupervisorPage = () => {
     return () => { cancelled = true; };
   }, [showUpdateContainerModal, updateContainerArticleId, selectedOrder?.articles]);
 
-  // Filter orders and articles based on received quantity
-  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
+  // Filter orders and articles. Default: only remaining > 0. When showAllArticles: received > 0.
+  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[], showAll: boolean): ProductionOrder[] => {
     return orders.map(order => {
-      // Filter articles that have received quantity > 0
       const filteredArticles = order.articles.filter(article => {
-        const receivedQuantity = article.floorQuantities?.linking?.received || 0;
-        return receivedQuantity > 0;
+        const received = article.floorQuantities?.linking?.received || 0;
+        const transferred = article.floorQuantities?.linking?.transferred || 0;
+        const remaining = article.floorQuantities?.linking?.remaining ?? (received - transferred);
+        if (showAll) return received > 0;
+        return remaining > 0;
       });
-      
-      return {
-        ...order,
-        articles: filteredArticles
-      };
-    }).filter(order => {
-      // Only show orders that have at least one article with received quantity > 0
-      return order.articles.length > 0;
-    });
+      return { ...order, articles: filteredArticles };
+    }).filter(order => order.articles.length > 0);
   };
 
-  // Apply filtering to orders
-  const paginatedOrders = filterOrdersByReceivedQuantity(orders);
+  const paginatedOrders = filterOrdersByReceivedQuantity(orders, showAllArticles);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -722,6 +719,8 @@ const LinkingFloorSupervisorPage = () => {
               activeArticleId={activeArticleId}
               onAssignClick={handleOpenAssignDrawer}
               onScanContainerClick={handleScanContainerClick}
+              showAllArticles={showAllArticles}
+              onShowAllArticlesChange={setShowAllArticles}
             />
           ) : (
             <>

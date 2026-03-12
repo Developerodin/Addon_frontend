@@ -9,7 +9,7 @@ export interface ArticleRow {
 }
 
 export interface ArticleViewTabProps {
-  /** Orders already filtered by linking received > 0. */
+  /** Orders already filtered by parent (remaining > 0 or received > 0 based on showAllArticles). */
   orders: ProductionOrder[];
   onViewOrder: (order: ProductionOrder, article?: Article) => void;
   onUpdateOrder: (order: ProductionOrder, article?: Article) => void;
@@ -21,17 +21,17 @@ export interface ArticleViewTabProps {
   onAssignClick?: () => void;
   /** Called when user clicks Scan Container. */
   onScanContainerClick?: () => void;
+  /** When true, show all articles with received > 0. When false, only remaining > 0. */
+  showAllArticles?: boolean;
+  onShowAllArticlesChange?: (show: boolean) => void;
 }
 
-/** Flattens orders into one row per article for linking floor (linking received > 0). */
+/** Flattens orders into rows. Parent already filtered articles. */
 function flattenOrdersToArticles(orders: ProductionOrder[]): ArticleRow[] {
   const rows: ArticleRow[] = [];
   for (const order of orders) {
     for (const article of order.articles) {
-      const received = article.floorQuantities?.linking?.received ?? 0;
-      if (received > 0) {
-        rows.push({ article, order });
-      }
+      rows.push({ article, order });
     }
   }
   return rows;
@@ -46,6 +46,8 @@ export default function ArticleViewTab({
   activeArticleId = null,
   onAssignClick,
   onScanContainerClick,
+  showAllArticles = false,
+  onShowAllArticlesChange,
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
 
@@ -100,6 +102,17 @@ export default function ArticleViewTab({
             <i className="ri-barcode-line text-xs" />
             Scan Container
           </button>
+        )}
+        {onShowAllArticlesChange && (
+          <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white hover:bg-gray-50 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showAllArticles}
+              onChange={(e) => onShowAllArticlesChange(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Show all
+          </label>
         )}
         <div className="relative flex-1 min-w-[140px] max-w-[240px]">
           <input
