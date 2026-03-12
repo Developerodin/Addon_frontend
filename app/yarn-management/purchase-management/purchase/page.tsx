@@ -1268,7 +1268,7 @@ const PurchasePage = () => {
                               onClick={() => handleStatusUpdate(order.id, 'in transit')}
                               className="h-7 px-2 text-[9px] font-bold bg-white text-purple-600 border border-purple-200 rounded hover:bg-purple-50 transition-colors uppercase shadow-sm"
                             >
-                              Dispatch
+                              Mark in Transit
                             </button>
                           )}
                         </div>
