@@ -189,6 +189,30 @@ function machineLabel(a: MachineOrderAssignmentTopItems): string {
   return typeof m === "string" ? m : "—";
 }
 
+/** Extract order ID from tx - handles populated object { _id, orderNumber } or string. */
+const txOrderId = (tx: any): string | undefined => {
+  const o = tx.orderId ?? tx.order;
+  if (!o) return undefined;
+  if (typeof o === "string") return o;
+  return (o as any)._id ?? (o as any).id ?? undefined;
+};
+
+/** Get display order number from tx - handles orderno or populated orderId. */
+const txOrderno = (tx: any): string | undefined => {
+  if (tx.orderno) return tx.orderno;
+  const o = tx.orderId ?? tx.order;
+  if (typeof o === "string") return undefined;
+  return (o as any)?.orderNumber;
+};
+
+/** Extract article ID from tx - handles populated object or string. */
+const txArticleId = (tx: any): string | undefined => {
+  const a = tx.articleId ?? tx.article;
+  if (!a) return undefined;
+  if (typeof a === "string") return a;
+  return (a as any)._id ?? (a as any).id ?? undefined;
+};
+
 // Helper function to extract transactions from nested API response structure
 const extractTransactions = (data: any): any[] => {
   if (!data) return [];
@@ -372,14 +396,12 @@ const YarnReturnPage = () => {
       }
 
       // Filter by orderId: API returns all tx for orderno, but multiple production orders can share same orderno
-      const txOrderId = (tx: any) =>
-        tx.orderId ?? tx.order?._id ?? tx.order?.id ?? (typeof tx.order === "string" ? tx.order : undefined);
       issuedTransactions = issuedTransactions.filter((tx: any) => {
         const oid = txOrderId(tx);
         return !oid || String(oid) === String(orderId);
       });
       returnedTransactions = returnedTransactions.filter((tx: any) => {
-        const oid = tx.orderId ?? tx.order?._id ?? tx.order?.id ?? (typeof tx.order === "string" ? tx.order : undefined);
+        const oid = txOrderId(tx);
         return !oid || String(oid) === String(orderId);
       });
 
@@ -400,7 +422,7 @@ const YarnReturnPage = () => {
         if (tx.transactionType !== "yarn_issued") return;
         const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
         const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
-        const articleId = tx.articleId ?? tx.article?._id ?? tx.article?.id ?? (typeof tx.article === "string" ? tx.article : undefined);
+        const articleId = txArticleId(tx);
         const coneIds = Array.isArray(tx.conesIdsArray) && tx.conesIdsArray.length > 0
           ? tx.conesIdsArray
           : [tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`];
@@ -644,7 +666,7 @@ const YarnReturnPage = () => {
 
       // Get return transactions for this order (same order number)
       const orderReturnTransactions = returnTransactions.filter(
-        (tx) => tx.orderno === order.orderNumber
+        (tx) => (txOrderno(tx) ?? tx.orderno) === order.orderNumber || txOrderId(tx) === order.id
       );
 
       if (orderReturnTransactions.length === 0) {
@@ -736,7 +758,7 @@ const YarnReturnPage = () => {
       pendingOrders.reduce((sum, order) => {
         // Get return transactions for this order
         const orderReturnTransactions = returnTransactions.filter(
-          (tx) => tx.orderno === order.orderNumber
+          (tx) => (txOrderno(tx) ?? tx.orderno) === order.orderNumber || txOrderId(tx) === order.id
         );
         
         // Count total cones returned from return transactions (from history)
@@ -785,7 +807,7 @@ const YarnReturnPage = () => {
 
       // Get return transactions for this order
       const orderReturnTransactions = returnTransactions.filter(
-        (tx) => tx.orderno === order.orderNumber
+        (tx) => (txOrderno(tx) ?? tx.orderno) === order.orderNumber || txOrderId(tx) === order.id
       );
 
       if (orderReturnTransactions.length === 0) {
@@ -824,7 +846,7 @@ const YarnReturnPage = () => {
         // Filter by order number or yarn name
         if (
           historySearchTerm &&
-          !(transaction.orderno ?? "")
+          !(txOrderno(transaction) ?? transaction.orderno ?? "")
             .toLowerCase()
             .includes(historySearchTerm.toLowerCase()) &&
           !(transaction.yarnName ?? "")
@@ -1710,6 +1732,8 @@ const YarnReturnPage = () => {
           totalNetWeight: weightPerCone,
           numberOfCones: 1,
           orderno: selectedOrder.orderNumber,
+          orderId: selectedOrder.id,
+          conesIdsArray: [String(cone.id).replace(/-\d+$/, "") || cone.id],
         };
 
         const response = await fetch(`${API_BASE_URL}/yarn-management/yarn-transactions`, {
@@ -1725,6 +1749,8 @@ const YarnReturnPage = () => {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.message || `Failed to create return transaction for ${barcode}`);
         }
+
+        const createdTx = await response.json().catch(() => null);
 
         // Update cone return status after successful transaction
         const coneId = coneDataFromMap?._id || coneDataFromMap?.id;
@@ -1791,11 +1817,21 @@ const YarnReturnPage = () => {
           // Continue even if status update fails, but log the error
         }
 
-        return { barcode, cone, coneId, weightPerCone };
+        return { barcode, cone, coneId, weightPerCone, createdTx };
       });
 
       // Wait for all transactions to complete
       const results = await Promise.all(transactionPromises);
+
+      // Add created return transactions to history immediately
+      const createdTxs = results.map((r) => r.createdTx).filter(Boolean);
+      if (createdTxs.length > 0) {
+        const normalized = createdTxs.map((tx: any) => ({
+          ...tx,
+          orderno: tx.orderno ?? tx.orderId?.orderNumber ?? (typeof tx.orderId === "object" ? (tx.orderId as any)?.orderNumber : undefined),
+        })) as ReturnTransaction[];
+        setReturnTransactions((prev) => [...prev, ...normalized]);
+      }
 
       // Update local state for all returned cones
       const updatedOrders = orders.map((order) => {
@@ -1959,53 +1995,53 @@ const YarnReturnPage = () => {
               console.warn("Could not fetch returned transactions:", err);
             }
 
-            // Update cones with latest data
+            // Update cones with latest data (same logic as fetchOrderWithCones - use conesIdsArray)
             const conesMap = new Map<string, Cone>();
+            const coneIdToTxIds = new Map<string, string[]>();
             issuedTransactions.forEach((tx: any) => {
-              if (tx.transactionType === "yarn_issued") {
-                // Use coneBarcode if available, otherwise use transaction ID
-                const coneBarcode = tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`;
-                const coneId = coneBarcode;
-                
-                // Find matching returned transaction (match by coneBarcode or transaction ID)
+              if (tx.transactionType !== "yarn_issued") return;
+              const txId = tx._id || tx.id;
+              const coneIds = Array.isArray(tx.conesIdsArray) && tx.conesIdsArray.length > 0
+                ? tx.conesIdsArray
+                : [tx.coneBarcode || tx.barcode || `TX-${txId}`];
+              coneIds.forEach((cid: string) => {
+                if (!coneIdToTxIds.has(cid)) coneIdToTxIds.set(cid, []);
+                coneIdToTxIds.get(cid)!.push(txId);
+              });
+            });
+            issuedTransactions.forEach((tx: any) => {
+              if (tx.transactionType !== "yarn_issued") return;
+              const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
+              const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
+              const articleId = txArticleId(tx);
+              const coneIds = Array.isArray(tx.conesIdsArray) && tx.conesIdsArray.length > 0
+                ? tx.conesIdsArray
+                : [tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`];
+              coneIds.forEach((coneId: string, idx: number) => {
+                if (conesMap.has(coneId)) return;
+                const txIdsForCone = coneIdToTxIds.get(coneId) || [];
                 const returnedTx = returnedTransactions.find(
-                  (rt: any) => {
-                    if (tx.coneBarcode && rt.coneBarcode) {
-                      return rt.coneBarcode === tx.coneBarcode && rt.transactionType === "yarn_returned";
-                    }
-                    // If no coneBarcode, match by issued transaction ID
-                    return rt.issuedTransactionId === (tx._id || tx.id) && rt.transactionType === "yarn_returned";
-                  }
+                  (rt: any) =>
+                    (rt.conesIdsArray?.includes?.(coneId) || rt.coneBarcode === coneId || txIdsForCone.includes(rt.issuedTransactionId)) &&
+                    rt.transactionType === "yarn_returned"
                 );
-
-                // Handle multiple cones in one transaction
-                const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
-                const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
-
-                for (let i = 0; i < numberOfCones; i++) {
-                  const coneIndex = numberOfCones > 1 ? i + 1 : 0;
-                  const uniqueConeId = numberOfCones > 1 ? `${coneId}-${coneIndex}` : coneId;
-                  const uniqueBarcode = numberOfCones > 1 ? `${coneBarcode}-${coneIndex}` : coneBarcode;
-
-                  conesMap.set(uniqueConeId, {
-                    id: uniqueConeId,
-                    barcode: uniqueBarcode,
-                    yarnCode: tx.yarn?.id || tx.yarn || "N/A",
-                    yarnName: tx.yarnName || "Unknown Yarn",
-                    yarnType: tx.yarn?.yarnType?.name || "Unknown",
-                    issuedWeight: weightPerCone,
-                    returnedWeight: returnedTx ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones : undefined,
-                    balanceWeight: returnedTx ? Math.max(
-                      weightPerCone - ((returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones),
-                      0
-                    ) : undefined,
-                    status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
-                    lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
-                    transactionId: tx._id || tx.id,
-                    yarnCatalogId: tx.yarn?.id || tx.yarn,
-                  });
-                }
-              }
+                const uniqueConeId = coneIds.length > 1 ? `${coneId}-${idx + 1}` : coneId;
+                conesMap.set(coneId, {
+                  id: uniqueConeId,
+                  barcode: coneId,
+                  yarnCode: tx.yarn?.id || tx.yarn || "N/A",
+                  yarnName: tx.yarnName || "Unknown Yarn",
+                  yarnType: tx.yarn?.yarnType?.name || "Unknown",
+                  issuedWeight: weightPerCone,
+                  returnedWeight: returnedTx ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones : undefined,
+                  balanceWeight: returnedTx ? Math.max(weightPerCone - ((returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones), 0) : undefined,
+                  status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
+                  lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
+                  transactionId: tx._id || tx.id,
+                  yarnCatalogId: tx.yarn?.id || tx.yarn,
+                  articleId,
+                });
+              });
             });
 
             const updatedCones = Array.from(conesMap.values());
@@ -2023,12 +2059,19 @@ const YarnReturnPage = () => {
               })
             );
 
-            // Refresh return transactions for this order
-            const newReturnTransactions = returnedTransactions as ReturnTransaction[];
+            // Refresh return transactions for this order (merge API response with just-created txs in case of race)
+            const fromApi = (returnedTransactions as any[]).map((tx) => ({
+              ...tx,
+              orderno: tx.orderno ?? tx.orderId?.orderNumber ?? (typeof tx.orderId === "object" ? (tx.orderId as any)?.orderNumber : undefined),
+            })) as ReturnTransaction[];
+            const merged = [
+              ...createdTxs.filter((c) => !fromApi.some((f) => f._id === c._id)),
+              ...fromApi,
+            ];
             setReturnTransactions((prev) => {
-              // Remove old transactions for this order and add new ones
-              const filtered = prev.filter(tx => tx.orderno !== selectedOrder.orderNumber);
-              return [...filtered, ...newReturnTransactions];
+              const orderno = selectedOrder.orderNumber;
+              const filtered = prev.filter((tx) => (txOrderno(tx) ?? tx.orderno) !== orderno && txOrderId(tx) !== selectedOrder.id);
+              return [...filtered, ...merged];
             });
           }
         } catch (error) {
@@ -2221,7 +2264,7 @@ const YarnReturnPage = () => {
                     <div className="p-[10px] border-b border-gray-100">
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
                         {filteredArticleRows.map((row) => {
-                          const orderReturnTransactions = returnTransactions.filter((tx) => tx.orderno === row.orderNumber);
+                          const orderReturnTransactions = returnTransactions.filter((tx) => (txOrderno(tx) ?? tx.orderno) === row.orderNumber || txOrderId(tx) === row.orderId);
                           const totalConesReturnedFromHistory = orderReturnTransactions.reduce((sum, tx) => sum + (tx.transactionConeCount || 1), 0);
                           const totalConesInOrder = row.cones.length;
                           const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
@@ -2307,7 +2350,7 @@ const YarnReturnPage = () => {
                       </thead>
                       <tbody>
                         {pendingArticles.map((row) => {
-                          const orderReturnTransactions = returnTransactions.filter((tx) => tx.orderno === row.orderNumber);
+                          const orderReturnTransactions = returnTransactions.filter((tx) => (txOrderno(tx) ?? tx.orderno) === row.orderNumber || txOrderId(tx) === row.orderId);
                           const totalConesReturnedFromHistory = orderReturnTransactions.reduce((sum, tx) => sum + (tx.transactionConeCount || 1), 0);
                           const totalConesInOrder = row.cones.length;
                           const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
@@ -2422,7 +2465,7 @@ const YarnReturnPage = () => {
                             Cones: {(() => {
                               // Get return transactions for this order from return history
                               const orderReturnTransactions = returnTransactions.filter(
-                                (tx) => tx.orderno === selectedOrder.orderNumber
+                                (tx) => (txOrderno(tx) ?? tx.orderno) === selectedOrder.orderNumber || txOrderId(tx) === selectedOrder.id
                               );
                               
                               // Count total cones returned from return transactions (from history)
@@ -2997,7 +3040,7 @@ const YarnReturnPage = () => {
                     <tbody>
                       {filteredReturnTransactions.map((transaction) => (
                         <tr key={transaction._id} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{transaction.orderno ?? transaction.orderId ?? "-"}</td>
+                          <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{txOrderno(transaction) ?? transaction.orderno ?? transaction.orderId ?? "-"}</td>
                           <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.transactionDate).toLocaleDateString()}</td>
                           <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.yarnName}</td>
                           <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionNetWeight?.toFixed(2) || "0.00"}</td>
