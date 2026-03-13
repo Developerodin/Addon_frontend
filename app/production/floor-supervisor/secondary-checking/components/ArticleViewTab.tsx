@@ -135,7 +135,7 @@ export default function ArticleViewTab({
               const received = sc?.received ?? 0;
               const completed = sc?.m1Quantity ?? (article as any).m1Quantity ?? 0;
               const transferred = sc?.transferred ?? 0;
-              const remaining = sc?.remaining ?? Math.max(0, received - transferred);
+              const remaining = sc?.remaining ?? Math.max(0, received - transferred); // backend sends remaining; fallback for legacy
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
               const isActiveRow = Boolean(activeArticleId && articleId && String(articleId) === String(activeArticleId));

@@ -66,7 +66,7 @@ export default function ArticleDetailBlock({
               </tr>
               <tr>
                 <td className="border border-gray-200 px-1.5 py-0.5 font-medium text-gray-600 bg-gray-100">Checking Rem</td>
-                <td className="border border-gray-200 px-1.5 py-0.5">{check.remaining ?? check.received - (check.transferred ?? 0)}</td>
+                <td className="border border-gray-200 px-1.5 py-0.5">{check.remaining ?? (check.received - (check.transferred ?? 0))}</td>
               </tr>
               {check.m1Quantity != null && (
                 <tr>

@@ -291,19 +291,12 @@ const CheckingFloorSupervisorPage = () => {
     };
   };
 
-  /** Max M1 user can transfer = Remaining − (M2 + M3 + M4) so user cannot enter more than actual remaining. */
+  /** Max M1 user can transfer = remaining (from backend). */
   const getActualRemainingForArticle = (article: Article): number => {
-    const articleId = article.id || article._id;
-    if (!articleId) return 0;
     const cf = getCheckingFloorData(article);
     const received = cf.data?.received || 0;
     const transferred = cf.data?.transferred || 0;
-    const remaining = received - transferred;
-    const update = updateData[articleId];
-    const totalM2 = (update?.m2Quantity ?? 0) + (transferM2M3M4[articleId]?.m2 ?? 0);
-    const totalM3 = (update?.m3Quantity ?? 0) + (transferM2M3M4[articleId]?.m3 ?? 0);
-    const totalM4 = (update?.m4Quantity ?? 0) + (transferM2M3M4[articleId]?.m4 ?? 0);
-    return Math.max(0, remaining - (totalM2 + totalM3 + totalM4));
+    return Math.max(0, cf.data?.remaining ?? (received - transferred));
   };
 
   // Apply filtering to orders
@@ -608,7 +601,7 @@ const CheckingFloorSupervisorPage = () => {
   const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
-    // Validate M1 quantities: cannot exceed actual remaining (Remaining − M2−M3−M4)
+    // Validate M1 quantities: cannot exceed remaining
     const invalidArticles = selectedOrder.articles.filter(article => {
       const articleId = article.id || article._id;
       if (!articleId) return false;
@@ -619,7 +612,7 @@ const CheckingFloorSupervisorPage = () => {
     });
 
     if (invalidArticles.length > 0) {
-      toast.error('Cannot submit: Some articles have M1 exceeding remaining (Remaining − M2−M3−M4)');
+      toast.error('Cannot submit: Some articles have M1 exceeding remaining');
       return;
     }
 
@@ -1540,7 +1533,7 @@ const CheckingFloorSupervisorPage = () => {
                       <td className="border-2 border-gray-300 px-2 py-1">{(article.plannedQuantity || 0).toLocaleString()}</td>
                       <td className="border-2 border-gray-300 px-2 py-1"><ReceivedQuantityDisplay received={checkingFloor.data?.received || 0} repairReceived={checkingFloor.data?.repairReceived} repairFromFloor={checkingFloor.data?.repairFromFloor} className="text-[11px]" /></td>
                       <td className="border-2 border-gray-300 px-2 py-1 text-green-700 font-medium">{checkingFloor.data?.transferred || 0}</td>
-                      <td className="border-2 border-gray-300 px-2 py-1 text-orange-700 font-medium">{(checkingFloor.data?.received || 0) - (checkingFloor.data?.transferred || 0)}</td>
+                      <td className="border-2 border-gray-300 px-2 py-1 text-orange-700 font-medium">{(checkingFloor.data?.remaining ?? ((checkingFloor.data?.received || 0) - (checkingFloor.data?.transferred || 0)))}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1548,32 +1541,22 @@ const CheckingFloorSupervisorPage = () => {
               {(() => {
                 const received = checkingFloor.data?.received || 0;
                 const transferred = checkingFloor.data?.transferred || 0;
-                const remaining = received - transferred;
-                const totalM2 = currentUpdateData.m2Quantity + (transferM2M3M4[articleId]?.m2 ?? 0);
-                const totalM3 = currentUpdateData.m3Quantity + (transferM2M3M4[articleId]?.m3 ?? 0);
-                const totalM4 = currentUpdateData.m4Quantity + (transferM2M3M4[articleId]?.m4 ?? 0);
-                const actualRemainingForTransfer = Math.max(0, remaining - (totalM2 + totalM3 + totalM4));
+                const remaining = Math.max(0, checkingFloor.data?.remaining ?? (received - transferred));
                 return (
-                  <p className="px-3 py-1 text-[10px] text-gray-600 bg-amber-50 border-t border-gray-200">Remaining for M1 transfer = Remaining − (M2+M3+M4) = <strong>{actualRemainingForTransfer}</strong> (max you can enter below).</p>
+                  <p className="px-3 py-1 text-[10px] text-gray-600 bg-amber-50 border-t border-gray-200">Max M1 to transfer = <strong>{remaining}</strong></p>
                 );
               })()}
             </section>
             {/* 4. M1 — quantity to send to next floor */}
             <section className="mb-4 rounded-md border-2 border-green-300 overflow-hidden">
               <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Good quality (M1) — how many to send to next floor?</div>
-              <p className="px-3 py-1 text-[10px] text-gray-600 bg-green-50/50 border-b border-green-200">Only good-quality pieces (M1) go to the next floor. Max = Remaining − (M2+M3+M4). You cannot transfer more than that.</p>
+              <p className="px-3 py-1 text-[10px] text-gray-600 bg-green-50/50 border-b border-green-200">Only good-quality pieces (M1) go to the next floor. Max = Remaining.</p>
               <div className="p-2">
                     <div className="flex flex-wrap items-center gap-3">
                       <div>
                         <label className="text-[10px] font-bold text-green-800 block mb-0.5">Quantity to transfer</label>
                         {(() => {
-                          const received = checkingFloor.data?.received || 0;
-                          const transferred = checkingFloor.data?.transferred || 0;
-                          const remaining = received - transferred;
-                          const totalM2 = currentUpdateData.m2Quantity + (transferM2M3M4[articleId]?.m2 ?? 0);
-                          const totalM3 = currentUpdateData.m3Quantity + (transferM2M3M4[articleId]?.m3 ?? 0);
-                          const totalM4 = currentUpdateData.m4Quantity + (transferM2M3M4[articleId]?.m4 ?? 0);
-                          const actualRemaining = Math.max(0, remaining - (totalM2 + totalM3 + totalM4));
+                          const actualRemaining = getActualRemainingForArticle(article);
                           const isFullyTransferred = actualRemaining <= 0;
                           return (
                             <>
@@ -1791,7 +1774,7 @@ const CheckingFloorSupervisorPage = () => {
                     return update.m1Quantity > actualRemaining;
                   });
                   if (invalid) {
-                    toast.error("Cannot submit: Some articles have M1 quantities exceeding remaining (Remaining − M2−M3−M4)");
+                    toast.error("Cannot submit: Some articles have M1 quantities exceeding remaining");
                     return;
                   }
                   const hasAnyM1 = modalArticles.some(article => {
