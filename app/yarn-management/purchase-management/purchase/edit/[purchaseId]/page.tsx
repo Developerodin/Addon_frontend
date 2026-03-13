@@ -56,6 +56,9 @@ const toDateInputValue = (value?: string): string => {
   return date.toISOString().split("T")[0];
 };
 
+/** True if string is a 24-char hex MongoDB ObjectId. New items have client ids (e.g. timestamp) and must not send _id. */
+const isValidMongoId = (id: string): boolean => /^[a-fA-F0-9]{24}$/.test(id);
+
 const mapApiOrderToFormData = (apiOrder: any): { formData: PurchaseOrderData; orderId: string; poNumber: string } => {
   if (!apiOrder) {
     return {
@@ -495,7 +498,7 @@ const EditPurchasePage = () => {
         };
 
         return {
-          ...(item.id && { _id: String(item.id) }),
+          ...(item.id && isValidMongoId(String(item.id)) && { _id: String(item.id) }),
           yarn: String(item.yarnId),
           yarnName: item.yarnName,
           sizeCount: String(resolveSizeCount()),
