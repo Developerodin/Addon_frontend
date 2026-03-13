@@ -43,6 +43,7 @@ interface Cone {
   transactionId?: string; // ID of the issued transaction
   yarnCatalogId?: string; // Yarn catalog ID for return transaction
   articleId?: string; // Article this cone belongs to (from issued tx)
+  articleNumber?: string; // Article number from issued tx – fallback when articleId missing
 }
 
 interface Article {
@@ -211,6 +212,12 @@ const txArticleId = (tx: any): string | undefined => {
   if (!a) return undefined;
   if (typeof a === "string") return a;
   return (a as any)._id ?? (a as any).id ?? undefined;
+};
+
+/** Extract article number from tx – used when articleId missing or doesn't match. */
+const txArticleNumber = (tx: any): string | undefined => {
+  const n = tx.articleNumber ?? tx.article?.articleNumber;
+  return typeof n === "string" ? n.trim() : undefined;
 };
 
 // Helper function to extract transactions from nested API response structure
@@ -425,6 +432,7 @@ const YarnReturnPage = () => {
         const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
         const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
         const articleId = txArticleId(tx);
+        const articleNumber = txArticleNumber(tx);
         const coneIds = Array.isArray(tx.conesIdsArray) && tx.conesIdsArray.length > 0
           ? tx.conesIdsArray
           : [tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`];
@@ -451,6 +459,7 @@ const YarnReturnPage = () => {
             transactionId: tx._id || tx.id,
             yarnCatalogId: tx.yarn?.id || tx.yarn,
             articleId,
+            articleNumber,
           });
         });
       });
@@ -748,15 +757,29 @@ const YarnReturnPage = () => {
   );
 
   // Build article rows from orders (article-wise display)
+  // Each article row shows only cones belonging to that article (by cone.articleId)
   const articleRows = useMemo(() => {
     const rows: ArticleRow[] = [];
     for (const order of orders) {
       const articles = order.articles?.length ? order.articles : [{ id: order.id, articleNumber: order.orderNumber, plannedQuantity: 0 } as Article];
-      const yarnNames = Array.from(new Set(order.cones.map((c) => c.yarnName).filter(Boolean))).join(", ");
+      const firstArticleId = articles[0] ? (articles[0].id || (articles[0] as any)._id) : undefined;
       for (const art of articles) {
+        const artId = art.id || (art as any)._id;
+        // Filter cones by article: match by articleId first, then articleNumber (fallback when articleId missing/mismatch)
+        let conesForArticle = order.cones.filter((c) => {
+          if (c.articleId && String(c.articleId) === String(artId)) return true;
+          if (c.articleNumber && art.articleNumber && String(c.articleNumber).trim() === String(art.articleNumber).trim()) return true;
+          if (!c.articleId && !c.articleNumber) return artId === firstArticleId; // legacy: no article info → first article
+          return false;
+        });
+        // Fallback: single-article order gets all cones; multi-article with no match stays empty
+        if (conesForArticle.length === 0 && order.cones.length > 0 && articles.length === 1) {
+          conesForArticle = order.cones;
+        }
+        const yarnNames = Array.from(new Set(conesForArticle.map((c) => c.yarnName).filter(Boolean))).join(", ");
         rows.push({
-          rowId: `${art.id}-${order.id}`,
-          articleId: art.id,
+          rowId: `${artId}-${order.id}`,
+          articleId: artId,
           articleNumber: art.articleNumber,
           orderId: order.id,
           orderNumber: order.orderNumber,
@@ -765,7 +788,7 @@ const YarnReturnPage = () => {
           knittingSupervisor: order.knittingSupervisor,
           knittingCompletedAt: order.knittingCompletedAt,
           status: order.status,
-          cones: order.cones,
+          cones: conesForArticle,
           plannedQuantity: art.plannedQuantity ?? 0,
           yarnNames,
         });
@@ -968,13 +991,19 @@ const YarnReturnPage = () => {
     [getAssignmentItemsForOrder]
   );
 
-  /** Check if all cones for a specific article are returned. Uses articleId on cones; when no cones have articleId, uses order-level (1:1 order-article). */
+  /** Check if all cones for a specific article are returned. Matches by articleId or articleNumber. */
   const isArticleAllConesReturned = useCallback(
     (order: ProductionOrder, articleId: string | undefined): boolean => {
-      const hasArticleCones = order.cones.some((c) => c.articleId);
-      const conesForArticle = hasArticleCones
-        ? order.cones.filter((c) => normId(c.articleId) === normId(articleId))
-        : order.cones; // No cones have articleId: assume 1:1 order-article
+      const art = order.articles?.find((a) => normId(a.id ?? (a as any)._id) === normId(articleId));
+      const artNumber = art?.articleNumber?.trim();
+      const hasArticleInfo = order.cones.some((c) => c.articleId || c.articleNumber);
+      const conesForArticle = hasArticleInfo
+        ? order.cones.filter(
+            (c) =>
+              normId(c.articleId) === normId(articleId) ||
+              (artNumber && c.articleNumber && String(c.articleNumber).trim() === artNumber)
+          )
+        : order.cones;
       if (conesForArticle.length === 0) return false;
       return conesForArticle.every((c) => c.status === "Returned");
     },
@@ -2338,10 +2367,7 @@ const YarnReturnPage = () => {
                     <div className="p-[10px] border-b border-gray-100">
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
                         {filteredArticleRows.map((row) => {
-                          const orderReturnTransactions = returnTransactions.filter((tx) => (txOrderno(tx) ?? tx.orderno) === row.orderNumber || txOrderId(tx) === row.orderId);
-                          const totalConesReturnedFromHistory = orderReturnTransactions.reduce((sum, tx) => sum + (tx.transactionConeCount || 1), 0);
-                          const totalConesInOrder = row.cones.length;
-                          const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
+                          const actualPendingCones = row.cones.filter((c) => c.status !== "Returned").length;
                           const isSelected = selectedArticleRowId === row.rowId;
                           return (
                             <button
@@ -2424,10 +2450,7 @@ const YarnReturnPage = () => {
                       </thead>
                       <tbody>
                         {pendingArticles.map((row) => {
-                          const orderReturnTransactions = returnTransactions.filter((tx) => (txOrderno(tx) ?? tx.orderno) === row.orderNumber || txOrderId(tx) === row.orderId);
-                          const totalConesReturnedFromHistory = orderReturnTransactions.reduce((sum, tx) => sum + (tx.transactionConeCount || 1), 0);
-                          const totalConesInOrder = row.cones.length;
-                          const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
+                          const actualPendingCones = row.cones.filter((c) => c.status !== "Returned").length;
                           return (
                             <tr key={row.rowId} className="hover:bg-gray-50/50 transition-colors">
                               <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{row.articleNumber}</td>
@@ -2539,26 +2562,7 @@ const YarnReturnPage = () => {
                             Floor: {selectedOrder.floor}
                           </p>
                           <p className="text-xs text-gray-500">
-                            Cones: {(() => {
-                              // Get return transactions for this order from return history
-                              const orderReturnTransactions = returnTransactions.filter(
-                                (tx) => (txOrderno(tx) ?? tx.orderno) === selectedOrder.orderNumber || txOrderId(tx) === selectedOrder.id
-                              );
-                              
-                              // Count total cones returned from return transactions (from history)
-                              const totalConesReturnedFromHistory = orderReturnTransactions.reduce(
-                                (sum, tx) => sum + (tx.transactionConeCount || 1),
-                                0
-                              );
-                              
-                              // Total cones in the order
-                              const totalConesInOrder = selectedOrder.cones.length;
-                              
-                              // Actual pending cones = total cones - cones returned in history
-                              const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
-                              
-                              return actualPendingCones;
-                            })()} pending
+                            Cones: {(selectedArticleRow ? selectedArticleRow.cones : selectedOrder.cones).filter((c) => c.status !== "Returned").length} pending
                           </p>
                         </div>
                         <span
