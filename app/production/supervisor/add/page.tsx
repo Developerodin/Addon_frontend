@@ -420,6 +420,9 @@ const AddOrderPage = () => {
       if (!artNum) {
         newErrors[`article_${index}_articleNumber`] = 'Article # required';
       }
+      if (article.productId && (!article.bom || article.bom.length === 0)) {
+        newErrors[`article_${index}_bom`] = "Lin BOM is missing for this article or factory code order can't be created for it";
+      }
       if (article.plannedQuantity <= 0) {
         newErrors[`article_${index}_quantity`] = 'Qty must be > 0';
       } else if (article.plannedQuantity > 100000) {
@@ -430,6 +433,11 @@ const AddOrderPage = () => {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
+  /** True if any article has factory code but no BOM — disables Create Order */
+  const hasArticleWithoutBOM = formData.articles.some(
+    (a) => a.productId && (!a.bom || a.bom.length === 0)
+  );
 
   // No order-level inputs; all editing happens within articles
 
@@ -807,7 +815,7 @@ const AddOrderPage = () => {
                                 <input
                                   type="text"
                                   readOnly
-                                  className={`form-control form-control-sm flex-1 text-xs py-1 px-2 h-8 bg-gray-50 cursor-pointer ${errors[`article_${index}_articleNumber`] ? 'border-red-500' : ''}`}
+                                  className={`form-control form-control-sm flex-1 text-xs py-1 px-2 h-8 bg-gray-50 cursor-pointer ${errors[`article_${index}_articleNumber`] || (article.productId && (!article.bom || article.bom.length === 0)) ? 'border-red-500 ring-1 ring-red-500' : ''}`}
                                   value={article.articleNumber}
                                   onClick={() => openProductModal(index)}
                                   placeholder="Click search to select article"
@@ -828,6 +836,9 @@ const AddOrderPage = () => {
                               )}
                               {errors[`article_${index}_articleNumber`] && (
                                 <div className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_articleNumber`]}</div>
+                              )}
+                              {article.productId && (!article.bom || article.bom.length === 0) && (
+                                <div className="text-red-600 text-[10px] mt-0.5">Lin BOM is missing for this article or factory code order can&apos;t be created for it</div>
                               )}
                             </td>
                             <td className="px-2 py-2">
@@ -1026,7 +1037,8 @@ const AddOrderPage = () => {
                     <button
                       type="submit"
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-60"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || hasArticleWithoutBOM}
+                      title={hasArticleWithoutBOM ? "Lin BOM is missing for one or more articles" : undefined}
                     >
                       {isSubmitting ? (
                         <>

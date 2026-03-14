@@ -663,7 +663,6 @@ const YarnIssuePage = () => {
       }
 
       if (!product || !product.bom || !Array.isArray(product.bom) || product.bom.length === 0) {
-        console.error("Product not found or no BOM for article:", articleNumber);
         return null;
       }
 
@@ -730,8 +729,8 @@ const YarnIssuePage = () => {
         return;
       }
 
-      // Already loaded BOM for this order (e.g. after setOrders in this same effect) – avoid refetch loop
-      if (selectedOrder.articleBoms && selectedOrder.articleBoms.size > 0) {
+      // Already attempted BOM fetch for this order (including empty = no BOM) – avoid refetch loop
+      if (selectedOrder.articleBoms !== undefined) {
         return;
       }
 
@@ -756,14 +755,14 @@ const YarnIssuePage = () => {
             if (!firstStyleCode) {
               firstStyleCode = result.styleCode;
             }
+          } else {
+            articleBoms.set(article.id, []); // Mark as "no BOM" to avoid re-fetch and show empty state
           }
           
           return { articleId: article.id, result };
         });
 
         await Promise.all(fetchPromises);
-
-        console.log("All article BOMs fetched:", articleBoms.size);
 
         // Combine all BOMs for "All" view WITHOUT aggregation
         const allBoms: YarnRequirement[] = [];
@@ -788,14 +787,12 @@ const YarnIssuePage = () => {
               ? allBoms 
               : articleBoms.get(selectedArticleId) || allBoms;
             
-            const updatedOrder = {
+            return {
               ...order,
               styleCode: firstStyleCode || order.styleCode,
               bom: currentBom,
               articleBoms,
             };
-            console.log("Updated order with all BOMs:", updatedOrder);
-            return updatedOrder;
           });
           
           return updated;
@@ -1664,7 +1661,7 @@ const YarnIssuePage = () => {
                         {sortedRequirements.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-12 text-center">
                             <i className="ri-stack-line text-4xl text-gray-300 mb-2"></i>
-                            <p className="text-[11px] text-gray-500">No yarn requisition in BOM for this article.</p>
+                            <p className="text-[11px] text-gray-500">No BOM for this article.</p>
                           </div>
                         ) : (
                           <table className="w-full border-collapse border border-gray-200">
@@ -1759,7 +1756,7 @@ const YarnIssuePage = () => {
                     {sortedRequirements.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-center">
                         <i className="ri-stack-line text-4xl text-gray-300 mb-2"></i>
-                        <p className="text-[11px] text-gray-500">No yarn requisition in BOM for any article.</p>
+                        <p className="text-[11px] text-gray-500">No BOM for any article.</p>
                       </div>
                     ) : (
                       <table className="w-full border-collapse border border-gray-200">
