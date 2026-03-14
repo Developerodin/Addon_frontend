@@ -2271,11 +2271,11 @@ const YarnReturnPage = () => {
         } catch (error) {
           console.error("Error refreshing return transactions:", error);
         }
-      }
 
-      // Finally, reload the page so that all data and UI are fully refreshed
-      if (typeof window !== "undefined") {
-        window.location.reload();
+        // Reload orders and return transactions from API so pending counts (Orders Awaiting, Cones Pending, etc.) are correct
+        if (selectedMachineAssignment) {
+          await loadOrdersForMachine(selectedMachineAssignment);
+        }
       }
     } catch (error) {
       console.error("Error creating return transaction:", error);
