@@ -168,9 +168,6 @@ const FullInventoryView: React.FC<FullInventoryViewProps> = ({
                       </div>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                      Cones (Long-term)
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
                       Cones (Short-term)
                     </th>
                     <th
@@ -191,11 +188,8 @@ const FullInventoryView: React.FC<FullInventoryViewProps> = ({
                         <SortIcon field="availableQty" />
                       </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                      Status
-                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
-                      Supplier
+                      Status
                     </th>
                   </tr>
                 </thead>
@@ -217,9 +211,6 @@ const FullInventoryView: React.FC<FullInventoryViewProps> = ({
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                         {item.weight.toLocaleString()} kg
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                        {item.conesLongTerm}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                         {item.conesShortTerm}
@@ -247,9 +238,6 @@ const FullInventoryView: React.FC<FullInventoryViewProps> = ({
                         >
                           {item.status}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 border-b border-gray-300">
-                        {item.supplier}
                       </td>
                     </tr>
                   ))}
