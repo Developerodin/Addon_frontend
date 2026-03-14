@@ -352,12 +352,16 @@ const YarnReturnPage = () => {
 
       const w = await fetchWeightLatest();
       if (cancelled || w == null || w <= 0) return;
+      // Use three decimal places from scale without rounding (truncate)
       setTransactionForm((prev) => {
         const tear = parseFloat(prev.totalTearWeight) || 0;
+        const truncatedWeight = Math.trunc(w * 1000) / 1000;
+        const net = Math.max(0, truncatedWeight - tear);
+        const truncatedNet = Math.trunc(net * 1000) / 1000;
         return {
           ...prev,
-          totalWeight: w.toFixed(2),
-          totalNetWeight: (w - tear).toFixed(2),
+          totalWeight: truncatedWeight.toFixed(3),
+          totalNetWeight: truncatedNet.toFixed(3),
         };
       });
     })();
@@ -1391,8 +1395,74 @@ const YarnReturnPage = () => {
         coneDetails,
         selectedOrderNumber: selectedOrder.orderNumber,
         orderConesCount: selectedOrder.cones.length,
-        orderConesBarcodes: selectedOrder.cones.map(c => c.barcode),
+        orderConesBarcodes: selectedOrder.cones.map((c) => c.barcode),
       });
+
+      // ORDER + ARTICLE VALIDATION (from cone / transaction side):
+      // If cone is issued for a different order/article, block it even if yarnName is same.
+      const normalizeId = (id: any): string =>
+        String(
+          typeof id === "object" && id !== null
+            ? id._id || id.id || ""
+            : id ?? ""
+        ).trim();
+
+      // 1) Order check
+      if (coneDetails.orderId) {
+        const coneOrderId = normalizeId(coneDetails.orderId);
+        const currentOrderId = normalizeId(selectedOrder.id);
+
+        console.log("🔎 Order validation:", {
+          coneOrderId,
+          currentOrderId,
+        });
+
+        if (coneOrderId && currentOrderId && coneOrderId !== currentOrderId) {
+          console.log("🔎 Order mismatch detected, blocking cone scan.", {
+            coneOrderId,
+            currentOrderId,
+          });
+          setScanError(
+            "This cone belongs to a different production order and cannot be returned here."
+          );
+          return;
+        }
+      }
+
+      // 2) Article check:
+      // We only block when the cone's articleId does NOT exist in this order's
+      // transactions/articles at all. If it does belong to this order (same
+      // articleId as any article in the order), we allow it even if a
+      // different article is currently selected in the UI.
+      if (coneDetails.articleId) {
+        const coneArticleId = normalizeId(coneDetails.articleId);
+        if (coneArticleId) {
+          const matchesAnyArticleInOrder =
+            Array.isArray(selectedOrder.articles) &&
+            selectedOrder.articles.some(
+              // Prefer backend _id for matching; fall back to id only if _id is missing
+              (a) => normalizeId((a as any)._id ?? a.id) === coneArticleId
+            );
+
+          console.log("🔎 Article validation:", {
+            coneArticleId,
+            orderArticles: selectedOrder.articles?.map((a) => ({
+              backendId: (a as any)._id,
+              frontendId: a.id,
+              articleNumber: a.articleNumber,
+              matches: normalizeId((a as any)._id ?? a.id) === coneArticleId,
+            })),
+            matchesAnyArticleInOrder,
+          });
+
+          if (!matchesAnyArticleInOrder) {
+            setScanError(
+              "This cone belongs to a different article than the one selected."
+            );
+            return;
+          }
+        }
+      }
 
       // Check if cone has been issued - only issued cones can be returned
       const issueStatus = (coneDetails.issueStatus ?? coneDetails.issue_status ?? "").toString().toLowerCase();
@@ -2173,6 +2243,11 @@ const YarnReturnPage = () => {
           console.error("Error refreshing return transactions:", error);
         }
       }
+
+      // Finally, reload the page so that all data and UI are fully refreshed
+      if (typeof window !== "undefined") {
+        window.location.reload();
+      }
     } catch (error) {
       console.error("Error creating return transaction:", error);
       toast.error(error instanceof Error ? error.message : "Failed to return cone. Please try again.");
@@ -2864,15 +2939,19 @@ const YarnReturnPage = () => {
                             try {
                               const w = await fetchWeightLatest();
                               if (w != null && w > 0) {
+                                // Use three decimal places from scale without rounding (truncate)
+                                const truncatedWeight = Math.trunc(w * 1000) / 1000;
                                 setTransactionForm((prev) => {
                                   const tear = parseFloat(prev.totalTearWeight) || 0;
+                                  const net = Math.max(0, truncatedWeight - tear);
+                                  const truncatedNet = Math.trunc(net * 1000) / 1000;
                                   return {
                                     ...prev,
-                                    totalWeight: w.toFixed(2),
-                                    totalNetWeight: (w - tear).toFixed(2),
+                                    totalWeight: truncatedWeight.toFixed(3),
+                                    totalNetWeight: truncatedNet.toFixed(3),
                                   };
                                 });
-                                toast.success(`Weight from scale: ${w.toFixed(2)} kg`);
+                                toast.success(`Weight from scale: ${ (Math.trunc(w * 1000) / 1000).toFixed(3) } kg`);
                               } else {
                                 toast.error("Could not get weight from scale.");
                               }
