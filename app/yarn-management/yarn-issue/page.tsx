@@ -408,10 +408,13 @@ const YarnIssuePage = () => {
       if (cancelled || w == null || w <= 0) return;
       setTransactionForm((prev) => {
         const tear = parseFloat(prev.totalTearWeight) || 0;
+        const truncatedWeight = Math.trunc(w * 1000) / 1000;
+        const net = Math.max(0, truncatedWeight - tear);
+        const truncatedNet = Math.trunc(net * 1000) / 1000;
         return {
           ...prev,
-          totalWeight: w.toFixed(2),
-          totalNetWeight: (w - tear).toFixed(2),
+          totalWeight: truncatedWeight.toFixed(3),
+          totalNetWeight: truncatedNet.toFixed(3),
         };
       });
     })();
@@ -1308,6 +1311,10 @@ const YarnIssuePage = () => {
                 issueStatus: "issued",
                 issueDate: new Date().toISOString(),
                 issueWeight: totalNetWeight,
+                orderId: selectedOrder.id || undefined,
+                ...(selectedArticle && {
+                  articleId: selectedArticle._id ?? selectedArticle.id,
+                }),
               }),
             }
           );
@@ -2189,13 +2196,17 @@ const YarnIssuePage = () => {
                           if (w != null && w > 0) {
                             setTransactionForm((prev) => {
                               const tear = parseFloat(prev.totalTearWeight) || 0;
+                              const truncatedWeight = Math.trunc(w * 1000) / 1000;
+                              const net = Math.max(0, truncatedWeight - tear);
+                              const truncatedNet = Math.trunc(net * 1000) / 1000;
                               return {
                                 ...prev,
-                                totalWeight: w.toFixed(2),
-                                totalNetWeight: (w - tear).toFixed(2),
+                                totalWeight: truncatedWeight.toFixed(3),
+                                totalNetWeight: truncatedNet.toFixed(3),
                               };
                             });
-                            toast.success(`Weight from scale: ${w.toFixed(2)} kg`);
+                            const truncated = (Math.trunc(w * 1000) / 1000).toFixed(3);
+                            toast.success(`Weight from scale: ${truncated} kg`);
                           } else {
                             toast.error("Could not get weight from scale.");
                           }
