@@ -1,13 +1,16 @@
 "use client"
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import Seo from '@/shared/layout-components/seo/seo'
 import Link from 'next/link'
 import { useUsers } from '@/shared/hooks/useUsers';
-import { User } from '@/shared/services/userService';
 import HelpIcon from '@/shared/components/HelpIcon';
 import { toast } from 'react-hot-toast';
+import UserActivityLogsTab from './components/UserActivityLogsTab';
+
+type UsersTab = 'users' | 'activity-logs';
 
 const UsersPage = () => {
+    const [activeTab, setActiveTab] = useState<UsersTab>('users');
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
     const [selectAll, setSelectAll] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -147,6 +150,38 @@ const UsersPage = () => {
             <Seo title="Users"/>
 
             <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+                {/* Tabs */}
+                <div className="border-b border-gray-200 px-[10px]">
+                    <div className="flex gap-1">
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('users')}
+                            className={`px-4 py-3 text-[11px] font-bold border-b-2 transition-colors -mb-px ${
+                                activeTab === 'users'
+                                    ? 'border-purple-600 text-purple-600 bg-purple-50/50'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                            <i className="ri-user-line me-1.5" /> Users
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('activity-logs')}
+                            className={`px-4 py-3 text-[11px] font-bold border-b-2 transition-colors -mb-px ${
+                                activeTab === 'activity-logs'
+                                    ? 'border-purple-600 text-purple-600 bg-purple-50/50'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                            <i className="ri-file-list-3-line me-1.5" /> Activity Logs
+                        </button>
+                    </div>
+                </div>
+
+                {activeTab === 'activity-logs' ? (
+                    <UserActivityLogsTab users={users} />
+                ) : (
+                <>
                 <div className="p-[10px]">
                     <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
                         <div className="flex items-center gap-2">
@@ -421,6 +456,8 @@ const UsersPage = () => {
                             </button>
                         </div>
                     </div>
+                )}
+                </>
                 )}
             </div>
         </div>
