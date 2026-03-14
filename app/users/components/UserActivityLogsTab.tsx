@@ -4,8 +4,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
 import { userActivityLogService } from "@/shared/services/userActivityLogService";
-import { userService } from "@/shared/services/userService";
-import type { User } from "@/shared/services/userService";
 import type { ActivityStatsResponse } from "@/shared/types/userActivityLog";
 import ActivityLogsStats from "./ActivityLogsStats";
 import ActivityLogsTable from "./ActivityLogsTable";
@@ -15,9 +13,10 @@ import {
   SORT_BY_OPTIONS,
   SORT_ORDER_OPTIONS,
 } from "@/shared/types/userActivityLog";
+import UserSelectDrawer from "./UserSelectDrawer";
 
 interface UserActivityLogsTabProps {
-  /** Users list for admin selector; if empty and admin, will fetch */
+  /** Unused – user selection now via searchable drawer */
   users?: User[];
 }
 
@@ -26,20 +25,12 @@ const DEFAULT_DATE_RANGE = {
   dateTo: new Date().toISOString().split("T")[0],
 };
 
-const UserActivityLogsTab: React.FC<UserActivityLogsTabProps> = ({ users: usersProp = [] }) => {
+const UserActivityLogsTab: React.FC<UserActivityLogsTabProps> = () => {
   const authUser = useSelector((state: any) => state.auth?.user);
   const isAdmin = authUser?.role === "super_admin" || authUser?.role === "admin";
-  const [users, setUsers] = useState<User[]>(usersProp);
-
-  useEffect(() => {
-    if (isAdmin && usersProp.length === 0) {
-      userService.getUsers({ limit: 500 }).then((r) => setUsers(r.results));
-    } else if (usersProp.length > 0) {
-      setUsers(usersProp);
-    }
-  }, [isAdmin, usersProp]);
-
+  const [userSelectDrawerOpen, setUserSelectDrawerOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>("me");
+  const [selectedUserLabel, setSelectedUserLabel] = useState<string>("My logs");
   const [logs, setLogs] = useState<any[]>([]);
   const [stats, setStats] = useState<ActivityStatsResponse | null>(null);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -206,40 +197,48 @@ const UserActivityLogsTab: React.FC<UserActivityLogsTabProps> = ({ users: usersP
     formFilters.dateFrom !== DEFAULT_DATE_RANGE.dateFrom ||
     formFilters.dateTo !== DEFAULT_DATE_RANGE.dateTo;
 
-  const selectedUserLabel =
-    selectedUserId === "me"
-      ? "My logs"
-      : selectedUserId === "all"
-        ? "All logs"
-        : users.find((u) => u.id === selectedUserId)?.name ?? selectedUserId;
+  const handleUserSelect = (userId: string, label?: string) => {
+    setSelectedUserId(userId);
+    setSelectedUserLabel(label ?? userId);
+    setAppliedFilters((p) => ({ ...p, page: 1 }));
+    if (userId === "all") setStats(null);
+  };
 
   return (
     <div className="p-[10px]">
-      {/* User selector (admin only) */}
-      {isAdmin && (
-        <div className="mb-4">
-          <label className="text-[11px] font-bold text-gray-600 uppercase tracking-wider block mb-1.5">
-            View logs for
-          </label>
-          <select
-            className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 w-full max-w-xs focus:ring-0 focus:border-purple-300"
-            value={selectedUserId}
-            onChange={(e) => {
-              setSelectedUserId(e.target.value);
-              setAppliedFilters((p) => ({ ...p, page: 1 }));
-              if (e.target.value === "all") setStats(null);
-            }}
-          >
-            <option value="me">My logs</option>
-            {isAdmin && <option value="all">All logs (admin)</option>}
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} ({u.email})
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* User selector – button opens searchable drawer (admin) or static label (non-admin) */}
+      <div className="mb-4">
+        <label className="text-[11px] font-bold text-gray-600 uppercase tracking-wider block mb-1.5">
+          View logs for
+        </label>
+        {isAdmin ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setUserSelectDrawerOpen(true)}
+              className="flex items-center gap-2 w-full max-w-xs px-3 py-2 text-left bg-white border border-gray-200 rounded hover:bg-gray-50 focus:ring-0 focus:border-purple-300 transition-colors"
+            >
+              <i className="ri-user-search-line text-gray-500" />
+              <span className="text-[12px] font-medium text-gray-900 truncate">
+                {selectedUserLabel}
+              </span>
+              <i className="ri-arrow-down-s-line text-gray-400 ml-auto shrink-0" />
+            </button>
+            <UserSelectDrawer
+              isOpen={userSelectDrawerOpen}
+              onClose={() => setUserSelectDrawerOpen(false)}
+              selectedUserId={selectedUserId}
+              onSelect={handleUserSelect}
+              isAdmin={isAdmin}
+            />
+          </>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded text-[12px] font-medium text-gray-700">
+            <i className="ri-user-line text-gray-500" />
+            My logs
+          </div>
+        )}
+      </div>
 
       {/* Stats (hidden when viewing all logs) */}
       {!isAllLogs && <ActivityLogsStats stats={stats} loading={statsLoading} />}

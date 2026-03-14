@@ -179,7 +179,7 @@ const UsersPage = () => {
                 </div>
 
                 {activeTab === 'activity-logs' ? (
-                    <UserActivityLogsTab users={users} />
+                    <UserActivityLogsTab />
                 ) : (
                 <>
                 <div className="p-[10px]">
