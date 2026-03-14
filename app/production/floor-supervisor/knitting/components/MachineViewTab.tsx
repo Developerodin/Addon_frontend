@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "react-hot-toast";
 import {
   listMachineOrderAssignments,
@@ -9,6 +10,7 @@ import {
   updateAssignmentItemStatus,
   updateAssignmentItemYarnIssueStatus,
   updateAssignmentItemYarnReturnStatus,
+  deleteAssignmentItem,
   OrderStatus,
   type MachineOrderAssignment,
   type OrderStatusType,
@@ -69,6 +71,8 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
   const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
   const [updatingYarnReturnItemId, setUpdatingYarnReturnItemId] = useState<string | null>(null);
   const [yarnMenuOpenItemId, setYarnMenuOpenItemId] = useState<string | null>(null);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState<{ itemId: string; top: number; left: number } | null>(null);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 
   const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
     OrderStatus.PENDING,
@@ -146,6 +150,26 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
         alert(message);
       } finally {
         setUpdatingYarnReturnItemId(null);
+      }
+    },
+    [poDetailsAssignment]
+  );
+
+  const handleDeleteItem = useCallback(
+    async (itemId: string) => {
+      if (!poDetailsAssignment?.id || !itemId) return;
+      setSettingsMenuOpen(null);
+      setDeletingItemId(itemId);
+      try {
+        const updated = await deleteAssignmentItem(poDetailsAssignment.id, itemId);
+        setPoDetailsAssignment(updated);
+        setRows((prev) => prev.map((r) => (r.id === poDetailsAssignment.id ? updated : r)));
+        toast.success("Article removed from assignment");
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Failed to delete item";
+        toast.error(message);
+      } finally {
+        setDeletingItemId(null);
       }
     },
     [poDetailsAssignment]
@@ -522,7 +546,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                   const allOrdered = [...prioritizedItems, ...onHoldItems, ...noPriorityItems];
 
                   return (
-                    <div className="border border-gray-300 rounded overflow-hidden">
+                    <div className="border border-gray-300 rounded overflow-visible">
                       <table className="min-w-full text-[11px] border-collapse">
                         <thead className="bg-gray-100 border-b border-gray-300">
                           <tr>
@@ -532,6 +556,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                             <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Yarn</th>
                             <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Yarn Return</th>
                             <th className="px-2 py-1.5 text-center font-semibold text-gray-700 w-6" title="Drag to reorder" />
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 w-8" />
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -632,6 +657,70 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                                 </td>
                                 <td className="px-2 py-1.5 text-center">
                                   {canDrag && <i className="ri-draggable text-gray-400 text-sm" aria-hidden />}
+                                </td>
+                                <td className="px-2 py-1.5 text-center relative">
+                                  {(() => {
+                                    const effectiveItemId = item.itemId ?? (item as { id?: string; _id?: string }).id ?? (item as { id?: string; _id?: string })._id;
+                                    if (!effectiveItemId) return null;
+                                    const isOpen = settingsMenuOpen?.itemId === effectiveItemId;
+                                    return (
+                                      <div className="relative inline-block">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (isOpen) {
+                                              setSettingsMenuOpen(null);
+                                            } else {
+                                              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                              setSettingsMenuOpen({
+                                                itemId: effectiveItemId,
+                                                top: rect.bottom + 4,
+                                                left: Math.min(rect.right - 100, window.innerWidth - 120),
+                                              });
+                                            }
+                                          }}
+                                          className="flex items-center justify-center rounded bg-gray-100 text-gray-600 hover:bg-gray-200 w-6 h-6"
+                                          title="Article options"
+                                          disabled={deletingItemId === effectiveItemId}
+                                        >
+                                          <i className="ri-settings-3-line text-xs" />
+                                        </button>
+                                        {isOpen && settingsMenuOpen && typeof document !== "undefined" && createPortal(
+                                          <>
+                                            <div
+                                              className="fixed inset-0 z-[60]"
+                                              onClick={() => setSettingsMenuOpen(null)}
+                                              aria-hidden
+                                            />
+                                            <div
+                                              className="fixed z-[70] min-w-[100px] bg-white border border-gray-300 rounded shadow-lg py-1"
+                                              style={{ top: settingsMenuOpen.top, left: settingsMenuOpen.left }}
+                                            >
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  if (window.confirm(`Remove ${item.articleNumber ?? "article"} from this machine assignment?`)) {
+                                                    handleDeleteItem(effectiveItemId);
+                                                  }
+                                                }}
+                                                disabled={deletingItemId === effectiveItemId}
+                                                className="w-full px-3 py-1.5 text-left text-[11px] text-red-600 hover:bg-red-50 flex items-center gap-1.5"
+                                              >
+                                                {deletingItemId === effectiveItemId ? (
+                                                  <span className="animate-spin rounded-full h-3 w-3 border-2 border-red-500 border-t-transparent" />
+                                                ) : (
+                                                  <i className="ri-delete-bin-line text-sm" />
+                                                )}
+                                                Delete
+                                              </button>
+                                            </div>
+                                          </>,
+                                          document.body
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                               </tr>
                             );
