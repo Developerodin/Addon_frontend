@@ -5,14 +5,14 @@
 
 /** Default candidates for cone weight (yarn-storage process). */
 const WEIGHT_API_CANDIDATES = [
-  'http://localhost:7001/api/weight/latest',
-  'http://192.168.0.10:7001/api/weight/latest',
+  'http://192.168.0.3:7001/api/latest/cones',
+  'http://localhost:7001/api/latest/cones',
 ] as const;
 
 /** Candidates for box weight (purchase-order-received process). */
 const WEIGHT_API_CANDIDATES_BOXES = [
-  'http://192.168.0.105:7001/api/weight/latest',
-  'http://localhost:7001/api/weight/latest',
+  'http://192.168.0.3:7001/api/latest/box',
+  'http://localhost:7001/api/latest/box',
 ] as const;
 
 export type WeightApiContext = 'cones' | 'boxes';
@@ -55,7 +55,7 @@ function setCachedUrl(context: WeightApiContext, url: string | null): void {
 /**
  * Resolve the weight API URL: try cached (memory/localStorage) first, then try each candidate.
  * Caches the first URL that responds (in memory and localStorage).
- * @param context - 'cones' for cone weight (default), 'boxes' for box weight (uses 192.168.0.105).
+ * @param context - 'cones' for cone weight (default), 'boxes' for box weight (uses 192.168.0.3).
  */
 export async function getResolvedWeightApiUrl(context: WeightApiContext = 'cones'): Promise<string> {
   const candidates = getCandidates(context);
@@ -87,7 +87,7 @@ export async function getResolvedWeightApiUrl(context: WeightApiContext = 'cones
 
 /**
  * Fetch latest weight from the resolved API.
- * @param context - 'cones' for cone scale (localhost/192.168.0.10), 'boxes' for box scale (192.168.0.105).
+ * @param context - 'cones' for cone scale (localhost/192.168.0.10), 'boxes' for box scale (192.168.0.3).
  * Returns weight in kg or null on failure.
  */
 export async function fetchWeightLatest(context: WeightApiContext = 'cones'): Promise<number | null> {
