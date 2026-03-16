@@ -146,29 +146,32 @@ const RackTransferModal: React.FC<RackTransferModalProps> = ({
         return;
       }
 
-      // Validate box is stored and QC approved
-      if (!box.storedStatus || box.qcData?.status !== "qc_approved") {
+      // Validate box is stored and QC approved (fallback: storedStatus+storageLocation for legacy boxes without qcData)
+      const qcApproved =
+        box.qcData?.status === "qc_approved" ||
+        (box.storedStatus === true && !!box.storageLocation);
+      if (!box.storedStatus || !qcApproved) {
         toast.error("Box must be stored and QC approved");
         setScannedBox(null);
         return;
       }
 
-      // Validate storage location matches transfer type
+      // Validate storage location matches transfer type.
+      // Slot barcodes can be "B7-02-S0029-F01" or "LT-"/"ST-" prefixed. If box is in sourceRack (barcode match), that's sufficient.
       const currentLocation = box.storageLocation || "";
-      if (transferType === "LT_TO_LT" && !currentLocation.startsWith("LT-")) {
-        toast.error("Box must be in long-term storage for LT→LT transfer");
-        setScannedBox(null);
-        return;
-      }
-      if (transferType === "ST_TO_ST" && !currentLocation.startsWith("ST-")) {
-        toast.error("Box must be in short-term storage for ST→ST transfer");
-        setScannedBox(null);
-        return;
-      }
-      if (transferType === "LT_TO_ST" && !currentLocation.startsWith("LT-")) {
-        toast.error("Box must be in long-term storage for LT→ST transfer");
-        setScannedBox(null);
-        return;
+      const inSourceRack = sourceRack && sourceRack.barcode === currentLocation;
+      if (transferType === "LT_TO_LT" || transferType === "LT_TO_ST") {
+        if (!inSourceRack && !currentLocation.startsWith("LT-")) {
+          toast.error("Box must be in long-term storage for this transfer");
+          setScannedBox(null);
+          return;
+        }
+      } else if (transferType === "ST_TO_ST") {
+        if (!inSourceRack && !currentLocation.startsWith("ST-")) {
+          toast.error("Box must be in short-term storage for ST→ST transfer");
+          setScannedBox(null);
+          return;
+        }
       }
 
       setScannedBox(box);

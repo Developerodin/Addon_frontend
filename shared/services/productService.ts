@@ -127,10 +127,39 @@ export async function getProductsByFactoryCodes(
   });
 }
 
+/** Product from GET /v1/products/by-code?factoryCode=... */
+export interface ProductByCode {
+  id?: string;
+  _id?: string;
+  name?: string;
+  factoryCode?: string;
+  styleCodes?: Array<{ id?: string; styleCode?: string; brand?: string }>;
+  category?: { name?: string };
+  processes?: unknown[];
+  [key: string]: unknown;
+}
+
+/**
+ * GET /v1/products/by-code?factoryCode=A004
+ * Returns product with styleCodes array for Branding transfer
+ */
+export async function getProductByCode(
+  factoryCode: string
+): Promise<ProductByCode | null> {
+  if (!factoryCode?.trim()) return null;
+  try {
+    const url = `${API_BASE_URL}/products/by-code?factoryCode=${encodeURIComponent(factoryCode.trim())}`;
+    return await request<ProductByCode>(url, { method: 'GET' });
+  } catch {
+    return null;
+  }
+}
+
 export const productService = {
   bulkExport: bulkExportProducts,
   bulkUpsert: bulkUpsertProducts,
   getByFactoryCodes: getProductsByFactoryCodes,
+  getByCode: getProductByCode,
 };
 
 export default productService;

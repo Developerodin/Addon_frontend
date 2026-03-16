@@ -351,7 +351,9 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
 
   // Map YarnBox to PackedBox format
   const mapYarnBoxToPackedBox = (box: YarnBox): PackedBox => {
-    const qcApproved = box.qcData?.status === "qc_approved";
+    const qcApproved =
+      box.qcData?.status === "qc_approved" ||
+      (box.storedStatus === true && !!box.storageLocation); // Fallback: stored boxes without qcData (legacy/missing populate)
     const isStored = box.storedStatus === true;
 
     return {
@@ -413,21 +415,16 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         const sourceRack = racks.find((r) => r.barcode === currentStorageLocation);
 
         if (sourceRack) {
-          // Determine transfer type based on storage location
-          if (currentStorageLocation.startsWith("LT-")) {
-            // Box is in long-term storage - can transfer LT→LT or LT→ST
-            setTransferSourceRack(sourceRack);
-            setTransferType("LT_TO_LT"); // Default to LT→LT, user can change
-            setTransferBoxId(boxDetails.boxId); // Store box ID to pre-select in modal
-            setShowTransferModal(true);
-            toast.success(`Box ${boxDetails.boxId || trimmedBarcode} found. Select destination rack for transfer.`);
-          } else if (currentStorageLocation.startsWith("ST-")) {
-            // Box is in short-term storage - should use ShortTermStorage component
+          // sourceRack found = box is in our LT racks (barcode matched). Open transfer modal.
+          // Note: storageLocation can be "B7-02-S0029-F01" or "LT-..." - we match by rack barcode, not prefix.
+          if (currentStorageLocation.startsWith("ST-")) {
             toast.error("Box is in short-term storage. Please use Short-Term Storage tab for transfers.");
           } else {
-            // Box is stored but location format doesn't match LT- or ST-
-            // Still show the info message
-            toast(`Box is already stored at ${currentStorageLocation}`);
+            setTransferSourceRack(sourceRack);
+            setTransferType("LT_TO_LT");
+            setTransferBoxId(boxDetails.boxId);
+            setShowTransferModal(true);
+            toast.success(`Box ${boxDetails.boxId || trimmedBarcode} found. Select destination rack for transfer.`);
           }
         } else {
           // Rack not found but box is stored - still show the info message

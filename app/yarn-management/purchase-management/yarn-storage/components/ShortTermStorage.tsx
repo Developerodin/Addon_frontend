@@ -819,7 +819,9 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   };
 
   const mapYarnBoxToPackedBox = useCallback((box: YarnBox): PackedBox => {
-    const qcApproved = box.qcData?.status === "qc_approved";
+    const qcApproved =
+      box.qcData?.status === "qc_approved" ||
+      (box.storedStatus === true && !!box.storageLocation); // Fallback: stored boxes without qcData (legacy/missing populate)
     const apiBox = box as YarnBox & { purchaseOrder?: { supplierName?: string } };
     const supplierName =
       box.supplier?.brandName ??

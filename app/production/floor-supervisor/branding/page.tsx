@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
+import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
@@ -9,6 +10,8 @@ import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuan
 import NumericInput from "@/shared/utils/numericInput";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
+import TransferItemsInput from "./components/TransferItemsInput";
+import { productService } from "@/shared/services/productService";
 import { containersMasterService, isPopulatedActiveArticle } from "@/shared/services/containersMasterService";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 import { getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
@@ -61,6 +64,7 @@ interface ProductionOrder {
 }
 
 const BrandingFloorSupervisorPage = () => {
+  const user = useSelector((state: any) => state.auth?.user);
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -76,7 +80,14 @@ const BrandingFloorSupervisorPage = () => {
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
-  const [updateData, setUpdateData] = useState<{[key: string]: {brandingQuantity: number; brandingType: 'Heat Transfer' | 'Embroidery'; remarks: string}} >({});
+  const [updateData, setUpdateData] = useState<{[key: string]: {
+    transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
+    brandingType: 'Heat Transfer' | 'Embroidery';
+    remarks: string;
+  }}>({});
+  /** Per-article style codes from GET /products/by-code (factoryCode = articleNumber) */
+  const [articleStyleCodeOptions, setArticleStyleCodeOptions] = useState<Record<string, Array<{ styleCode: string; brand?: string }>>>({});
+  const [articleStyleCodesLoading, setArticleStyleCodesLoading] = useState(false);
   const [filters, setFilters] = useState({
     status: '',
     priority: '',
@@ -142,6 +153,41 @@ const BrandingFloorSupervisorPage = () => {
     }
   };
 
+  // When update modal opens, fetch product by factoryCode (articleNumber) per article for style codes
+  useEffect(() => {
+    if (!showUpdateModal || !selectedOrder) {
+      setArticleStyleCodeOptions({});
+      setArticleStyleCodesLoading(false);
+      return;
+    }
+    const articles = selectedArticleId
+      ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId)
+      : selectedOrder.articles;
+    const opts: Record<string, Array<{ styleCode: string; brand?: string }>> = {};
+    let cancelled = false;
+    setArticleStyleCodesLoading(true);
+    Promise.all(
+      articles.map(async (article) => {
+        const articleId = article.id || article._id;
+        if (!articleId) return;
+        const factoryCode = article.articleNumber?.trim();
+        if (!factoryCode) return;
+        const product = await productService.getByCode(factoryCode);
+        if (cancelled) return;
+        const styleCodes = product?.styleCodes ?? [];
+        opts[articleId] = styleCodes
+          .filter((sc) => sc?.styleCode)
+          .map((sc) => ({ styleCode: String(sc.styleCode), brand: sc.brand ?? "" }));
+      })
+    ).then(() => {
+      if (!cancelled) {
+        setArticleStyleCodeOptions(opts);
+        setArticleStyleCodesLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [showUpdateModal, selectedOrder?.id, selectedArticleId]);
+
   // Debounced search effect
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -193,14 +239,17 @@ const BrandingFloorSupervisorPage = () => {
     setSelectedOrder(order);
     setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
     setActiveUpdateTabIndex(0);
-    // Initialize update data with current values
-    const initialData: {[key: string]: {brandingQuantity: number; brandingType: 'Heat Transfer' | 'Embroidery'; remarks: string}} = {};
+    // Initialize update data: transferItems = empty (user enters NEW transfer only). Previously transferred shown separately.
+    const initialData: {[key: string]: {
+      transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
+      brandingType: 'Heat Transfer' | 'Embroidery';
+      remarks: string;
+    }} = {};
     order.articles.forEach(article => {
       const articleId = article.id || article._id;
       if (articleId) {
-        // Initialize with 0 for completed quantity
         initialData[articleId] = {
-          brandingQuantity: 0,
+          transferItems: [{ transferred: 0 }],
           brandingType: article.brandingType || 'Heat Transfer',
           remarks: article.remarks || ''
         };
@@ -311,7 +360,8 @@ const BrandingFloorSupervisorPage = () => {
   // When article changes in modal, sync quantity and next floor from article processes
   useEffect(() => {
     if (!showUpdateContainerModal || !updateContainerArticleId || !selectedOrder) return;
-    setUpdateContainerQuantity(String(updateData[updateContainerArticleId]?.brandingQuantity ?? 0));
+    const items = updateData[updateContainerArticleId]?.transferItems ?? [];
+    setUpdateContainerQuantity(String(items.reduce((s, i) => s + (i.transferred ?? 0), 0)));
     const mongoId = getArticleMongoId(updateContainerArticleId, selectedOrder.articles);
     if (!mongoId) return;
     let cancelled = false;
@@ -325,12 +375,12 @@ const BrandingFloorSupervisorPage = () => {
     return () => { cancelled = true; };
   }, [showUpdateContainerModal, updateContainerArticleId, selectedOrder?.articles]);
 
-  const handleBrandingQuantityChange = (articleId: string, value: number) => {
+  const handleTransferItemsChange = (articleId: string, items: Array<{ transferred: number; styleCode?: string; brand?: string }>) => {
     setUpdateData(prev => ({
       ...prev,
       [articleId]: {
         ...prev[articleId],
-        brandingQuantity: Math.max(0, value)
+        transferItems: items.length > 0 ? items : [{ transferred: 0 }]
       }
     }));
   };
@@ -358,23 +408,24 @@ const BrandingFloorSupervisorPage = () => {
   const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
+    const getTransferTotal = (items: Array<{ transferred?: number }>) =>
+      (items ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
+
     // Validate all quantities before submission
     const invalidArticles = selectedOrder.articles.filter(article => {
       const articleId = article.id || article._id;
       if (!articleId) return false;
-      
       const update = updateData[articleId];
       if (!update) return false;
-      
       const received = article.floorQuantities?.branding?.received || 0;
       const transferred = article.floorQuantities?.branding?.transferred || 0;
       const remaining = received - transferred;
-      
-      return update.brandingQuantity > remaining;
+      const total = getTransferTotal(update.transferItems ?? []);
+      return total > remaining;
     });
 
     if (invalidArticles.length > 0) {
-      toast.error('Cannot submit: Some articles have completed quantities exceeding remaining quantities');
+      toast.error('Cannot submit: Some articles have transfer quantities exceeding remaining');
       return;
     }
 
@@ -388,11 +439,22 @@ const BrandingFloorSupervisorPage = () => {
         
         const update = updateData[articleId];
         const brandingTransferredQuantity = article.floorQuantities?.branding?.transferred || 0;
-        if (update && (update.brandingQuantity !== brandingTransferredQuantity || update.remarks !== (article.remarks || ''))) {
+        const newTransferQty = getTransferTotal(update?.transferItems ?? []);
+        const hasChanges = newTransferQty > 0 || update?.remarks !== (article.remarks || '');
+        if (update && hasChanges) {
+          const validItems = (update.transferItems ?? []).filter((i) => (i.transferred ?? 0) > 0);
+          const userId = user?.id ?? user?._id;
+          const floorSupervisorId = user?.id ?? user?._id;
+          if (validItems.length > 0 && (!userId || !floorSupervisorId)) {
+            toast.error("User session required for transfer. Please log in again.");
+            return;
+          }
           const progressData = {
-            completedQuantity: update.brandingQuantity,
+            transferredData: validItems.length > 0 ? validItems : undefined,
             brandingType: update.brandingType,
-            remarks: update.remarks
+            remarks: update.remarks,
+            ...(userId ? { userId } : {}),
+            ...(floorSupervisorId ? { floorSupervisorId } : {}),
           };
           
           try {
@@ -527,9 +589,10 @@ const BrandingFloorSupervisorPage = () => {
     if (!articleId) return;
     setAcceptArticleLoading(true);
     try {
+      const qty = containerScanned.container.quantity ?? 0;
       const res = await productionService.updateArticleFloorReceivedData(articleId, {
         floor: "Branding",
-        quantity: containerScanned.container.quantity ?? 0,
+        ...(qty > 0 ? { receivedTransferItems: [{ transferred: qty }] } : { quantity: 0 }),
         receivedData: {
           receivedStatusFromPreviousFloor: "Completed",
           receivedInContainerId: containerScanned.container._id ?? null,
@@ -1042,120 +1105,132 @@ const BrandingFloorSupervisorPage = () => {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-4">
               <p className="text-xs text-blue-800">
                 <i className="ri-information-line me-1"></i>
-                <strong>Note:</strong> Enter the total cumulative completed quantity. The system will automatically calculate the difference from the previous amount.
+                <strong>Note:</strong> Enter <strong>new</strong> transfer below. Previously transferred is shown separately. Total must not exceed remaining. Use &quot;Add row&quot; for multiple style/brand breakdowns.
               </p>
             </div>
 
-            {/* Excel-like Table Form */}
-            <div className="border border-gray-300 rounded overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-xs border-collapse">
-                  <thead className="bg-gray-100 border-b border-gray-300">
-                    <tr>
-                      <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Article</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Planned</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Received</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Transferred</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Remaining</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-yellow-50">Branding Completed *</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Branding Type</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {modalArticles.map((article, idx) => {
-                      const articleId = article.id || article._id;
-                      if (!articleId) return null;
-                      
-                      const currentUpdateData = updateData[articleId] || { 
-                        brandingQuantity: 0, 
-                        brandingType: article.brandingType || 'Heat Transfer',
-                        remarks: article.remarks || '' 
-                      };
-                      
-                      const plannedQty = article.plannedQuantity || 0;
-                      const receivedQty = article.floorQuantities?.branding?.received || 0;
-                      const transferredQty = article.floorQuantities?.branding?.transferred || 0;
-                      const remainingQty = receivedQty - transferredQty;
-                      const isFullyTransferred = remainingQty <= 0;
-                      
-                      return (
-                        <tr key={articleId} className="hover:bg-gray-50">
-                          <td className="px-2 py-1.5 border-r border-gray-300">
-                            <div className="font-medium text-gray-900">{article.articleNumber || `Article ${idx + 1}`}</div>
-                            <div className="text-gray-500 text-xs mt-0.5">{article.linkingType || 'N/A'}</div>
-                          </td>
-                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{plannedQty.toLocaleString()}</td>
-                          <td className="px-2 py-1.5 border-r border-gray-300 align-top min-w-[120px]">
-                            <ReceivedQuantityDisplay
-                              received={receivedQty}
-                              repairReceived={article.floorQuantities?.branding?.repairReceived}
-                              repairFromFloor={article.floorQuantities?.branding?.repairFromFloor}
-                            />
-                          </td>
-                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
-                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
-                          <td className="px-2 py-1.5 border-r border-gray-300 bg-yellow-50">
-                            <div className="flex flex-col gap-1">
-                              <NumericInput
-                                className={`py-1 text-xs h-7 ${
-                                  isFullyTransferred 
-                                    ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
-                                    : currentUpdateData.brandingQuantity > remainingQty 
-                                      ? 'border-red-500 focus:border-red-500' 
-                                      : ''
-                                }`}
-                                value={currentUpdateData.brandingQuantity}
-                                onChange={(value) => {
-                                  if (isFullyTransferred) return;
-                                  if (value <= remainingQty) {
-                                    handleBrandingQuantityChange(articleId, value);
-                                  }
-                                }}
-                                placeholder={isFullyTransferred ? 'Fully Transferred' : `Max: ${remainingQty}`}
-                                disabled={isFullyTransferred}
-                                allowDecimals
+            {/* Excel-like: each article = info row + transfer section in separate row */}
+            <div className="space-y-4">
+              {modalArticles.map((article, idx) => {
+                const articleId = article.id || article._id;
+                if (!articleId) return null;
+
+                const currentUpdateData = updateData[articleId] || {
+                  transferItems: [{ transferred: 0 }],
+                  brandingType: article.brandingType || "Heat Transfer",
+                  remarks: article.remarks || "",
+                };
+
+                const plannedQty = article.plannedQuantity || 0;
+                const receivedQty = article.floorQuantities?.branding?.received || 0;
+                const transferredQty = article.floorQuantities?.branding?.transferred || 0;
+                const remainingQty = receivedQty - transferredQty;
+                const isFullyTransferred = remainingQty <= 0;
+
+                return (
+                  <div key={articleId} className="border border-gray-300 rounded overflow-hidden bg-white">
+                    {/* Article info row */}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs border-collapse">
+                        <thead className="bg-gray-100 border-b border-gray-300">
+                          <tr>
+                            <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Article</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Planned</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Received</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Transferred</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Remaining</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Branding Type</th>
+                            <th className="px-2 py-1.5 text-left font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="hover:bg-gray-50/50">
+                            <td className="px-2 py-1.5 border-r border-gray-300">
+                              <div className="font-medium text-gray-900">{article.articleNumber || `Article ${idx + 1}`}</div>
+                              <div className="text-gray-500 text-xs mt-0.5">{article.linkingType || "N/A"}</div>
+                            </td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{plannedQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 border-r border-gray-300 align-top min-w-[100px]">
+                              <ReceivedQuantityDisplay
+                                received={receivedQty}
+                                repairReceived={article.floorQuantities?.branding?.repairReceived}
+                                repairFromFloor={article.floorQuantities?.branding?.repairFromFloor}
                               />
-                              {isFullyTransferred ? (
-                                <div className="text-green-600 text-xs font-medium">✓ All transferred</div>
-                              ) : currentUpdateData.brandingQuantity > remainingQty ? (
-                                <div className="text-red-500 text-xs">Max: {remainingQty}</div>
-                              ) : null}
+                            </td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 border-r border-gray-300">
+                              <select
+                                className="form-select text-xs py-1 px-2 h-7 w-full"
+                                value={currentUpdateData.brandingType}
+                                onChange={(e) => handleBrandingTypeChange(articleId, e.target.value as "Heat Transfer" | "Embroidery")}
+                              >
+                                <option value="Heat Transfer">Heat Transfer</option>
+                                <option value="Embroidery">Embroidery</option>
+                              </select>
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <textarea
+                                className="form-control text-xs py-1 px-2 h-7 resize-none w-full"
+                                rows={1}
+                                placeholder="Remarks..."
+                                value={currentUpdateData.remarks}
+                                onChange={(e) => handleRemarksChange(articleId, e.target.value)}
+                                onFocus={(e) => {
+                                  e.target.rows = 2;
+                                  e.target.style.height = "auto";
+                                }}
+                                onBlur={(e) => {
+                                  e.target.rows = 1;
+                                  e.target.style.height = "1.75rem";
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Previously transferred - read-only */}
+                    {(article as any).floorQuantities?.branding?.transferredData?.length > 0 && (
+                      <div className="border-t border-gray-200 px-2 py-2 bg-gray-50/50">
+                        <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wide mb-1">Previously transferred</label>
+                        <div className="space-y-0.5 text-[11px] text-gray-700">
+                          {((article as any).floorQuantities.branding.transferredData as any[]).map((d: any, i: number) => (
+                            <div key={i}>
+                              <span className="font-medium">{d.transferred ?? 0}</span>
+                              {d.styleCode && <span> · {d.styleCode}</span>}
+                              {d.brand && <span> · {d.brand}</span>}
                             </div>
-                          </td>
-                          <td className="px-2 py-1.5 border-r border-gray-300">
-                            <select
-                              className="form-select text-xs py-1 px-2 h-7"
-                              value={currentUpdateData.brandingType}
-                              onChange={(e) => handleBrandingTypeChange(articleId, e.target.value as 'Heat Transfer' | 'Embroidery')}
-                            >
-                              <option value="Heat Transfer">Heat Transfer</option>
-                              <option value="Embroidery">Embroidery</option>
-                            </select>
-                          </td>
-                          <td className="px-2 py-1.5">
-                            <textarea
-                              className="form-control text-xs py-1 px-2 h-7 resize-none"
-                              rows={1}
-                              placeholder="Remarks..."
-                              value={currentUpdateData.remarks}
-                              onChange={(e) => handleRemarksChange(articleId, e.target.value)}
-                              onFocus={(e) => {
-                                e.target.rows = 2;
-                                e.target.style.height = 'auto';
-                              }}
-                              onBlur={(e) => {
-                                e.target.rows = 1;
-                                e.target.style.height = '1.75rem';
-                              }}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* New transfer section - user enters what they want to transfer now */}
+                    <div className="border-t-2 border-amber-200 bg-amber-50/30 px-2 py-2">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">New transfer (Qty · Style · Brand) *</span>
+                        {isFullyTransferred && (
+                          <span className="text-green-600 text-xs font-medium">✓ All transferred</span>
+                        )}
+                      </div>
+                      <TransferItemsInput
+                        value={currentUpdateData.transferItems ?? [{ transferred: 0 }]}
+                        onChange={(items) => handleTransferItemsChange(articleId, items)}
+                        maxTotal={remainingQty}
+                        disabled={isFullyTransferred || articleStyleCodesLoading || (articleStyleCodeOptions[articleId]?.length ?? 0) === 0}
+                        styleCodeOptions={articleStyleCodeOptions[articleId] ?? []}
+                        placeholder={
+                          articleStyleCodesLoading
+                            ? "Loading style codes..."
+                            : (articleStyleCodeOptions[articleId]?.length ?? 0) === 0
+                              ? "No style codes for this product"
+                              : "Add new transfer lines (max: remaining)"
+                        }
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             </div>
@@ -1172,7 +1247,8 @@ const BrandingFloorSupervisorPage = () => {
                     const received = article.floorQuantities?.branding?.received || 0;
                     const transferred = article.floorQuantities?.branding?.transferred || 0;
                     const remaining = received - transferred;
-                    return update.brandingQuantity > remaining;
+                    const total = (update.transferItems ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
+                    return total > remaining;
                   });
                   if (invalid) {
                     toast.error("Cannot submit: Some articles have completed quantities exceeding remaining quantities");
@@ -1184,7 +1260,8 @@ const BrandingFloorSupervisorPage = () => {
                   const first = modalArticles[0];
                   const firstId = first?.id || first?._id || "";
                   setUpdateContainerArticleId(firstId);
-                  setUpdateContainerQuantity(String(updateData[firstId]?.brandingQuantity ?? 0));
+                  const firstItems = updateData[firstId]?.transferItems ?? [];
+                  setUpdateContainerQuantity(String(firstItems.reduce((s, i) => s + (i.transferred ?? 0), 0)));
                   setUpdateContainerNextFloor("Final Checking");
                   setShowUpdateContainerModal(true);
                 }}
@@ -1198,7 +1275,8 @@ const BrandingFloorSupervisorPage = () => {
                     const received = article.floorQuantities?.branding?.received || 0;
                     const transferred = article.floorQuantities?.branding?.transferred || 0;
                     const remaining = received - transferred;
-                    return update.brandingQuantity > remaining;
+                    const total = (update.transferItems ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
+                    return total > remaining;
                   })
                 }
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 shadow-sm disabled:opacity-50"
@@ -1276,7 +1354,8 @@ const BrandingFloorSupervisorPage = () => {
                   const floor = updateContainerNextFloor.trim();
                   if (!barcode || !articleId || !floor) return;
                   const qtyNum = updateContainerQuantity.trim() ? parseInt(updateContainerQuantity.trim(), 10) : NaN;
-                  const qty = updateContainerQuantity.trim() === "" ? (updateData[articleId]?.brandingQuantity ?? 0) : (Number.isFinite(qtyNum) && qtyNum >= 0 ? qtyNum : NaN);
+                  const fallbackQty = (updateData[articleId]?.transferItems ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
+                  const qty = updateContainerQuantity.trim() === "" ? fallbackQty : (Number.isFinite(qtyNum) && qtyNum >= 0 ? qtyNum : NaN);
                   if (!Number.isFinite(qty) || qty < 0) {
                     toast.error("Please enter a valid quantity (0 or greater)");
                     return;
@@ -1376,6 +1455,7 @@ const BrandingFloorSupervisorPage = () => {
                         <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Transferred</th>
                         <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Remaining</th>
                         <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Branding Type</th>
+                        <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Style / Brand</th>
                         <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Progress</th>
                         <th className="px-2 py-1.5 text-center font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
                       </tr>
@@ -1416,6 +1496,19 @@ const BrandingFloorSupervisorPage = () => {
                             <td className="px-2 py-1.5 text-center border-r border-gray-300">
                               {article.brandingType ? (
                                 <span className="text-gray-700 text-xs">{article.brandingType}</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 border-r border-gray-300 text-[10px] text-gray-600 max-w-[160px]">
+                              {(article.floorQuantities?.branding as any)?.transferredData?.length > 0 ? (
+                                <div className="space-y-0.5">
+                                  {(article.floorQuantities?.branding as any).transferredData.map((d: any, i: number) => (
+                                    <div key={i} className="truncate">
+                                      {d.transferred ?? 0} {d.styleCode ? `· ${d.styleCode}` : ""} {d.brand ? `· ${d.brand}` : ""}
+                                    </div>
+                                  ))}
+                                </div>
                               ) : (
                                 <span className="text-gray-400">-</span>
                               )}

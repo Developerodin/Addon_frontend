@@ -203,6 +203,7 @@ const ProcessOrderPage = () => {
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
   const [isFetchingWeight, setIsFetchingWeight] = useState(false);
   const [isOrderItemsSummaryOpen, setIsOrderItemsSummaryOpen] = useState(false);
+  const [isApprovingAll, setIsApprovingAll] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const [qzStatus, setQzStatus] = useState<{
     scriptLoaded: boolean;
@@ -879,6 +880,55 @@ const ProcessOrderPage = () => {
       toast.error(error instanceof Error ? error.message : 'Failed to reject lot');
     } finally {
       setIsUpdatingOrderStatus(false);
+    }
+  };
+
+  // Lots pending QC (lot_pending or lot_qc_pending) - for QC Approve All button
+  const hasPendingLots =
+    order?.receivedLotDetails?.some(
+      (lot) => lot.status === "lot_qc_pending" || lot.status === "lot_pending"
+    ) ?? false;
+
+  const handleQcApproveAll = async () => {
+    const loadingToast = toast.loading("QC approving all lots...");
+    if (!orderId || !order) {
+      toast.dismiss(loadingToast);
+      toast.error("Order not loaded. Please refresh the page.");
+      return;
+    }
+    const u = user as any;
+    const userId = u?.id ?? u?.userId ?? u?._id;
+    const userEmail = u?.email ?? u?.emailId ?? u?.username ?? "";
+    if (!userId || !userEmail) {
+      toast.dismiss(loadingToast);
+      toast.error("User information not available. Please login again.");
+      return;
+    }
+
+    setIsApprovingAll(true);
+    try {
+      await yarnPurchaseOrderService.qcApproveAll(orderId, {
+        updated_by: {
+          username: userEmail,
+          user_id: userId,
+        },
+        notes: "QC approved all lots",
+        remarks: "All lots passed",
+      });
+      toast.dismiss(loadingToast);
+      toast.success("All lots QC approved successfully");
+      const updatedApiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+      const mappedOrder = mapAPIOrderToReceivedOrder(updatedApiOrder);
+      setOrder(mappedOrder);
+      setRawApiOrder(updatedApiOrder);
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      console.error("QC Approve All failed:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to QC approve all lots"
+      );
+    } finally {
+      setIsApprovingAll(false);
     }
   };
 
@@ -2139,6 +2189,29 @@ const ProcessOrderPage = () => {
                 )}
                 {isPrinting ? 'Processing...' : 'Print Summary'}
               </button>
+              {/* QC Approve All - commented out
+              {order && (
+                <button
+                  type="button"
+                  onClick={handleQcApproveAll}
+                  disabled={isApprovingAll}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors shadow-sm ${!isApprovingAll ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                  title="QC approve all lots at once"
+                >
+                  {isApprovingAll ? (
+                    <>
+                      <i className="ri-loader-4-line animate-spin text-xs"></i>
+                      Approving...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-check-double-line text-xs"></i>
+                      QC Approve All
+                    </>
+                  )}
+                </button>
+              )}
+              */}
             </div>
           </div>
 

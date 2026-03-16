@@ -134,6 +134,7 @@ export default function ArticleViewTab({
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Trf</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rem</th>
               <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Type</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Style / Brand</th>
               <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
               <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
             </tr>
@@ -177,6 +178,22 @@ export default function ArticleViewTab({
                   </td>
                   <td className="px-1.5 py-2.5 border border-gray-200 text-[11px] text-gray-700">
                     {article.brandingType ?? "—"}
+                  </td>
+                  <td className="px-1.5 py-2.5 border border-gray-200 text-[10px] text-gray-600 max-w-[140px]">
+                    {(br as any)?.transferredData?.length > 0 ? (
+                      <div className="space-y-0.5">
+                        {(br as any).transferredData.slice(0, 3).map((d: any, i: number) => (
+                          <div key={i} className="truncate">
+                            {d.transferred ?? 0} {d.styleCode ? `· ${d.styleCode}` : ""} {d.brand ? `· ${d.brand}` : ""}
+                          </div>
+                        ))}
+                        {(br as any).transferredData.length > 3 && (
+                          <div className="text-gray-400">+{(br as any).transferredData.length - 3} more</div>
+                        )}
+                      </div>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-1.5 py-2.5 border border-gray-200">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>

@@ -56,8 +56,8 @@ export interface Article {
     secondaryChecking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number; m2Transferred?: number; m2Remaining?: number; repairReceived?: number; repairFromFloor?: string };
     washing: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
     boarding: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
-    finalChecking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number; m2Transferred?: number; m2Remaining?: number; repairReceived?: number; repairFromFloor?: string };
-    branding: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
+    finalChecking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number; m2Transferred?: number; m2Remaining?: number; repairReceived?: number; repairFromFloor?: string; transferredData?: TransferItem[]; receivedData?: Array<TransferItem & { receivedStatusFromPreviousFloor?: string; receivedInContainerId?: string; receivedTimestamp?: string }> };
+    branding: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string; transferredData?: TransferItem[]; receivedData?: Array<TransferItem & { receivedStatusFromPreviousFloor?: string; receivedInContainerId?: string; receivedTimestamp?: string }> };
     warehouse: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
   };
 }
@@ -137,8 +137,21 @@ export interface UpdateOrderRequest {
   }[];
 }
 
+/** Transfer item breakdown by styleCode/brand (Branding, Final Checking) */
+export interface TransferItem {
+  transferred: number;
+  styleCode?: string;
+  brand?: string;
+}
+
 export interface UpdateArticleProgressRequest {
   completedQuantity?: number;
+  /** Transfer breakdown by styleCode/brand (Branding → Final Checking, Final Checking → Warehouse) */
+  transferredData?: TransferItem[];
+  /** Required for transfer: current user object id */
+  userId?: string;
+  /** Required for transfer: floor supervisor object id */
+  floorSupervisorId?: string;
   remarks?: string;
   m1Quantity?: number;
   m2Quantity?: number;
@@ -154,7 +167,12 @@ export interface UpdateArticleProgressRequest {
 export interface TransferArticleRequest {
   orderId: string;
   articleId: string;
-  quantity: number;
+  /** Legacy: single quantity when transferItems not provided */
+  quantity?: number;
+  /** Breakdown by styleCode/brand for Branding/Final Checking */
+  transferItems?: TransferItem[];
+  userId?: string;
+  floorSupervisorId?: string;
   remarks?: string;
   batchNumber?: string;
 }
@@ -166,8 +184,10 @@ export type ProductionFloorName =
 
 export interface FloorReceivedDataBody {
   floor: ProductionFloorName;
-  /** Required for container accept flow – adds to floor's received and moves article to receiving floor */
+  /** Legacy: single quantity when receivedTransferItems not provided */
   quantity?: number;
+  /** Breakdown by styleCode/brand when receiving (omit quantity when using this) */
+  receivedTransferItems?: TransferItem[];
   receivedData: {
     receivedStatusFromPreviousFloor?: string;
     receivedInContainerId?: string | null;
@@ -604,6 +624,25 @@ class ProductionService {
     return this.request(`/floors/${floor}/transfer`, {
       method: 'POST',
       body: JSON.stringify(transferData),
+    });
+  }
+
+  /** Transfer with breakdown (Branding/Final Checking): POST /floors/:floor/transfer/:orderId/:articleId */
+  async transferFloorArticle(
+    floor: string,
+    orderId: string,
+    articleId: string,
+    body: {
+      transferItems?: TransferItem[];
+      quantity?: number;
+      userId?: string;
+      floorSupervisorId?: string;
+      remarks?: string;
+    }
+  ): Promise<ApiResponse<any>> {
+    return this.request(`/floors/${floor}/transfer/${orderId}/${articleId}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     });
   }
 

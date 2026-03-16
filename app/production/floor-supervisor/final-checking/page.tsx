@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
+import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
@@ -11,6 +12,7 @@ import { getPreviousFloor, getArticleMongoId, resolveNextFloorFromProcesses } fr
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
+import TransferItemsInput from "../branding/components/TransferItemsInput";
 import { containersMasterService, isPopulatedActiveArticle } from "@/shared/services/containersMasterService";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 
@@ -46,6 +48,7 @@ interface FloorQuantities {
 
 
 const FinalCheckingFloorSupervisorPage = () => {
+  const user = useSelector((state: any) => state.auth?.user);
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -68,7 +71,8 @@ const FinalCheckingFloorSupervisorPage = () => {
     m3Quantity: number,
     m4Quantity: number,
     repairStatus: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected',
-    repairRemarks: string
+    repairRemarks: string,
+    transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
   }}>({});
   const [shiftInputs, setShiftInputs] = useState<{[key: string]: {
     m2ToM1: number,
@@ -121,6 +125,8 @@ const FinalCheckingFloorSupervisorPage = () => {
   const [updateContainerQuantity, setUpdateContainerQuantity] = useState("");
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Warehouse");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
+  /** For container accept: receivedTransferItems breakdown (Branding → Final Checking) */
+  const [acceptReceivedTransferItems, setAcceptReceivedTransferItems] = useState<Array<{ transferred: number; styleCode?: string; brand?: string }>>([]);
 
   // Load final checking floor orders from API
   const loadOrders = async () => {
@@ -206,10 +212,11 @@ const FinalCheckingFloorSupervisorPage = () => {
     };
   }, [showUpdateContainerModal, updateContainerBarcode]);
 
-  // When article changes in modal, sync quantity and next floor from article processes
+  // When article changes in modal, sync quantity (from transferItems) and next floor from article processes
   useEffect(() => {
     if (!showUpdateContainerModal || !updateContainerArticleId || !selectedOrder) return;
-    setUpdateContainerQuantity(String(updateData[updateContainerArticleId]?.m1Quantity ?? 0));
+    const items = updateData[updateContainerArticleId]?.transferItems ?? [];
+    setUpdateContainerQuantity(String(items.reduce((s, i) => s + (i.transferred ?? 0), 0)));
     const mongoId = getArticleMongoId(updateContainerArticleId, selectedOrder.articles);
     if (!mongoId) return;
     let cancelled = false;
@@ -250,6 +257,39 @@ const FinalCheckingFloorSupervisorPage = () => {
     return Math.max(0, fc?.remaining ?? (received - transferred));
   };
 
+  /** Build style code options and max qty per style from receivedData (only what we received). */
+  const getArticleM1StyleCodeOptions = (article: Article) => {
+    const fc = article.floorQuantities?.finalChecking;
+    const receivedData = (fc?.receivedData as Array<{ transferred?: number; styleCode?: string; brand?: string }>) ?? [];
+    const transferredData = (fc?.transferredData as Array<{ transferred?: number; styleCode?: string }>) ?? [];
+    const receivedBySc: Record<string, number> = {};
+    const transferredBySc: Record<string, number> = {};
+    for (const d of receivedData) {
+      const sc = (d.styleCode ?? "").trim();
+      if (sc && (d.transferred ?? 0) > 0) {
+        receivedBySc[sc] = (receivedBySc[sc] ?? 0) + (d.transferred ?? 0);
+      }
+    }
+    for (const d of transferredData) {
+      const sc = (d.styleCode ?? "").trim();
+      if (sc) transferredBySc[sc] = (transferredBySc[sc] ?? 0) + (d.transferred ?? 0);
+    }
+    const options: Array<{ styleCode: string; brand?: string }> = [];
+    const seen = new Set<string>();
+    for (const d of receivedData) {
+      const sc = (d.styleCode ?? "").trim();
+      if (sc && (d.transferred ?? 0) > 0 && !seen.has(sc)) {
+        seen.add(sc);
+        options.push({ styleCode: sc, brand: d.brand ?? "" });
+      }
+    }
+    const maxBySc: Record<string, number> = {};
+    for (const sc of Object.keys(receivedBySc)) {
+      maxBySc[sc] = Math.max(0, (receivedBySc[sc] ?? 0) - (transferredBySc[sc] ?? 0));
+    }
+    return { options, styleCodeMaxQuantities: maxBySc };
+  };
+
   // Apply filtering to orders
   const paginatedOrders = filterOrdersByReceivedQuantity(orders);
 
@@ -281,7 +321,7 @@ const FinalCheckingFloorSupervisorPage = () => {
     setSelectedOrder(order);
     setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
     setActiveUpdateTabIndex(0);
-    // Initialize update data with current values
+    // Initialize update data: transferItems = empty (user enters NEW transfer only). Previously transferred shown separately.
     const initialData: {[key: string]: {
       remarks: string,
       m1Quantity: number,
@@ -289,19 +329,21 @@ const FinalCheckingFloorSupervisorPage = () => {
       m3Quantity: number,
       m4Quantity: number,
       repairStatus: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected',
-      repairRemarks: string
+      repairRemarks: string,
+      transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
     }} = {};
     order.articles.forEach(article => {
       const articleId = article.id || article._id;
       if (articleId) {
         initialData[articleId] = {
           remarks: article.remarks || '',
-          m1Quantity: 0, // Always start with 0 for user input
+          m1Quantity: 0,
           m2Quantity: article.floorQuantities?.finalChecking?.m2Quantity || article.m2Quantity || 0,
           m3Quantity: article.floorQuantities?.finalChecking?.m3Quantity || article.m3Quantity || 0,
           m4Quantity: article.floorQuantities?.finalChecking?.m4Quantity || article.m4Quantity || 0,
           repairStatus: (article as any).floorQuantities?.finalChecking?.repairStatus || (article as any).repairStatus || 'Not Required',
-          repairRemarks: (article as any).floorQuantities?.finalChecking?.repairRemarks || (article as any).repairRemarks || ''
+          repairRemarks: (article as any).floorQuantities?.finalChecking?.repairRemarks || (article as any).repairRemarks || '',
+          transferItems: [{ transferred: 0 }],
         };
       }
     });
@@ -384,6 +426,31 @@ const FinalCheckingFloorSupervisorPage = () => {
       [articleId]: {
         ...prev[articleId],
         m1Quantity: value
+      }
+    }));
+  };
+
+  const getTransferTotal = (items: Array<{ transferred?: number }>) =>
+    (items ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
+
+  /** Check if transfer items exceed per-style-code received for an article. */
+  const hasTransferItemsExceedingStyleCodeMax = (article: Article, items: Array<{ transferred?: number; styleCode?: string }>) => {
+    const { styleCodeMaxQuantities } = getArticleM1StyleCodeOptions(article);
+    const bySc: Record<string, number> = {};
+    for (const i of items ?? []) {
+      const sc = (i.styleCode ?? "").trim();
+      if (sc) bySc[sc] = (bySc[sc] ?? 0) + (i.transferred ?? 0);
+    }
+    return Object.entries(bySc).some(([sc, sum]) => sum > (styleCodeMaxQuantities[sc] ?? Infinity));
+  };
+
+  const handleTransferItemsChange = (articleId: string, items: Array<{ transferred: number; styleCode?: string; brand?: string }>) => {
+    setUpdateData(prev => ({
+      ...prev,
+      [articleId]: {
+        ...prev[articleId],
+        transferItems: items.length > 0 ? items : [{ transferred: 0 }],
+        m1Quantity: items.reduce((s, i) => s + (i.transferred ?? 0), 0)
       }
     }));
   };
@@ -561,18 +628,47 @@ const FinalCheckingFloorSupervisorPage = () => {
   const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
 
-    // Validate M1 quantities before submission
+    // Fetch fresh article data to avoid stale remaining (transferable) validation
+    const articlesWithTransfer = selectedOrder.articles.filter((a) => {
+      const total = getTransferTotal(updateData[a.id || a._id || ""]?.transferItems ?? []);
+      return total > 0;
+    });
+    let freshArticles = new Map<string, Article>();
+    if (articlesWithTransfer.length > 0) {
+      try {
+        const results = await Promise.allSettled(
+          articlesWithTransfer.map((a) => productionService.getArticle(a._id || a.id))
+        );
+        results.forEach((r, i) => {
+          const art = articlesWithTransfer[i];
+          const id = art?.id || art?._id;
+          if (id && r.status === "fulfilled" && r.value.success && r.value.data) {
+            freshArticles.set(id, r.value.data as Article);
+          }
+        });
+      } catch {
+        // Fallback to selectedOrder articles if fetch fails
+      }
+    }
+
+    const getArticleForValidation = (article: Article) =>
+      freshArticles.get(article.id || article._id || "") ?? article;
+
+    // Validate M1 (sum of transferItems, per-style-code) before submission - use fresh data
     const invalidArticles = selectedOrder.articles.filter(article => {
+      const fresh = getArticleForValidation(article);
       const articleId = article.id || article._id;
       if (!articleId) return false;
       const update = updateData[articleId];
       if (!update) return false;
-      const actualRemaining = getActualRemainingForArticle(article);
-      return update.m1Quantity > actualRemaining;
+      const actualRemaining = getActualRemainingForArticle(fresh);
+      const total = getTransferTotal(update.transferItems ?? []);
+      if (total > actualRemaining) return true;
+      return hasTransferItemsExceedingStyleCodeMax(fresh, update.transferItems ?? []);
     });
 
     if (invalidArticles.length > 0) {
-      toast.error('Cannot submit: Some articles have M1 exceeding remaining');
+      toast.error('Cannot submit: Some articles have transfer quantity exceeding remaining or received per style code');
       return;
     }
 
@@ -583,7 +679,8 @@ const FinalCheckingFloorSupervisorPage = () => {
       const updatePromises = selectedOrder.articles.map(async (article) => {
         const articleId = article.id || article._id;
         if (!articleId) return null;
-        
+        const fresh = getArticleForValidation(article);
+
         const update = updateData[articleId];
         const addM2 = transferM2M3M4[articleId]?.m2 ?? 0;
         const addM3 = transferM2M3M4[articleId]?.m3 ?? 0;
@@ -591,23 +688,70 @@ const FinalCheckingFloorSupervisorPage = () => {
         const totalM2 = (update?.m2Quantity ?? 0) + addM2;
         const totalM3 = (update?.m3Quantity ?? 0) + addM3;
         const totalM4 = (update?.m4Quantity ?? 0) + addM4;
+        const fcM1 = fresh.floorQuantities?.finalChecking?.m1Quantity ?? fresh.m1Quantity ?? 0;
+        const fcM2 = fresh.floorQuantities?.finalChecking?.m2Quantity ?? fresh.m2Quantity ?? 0;
+        const fcM3 = fresh.floorQuantities?.finalChecking?.m3Quantity ?? fresh.m3Quantity ?? 0;
+        const fcM4 = fresh.floorQuantities?.finalChecking?.m4Quantity ?? fresh.m4Quantity ?? 0;
         if (update && (
-          update.remarks !== (article.remarks || '') ||
-          update.m1Quantity !== article.m1Quantity ||
-          totalM2 !== article.m2Quantity ||
-          totalM3 !== article.m3Quantity ||
-          totalM4 !== article.m4Quantity ||
-          update.repairStatus !== article.repairStatus ||
-          update.repairRemarks !== (article.repairRemarks || '')
+          update.remarks !== (fresh.remarks || '') ||
+          update.m1Quantity !== fcM1 ||
+          totalM2 !== fcM2 ||
+          totalM3 !== fcM3 ||
+          totalM4 !== fcM4 ||
+          update.repairStatus !== fresh.repairStatus ||
+          update.repairRemarks !== (fresh.repairRemarks || '')
         )) {
-          // Use new bulk quality inspection API for M1-M4 updates (m2/m3/m4 = previous + transfer input)
-          if (update.m1Quantity !== article.m1Quantity || 
-              totalM2 !== article.m2Quantity || 
-              totalM3 !== article.m3Quantity || 
-              totalM4 !== article.m4Quantity) {
-            
+          const validItems = (update.transferItems ?? []).filter((i) => (i.transferred ?? 0) > 0);
+          const userId = user?.id ?? user?._id;
+          const floorSupervisorId = user?.id ?? user?._id;
+          if (validItems.length > 0) {
+            const received = fresh.floorQuantities?.finalChecking?.received ?? 0;
+            if (received <= 0) {
+              toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
+              return;
+            }
+            if (!userId || !floorSupervisorId) {
+              toast.error("User session required for transfer. Please log in again.");
+              return;
+            }
+          }
+
+          // CRITICAL: Call updateArticleProgress (transfer) BEFORE quality-inspection.
+          // Backend: quality-inspection updates m1/transferred; if we call it first, transferable becomes 0 and PATCH fails.
+          const progressData = {
+            remarks: update.remarks,
+            repairStatus: update.repairStatus,
+            repairRemarks: update.repairRemarks,
+            ...(validItems.length > 0 ? { transferredData: validItems } : {}),
+            ...(userId ? { userId } : {}),
+            ...(floorSupervisorId ? { floorSupervisorId } : {}),
+          };
+          try {
+            const response = await productionService.updateArticleProgress(
+              'FinalChecking',
+              selectedOrder.id,
+              article._id || article.id,
+              progressData
+            );
+            if (!response.success) {
+              throw new Error(response.error?.message || 'Failed to update article');
+            }
+          } catch (error: any) {
+            const msg = error?.message ?? String(error);
+            if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
+              toast.error("Transfer quantity exceeds remaining. Refresh and enter only the new amount to transfer (max: remaining).");
+            } else {
+              toast.error(msg);
+            }
+            throw error;
+          }
+
+          // Then update quality inspection (M1–M4)
+          if (update.m1Quantity !== fcM1 ||
+              totalM2 !== fcM2 ||
+              totalM3 !== fcM3 ||
+              totalM4 !== fcM4) {
             const inspectedQuantity = update.m1Quantity + totalM2 + totalM3 + totalM4;
-            
             try {
               const qualityResponse = await productionService.updateQualityInspection(
                 article._id || article.id,
@@ -621,7 +765,6 @@ const FinalCheckingFloorSupervisorPage = () => {
                   floor: "Final Checking"
                 }
               );
-              
               if (!qualityResponse.success) {
                 throw new Error(qualityResponse.error?.message || 'Failed to update quality inspection');
               }
@@ -630,31 +773,8 @@ const FinalCheckingFloorSupervisorPage = () => {
               throw error;
             }
           }
-          
-          // Update other progress data
-          const progressData = {
-            remarks: update.remarks,
-            repairStatus: update.repairStatus,
-            repairRemarks: update.repairRemarks
-          };
-          
-          try {
-            const response = await productionService.updateArticleProgress(
-              'FinalChecking',
-              selectedOrder.id,
-              article._id || article.id,
-              progressData
-            );
-            
-            if (!response.success) {
-              throw new Error(response.error?.message || 'Failed to update article');
-            }
-            
-            return response.data;
-          } catch (error) {
-            console.error(`Error updating article ${articleId}:`, error);
-            throw error;
-          }
+
+          return (await productionService.getArticle(article._id || article.id))?.data ?? null;
         }
         return null;
       }).filter(Boolean);
@@ -665,7 +785,12 @@ const FinalCheckingFloorSupervisorPage = () => {
       const failedUpdates = results.filter(result => result.status === 'rejected');
       if (failedUpdates.length > 0) {
         console.error('Some updates failed:', failedUpdates);
-        toast.error(`${failedUpdates.length} article(s) failed to update`);
+        const firstReason = (failedUpdates[0] as PromiseRejectedResult)?.reason?.message ?? "";
+        if (firstReason.includes("exceeds transferable") || firstReason.includes("transferable (0)")) {
+          toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
+        } else {
+          toast.error(`${failedUpdates.length} article(s) failed to update`);
+        }
       } else {
         toast.success('Order updated successfully');
       }
@@ -676,7 +801,12 @@ const FinalCheckingFloorSupervisorPage = () => {
       loadOrders();
     } catch (error: any) {
       console.error('Error updating order:', error);
-      toast.error(error.message || 'Failed to update order');
+      const msg = error?.message ?? 'Failed to update order';
+      if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
+        toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -758,14 +888,34 @@ const FinalCheckingFloorSupervisorPage = () => {
     try {
       const container = await containersMasterService.getByBarcode(barcode);
       let article: Article | null = null;
+      let articleId: string | null = null;
       if (isPopulatedActiveArticle(container.activeArticle)) {
         article = container.activeArticle as unknown as Article;
+        articleId = (article as any)?._id ?? (article as any)?.id ?? null;
       } else if (typeof container.activeArticle === 'string') {
-        const articleId = container.activeArticle.trim();
+        articleId = container.activeArticle.trim() || null;
         article = articleId ? findArticleInOrders(articleId) ?? null : null;
-        if (!article && articleId) toast.error("Article not found in current orders.");
+      }
+      // Fetch full article to get latest branding.transferredData for receivedTransferItems pre-fill
+      if (articleId) {
+        const res = await productionService.getArticle(articleId);
+        if (res.success && res.data) article = res.data as unknown as Article;
+        else if (!article) toast.error("Article not found in current orders.");
       }
       setContainerScanned({ container, article });
+      const qty = container.quantity ?? 0;
+      // Pre-populate from Branding transferredData when container came from Branding (same breakdown)
+      const brandingTd = (article as any)?.floorQuantities?.branding?.transferredData;
+      const tdSum = Array.isArray(brandingTd)
+        ? brandingTd.reduce((s: number, i: any) => s + (i.transferred ?? 0), 0)
+        : 0;
+      if (Array.isArray(brandingTd) && brandingTd.length > 0 && tdSum === qty) {
+        setAcceptReceivedTransferItems(
+          brandingTd.map((i: any) => ({ transferred: i.transferred ?? 0, styleCode: i.styleCode, brand: i.brand }))
+        );
+      } else {
+        setAcceptReceivedTransferItems(qty > 0 ? [{ transferred: qty }] : [{ transferred: 0 }]);
+      }
       if (normalizeFloor(container.activeFloor) !== normalizeFloor(CURRENT_FLOOR)) {
         toast.error(`This container belongs to "${container.activeFloor ?? "unknown"}", not ${CURRENT_FLOOR}. Accept Article disabled.`);
       }
@@ -782,13 +932,20 @@ const FinalCheckingFloorSupervisorPage = () => {
     if (!containerScanned?.article) return;
     const articleId = containerScanned.article._id || containerScanned.article.id;
     if (!articleId) return;
+    const expectedQty = containerScanned.container.quantity ?? 0;
+    const total = acceptReceivedTransferItems.reduce((s, i) => s + (i.transferred ?? 0), 0);
+    if (expectedQty > 0 && total !== expectedQty) {
+      toast.error(`Sum of transfer items (${total}) must equal container quantity (${expectedQty})`);
+      return;
+    }
     setAcceptArticleLoading(true);
     try {
+      // Send quantity; backend auto-populates receivedTransferItems from branding.transferredData
       const res = await productionService.updateArticleFloorReceivedData(articleId, {
         floor: "Final Checking",
-        quantity: containerScanned.container.quantity ?? 0,
+        quantity: expectedQty,
         receivedData: {
-          receivedStatusFromPreviousFloor: "Completed",
+          receivedStatusFromPreviousFloor: "Transferred from Branding",
           receivedInContainerId: containerScanned.container._id ?? null,
           receivedTimestamp: new Date().toISOString(),
         },
@@ -805,6 +962,7 @@ const FinalCheckingFloorSupervisorPage = () => {
         setShowContainerScanDrawer(false);
         setContainerScanned(null);
         setContainerScanBarcode("");
+        setAcceptReceivedTransferItems([]);
         loadOrders();
       } else {
         toast.error(res.error?.message ?? "Failed to accept article quantity");
@@ -1161,11 +1319,11 @@ const FinalCheckingFloorSupervisorPage = () => {
       {/* Scan Container drawer */}
       {showContainerScanDrawer && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); setActiveArticleId(null); }} aria-hidden />
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); setActiveArticleId(null); setAcceptReceivedTransferItems([]); }} aria-hidden />
           <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
             <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
               <h3 className="text-sm font-bold text-gray-800">Scan Container</h3>
-              <button type="button" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); setActiveArticleId(null); }} className="text-gray-500 hover:text-gray-700 p-1">
+              <button type="button" onClick={() => { setShowContainerScanDrawer(false); setContainerScanned(null); setContainerScanBarcode(""); setActiveArticleId(null); setAcceptReceivedTransferItems([]); }} className="text-gray-500 hover:text-gray-700 p-1">
                 <i className="ri-close-line text-lg" />
               </button>
             </div>
@@ -1212,11 +1370,33 @@ const FinalCheckingFloorSupervisorPage = () => {
                           This container is assigned to <strong>{containerScanned.container.activeFloor || "unknown"}</strong>, not {CURRENT_FLOOR}. Accept Article is disabled.
                         </div>
                       )}
+                      <div className="border-t-2 border-teal-200 pt-3 mt-4">
+                        <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider mb-2">Received breakdown (Qty · Style · Brand)</h4>
+                        <p className="text-[10px] text-gray-600 mb-2">Sum must equal container quantity ({containerScanned.container.quantity ?? 0})</p>
+                        <TransferItemsInput
+                          value={acceptReceivedTransferItems}
+                          onChange={setAcceptReceivedTransferItems}
+                          maxTotal={containerScanned.container.quantity ?? 0}
+                          disabled={!containerBelongsToCurrentFloor}
+                          styleCodeOptions={
+                            Array.isArray((containerScanned.article as any)?.floorQuantities?.branding?.transferredData)
+                              ? ((containerScanned.article as any).floorQuantities.branding.transferredData as any[])
+                                  .filter((d: any) => (d.transferred ?? 0) > 0 && (d.styleCode ?? "").trim())
+                                  .reduce((acc: Array<{ styleCode: string; brand?: string }>, d: any) => {
+                                    const sc = (d.styleCode ?? "").trim();
+                                    if (!acc.some((o) => o.styleCode === sc)) acc.push({ styleCode: sc, brand: d.brand ?? "" });
+                                    return acc;
+                                  }, [])
+                              : []
+                          }
+                          placeholder="Add received lines"
+                        />
+                      </div>
                       <button
                         type="button"
                         disabled={acceptArticleLoading || !containerBelongsToCurrentFloor}
                         onClick={handleAcceptArticleQuantity}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full disabled:opacity-50 disabled:cursor-not-allowed mt-3"
                       >
                         {acceptArticleLoading ? "Accepting..." : "Accept Article Quantity"}
                       </button>
@@ -1421,6 +1601,11 @@ const FinalCheckingFloorSupervisorPage = () => {
             <div className="mb-4 px-3 py-2 rounded-md bg-teal-50 border-2 border-teal-200 text-[11px] text-teal-900">
               <strong>How to update:</strong> Select an article below, then (1) enter how many good pieces go to next floor (M1), (2) enter how many you checked in each quality category (M1–M4), (3) optionally move pieces between categories, then click Update Order.
             </div>
+            {modalArticles.some((a) => (a.floorQuantities?.finalChecking?.received ?? 0) <= 0) && (
+              <div className="mb-4 px-3 py-2 rounded-md bg-amber-50 border-2 border-amber-200 text-[11px] text-amber-900">
+                <strong>Accept before transfer:</strong> To transfer M1 to Warehouse, you must first accept the container (Scan Container → Accept Article Quantity). Transfer is disabled until <code>received</code> &gt; 0.
+              </div>
+            )}
             <section className="mb-4 rounded-md border-2 border-gray-300 bg-gray-50 overflow-hidden">
               <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">1. Order info</div>
               <div className="grid grid-cols-2 gap-3 p-3">
@@ -1465,7 +1650,8 @@ const FinalCheckingFloorSupervisorPage = () => {
                   m3Quantity: fc?.m3Quantity ?? article.m3Quantity ?? 0,
                   m4Quantity: fc?.m4Quantity ?? article.m4Quantity ?? 0,
                   repairStatus: (fc?.repairStatus || (article as any).repairStatus || "Not Required") as "Not Required" | "In Review" | "Repaired" | "Rejected",
-                  repairRemarks: fc?.repairRemarks || (article as any).repairRemarks || ""
+                  repairRemarks: fc?.repairRemarks || (article as any).repairRemarks || "",
+                  transferItems: [{ transferred: 0 }],
                 };
                 const received = fc?.received || 0;
                 const transferred = fc?.transferred || 0;
@@ -1495,35 +1681,66 @@ const FinalCheckingFloorSupervisorPage = () => {
                   </tbody>
                 </table>
               </div>
+              {(fc?.receivedData as any[])?.some((d: any) => (d.transferred ?? 0) > 0) && (
+                <div className="px-3 py-2 border-t border-gray-200 bg-sky-50/50">
+                  <label className="block text-[10px] font-bold text-sky-800 mb-1">Received breakdown (Qty · Style · Brand)</label>
+                  <div className="space-y-0.5 text-[11px] text-gray-700">
+                    {(fc?.receivedData as any[]).filter((d: any) => (d.transferred ?? 0) > 0).map((d: any, i: number) => (
+                      <div key={i}>
+                        <span className="font-medium">{d.transferred ?? 0}</span>
+                        {d.styleCode && <span> · {d.styleCode}</span>}
+                        {d.brand && <span> · {d.brand}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="px-3 py-1 text-[10px] text-gray-600 bg-amber-50 border-t border-gray-200">Max M1 to transfer = <strong>{remaining}</strong></p>
             </section>
             <section className="mb-4 rounded-md border-2 border-green-300 overflow-hidden">
-              <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Good quality (M1) — how many to send to next floor?</div>
-              <p className="px-3 py-1 text-[10px] text-gray-600 bg-green-50/50 border-b border-green-200">Max = Remaining.</p>
-              <div className="p-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-green-800 block mb-0.5">Quantity to transfer</label>
-                    {(() => {
-                      const actualRemaining = getActualRemainingForArticle(article);
-                      const isFullyTransferred = actualRemaining <= 0;
-                      return (
-                        <>
-                          <span className="text-[10px] text-gray-500 block mb-0.5">(Max: {actualRemaining})</span>
-                          <NumericInput
-                            className={`py-1.5 px-2 text-[12px] w-24 border-2 rounded ${isFullyTransferred ? "bg-gray-100 border-gray-300 cursor-not-allowed" : currentUpdateData.m1Quantity > actualRemaining ? "border-red-500" : "border-gray-300"}`}
-                            value={currentUpdateData.m1Quantity}
-                            onChange={(value) => { if (!isFullyTransferred && value <= actualRemaining) handleM1QuantityChange(articleId, value); }}
-                            placeholder={isFullyTransferred ? "Done" : `Max ${actualRemaining}`}
-                            disabled={isFullyTransferred}
-                            allowDecimals
-                          />
-                          {isFullyTransferred ? <div className="text-[10px] text-green-600 mt-0.5 font-medium">✓ No quantity left to transfer</div> : currentUpdateData.m1Quantity > actualRemaining ? <div className="text-[10px] text-red-600 font-medium">Max {actualRemaining}</div> : null}
-                        </>
-                      );
-                    })()}
+              <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Good quality (M1) — transfer to next floor (Qty · Style · Brand)</div>
+              {(fc?.transferredData as any[])?.length > 0 && (
+                <div className="px-3 py-2 border-b border-gray-200 bg-gray-50/50">
+                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wide mb-1">Previously transferred</label>
+                  <div className="space-y-0.5 text-[11px] text-gray-700">
+                    {(fc?.transferredData as any[]).map((d: any, i: number) => (
+                      <div key={i}>
+                        <span className="font-medium">{d.transferred ?? 0}</span>
+                        {d.styleCode && <span> · {d.styleCode}</span>}
+                        {d.brand && <span> · {d.brand}</span>}
+                      </div>
+                    ))}
                   </div>
                 </div>
+              )}
+              <p className="px-3 py-1 text-[10px] text-gray-600 bg-green-50/50 border-b border-green-200">Enter <strong>new</strong> transfer below. Total must not exceed remaining.</p>
+              <div className="p-2 border-t-2 border-green-200 bg-green-50/30">
+                {(() => {
+                  const actualRemaining = getActualRemainingForArticle(article);
+                  const isFullyTransferred = actualRemaining <= 0;
+                  return (
+                    <>
+                      {(() => {
+                        const { options, styleCodeMaxQuantities } = getArticleM1StyleCodeOptions(article);
+                        const noReceived = options.length === 0;
+                        return (
+                          <TransferItemsInput
+                            value={currentUpdateData.transferItems ?? [{ transferred: 0 }]}
+                            onChange={(items) => handleTransferItemsChange(articleId, items)}
+                            maxTotal={actualRemaining}
+                            disabled={isFullyTransferred || noReceived}
+                            styleCodeOptions={options}
+                            styleCodeMaxQuantities={noReceived ? undefined : styleCodeMaxQuantities}
+                            placeholder={noReceived ? "No received breakdown — accept article first" : "Add new transfer lines (max: remaining)"}
+                          />
+                        );
+                      })()}
+                      {isFullyTransferred && (
+                        <div className="text-[10px] text-green-600 mt-1 font-medium">✓ No quantity left to transfer</div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </section>
             <section className="mb-4 rounded-md border-2 border-gray-400 overflow-hidden">
@@ -1714,15 +1931,28 @@ const FinalCheckingFloorSupervisorPage = () => {
                     const update = updateData[articleId];
                     if (!update) return false;
                     const actualRemaining = getActualRemainingForArticle(article);
-                    return update.m1Quantity > actualRemaining;
+                    const total = getTransferTotal(update.transferItems ?? []);
+                    if (total > actualRemaining) return true;
+                    return hasTransferItemsExceedingStyleCodeMax(article, update.transferItems ?? []);
                   });
                   if (invalid) {
-                    toast.error("Cannot submit: Some articles have M1 exceeding remaining");
+                    toast.error("Cannot submit: Some articles have transfer quantity exceeding remaining or received per style code");
+                    return;
+                  }
+                  const hasTransferButNoReceived = modalArticles.some(article => {
+                    const aid = article.id || article._id;
+                    const total = getTransferTotal(updateData[aid]?.transferItems ?? []);
+                    const received = article.floorQuantities?.finalChecking?.received ?? 0;
+                    return total > 0 && received <= 0;
+                  });
+                  if (hasTransferButNoReceived) {
+                    toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
                     return;
                   }
                   const hasAnyM1 = modalArticles.some(article => {
                     const articleId = article.id || article._id;
-                    return articleId && (updateData[articleId]?.m1Quantity ?? 0) > 0;
+                    const total = getTransferTotal(updateData[articleId]?.transferItems ?? []);
+                    return articleId && total > 0;
                   });
                   if (!hasAnyM1) {
                     handleUpdateSubmit();
@@ -1734,7 +1964,8 @@ const FinalCheckingFloorSupervisorPage = () => {
                   const first = modalArticles[0];
                   const firstId = first?.id || first?._id || "";
                   setUpdateContainerArticleId(firstId);
-                  setUpdateContainerQuantity(String(updateData[firstId]?.m1Quantity ?? 0));
+                  const firstItems = updateData[firstId]?.transferItems ?? [];
+                  setUpdateContainerQuantity(String(firstItems.reduce((s, i) => s + (i.transferred ?? 0), 0)));
                   setUpdateContainerNextFloor("Warehouse");
                   setShowUpdateContainerModal(true);
                 }}
@@ -1744,7 +1975,9 @@ const FinalCheckingFloorSupervisorPage = () => {
                   const update = updateData[articleId];
                   if (!update) return false;
                   const actualRemaining = getActualRemainingForArticle(article);
-                  return update.m1Quantity > actualRemaining;
+                  const total = getTransferTotal(update.transferItems ?? []);
+                  if (total > actualRemaining) return true;
+                  return hasTransferItemsExceedingStyleCodeMax(article, update.transferItems ?? []);
                 })}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 shadow-sm disabled:opacity-50"
               >
@@ -1870,6 +2103,37 @@ const FinalCheckingFloorSupervisorPage = () => {
                         </div>
                       </div>
                     </div>
+
+                    {(article.floorQuantities?.finalChecking as any)?.receivedData?.some((d: any) => (d.transferred ?? 0) > 0) && (
+                      <div className="mb-4 p-3 bg-sky-50 rounded-lg border border-sky-200">
+                        <label className="form-label text-sky-800 font-semibold">Received breakdown (Style / Brand)</label>
+                        <div className="mt-2 space-y-1 text-sm text-gray-700">
+                          {(article.floorQuantities?.finalChecking as any).receivedData
+                            .filter((d: any) => (d.transferred ?? 0) > 0)
+                            .map((d: any, i: number) => (
+                              <div key={i} className="flex gap-2">
+                                <span className="font-medium">{d.transferred ?? 0}</span>
+                                {d.styleCode && <span>· {d.styleCode}</span>}
+                                {d.brand && <span>· {d.brand}</span>}
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                    {(article.floorQuantities?.finalChecking as any)?.transferredData?.length > 0 && (
+                      <div className="mb-4 p-3 bg-teal-50 rounded-lg border border-teal-200">
+                        <label className="form-label text-teal-800 font-semibold">Transferred breakdown (Style / Brand)</label>
+                        <div className="mt-2 space-y-1 text-sm text-gray-700">
+                          {(article.floorQuantities?.finalChecking as any).transferredData.map((d: any, i: number) => (
+                            <div key={i} className="flex gap-2">
+                              <span className="font-medium">{d.transferred ?? 0}</span>
+                              {d.styleCode && <span>· {d.styleCode}</span>}
+                              {d.brand && <span>· {d.brand}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Quality Check Results */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
