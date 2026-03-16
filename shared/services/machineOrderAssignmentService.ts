@@ -155,7 +155,7 @@ function normalizeAssignment(raw: any): MachineOrderAssignment {
     activeNeedle: raw.activeNeedle ?? '',
     productionOrderItems: Array.isArray(raw.productionOrderItems)
       ? raw.productionOrderItems.map((item: any) => ({
-          itemId: item.id ?? item._id,
+          itemId: item.itemId ?? item.id ?? item._id,
           productionOrder: item.productionOrder?.id ?? item.productionOrder?._id ?? item.productionOrder,
           article: item.article?.id ?? item.article?._id ?? item.article,
           status: item.status,
@@ -400,6 +400,27 @@ export async function updateAssignmentItemYarnIssueStatus(
     const err = await res.json().catch(() => ({}));
     const msg = (err as { message?: string }).message || (err as { error?: string }).error || res.statusText || 'Failed to update yarn issue status';
     throw new Error(typeof msg === 'string' ? msg : 'Failed to update yarn issue status');
+  }
+  const data = await res.json();
+  return normalizeAssignment(data.data ?? data);
+}
+
+/** Delete a single item from assignment. DELETE :assignmentId/items/:itemId. Returns updated assignment or refetches on 204. */
+export async function deleteAssignmentItem(
+  assignmentId: string,
+  itemId: string
+): Promise<MachineOrderAssignment> {
+  const res = await fetch(`${BASE}/${assignmentId}/items/${itemId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = (err as { message?: string }).message || (err as { error?: string }).error || res.statusText || 'Failed to delete item';
+    throw new Error(typeof msg === 'string' ? msg : 'Failed to delete item');
+  }
+  if (res.status === 204) {
+    return getMachineOrderAssignment(assignmentId);
   }
   const data = await res.json();
   return normalizeAssignment(data.data ?? data);

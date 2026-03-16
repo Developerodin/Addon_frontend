@@ -163,6 +163,39 @@ const FullInventoryPage = () => {
     );
   };
 
+  const handleDownloadReport = () => {
+    const headers = [
+      "Yarn Name",
+      "Weight (kg)",
+      "Cones (Short-term)",
+      "Blocked Qty (kg)",
+      "Available Qty (kg)",
+      "Status",
+    ];
+    const rows = filteredAndSorted.map((item) => [
+      item.yarnName,
+      item.weight.toLocaleString(),
+      String(item.conesShortTerm ?? ""),
+      item.blockedQty.toLocaleString(),
+      item.availableQty.toLocaleString(),
+      item.status,
+    ]);
+    const escapeCsv = (val: string) =>
+      /[,"\n\r]/.test(val) ? `"${String(val).replace(/"/g, '""')}"` : val;
+    const csvRows = [headers, ...rows].map((row) =>
+      row.map(escapeCsv).join(",")
+    );
+    const csvContent = "\uFEFF" + csvRows.join("\r\n");
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `yarn-inventory-report-${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "In Stock":
@@ -249,6 +282,15 @@ const FullInventoryPage = () => {
           <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
             Total Items: {inventory.length}
           </div>
+          <button
+            type="button"
+            onClick={handleDownloadReport}
+            disabled={filteredAndSorted.length === 0}
+            className="ti-btn ti-btn-outline flex items-center gap-2"
+          >
+            <i className="ri-download-2-line"></i>
+            Download Report
+          </button>
           <Link
             href="/yarn-management/dashboard"
             className="ti-btn ti-btn-outline"
@@ -324,9 +366,6 @@ const FullInventoryPage = () => {
                       </div>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                      Cones (Long-term)
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
                       Cones (Short-term)
                     </th>
                     <th
@@ -347,11 +386,8 @@ const FullInventoryPage = () => {
                         <SortIcon field="availableQty" />
                       </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-b border-gray-300">
-                      Status
-                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-300">
-                      Supplier
+                      Status
                     </th>
                   </tr>
                 </thead>
@@ -373,9 +409,6 @@ const FullInventoryPage = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                         {item.weight.toLocaleString()} kg
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
-                        {item.conesLongTerm}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-r border-b border-gray-300">
                         {item.conesShortTerm}
@@ -403,9 +436,6 @@ const FullInventoryPage = () => {
                         >
                           {item.status}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 border-b border-gray-300">
-                        {item.supplier}
                       </td>
                     </tr>
                   ))}
