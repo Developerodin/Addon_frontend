@@ -7,6 +7,7 @@ import TransferModal from "@/shared/components/production/TransferModal";
 import { productionService, ProductionOrder, FloorOrderFilters, type Article } from "@/shared/services/productionService";
 import { getNextFloor, FloorType, getArticleMongoId, resolveNextFloorFromProcesses, type LinkingType } from "@/shared/utils/productionUtils";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
+import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
 import NumericInput from "@/shared/utils/numericInput";
 import MachineViewTab from "./components/MachineViewTab";
 import ArticleViewTab from "./components/ArticleViewTab";
@@ -63,6 +64,7 @@ const KnittingFloorSupervisorPage = () => {
   /** Weight modal: shown when user clicks Update Order; capture weight then call update API. */
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [weightInput, setWeightInput] = useState<string>('');
+  const [fetchingWeight, setFetchingWeight] = useState(false);
   /** After weight, show container modal: barcode, article, next floor; then PATCH container and call handleUpdateSubmit. */
   const [showContainerModal, setShowContainerModal] = useState(false);
   const [containerBarcode, setContainerBarcode] = useState('');
@@ -1332,15 +1334,49 @@ const KnittingFloorSupervisorPage = () => {
                   </p>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-600 mb-1">Weight</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="any"
-                      placeholder="Enter weight"
-                      value={weightInput}
-                      onChange={(e) => setWeightInput(e.target.value)}
-                      className="w-full border border-gray-300 rounded px-3 py-2 text-[12px] focus:ring-1 focus:ring-purple-300 focus:border-purple-500"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        placeholder="Enter weight"
+                        value={weightInput}
+                        onChange={(e) => setWeightInput(e.target.value)}
+                        className="flex-1 border border-gray-300 rounded px-3 py-2 text-[12px] focus:ring-1 focus:ring-purple-300 focus:border-purple-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={fetchingWeight}
+                        onClick={async () => {
+                          setFetchingWeight(true);
+                          try {
+                            const w = await fetchWeightLatest('knitting');
+                            if (w != null && w > 0) {
+                              const truncated = Math.trunc(w * 1000) / 1000;
+                              setWeightInput(truncated.toFixed(3));
+                              toast.success(`Weight from scale: ${truncated.toFixed(3)} kg`);
+                            } else {
+                              toast.error('Could not get weight from scale.');
+                            }
+                          } finally {
+                            setFetchingWeight(false);
+                          }
+                        }}
+                        className="px-3 py-2 text-[11px] font-bold rounded border border-purple-300 text-purple-700 bg-purple-50 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        title="Get weight from connected scale"
+                      >
+                        {fetchingWeight ? (
+                          <span className="flex items-center gap-1">
+                            <span className="animate-spin rounded-full h-3 w-3 border-2 border-purple-500 border-t-transparent" />
+                            Reading…
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <i className="ri-scales-line text-xs"></i> From scale
+                          </span>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div className="flex justify-end gap-2 pt-1">
                     <button type="button" onClick={() => { setShowWeightModal(false); setWeightInput(''); }} className="px-3 py-1.5 text-[11px] font-bold text-gray-600 border border-gray-300 rounded hover:bg-gray-50">

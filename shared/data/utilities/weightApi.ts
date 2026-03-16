@@ -5,23 +5,31 @@
 
 /** Default candidates for cone weight (yarn-storage process). */
 const WEIGHT_API_CANDIDATES = [
-  'http://192.168.0.3:7001/api/latest/cones',
+  'http://192.168.0.39:7001/api/latest/cones',
   'http://localhost:7001/api/latest/cones',
 ] as const;
 
 /** Candidates for box weight (purchase-order-received process). */
 const WEIGHT_API_CANDIDATES_BOXES = [
-  'http://192.168.0.3:7001/api/latest/box',
+  'http://192.168.0.39:7001/api/latest/box',
   'http://localhost:7001/api/latest/box',
 ] as const;
 
-export type WeightApiContext = 'cones' | 'boxes';
+/** Candidates for knitting weight scale. */
+const WEIGHT_API_CANDIDATES_KNITTING = [
+  'http://192.168.0.39:7001/api/latest/knitting',
+  'http://localhost:7001/api/latest/knitting',
+] as const;
+
+export type WeightApiContext = 'cones' | 'boxes' | 'knitting';
 
 const CACHE_KEY = 'weightApiUrl';
 const CACHE_KEY_BOXES = 'weightApiUrlBoxes';
+const CACHE_KEY_KNITTING = 'weightApiUrlKnitting';
 
 let cachedUrl: string | null = null;
 let cachedUrlBoxes: string | null = null;
+let cachedUrlKnitting: string | null = null;
 
 /**
  * Try fetching from a URL; returns true if response is ok.
@@ -36,19 +44,26 @@ async function probe(url: string): Promise<boolean> {
 }
 
 function getCandidates(context: WeightApiContext): readonly string[] {
-  return context === 'boxes' ? WEIGHT_API_CANDIDATES_BOXES : WEIGHT_API_CANDIDATES;
+  if (context === 'boxes') return WEIGHT_API_CANDIDATES_BOXES;
+  if (context === 'knitting') return WEIGHT_API_CANDIDATES_KNITTING;
+  return WEIGHT_API_CANDIDATES;
 }
 
 function getCacheKey(context: WeightApiContext): string {
-  return context === 'boxes' ? CACHE_KEY_BOXES : CACHE_KEY;
+  if (context === 'boxes') return CACHE_KEY_BOXES;
+  if (context === 'knitting') return CACHE_KEY_KNITTING;
+  return CACHE_KEY;
 }
 
 function getCachedUrl(context: WeightApiContext): string | null {
-  return context === 'boxes' ? cachedUrlBoxes : cachedUrl;
+  if (context === 'boxes') return cachedUrlBoxes;
+  if (context === 'knitting') return cachedUrlKnitting;
+  return cachedUrl;
 }
 
 function setCachedUrl(context: WeightApiContext, url: string | null): void {
   if (context === 'boxes') cachedUrlBoxes = url;
+  else if (context === 'knitting') cachedUrlKnitting = url;
   else cachedUrl = url;
 }
 
