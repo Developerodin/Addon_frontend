@@ -34,6 +34,46 @@ function getItemCounts(a: AssignmentRow): { poCount: number; articleCount: numbe
 /** Dark purplish-blue gradient (top-left darker → bottom-right lighter bluish purple) */
 const CARD_BG = "linear-gradient(135deg, #2d2a4e 0%, #3a3768 50%, #4a4d8c 100%)";
 
+/** Brighter blue – no yarn issued (compact yarn-issue cards). */
+const CARD_BG_ISSUE_NONE =
+  "linear-gradient(135deg, #4a5590 0%, #5c6aa8 50%, #7280c0 100%)";
+/** Brighter green – yarn issued (all or partial) (compact yarn-issue cards). */
+const CARD_BG_ISSUE_GREEN =
+  "linear-gradient(135deg, #2d6b48 0%, #3d8f5e 50%, #52a872 100%)";
+
+/** Aggregate yarnIssueStatus across a machine’s items. */
+function getMachineYarnIssueProgress(row: AssignmentRow): "none" | "partial" | "all" {
+  const items = (row as { productionOrderItems?: Array<{ yarnIssueStatus?: string }> }).productionOrderItems ?? [];
+  if (!items.length) return "none";
+  const statuses = items
+    .map((i) => (i?.yarnIssueStatus || "").toString())
+    .filter((s) => s.length > 0);
+  if (!statuses.length) return "none";
+  const completed = statuses.filter((s) => s.toLowerCase() === "completed").length;
+  if (completed === 0) return "none";
+  if (completed === statuses.length) return "all";
+  return "partial";
+}
+
+function getCardBackground(row: AssignmentRow, compact: boolean, nameOnly: boolean): string {
+  // For the standard (non-compact) assignment view, keep existing look.
+  if (!compact) return CARD_BG;
+  // In compact cards (used by yarn-issue page): issued = green, not issued = blue.
+  const progress = getMachineYarnIssueProgress(row);
+  switch (progress) {
+    case "all":
+      // All yarn issued → green
+      return CARD_BG_ISSUE_GREEN;
+    case "partial":
+      // Partially issued → green
+      return CARD_BG_ISSUE_GREEN;
+    case "none":
+    default:
+      // No yarn issued → blue
+      return CARD_BG_ISSUE_NONE;
+  }
+}
+
 function getPagination(currentPage: number, totalPages: number): (number | string)[] {
   if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
   const pages: (number | string)[] = [1];
@@ -142,9 +182,17 @@ export default function AssignmentsCards({
                 role={readOnly && onCardClick && cardClickable ? "button" : undefined}
                 tabIndex={readOnly && onCardClick && cardClickable ? 0 : undefined}
                 onClick={readOnly && onCardClick && cardClickable ? () => onCardClick(row) : undefined}
-                onKeyDown={readOnly && onCardClick && cardClickable ? (e) => { if (e.key === "Enter" || e.key === " ") onCardClick(row); } : undefined}
-                className={`rounded-lg shadow-md overflow-hidden border border-white/10 min-w-0 ${compact ? "rounded-lg transition-[filter] hover:brightness-110" : "rounded-xl transition-transform hover:scale-[1.02]"} ${readOnly && onCardClick && cardClickable ? "cursor-pointer" : ""}`}
-                style={{ background: CARD_BG }}
+                onKeyDown={
+                  readOnly && onCardClick && cardClickable
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") onCardClick(row);
+                      }
+                    : undefined
+                }
+                className={`rounded-lg shadow-md overflow-hidden border border-white/10 min-w-0 ${
+                  compact ? "rounded-lg transition-[filter] hover:brightness-110" : "rounded-xl transition-transform hover:scale-[1.02]"
+                } ${readOnly && onCardClick && cardClickable ? "cursor-pointer" : ""}`}
+                style={{ background: getCardBackground(row, compact, nameOnly) }}
               >
                 <div className={`text-white flex flex-col ${compact ? "p-2.5 min-h-0" : `p-3 ${columnsPerRow === 5 ? "min-h-[140px]" : "min-h-[200px]"}`}`}>
                   <div className={`flex items-start justify-between gap-2 ${compact ? "" : "mb-2"}`}>

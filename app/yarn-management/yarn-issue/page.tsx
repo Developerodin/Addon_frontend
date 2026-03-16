@@ -1522,7 +1522,6 @@ const YarnIssuePage = () => {
                   <div className="p-[10px] border-b border-gray-100">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
                       {filteredOrders.map((order) => {
-                        const issuedTotals = getOrderTotals(order, allYarnTransactions);
                         const isSelected = selectedOrderId === order.id;
                         return (
                           <button
@@ -1540,9 +1539,6 @@ const YarnIssuePage = () => {
                           >
                             <div className="text-[12px] font-bold text-gray-900 truncate">{order.orderNumber}</div>
                             <div className="text-[10px] text-gray-500 mt-0.5 truncate">{order.buyer} · {order.floor}</div>
-                            <div className="text-[10px] text-gray-600 mt-1 font-medium">
-                              {issuedTotals.issued.toFixed(2)} / {(issuedTotals.required / 1000).toFixed(2)} kg
-                            </div>
                           </button>
                         );
                       })}
@@ -1653,7 +1649,24 @@ const YarnIssuePage = () => {
                         <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">BOM - Yarn Requirements</h3>
                         {sortedRequirements.length > 0 && (
                           <span className="text-[11px] text-gray-500">
-                            Total: {formatKgDisplay(sortedRequirements.reduce((sum, req) => sum + req.requiredQty, 0))} • {sortedRequirements.length} yarn{sortedRequirements.length !== 1 ? "s" : ""}
+                            {(() => {
+                              const totals = sortedRequirements.reduce(
+                                (acc, req) => {
+                                  const articleFilter = getArticleFilterForRequirement(req, selectedArticleId, selectedOrder);
+                                  const issuedKg = getIssuedQty(req, allYarnTransactions, selectedOrder!, articleFilter);
+                                  acc.requiredGrams += req.requiredQty;
+                                  acc.issuedGrams += issuedKg * 1000;
+                                  return acc;
+                                },
+                                { issuedGrams: 0, requiredGrams: 0 }
+                              );
+                              return (
+                                <>
+                                  Issued: {formatKgDisplay(totals.issuedGrams)} • Total: {formatKgDisplay(totals.requiredGrams)} • {sortedRequirements.length} yarn
+                                  {sortedRequirements.length !== 1 ? "s" : ""}
+                                </>
+                              );
+                            })()}
                           </span>
                         )}
                       </div>
