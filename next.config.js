@@ -2,6 +2,13 @@
 const isProd = process.env.NODE_ENV === "production";
 const nextConfig = {
   reactStrictMode: true,
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.devServer ??= {};
+      config.devServer.allowedHosts = "all";
+    }
+    return config;
+  },
   trailingSlash: true,
   swcMinify: true,
   basePath: "",

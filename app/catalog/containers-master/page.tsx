@@ -8,6 +8,7 @@ import {
   containersMasterService,
   type ContainerMaster,
   type ContainerStatus,
+  type ContainerType,
   type CreateContainerBody,
   type UpdateContainerBody,
 } from "@/shared/services/containersMasterService";
@@ -30,6 +31,7 @@ const ContainersMasterPage = () => {
   const [totalResults, setTotalResults] = useState(0);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<ContainerStatus | "">("");
+  const [filterType, setFilterType] = useState<ContainerType | "">("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -38,6 +40,8 @@ const ContainersMasterPage = () => {
   const [editingContainer, setEditingContainer] = useState<ContainerMaster | null>(null);
   const [formStatus, setFormStatus] = useState<ContainerStatus>("Active");
   const [formContainerName, setFormContainerName] = useState("");
+  const [formType, setFormType] = useState<ContainerType>("bag");
+  const [formTearWeight, setFormTearWeight] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resettingActive, setResettingActive] = useState(false);
@@ -68,6 +72,7 @@ const ContainersMasterPage = () => {
         limit,
         search: search || undefined,
         status: filterStatus || undefined,
+        type: filterType || undefined,
         sortBy: sortBy || undefined,
       });
       setRows(data.results);
@@ -81,7 +86,7 @@ const ContainersMasterPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, search, filterStatus, sortBy]);
+  }, [page, limit, search, filterStatus, filterType, sortBy]);
 
   useEffect(() => {
     fetchList();
@@ -89,7 +94,7 @@ const ContainersMasterPage = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterStatus]);
+  }, [search, filterStatus, filterType]);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -112,6 +117,8 @@ const ContainersMasterPage = () => {
     setEditingContainer(null);
     setFormStatus("Active");
     setFormContainerName("");
+    setFormType("bag");
+    setFormTearWeight("");
     setSideModalOpen(true);
   };
 
@@ -119,6 +126,8 @@ const ContainersMasterPage = () => {
     setEditingContainer(row);
     setFormStatus(row.status);
     setFormContainerName(row.containerName ?? "");
+    setFormType((row.type as ContainerType) ?? "bag");
+    setFormTearWeight(row.tearWeight != null ? String(row.tearWeight) : "");
     setSideModalOpen(true);
   };
 
@@ -132,11 +141,21 @@ const ContainersMasterPage = () => {
     setSaving(true);
     try {
       if (editingContainer) {
-        const body: UpdateContainerBody = { status: formStatus, containerName: formContainerName.trim() || undefined };
+        const body: UpdateContainerBody = {
+          status: formStatus,
+          containerName: formContainerName.trim() || undefined,
+          type: formType,
+          tearWeight: formTearWeight ? parseFloat(formTearWeight) : undefined,
+        };
         await containersMasterService.update(editingContainer._id, body);
         toast.success("Container updated");
       } else {
-        const body: CreateContainerBody = { status: formStatus, containerName: formContainerName.trim() || undefined };
+        const body: CreateContainerBody = {
+          status: formStatus,
+          containerName: formContainerName.trim() || undefined,
+          type: formType,
+          tearWeight: formTearWeight ? parseFloat(formTearWeight) : undefined,
+        };
         await containersMasterService.create(body);
         toast.success("Container created");
       }
@@ -377,6 +396,16 @@ const ContainersMasterPage = () => {
                 <option value="Inactive">Inactive</option>
               </select>
               <select
+                value={filterType}
+                onChange={(e) => setFilterType((e.target.value || "") as ContainerType | "")}
+                className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
+              >
+                <option value="">All types</option>
+                <option value="bag">Bag</option>
+                <option value="bigContainer">Big Container</option>
+                <option value="container">Container</option>
+              </select>
+              <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
@@ -470,6 +499,8 @@ const ContainersMasterPage = () => {
                   </th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Name</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Type</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tear Weight</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Created</th>
                   <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
@@ -483,6 +514,14 @@ const ContainersMasterPage = () => {
                     </td>
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-900 border border-gray-200">{row.barcode}</td>
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{row.containerName ?? "-"}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
+                      {row.type ? (
+                        <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight bg-blue-50 text-blue-700">
+                          {row.type}
+                        </span>
+                      ) : "-"}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{row.tearWeight != null ? row.tearWeight : "-"}</td>
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${row.status === "Active" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"}`}>
                         {row.status}
@@ -554,6 +593,18 @@ const ContainersMasterPage = () => {
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 mb-1">Container Name</label>
                 <input type="text" value={formContainerName} onChange={(e) => setFormContainerName(e.target.value)} placeholder="Optional name" className="w-full bg-white border border-gray-200 text-[12px] font-medium rounded px-3 py-2 focus:ring-0 focus:border-purple-300" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1">Type</label>
+                <select value={formType} onChange={(e) => setFormType(e.target.value as ContainerType)} className="w-full bg-white border border-gray-200 text-[12px] font-medium rounded px-3 py-2 focus:ring-0 focus:border-purple-300">
+                  <option value="bag">Bag</option>
+                  <option value="bigContainer">Big Container</option>
+                  <option value="container">Container</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1">Tear Weight</label>
+                <input type="number" step="0.001" value={formTearWeight} onChange={(e) => setFormTearWeight(e.target.value)} placeholder="e.g. 0.412" className="w-full bg-white border border-gray-200 text-[12px] font-medium rounded px-3 py-2 focus:ring-0 focus:border-purple-300" />
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 mb-1">Status</label>

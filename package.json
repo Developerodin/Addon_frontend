@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -H 0.0.0.0",
+    "dev": "node -e \"const os=require('os');const i=Object.values(os.networkInterfaces()).flat().find(j=>j.family==='IPv4'&&!j.internal);console.log('\\n  Network URL: http://'+(i?i.address:'0.0.0.0')+':3000\\n');\" && next dev -H 0.0.0.0",
     "build": "next build",
     "postbuild": "node scripts/postbuild.js",
     "start": "npm run postbuild && node standalone-server.js",

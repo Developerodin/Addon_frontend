@@ -3,6 +3,8 @@ import Cookies from 'js-cookie';
 
 export type ContainerStatus = 'Active' | 'Inactive';
 
+export type ContainerType = 'bag' | 'bigContainer' | 'container';
+
 /** Populated article when GET /barcode/:barcode returns activeArticle as object */
 export interface ContainerActiveArticlePopulated {
   _id: string;
@@ -19,6 +21,8 @@ export interface ContainerMaster {
   barcode: string;
   containerName?: string;
   status: ContainerStatus;
+  type?: ContainerType;
+  tearWeight?: number;
   activeArticle?: string | ContainerActiveArticlePopulated;
   activeFloor?: string;
   /** Quantity from container barcode API response */
@@ -36,6 +40,7 @@ export function isPopulatedActiveArticle(
 
 export interface ContainersListParams {
   status?: ContainerStatus;
+  type?: ContainerType;
   search?: string;
   sortBy?: string;
   page?: number;
@@ -53,11 +58,15 @@ export interface PaginatedContainers {
 export interface CreateContainerBody {
   containerName?: string;
   status?: ContainerStatus;
+  type?: ContainerType;
+  tearWeight?: number;
 }
 
 export interface UpdateContainerBody {
   containerName?: string;
   status?: ContainerStatus;
+  type?: ContainerType;
+  tearWeight?: number;
 }
 
 /** Body for PATCH /barcode/:barcode – set active article, floor and optional quantity on container */
@@ -108,6 +117,7 @@ class ContainersMasterService {
   async list(params?: ContainersListParams): Promise<PaginatedContainers> {
     const sp = new URLSearchParams();
     if (params?.status) sp.append('status', params.status);
+    if (params?.type) sp.append('type', params.type);
     if (params?.search) sp.append('search', params.search);
     if (params?.sortBy) sp.append('sortBy', params.sortBy);
     if (params?.page != null) sp.append('page', String(params.page));
