@@ -20,6 +20,7 @@ const CataloguingPage = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingAll, setIsExportingAll] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
@@ -506,6 +507,83 @@ const CataloguingPage = () => {
     }
   };
 
+  const handleExportAll = async () => {
+    try {
+      setIsExportingAll(true);
+      const response = await yarnCatalogService.getYarnCatalogs({
+        page: 1,
+        limit: 10000,
+      });
+      const exportSource = response.results || [];
+
+      if (exportSource.length === 0) {
+        toast.error("No yarn catalogs available for export");
+        return;
+      }
+
+      const sheetData = exportSource.map((catalog) => ({
+        ID: catalog.id,
+        "Yarn Name": catalog.yarnName || "",
+        "Yarn Type ID": catalog.yarnType?.id || "",
+        "Yarn Type Name": catalog.yarnType?.name || "",
+        "Yarn Subtype ID": catalog.yarnSubtype?.id || "",
+        "Yarn Subtype Name":
+          (catalog.yarnSubtype && ("subtype" in catalog.yarnSubtype ? (catalog.yarnSubtype as { subtype?: string }).subtype : catalog.yarnSubtype?.name)) ||
+          "",
+        "Count Size ID": catalog.countSize?.id || "",
+        "Count Size Name": catalog.countSize?.name || "",
+        "Blend ID": catalog.blend?.id || "",
+        "Blend Name": catalog.blend?.name || (catalog.blend as { brandName?: string })?.brandName || "",
+        "Color Family ID": catalog.colorFamily?.id || "",
+        "Color Family Name": catalog.colorFamily?.name || "",
+        "Pantone Shade": catalog.pantonShade || "",
+        "Pantone Name": catalog.pantonName || "",
+        Season: catalog.season || "",
+        GST: catalog.gst ?? "",
+        Remark: catalog.remark || "",
+        "HSN Code": catalog.hsnCode || "",
+        "Min Quantity": catalog.minQuantity ?? "",
+        Status: catalog.status || "",
+        "Created At": catalog.createdAt ? new Date(catalog.createdAt).toLocaleString() : "",
+        "Updated At": catalog.updatedAt ? new Date(catalog.updatedAt).toLocaleString() : "",
+      }));
+
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(sheetData);
+      worksheet["!cols"] = [
+        { wch: 20 },
+        { wch: 30 },
+        { wch: 26 },
+        { wch: 28 },
+        { wch: 26 },
+        { wch: 28 },
+        { wch: 26 },
+        { wch: 24 },
+        { wch: 28 },
+        { wch: 24 },
+        { wch: 28 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 24 },
+        { wch: 14 },
+        { wch: 12 },
+        { wch: 10 },
+        { wch: 24 },
+        { wch: 24 },
+      ];
+      XLSX.utils.book_append_sheet(workbook, worksheet, "YarnCatalogs");
+      XLSX.writeFile(workbook, "all-yarn-catalogs.xlsx");
+      toast.success("All yarn catalogs exported successfully");
+    } catch (error) {
+      console.error("Error exporting all yarn catalogs:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to export all yarn catalogs");
+    } finally {
+      setIsExportingAll(false);
+    }
+  };
+
   const handleSyncCatalogWithSupplier = async () => {
     setIsSyncing(true);
     try {
@@ -596,6 +674,9 @@ const CataloguingPage = () => {
               )}
               <button type="button" onClick={handleExport} disabled={isExporting} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
                 {isExporting ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-download-2-line text-xs"></i>} Export
+              </button>
+              <button type="button" onClick={handleExportAll} disabled={isExportingAll} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-[11px] font-bold rounded hover:bg-indigo-700 transition-colors shadow-sm">
+                {isExportingAll ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-download-cloud-2-line text-xs"></i>} Export All
               </button>
               <button type="button" onClick={handleSyncCatalogWithSupplier} disabled={isSyncing} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-[11px] font-bold rounded hover:bg-sky-700 transition-colors shadow-sm" title="Sync catalog with supplier">
                 {isSyncing ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-refresh-line text-xs"></i>} Sync catalog with supplier

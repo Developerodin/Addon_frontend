@@ -253,6 +253,16 @@ const ProcessOrderPage = () => {
   const [matchExcelErrorDrawerOpen, setMatchExcelErrorDrawerOpen] = useState(false);
   const [matchExcelErrors, setMatchExcelErrors] = useState<string[]>([]);
 
+  // Print Summary Details Modal
+  const [showPrintSummaryModal, setShowPrintSummaryModal] = useState(false);
+  const [printSummaryDetails, setPrintSummaryDetails] = useState({
+    vendorInvoiceNo: '',
+    vendorInvoiceDate: '',
+    grnNo: '',
+    grnDate: '',
+    discrepancyDetails: ''
+  });
+
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
   const hasPurchaseOrderReceived = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
@@ -1021,18 +1031,23 @@ const ProcessOrderPage = () => {
 
       // Get packlist details
       const packlistDetails = rawApiOrder?.packListDetails?.[0] || order.packListDetails;
-      const invoiceNo = rawApiOrder?.invoiceNo || rawApiOrder?.billNo || poNumber;
       const dispatchDoc = packlistDetails?.trackingNumber || 'N/A';
       const deliveryNote = '';
 
+      // Set user provided values
+      const vendorInvoiceNo = printSummaryDetails.vendorInvoiceNo || rawApiOrder?.invoiceNo || rawApiOrder?.billNo || poNumber || '';
+      const vendorInvoiceDate = printSummaryDetails.vendorInvoiceDate ? formatDate(printSummaryDetails.vendorInvoiceDate) : formatDate(orderDate);
+      const grnNo = printSummaryDetails.grnNo || '';
+      const grnDate = printSummaryDetails.grnDate ? formatDate(printSummaryDetails.grnDate) : '';
+
       // Header Grid values
-      htmlTemplate = htmlTemplate.replace(/id="invoice-no".*?>.*?<\/div>/, `id="invoice-no">${invoiceNo}</div>`);
-      htmlTemplate = htmlTemplate.replace(/id="invoice-date".*?>.*?<\/div>/, `id="invoice-date">${formatDate(orderDate)}</div>`);
-      htmlTemplate = htmlTemplate.replace(/id="delivery-note".*?>.*?<\/div>/, `id="delivery-note">${deliveryNote}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="vendor-invoice-no".*?>.*?<\/div>/, `id="vendor-invoice-no">${vendorInvoiceNo}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="vendor-invoice-date".*?>.*?<\/div>/, `id="vendor-invoice-date">${vendorInvoiceDate}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="grn-no".*?>.*?<\/div>/, `id="grn-no">${grnNo}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="grn-date".*?>.*?<\/div>/, `id="grn-date">${grnDate}</div>`);
+      
       htmlTemplate = htmlTemplate.replace(/id="po-no".*?>.*?<\/div>/, `id="po-no">${poNumber}</div>`);
       htmlTemplate = htmlTemplate.replace(/id="po-date".*?>.*?<\/div>/, `id="po-date">${formatDate(orderDate)}</div>`);
-      htmlTemplate = htmlTemplate.replace(/id="dispatch-doc".*?>.*?<\/div>/, `id="dispatch-doc">${dispatchDoc}</div>`);
-      htmlTemplate = htmlTemplate.replace(/id="delivery-date".*?>.*?<\/div>/, `id="delivery-date">${packlistDetails?.estimatedDeliveryDate ? formatDate(packlistDetails.estimatedDeliveryDate) : 'N/A'}</div>`);
 
       // Generation of items rows
       let itemsHtml = '';
@@ -1062,9 +1077,8 @@ const ProcessOrderPage = () => {
       htmlTemplate = htmlTemplate.replace(/id="total-qty".*?>.*?<\/td>/, `id="total-qty">${totalQty.toLocaleString('en-IN', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</td>`);
       htmlTemplate = htmlTemplate.replace(/id="total-amount".*?>.*?<\/td>/, `id="total-amount">${subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>`);
 
-      // Round off calculation
-      const roundOff = totalAmount - (subTotal + totalGst);
-      htmlTemplate = htmlTemplate.replace(/id="round-off".*?>.*?<\/td>/, `id="round-off" style="padding: 1px 4px; font-size: 8px;">${roundOff.toFixed(2)}</td>`);
+      // Update discrepancy details in template
+      htmlTemplate = htmlTemplate.replace(/id="discrepancy-details".*?>.*?<\/span>/, `id="discrepancy-details">${printSummaryDetails.discrepancyDetails || ''}</span>`);
 
       // Calculate GST
       const isSameState = supplierState?.toLowerCase() === 'maharashtra' || supplierState?.toLowerCase() === 'mh';
@@ -2177,7 +2191,7 @@ const ProcessOrderPage = () => {
               )}
               <button
                 type="button"
-                onClick={handlePrintOrderSummary}
+                onClick={() => setShowPrintSummaryModal(true)}
                 disabled={isPrinting}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-[11px] font-bold rounded transition-colors shadow-sm ${!isPrinting ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'}`}
                 title="Print Order Summary (PDF)"
@@ -3823,6 +3837,106 @@ const ProcessOrderPage = () => {
               >
                 <i className="ri-printer-line mr-2"></i>
                 {isTestPrint ? 'Print Test Label' : 'Print with These Settings'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Summary Details Modal */}
+      {showPrintSummaryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pt-16">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowPrintSummaryModal(false)}></div>
+          <div className="relative bg-white rounded-xl shadow-2xl w-[90%] md:w-[600px] max-h-[90vh] flex flex-col flex-shrink">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <i className="ri-printer-line text-purple-600"></i>
+                Print Summary Details
+              </h3>
+              <button
+                onClick={() => setShowPrintSummaryModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+              >
+                <i className="ri-close-line text-xl"></i>
+              </button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Vendor Invoice No</label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                      value={printSummaryDetails.vendorInvoiceNo}
+                      onChange={(e) => setPrintSummaryDetails({ ...printSummaryDetails, vendorInvoiceNo: e.target.value })}
+                      placeholder="Enter invoice no"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Vendor Invoice Date</label>
+                    <input
+                      type="date"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                      value={printSummaryDetails.vendorInvoiceDate}
+                      onChange={(e) => setPrintSummaryDetails({ ...printSummaryDetails, vendorInvoiceDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">GRN No</label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                      value={printSummaryDetails.grnNo}
+                      onChange={(e) => setPrintSummaryDetails({ ...printSummaryDetails, grnNo: e.target.value })}
+                      placeholder="Enter GRN no"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">GRN Date</label>
+                    <input
+                      type="date"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                      value={printSummaryDetails.grnDate}
+                      onChange={(e) => setPrintSummaryDetails({ ...printSummaryDetails, grnDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Discrepancy Details</label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 h-24 resize-none"
+                  value={printSummaryDetails.discrepancyDetails}
+                  onChange={(e) => setPrintSummaryDetails({ ...printSummaryDetails, discrepancyDetails: e.target.value })}
+                  placeholder="Enter any discrepancy details..."
+                />
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 shrink-0 rounded-b-xl">
+              <button
+                type="button"
+                onClick={() => setShowPrintSummaryModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md shadow-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPrintSummaryModal(false);
+                  handlePrintOrderSummary();
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm transition-colors"
+              >
+                <i className="ri-printer-line mr-2"></i>
+                Print Document
               </button>
             </div>
           </div>
