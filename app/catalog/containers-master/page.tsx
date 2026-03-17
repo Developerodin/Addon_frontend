@@ -6,6 +6,7 @@ import { Toaster, toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import {
   containersMasterService,
+  hasActiveItems,
   type ContainerMaster,
   type ContainerStatus,
   type ContainerType,
@@ -534,9 +535,11 @@ const ContainersMasterPage = () => {
                     </td>
                     <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
                       <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                        <button type="button" onClick={() => { setActiveItemsContainer(row); setShowActiveItemsDrawer(true); }} className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-500 border border-blue-100 rounded hover:bg-blue-100 transition-colors" title="View active items">
-                          <i className="ri-eye-line text-xs"></i>
-                        </button>
+                        {hasActiveItems(row) && (
+                          <button type="button" onClick={() => { setActiveItemsContainer(row); setShowActiveItemsDrawer(true); }} className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-500 border border-blue-100 rounded hover:bg-blue-100 transition-colors" title="View active items">
+                            <i className="ri-eye-line text-xs"></i>
+                          </button>
+                        )}
                         <button type="button" onClick={() => openEditModal(row)} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors" title="Edit">
                           <i className="ri-pencil-line text-xs"></i>
                         </button>
