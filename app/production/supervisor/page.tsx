@@ -688,7 +688,7 @@ const ProductionSupervisorPage = () => {
                                   <button className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100" onClick={() => handleViewOrder(order)} title="View"><i className="ri-eye-line text-xs"></i></button>
                                   <button className="w-7 h-7 flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-200 rounded hover:bg-gray-100" onClick={() => handleViewOrderLogs(order)} title="Logs"><i className="ri-file-list-line text-xs"></i></button>
                                   <Link href={`/production/supervisor/edit?id=${order.id}`} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100" title="Edit"><i className="ri-pencil-line text-xs"></i></Link>
-                                  <button className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100" onClick={() => handleDeleteOrder(order.id)} title="Delete"><i className="ri-delete-bin-line text-xs"></i></button>
+                                  {/* <button className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100" onClick={() => handleDeleteOrder(order.id)} title="Delete"><i className="ri-delete-bin-line text-xs"></i></button> */}
                                 </div>
                               </td>
                             </tr>

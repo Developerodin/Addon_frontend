@@ -20,8 +20,50 @@ import {
   type OrderStatusType,
   type ProductionOrderItem,
 } from "@/shared/services/machineOrderAssignmentService";
-import { containersMasterService, isPopulatedActiveArticle } from "@/shared/services/containersMasterService";
+import { containersMasterService, hasActiveItems } from "@/shared/services/containersMasterService";
+import QRCode from "qrcode";
 type KnittingTab = "orders" | "machine-view" | "article-view" | "planning";
+
+/** Print 50×70mm label with QR code (articleId + orderId) and article number */
+async function printContainerLabel(articleId: string, orderId: string, articleNumber: string): Promise<void> {
+  const qrPayload = JSON.stringify({ articleId, orderId });
+  const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+    width: 120,
+    margin: 1,
+    color: { dark: "#000000", light: "#FFFFFF" },
+    errorCorrectionLevel: "M",
+  });
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    throw new Error("Popup blocked. Allow popups to print.");
+  }
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Label - ${articleNumber}</title>
+        <style>
+          @page { size: 50mm 70mm; margin: 0; }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: system-ui, sans-serif; width: 50mm; height: 70mm; padding: 4mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+          .qr { width: 35mm; height: 35mm; flex-shrink: 0; }
+          .qr img { width: 100%; height: 100%; object-fit: contain; }
+          .article { font-size: 14pt; font-weight: bold; text-align: center; margin-top: 4mm; word-break: break-all; }
+        </style>
+      </head>
+      <body>
+        <div class="qr"><img src="${qrDataUrl}" alt="QR" /></div>
+        <div class="article">${articleNumber || "—"}</div>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 300);
+}
 
 const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
   OrderStatus.PENDING,
@@ -75,7 +117,7 @@ const KnittingFloorSupervisorPage = () => {
   const [containerSubmitting, setContainerSubmitting] = useState(false);
   /** After barcode enter/scan: idle | loading | not-found | already-filled | ok. Only allow update when ok. */
   const [containerCheckStatus, setContainerCheckStatus] = useState<'idle' | 'loading' | 'not-found' | 'already-filled' | 'ok'>('idle');
-  const [containerFetched, setContainerFetched] = useState<{ activeArticle?: string | { articleNumber?: string; [k: string]: unknown }; activeFloor?: string } | null>(null);
+  const [containerFetched, setContainerFetched] = useState<{ activeItems?: Array<{ article: string | { articleNumber?: string }; quantity: number }>; activeFloor?: string } | null>(null);
   /** Complete confirmation: show article summary and "Do you really want to complete?" before marking status Completed. */
   const [showCompleteConfirmModal, setShowCompleteConfirmModal] = useState(false);
   const [completeConfirmData, setCompleteConfirmData] = useState<{
@@ -151,7 +193,7 @@ const KnittingFloorSupervisorPage = () => {
     return () => clearTimeout(timeoutId);
   }, [currentPage, itemsPerPage, filters, searchQuery]);
 
-  // When user enters/scans barcode in container modal, fetch container and check if already filled
+  // When user enters/scans barcode in container modal, fetch container and check if free or same-floor (multi-article allowed)
   useEffect(() => {
     if (!showContainerModal) {
       setContainerCheckStatus('idle');
@@ -164,6 +206,7 @@ const KnittingFloorSupervisorPage = () => {
       setContainerFetched(null);
       return;
     }
+    const nextFloor = containerNextFloor?.trim().toLowerCase();
     let cancelled = false;
     const t = setTimeout(() => {
       setContainerCheckStatus('loading');
@@ -172,14 +215,16 @@ const KnittingFloorSupervisorPage = () => {
         .getByBarcode(barcode)
         .then((container) => {
           if (cancelled) return;
-          const hasActive = !!(
-            container.activeFloor?.trim() ||
-            isPopulatedActiveArticle(container.activeArticle) ||
-            (typeof container.activeArticle === 'string' && container.activeArticle.trim())
-          );
-          if (hasActive) {
-            setContainerCheckStatus('already-filled');
-            setContainerFetched({ activeArticle: container.activeArticle, activeFloor: container.activeFloor });
+          if (hasActiveItems(container)) {
+            const activeFloorNorm = (container.activeFloor ?? '').trim().toLowerCase();
+            // Same destination floor → allow adding another article (multi-article per container)
+            if (nextFloor && activeFloorNorm && activeFloorNorm === nextFloor) {
+              setContainerCheckStatus('ok');
+              setContainerFetched({ activeItems: container.activeItems, activeFloor: container.activeFloor });
+            } else {
+              setContainerCheckStatus('already-filled');
+              setContainerFetched({ activeItems: container.activeItems, activeFloor: container.activeFloor });
+            }
           } else {
             setContainerCheckStatus('ok');
             setContainerFetched(null);
@@ -197,7 +242,7 @@ const KnittingFloorSupervisorPage = () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [showContainerModal, containerBarcode]);
+  }, [showContainerModal, containerBarcode, containerNextFloor]);
 
   // When article changes in container modal, pre-fill quantity and next floor from article processes
   useEffect(() => {
@@ -1439,14 +1484,18 @@ const KnittingFloorSupervisorPage = () => {
                     {containerCheckStatus === 'already-filled' && (
                       <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">
                         This container is not empty. It is assigned to <strong>{containerFetched?.activeFloor ?? 'unknown'}</strong>
-                        {containerFetched?.activeArticle && typeof containerFetched.activeArticle === 'object' && 'articleNumber' in containerFetched.activeArticle
-                          ? ` with article <strong>${containerFetched.activeArticle.articleNumber}</strong>`
+                        {containerFetched?.activeItems?.length
+                          ? ` with ${containerFetched.activeItems.length} item(s)`
                           : ''}
                         . Use another container.
                       </p>
                     )}
                     {containerCheckStatus === 'ok' && (
-                      <p className="text-[11px] text-green-600 mt-1">Container is available. Select floor below.</p>
+                      <p className="text-[11px] text-green-600 mt-1">
+                        {containerFetched?.activeItems?.length
+                          ? `Container has items for ${containerFetched.activeFloor ?? 'this floor'}. You can add another article.`
+                          : 'Container is available. Select floor below.'}
+                      </p>
                     )}
                   </div>
                   <div className={containerCheckStatus !== 'ok' ? 'opacity-60 pointer-events-none' : ''}>
@@ -1480,7 +1529,29 @@ const KnittingFloorSupervisorPage = () => {
                     />
                     <p className="text-[10px] text-gray-500 mt-0.5">Set automatically from article process flow</p>
                   </div>
-                  <div className="flex justify-end gap-2 pt-1">
+                  <div className="flex justify-end gap-2 pt-1 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!selectedOrder || !containerArticleId) return;
+                        const article = selectedOrder.articles.find((a) => a._id === containerArticleId || a.id === containerArticleId);
+                        const articleId = getArticleMongoId(containerArticleId, selectedOrder.articles) ?? containerArticleId;
+                        const orderId = selectedOrder.id ?? selectedOrder._id ?? '';
+                        const articleNumber = article?.articleNumber ?? article?.factoryCode ?? '—';
+                        try {
+                          await printContainerLabel(articleId, orderId, articleNumber);
+                          toast.success('Label opened for printing');
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Print failed');
+                        }
+                      }}
+                      disabled={!containerArticleId}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Print 50×70mm label with QR code (articleId + orderId) and article number"
+                    >
+                      <i className="ri-printer-line text-xs" />
+                      Print label
+                    </button>
                     <button
                       type="button"
                       onClick={() => { setShowContainerModal(false); setPendingWeightForContainer(undefined); setContainerCheckStatus('idle'); setContainerFetched(null); setContainerQuantity(''); }}
@@ -1506,11 +1577,17 @@ const KnittingFloorSupervisorPage = () => {
                         }
                         setContainerSubmitting(true);
                         try {
-                          await containersMasterService.updateByBarcode(barcode, {
-                            activeArticle: activeArticleMongoId,
-                            activeFloor: floor,
-                            quantity: qty,
-                          });
+                          // Multi-article: if container already has items for same floor, append; else full replace
+                          if (containerFetched?.activeItems?.length) {
+                            await containersMasterService.updateByBarcode(barcode, {
+                              addItem: { article: activeArticleMongoId, quantity: qty },
+                            });
+                          } else {
+                            await containersMasterService.updateByBarcode(barcode, {
+                              activeFloor: floor,
+                              activeItems: [{ article: activeArticleMongoId, quantity: qty }],
+                            });
+                          }
                           toast.success('Container updated');
                           setShowContainerModal(false);
                           setContainerBarcode('');

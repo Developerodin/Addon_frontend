@@ -428,6 +428,10 @@ const AddOrderPage = () => {
       } else if (article.plannedQuantity > 100000) {
         newErrors[`article_${index}_quantity`] = 'Qty cannot exceed 100,000';
       }
+      // Machine selection is compulsory for each article with product selected
+      if (article.productId && (!article.machineId || String(article.machineId).trim() === '')) {
+        newErrors[`article_${index}_machine`] = 'Machine selection required';
+      }
     });
 
     setErrors(newErrors);
@@ -437,6 +441,11 @@ const AddOrderPage = () => {
   /** True if any article has factory code but no BOM — disables Create Order */
   const hasArticleWithoutBOM = formData.articles.some(
     (a) => a.productId && (!a.bom || a.bom.length === 0)
+  );
+
+  /** True if any article has product but no machine selected — disables Create Order */
+  const hasArticleWithoutMachine = formData.articles.some(
+    (a) => a.productId && (!a.machineId || String(a.machineId).trim() === '')
   );
 
   // No order-level inputs; all editing happens within articles
@@ -464,6 +473,9 @@ const AddOrderPage = () => {
       if (errors[key]) setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
     } else if (field === 'plannedQuantity') {
       const key = `article_${articleIndex}_quantity`;
+      if (errors[key]) setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
+    } else if (field === 'machineId') {
+      const key = `article_${articleIndex}_machine`;
       if (errors[key]) setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
     }
   };
@@ -713,6 +725,7 @@ const AddOrderPage = () => {
                         <li><strong>Planned Quantity:</strong> Number of units to produce (1-100,000)</li>
                         <li><strong>Linking Type:</strong> Auto, Rosso, or Hand linking</li>
                         <li><strong>Priority (per article):</strong> Urgent, High, Medium, or Low</li>
+                        <li><strong>Machine:</strong> Required for each article — select a machine before creating order</li>
                       </ul>
                     </div>
                   </div>
@@ -889,7 +902,7 @@ const AddOrderPage = () => {
                                 }}
                                 disabled={isLoadingMachines || !article.productId}
                                 title={!article.productId ? 'Select an article (factory code) first' : undefined}
-                                className="form-control form-control-sm w-full text-xs py-1 px-2 h-8 text-left bg-white border border-gray-300 rounded flex items-center justify-between gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
+                                className={`form-control form-control-sm w-full text-xs py-1 px-2 h-8 text-left bg-white border rounded flex items-center justify-between gap-1 disabled:opacity-60 disabled:cursor-not-allowed ${errors[`article_${index}_machine`] || (article.productId && (!article.machineId || String(article.machineId).trim() === '')) ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                               >
                                 <span className="truncate">
                                   {article.machineId
@@ -898,6 +911,9 @@ const AddOrderPage = () => {
                                 </span>
                                 <i className="ri-arrow-down-s-line text-gray-500 shrink-0" />
                               </button>
+                              {errors[`article_${index}_machine`] && (
+                                <div className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_machine`]}</div>
+                              )}
                             </td>
                             <td className="px-2 py-2">
                               <input
@@ -1037,8 +1053,14 @@ const AddOrderPage = () => {
                     <button
                       type="submit"
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-60"
-                      disabled={isSubmitting || hasArticleWithoutBOM}
-                      title={hasArticleWithoutBOM ? "Lin BOM is missing for one or more articles" : undefined}
+                      disabled={isSubmitting || hasArticleWithoutBOM || hasArticleWithoutMachine}
+                      title={
+                        hasArticleWithoutBOM
+                          ? "Lin BOM is missing for one or more articles"
+                          : hasArticleWithoutMachine
+                            ? "Machine selection is required for each article"
+                            : undefined
+                      }
                     >
                       {isSubmitting ? (
                         <>

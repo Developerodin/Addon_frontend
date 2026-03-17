@@ -16,6 +16,12 @@ export interface ContainerActiveArticlePopulated {
   [key: string]: unknown;
 }
 
+/** Single item in activeItems array (article + quantity) */
+export interface ContainerActiveItem {
+  article: string | ContainerActiveArticlePopulated;
+  quantity: number;
+}
+
 export interface ContainerMaster {
   _id: string;
   barcode: string;
@@ -23,9 +29,12 @@ export interface ContainerMaster {
   status: ContainerStatus;
   type?: ContainerType;
   tearWeight?: number;
+  /** @deprecated Use activeItems. Kept for backward compat. */
   activeArticle?: string | ContainerActiveArticlePopulated;
   activeFloor?: string;
-  /** Quantity from container barcode API response */
+  /** Array of article + quantity. New schema. */
+  activeItems?: ContainerActiveItem[];
+  /** Virtual: sum of activeItems.quantity. From API response. */
   quantity?: number;
   createdAt: string;
   updatedAt: string;
@@ -36,6 +45,45 @@ export function isPopulatedActiveArticle(
   activeArticle: string | ContainerActiveArticlePopulated | undefined
 ): activeArticle is ContainerActiveArticlePopulated {
   return Boolean(activeArticle && typeof activeArticle === 'object' && 'articleNumber' in activeArticle);
+}
+
+/** True when container has activeItems (new schema) or legacy activeArticle */
+export function hasActiveItems(container: ContainerMaster | null | undefined): boolean {
+  if (!container) return false;
+  if (container.activeItems && container.activeItems.length > 0) return true;
+  return !!(
+    container.activeFloor?.trim() ||
+    isPopulatedActiveArticle(container.activeArticle as ContainerActiveArticlePopulated | undefined) ||
+    (typeof container.activeArticle === 'string' && container.activeArticle.trim())
+  );
+}
+
+/** Get first article from container (activeItems[0] or legacy activeArticle) for display */
+export function getContainerFirstArticle(container: ContainerMaster | null | undefined): string | ContainerActiveArticlePopulated | null {
+  if (!container) return null;
+  const first = container.activeItems?.[0];
+  if (first) return first.article;
+  return (container.activeArticle as string | ContainerActiveArticlePopulated | undefined) ?? null;
+}
+
+/** Get all articles from container for accept flow */
+export function getContainerArticles(container: ContainerMaster | null | undefined): Array<{ articleId: string; quantity: number }> {
+  if (!container) return [];
+  if (container.activeItems && container.activeItems.length > 0) {
+    return container.activeItems.map((item) => ({
+      articleId: typeof item.article === 'string' ? item.article : (item.article._id ?? item.article.id ?? ''),
+      quantity: item.quantity ?? 0,
+    }));
+  }
+  const legacy = container.activeArticle;
+  if (typeof legacy === 'string' && legacy.trim()) {
+    return [{ articleId: legacy.trim(), quantity: container.quantity ?? 0 }];
+  }
+  if (legacy && typeof legacy === 'object' && 'articleNumber' in legacy) {
+    const id = (legacy as ContainerActiveArticlePopulated)._id ?? (legacy as ContainerActiveArticlePopulated).id ?? '';
+    return id ? [{ articleId: id, quantity: container.quantity ?? 0 }] : [];
+  }
+  return [];
 }
 
 export interface ContainersListParams {
@@ -69,12 +117,20 @@ export interface UpdateContainerBody {
   tearWeight?: number;
 }
 
-/** Body for PATCH /barcode/:barcode – set active article, floor and optional quantity on container */
-export interface UpdateContainerByBarcodeBody {
-  activeArticle: string; // MongoDB ObjectId
-  activeFloor: string;   // non-empty floor name
-  quantity?: number;    // optional quantity (e.g. for knitting transfer)
+/** Body for PATCH /barcode/:barcode – full replace with activeItems */
+export interface UpdateContainerByBarcodeBodyFull {
+  activeFloor: string;
+  activeItems: Array<{ article: string; quantity: number }>;
 }
+
+/** Body for PATCH /barcode/:barcode – append one item */
+export interface UpdateContainerByBarcodeBodyAddItem {
+  addItem: { article: string; quantity: number };
+}
+
+export type UpdateContainerByBarcodeBody =
+  | UpdateContainerByBarcodeBodyFull
+  | UpdateContainerByBarcodeBodyAddItem;
 
 const getAccessToken = (): string | null => {
   if (typeof document === 'undefined') return null;
@@ -151,17 +207,33 @@ class ContainersMasterService {
     });
   }
 
-  /** PATCH /barcode/:barcode – update container's activeArticle and activeFloor. Returns 404 if barcode not found, 400 if validation fails. */
+  /** PATCH /barcode/:barcode – update container. Use activeFloor+activeItems (full) or addItem (append). */
   async updateByBarcode(barcode: string, body: UpdateContainerByBarcodeBody): Promise<ContainerMaster> {
     if (!barcode || !barcode.trim()) throw new Error('barcode is required');
-    if (!body.activeArticle || !body.activeFloor?.trim()) throw new Error('activeArticle and activeFloor are required');
+    const isFull = 'activeItems' in body;
+    const isAdd = 'addItem' in body;
+    if (isFull) {
+      if (!body.activeFloor?.trim() || !Array.isArray(body.activeItems)) throw new Error('activeFloor and activeItems are required');
+    } else if (isAdd) {
+      if (!body.addItem?.article || body.addItem.quantity == null) throw new Error('addItem.article and addItem.quantity are required');
+    } else {
+      throw new Error('Provide either { activeFloor, activeItems } or { addItem }');
+    }
     return this.request<ContainerMaster>(`/barcode/${encodeURIComponent(barcode.trim())}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     });
   }
 
-  /** PATCH /barcode/:barcode/clear-active – clear active article/floor on container. Call after Accept Article Quantity. */
+  /** POST /barcode/:barcode/accept – updates received data for all articles in activeItems. */
+  async acceptByBarcode(barcode: string): Promise<ContainerMaster> {
+    if (!barcode || !barcode.trim()) throw new Error('barcode is required');
+    return this.request<ContainerMaster>(`/barcode/${encodeURIComponent(barcode.trim())}/accept`, {
+      method: 'POST',
+    });
+  }
+
+  /** PATCH /barcode/:barcode/clear-active – clear active items on container. Call after Accept if needed. */
   async clearActiveByBarcode(barcode: string): Promise<void> {
     if (!barcode || !barcode.trim()) throw new Error('barcode is required');
     await this.request<void>(`/barcode/${encodeURIComponent(barcode.trim())}/clear-active`, {
