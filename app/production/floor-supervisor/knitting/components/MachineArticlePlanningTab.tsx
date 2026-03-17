@@ -184,11 +184,19 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
         const type = attrs?.Type ?? "-";
         const needle = (assignment.activeNeedle ?? "").trim() || "-";
         const existingPlan = runningItem ? (runningItem.articleNumber ?? runningArticle?.articleNumber ?? "-") : "-";
+        const existingProd = runningArticle?.plannedQuantity;
+        const existingRem = runningArticle?.floorQuantities?.knitting?.remaining ?? existingProd;
         const existingQty =
-          runningArticle?.plannedQuantity != null ? String(runningArticle.plannedQuantity) : "-";
+          existingProd != null
+            ? `${(existingRem ?? existingProd).toLocaleString()} / ${existingProd.toLocaleString()}`
+            : "-";
         const nextPlan = nextItem ? (nextItem.articleNumber ?? nextArticle?.articleNumber ?? "-") : "-";
+        const nextProd = nextArticle?.plannedQuantity;
+        const nextRem = nextArticle?.floorQuantities?.knitting?.remaining ?? nextProd;
         const nextQty =
-          nextArticle?.plannedQuantity != null ? String(nextArticle.plannedQuantity) : "-";
+          nextProd != null
+            ? `${(nextRem ?? nextProd).toLocaleString()} / ${nextProd.toLocaleString()}`
+            : "-";
 
         planningRows.push({
           machineId: m.id,
@@ -259,8 +267,8 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
               </tr>
               <tr>
                 <th></th><th></th><th></th><th></th>
-                <th>Existing Plan</th><th>Qty</th>
-                <th>Plan 1</th><th>Qty</th>
+                <th>Existing Plan</th><th>Rem / Prod</th>
+                <th>Plan 1</th><th>Rem / Prod</th>
               </tr>
             </thead>
             <tbody>
@@ -359,13 +367,13 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
                 Existing Plan
               </th>
               <th className="px-2 py-1.5 text-[10px] font-semibold text-gray-600 border-b border-r border-gray-300">
-                Qty
+                Rem / Prod
               </th>
               <th className="px-2 py-1.5 text-[10px] font-semibold text-gray-600 border-b border-r border-gray-300">
                 Plan 1
               </th>
               <th className="px-2 py-1.5 text-[10px] font-semibold text-gray-600 border-b border-gray-300">
-                Qty
+                Rem / Prod
               </th>
             </tr>
           </thead>
