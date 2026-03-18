@@ -489,12 +489,19 @@ const PurchasePage = () => {
 
       // Replace invoice details
       const invoiceDate = formatDate(orderDate);
-      const deliveryDate = packlistDetails?.estimatedDeliveryDate ? formatDate(packlistDetails.estimatedDeliveryDate) : 'N/A';
+      const orderDeliveryDate = detailedOrderData?.estimatedOrderDeliveryDate || detailedOrderData?.estimated_order_delivery_date;
+      const deliveryDate =
+        packlistDetails?.estimatedDeliveryDate
+          ? formatDate(packlistDetails.estimatedDeliveryDate)
+          : orderDeliveryDate
+            ? formatDate(orderDeliveryDate)
+            : 'N/A';
+      const creditDays = detailedOrderData?.creditDays ?? detailedOrderData?.credit_days ?? 0;
 
       htmlTemplate = htmlTemplate.replace(/<span id="po-no">.*?<\/span>/g, `<span id="po-no">${poNumber}</span>`);
       htmlTemplate = htmlTemplate.replace(/<span id="po-date">.*?<\/span>/g, `<span id="po-date">${invoiceDate}</span>`);
       htmlTemplate = htmlTemplate.replace(/<span id="delivery-date">.*?<\/span>/g, `<span id="delivery-date">${deliveryDate}</span>`);
-      htmlTemplate = htmlTemplate.replace(/<span id="credit-days">.*?<\/span>/g, `<span id="credit-days">30</span>`);
+      htmlTemplate = htmlTemplate.replace(/<span id="credit-days">.*?<\/span>/g, `<span id="credit-days">${creditDays}</span>`);
 
       // Replace Vendor Details
       let vendorHtml = `
