@@ -56,6 +56,8 @@ export interface PurchaseOrderData {
   purchaseDate: string;
   supplierId: string;
   supplierName: string;
+  creditDays: number;
+  estimatedOrderDeliveryDate: string;
   items: YarnPurchaseItem[];
   subTotal: number;
   totalGst: number;
@@ -107,6 +109,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     purchaseDate: initialData.purchaseDate || new Date().toISOString().split('T')[0],
     supplierId: initialData.supplierId || "",
     supplierName: initialData.supplierName || "",
+    creditDays: initialData.creditDays ?? 0,
+    estimatedOrderDeliveryDate: initialData.estimatedOrderDeliveryDate || "",
     items: initialData.items || [],
     subTotal: initialData.subTotal || 0,
     totalGst: initialData.totalGst || 0,
@@ -1418,6 +1422,16 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       toast.error("Supplier is required");
       return;
     }
+    if (formData.creditDays == null || formData.creditDays < 0) {
+      console.warn('[PurchaseForm] Validation failed: credit days invalid');
+      toast.error("Credit Days is required (min 0)");
+      return;
+    }
+    if (!formData.estimatedOrderDeliveryDate?.trim()) {
+      console.warn('[PurchaseForm] Validation failed: estimated order delivery date missing');
+      toast.error("Estimated Order Delivery Date is required");
+      return;
+    }
     if (formData.items.length === 0) {
       console.warn('[PurchaseForm] Validation failed: no items added');
       toast.error("At least one yarn item is required");
@@ -1567,6 +1581,33 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               </div>
             )}
           </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">
+            Credit Days <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="number"
+            min={0}
+            value={formData.creditDays}
+            onChange={(e) => setFormData(prev => ({ ...prev, creditDays: Math.max(0, Number(e.target.value) || 0) }))}
+            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">
+            Estimated Order Delivery Date <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="date"
+            value={formData.estimatedOrderDeliveryDate}
+            onChange={(e) => setFormData(prev => ({ ...prev, estimatedOrderDeliveryDate: e.target.value }))}
+            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+            required
+          />
         </div>
       </div>
 

@@ -259,6 +259,8 @@ const AddPurchasePage = () => {
         poNumber: generatePoNumber(),
         supplierName: data.supplierName,
         supplier: data.supplierId,
+        creditDays: data.creditDays,
+        estimatedOrderDeliveryDate: data.estimatedOrderDeliveryDate,
         poItems,
         notes: data.notes,
         subTotal: data.subTotal,

@@ -103,6 +103,8 @@ export interface CreatePurchaseOrderPayload {
   poNumber: string;
   supplierName: string;
   supplier: string;
+  creditDays: number;
+  estimatedOrderDeliveryDate: string;
   poItems: PurchaseOrderItemPayload[];
   notes?: string;
   subTotal: number;
@@ -115,6 +117,8 @@ export interface UpdatePurchaseOrderPayload {
   poNumber: string;
   supplierName: string;
   supplier: string;
+  creditDays: number;
+  estimatedOrderDeliveryDate: string;
   poItems: PurchaseOrderItemPayload[];
   notes?: string;
   subTotal: number;
