@@ -52,9 +52,11 @@ export interface MachineViewTabProps {
   onOpenEditModal?: (assignment: MachineOrderAssignment) => void;
   /** When this value changes, machine assignments list is refetched (e.g. after completing an article in parent). */
   refreshTrigger?: number;
+  /** When false, hide settings icon in Actions (e.g. for "user" role). Default true. */
+  canShowSettings?: boolean;
 }
 
-export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: MachineViewTabProps) {
+export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canShowSettings = true }: MachineViewTabProps) {
   const [rows, setRows] = useState<MachineOrderAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -446,6 +448,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                               >
                                 <i className="ri-pencil-line text-sm" />
                               </button>
+                              {canShowSettings && (
                               <button
                                 type="button"
                                 onClick={async () => {
@@ -461,6 +464,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                               >
                                 <i className="ri-settings-3-line text-sm" />
                               </button>
+                              )}
                             </div>
                           )}
                         </td>
@@ -659,7 +663,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger }: Mach
                                   {canDrag && <i className="ri-draggable text-gray-400 text-sm" aria-hidden />}
                                 </td>
                                 <td className="px-2 py-1.5 text-center relative">
-                                  {(() => {
+                                  {canShowSettings && (() => {
                                     const effectiveItemId = item.itemId ?? (item as { id?: string; _id?: string }).id ?? (item as { id?: string; _id?: string })._id;
                                     if (!effectiveItemId) return null;
                                     const isOpen = settingsMenuOpen?.itemId === effectiveItemId;

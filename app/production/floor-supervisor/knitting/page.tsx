@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
@@ -85,6 +86,8 @@ function getStatusOptionsForItem(idx: number, currentStatus?: OrderStatusType): 
 }
 
 const KnittingFloorSupervisorPage = () => {
+  const user = useSelector((state: any) => state.auth?.user);
+  const isUserRole = user?.role === "user";
   const [activeTab, setActiveTab] = useState<KnittingTab>("machine-view");
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -183,6 +186,13 @@ const KnittingFloorSupervisorPage = () => {
       setIsLoading(false);
     }
   };
+
+  // When user role is "user", don't allow Orders tab – switch to machine-view if on orders
+  useEffect(() => {
+    if (isUserRole && activeTab === "orders") {
+      setActiveTab("machine-view");
+    }
+  }, [isUserRole, activeTab]);
 
   // Debounced search effect
   useEffect(() => {
@@ -835,13 +845,15 @@ const KnittingFloorSupervisorPage = () => {
 
           {/* Tabs: Orders | Machine view */}
           <div className="flex border-b border-gray-300 mb-0">
-            <button
-              type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setActiveTab("orders")}
-            >
-              Orders
-            </button>
+            {!isUserRole && (
+              <button
+                type="button"
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setActiveTab("orders")}
+              >
+                Orders
+              </button>
+            )}
             <button
               type="button"
               className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "machine-view" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -869,7 +881,7 @@ const KnittingFloorSupervisorPage = () => {
         {/* Content: Orders | Machine view | Article view */}
         <div className="min-h-[300px]">
           {activeTab === "machine-view" ? (
-            <MachineViewTab onOpenEditModal={handleOpenUpdateModalFromMachine} refreshTrigger={machineViewRefreshTrigger} />
+            <MachineViewTab onOpenEditModal={handleOpenUpdateModalFromMachine} refreshTrigger={machineViewRefreshTrigger} canShowSettings={!isUserRole} />
           ) : activeTab === "planning" ? (
             <MachineArticlePlanningTab refreshTrigger={machineViewRefreshTrigger} />
           ) : activeTab === "article-view" ? (
