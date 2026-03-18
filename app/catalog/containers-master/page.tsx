@@ -52,6 +52,7 @@ const ContainersMasterPage = () => {
   const [printModalContainers, setPrintModalContainers] = useState<ContainerMaster[]>([]);
   const [showActiveItemsDrawer, setShowActiveItemsDrawer] = useState(false);
   const [activeItemsContainer, setActiveItemsContainer] = useState<ContainerMaster | null>(null);
+  const [activeItemsDrawerLoading, setActiveItemsDrawerLoading] = useState(false);
   const [printSelectedIds, setPrintSelectedIds] = useState<string[]>([]);
   const [isPrinting, setIsPrinting] = useState(false);
   const [printSettings, setPrintSettings] = useState({
@@ -451,6 +452,7 @@ const ContainersMasterPage = () => {
                   </button>
                 </>
               )}
+              {/* Reset Active button - commented out
               <button
                 type="button"
                 onClick={() => setShowResetConfirm(true)}
@@ -460,6 +462,7 @@ const ContainersMasterPage = () => {
                 {resettingActive ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-refresh-line text-xs"></i>}
                 Reset Active
               </button>
+              */}
               <button
                 type="button"
                 onClick={openAddModal}
@@ -536,16 +539,38 @@ const ContainersMasterPage = () => {
                     <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
                       <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                         {hasActiveItems(row) && (
-                          <button type="button" onClick={() => { setActiveItemsContainer(row); setShowActiveItemsDrawer(true); }} className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-500 border border-blue-100 rounded hover:bg-blue-100 transition-colors" title="View active items">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setActiveItemsContainer(row);
+                              setShowActiveItemsDrawer(true);
+                              setActiveItemsDrawerLoading(true);
+                              try {
+                                const data = await containersMasterService.getWithArticles(row._id);
+                                setActiveItemsContainer(data);
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : "Failed to load active items");
+                                setShowActiveItemsDrawer(false);
+                                setActiveItemsContainer(null);
+                              } finally {
+                                setActiveItemsDrawerLoading(false);
+                              }
+                            }}
+                            disabled={activeItemsDrawerLoading}
+                            className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-500 border border-blue-100 rounded hover:bg-blue-100 transition-colors disabled:opacity-50"
+                            title="View active items"
+                          >
                             <i className="ri-eye-line text-xs"></i>
                           </button>
                         )}
                         <button type="button" onClick={() => openEditModal(row)} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors" title="Edit">
                           <i className="ri-pencil-line text-xs"></i>
                         </button>
+                        {/* Delete icon in action - commented out
                         <button type="button" onClick={() => handleDelete(row._id)} disabled={deletingId === row._id} className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors" title="Delete">
                           {deletingId === row._id ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-delete-bin-line text-xs"></i>}
                         </button>
+                        */}
                       </div>
                     </td>
                   </tr>
@@ -646,35 +671,42 @@ const ContainersMasterPage = () => {
               </button>
             </div>
             <div className="p-[10px] flex-1 overflow-auto">
-              <div className="mb-3">
-                <span className="text-[11px] font-bold text-gray-600">Active floor:</span>
-                <span className="ml-2 text-[12px] text-gray-900">{activeItemsContainer.activeFloor || "—"}</span>
-              </div>
-              {(activeItemsContainer.activeItems && activeItemsContainer.activeItems.length > 0) ? (
-                <div className="space-y-3">
-                  <h4 className="text-[11px] font-bold text-gray-700 uppercase">activeItems</h4>
-                  <div className="overflow-x-auto border border-gray-200 rounded">
-                    <table className="w-full text-[11px]">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-2 py-1.5 text-left font-bold">Article</th>
-                          <th className="px-2 py-1.5 text-right font-bold">Qty</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeItemsContainer.activeItems.map((item, idx) => (
-                          <tr key={idx} className="border-t border-gray-100">
-                            <td className="px-2 py-1.5 text-gray-800">
-                              {typeof item.article === "object" && item.article && "articleNumber" in item.article
-                                ? (item.article as { articleNumber?: string }).articleNumber ?? JSON.stringify(item.article)
-                                : String(item.article)}
-                            </td>
-                            <td className="px-2 py-1.5 text-right font-medium">{item.quantity ?? 0}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              {activeItemsDrawerLoading ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
+                  <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading active items</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-3">
+                    <span className="text-[11px] font-bold text-gray-600">Active floor:</span>
+                    <span className="ml-2 text-[12px] text-gray-900">{activeItemsContainer.activeFloor || "—"}</span>
                   </div>
+                  {(activeItemsContainer.activeItems && activeItemsContainer.activeItems.length > 0) ? (
+                    <div className="space-y-3">
+                      <h4 className="text-[11px] font-bold text-gray-700 uppercase">activeItems</h4>
+                      <div className="overflow-x-auto border border-gray-200 rounded">
+                        <table className="w-full text-[11px]">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-2 py-1.5 text-left font-bold">Article</th>
+                              <th className="px-2 py-1.5 text-right font-bold">Qty</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {activeItemsContainer.activeItems.map((item, idx) => (
+                              <tr key={idx} className="border-t border-gray-100">
+                                <td className="px-2 py-1.5 text-gray-800">
+                                  {typeof item.article === "object" && item.article
+                                    ? (item.article as { articleNumber?: string }).articleNumber ?? (item.article as { id?: string }).id ?? "-"
+                                    : String(item.article)}
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-medium">{item.quantity ?? 0}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                   <details className="border border-gray-200 rounded p-2 bg-gray-50/50">
                     <summary className="text-[11px] font-bold text-gray-600 cursor-pointer">Raw JSON</summary>
                     <pre className="mt-2 text-[10px] text-gray-700 overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify(activeItemsContainer.activeItems, null, 2)}</pre>
@@ -687,6 +719,8 @@ const ContainersMasterPage = () => {
                 </div>
               ) : (
                 <p className="text-[12px] text-gray-500">No active items.</p>
+              )}
+                </>
               )}
             </div>
           </div>

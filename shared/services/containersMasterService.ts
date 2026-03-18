@@ -187,6 +187,12 @@ class ContainersMasterService {
     return this.request<ContainerMaster>(`/${containerId}`);
   }
 
+  /** GET /:containerId/with-articles – container with populated article objects (articleNumber, etc.) */
+  async getWithArticles(containerId: string): Promise<ContainerMaster> {
+    if (!containerId) throw new Error('containerId is required');
+    return this.request<ContainerMaster>(`/${containerId}/with-articles`);
+  }
+
   async getByBarcode(barcode: string): Promise<ContainerMaster> {
     if (!barcode) throw new Error('barcode is required');
     return this.request<ContainerMaster>(`/barcode/${encodeURIComponent(barcode)}`);
