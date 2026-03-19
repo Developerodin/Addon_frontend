@@ -82,6 +82,36 @@ export interface UpdateRequisitionStatusRequest {
   poSent: boolean;
 }
 
+/** Yarn report row from GET /yarn-management/yarn-report */
+export interface YarnReportRow {
+  store: string;
+  hsnCode: string;
+  yarnName: string;
+  brand: string;
+  shadeNumber: string;
+  yarnType: string;
+  yarnSubtype: string;
+  count: string;
+  colorFamily: string;
+  pantoneColorName: string;
+  opening: number;
+  pur: number;
+  purRet: number;
+  yarnIssueToKnitting: number;
+  yarnReturnedFromKnitting: number;
+  balance: number;
+  rate: number;
+  unit: string;
+  gstPercent: number;
+  amount: number;
+}
+
+export interface YarnReportResponse {
+  results: YarnReportRow[];
+  startDate: string;
+  endDate: string;
+}
+
 class YarnInventoryService {
   private baseURL = `${API_BASE_URL}/yarn-management`;
 
@@ -201,6 +231,19 @@ class YarnInventoryService {
         method: 'PATCH',
         body: JSON.stringify(data),
       }
+    );
+  }
+
+  /** Yarn report for date range (YYYY-MM-DD) */
+  async getYarnReport(params: {
+    start_date: string;
+    end_date: string;
+  }): Promise<YarnReportResponse> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('start_date', params.start_date);
+    queryParams.append('end_date', params.end_date);
+    return this.makeRequest<YarnReportResponse>(
+      `/yarn-report?${queryParams.toString()}`
     );
   }
 }
