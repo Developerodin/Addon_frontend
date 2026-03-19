@@ -1018,6 +1018,29 @@ const FinalCheckingFloorSupervisorPage = () => {
     return priorityClasses[priority as keyof typeof priorityClasses] || 'bg-gray-100 text-gray-800';
   };
 
+  const handlePrintList = async () => {
+    try {
+      const response = await fetch('/templates/stock-transfer-note.html');
+      let htmlTemplate = await response.text();
+
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(htmlTemplate);
+        printWindow.document.close();
+        printWindow.onload = () => {
+          setTimeout(() => {
+            printWindow.print();
+          }, 250);
+        };
+      } else {
+        toast.error('Please allow popups to print list');
+      }
+    } catch (error) {
+      console.error('Error printing list:', error);
+      toast.error('Failed to load print template');
+    }
+  };
+
   return (
     <div className="main-content !p-[10px]">
       <Seo title="Final Checking Supervisor Dashboard" />
@@ -1056,6 +1079,14 @@ const FinalCheckingFloorSupervisorPage = () => {
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                onClick={handlePrintList}
+                title="Print List"
+              >
+                <i className="ri-printer-line text-xs"></i> Print List
+              </button>
               <button
                 type="button"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
