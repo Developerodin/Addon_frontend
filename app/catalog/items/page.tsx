@@ -188,20 +188,56 @@ const ProductListPage = () => {
     }
   };
 
-  const handleViewStyleCodes = (product: Product) => {
+  const handleViewStyleCodes = async (product: Product) => {
     const raw = product.styleCodes || [];
-    const resolved: StyleCode[] = raw.map((item: any) => {
-      if (typeof item === 'string') {
-        const found = styleCodeLookup.find((sc) => sc.id === item);
-        return found ? { styleCode: found.styleCode, eanCode: found.eanCode, mrp: found.mrp } : { styleCode: '', eanCode: '', mrp: 0 };
+    const getIdFromItem = (item: any): string => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') return String(item.styleCodeId ?? item.id ?? item._id ?? '').trim();
+      return '';
+    };
+
+    // Collect IDs that need resolving
+    const ids = raw.map(getIdFromItem).filter(Boolean);
+    const lookupById = new Map(styleCodeLookup.map((sc) => [sc.id, sc]));
+    const missingIds = Array.from(new Set(ids.filter((id) => !lookupById.has(id))));
+
+    // Resolve missing IDs on-demand so modal doesn't show blanks
+    if (missingIds.length > 0) {
+      try {
+        const fetched = await Promise.all(
+          missingIds.map((id) =>
+            styleCodeService
+              .get(id)
+              .then((sc) => ({ id: sc.id, styleCode: sc.styleCode ?? '', eanCode: sc.eanCode ?? '', mrp: sc.mrp ?? 0 }))
+              .catch(() => null)
+          )
+        );
+        const ok = fetched.filter((x): x is { id: string; styleCode: string; eanCode: string; mrp: number } => !!x && !!x.id);
+        if (ok.length > 0) {
+          setStyleCodeLookup((prev) => {
+            const prevById = new Map(prev.map((p) => [p.id, p]));
+            ok.forEach((sc) => prevById.set(sc.id, sc));
+            return Array.from(prevById.values());
+          });
+          ok.forEach((sc) => lookupById.set(sc.id, sc));
+        }
+      } catch (e) {
+        // ignore; we'll still show ID placeholders below
       }
-      if (item && typeof item === 'object' && (item.styleCode != null || item.eanCode != null)) {
+    }
+
+    const resolved: StyleCode[] = raw.map((item: any) => {
+      // Already has full fields
+      if (item && typeof item === 'object' && (item.styleCode != null || item.eanCode != null || item.mrp != null)) {
         return { styleCode: item.styleCode ?? '', eanCode: item.eanCode ?? '', mrp: item.mrp ?? 0 };
       }
-      const id = item?.styleCodeId ?? item?.id ?? item?._id ?? '';
-      const found = styleCodeLookup.find((sc) => sc.id === id);
-      return found ? { styleCode: found.styleCode, eanCode: found.eanCode, mrp: found.mrp } : { styleCode: id ? `(ID: ${id})` : '', eanCode: '', mrp: 0 };
+      const id = getIdFromItem(item);
+      const found = id ? lookupById.get(id) : undefined;
+      return found
+        ? { styleCode: found.styleCode, eanCode: found.eanCode, mrp: found.mrp }
+        : { styleCode: id ? `(ID: ${id})` : '', eanCode: '', mrp: 0 };
     });
+
     setSelectedProductStyleCodes(resolved);
     setSelectedProductName(product.name);
     setIsStyleCodesModalOpen(true);
