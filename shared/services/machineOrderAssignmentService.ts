@@ -466,10 +466,11 @@ export async function createMachineOrderAssignment(
 /** Mongo ObjectId is 24 hex chars. Short codes (e.g. ARTMLJSS8X0039) must not be sent as article. */
 const MONGO_ID_REGEX = /^[a-fA-F0-9]{24}$/;
 
-/** Payload for PATCH: only fields API accepts. Only items with valid Mongo ids for productionOrder and article. */
+/** Payload for PATCH: only fields API accepts. Only items with valid Mongo ids for productionOrder and article.
+ * priority is managed by backend – do not send. */
 function sanitizeProductionOrderItemsForApi(
   items: ProductionOrderItem[]
-): { productionOrder: string; article: string; status?: OrderStatusType; priority?: number }[] {
+): { productionOrder: string; article: string; status?: OrderStatusType }[] {
   return items
     .map((item) => {
       const po = String(item.productionOrder ?? '').trim();
@@ -480,7 +481,6 @@ function sanitizeProductionOrderItemsForApi(
         productionOrder: po,
         article: art,
         status: item.status,
-        priority: item.priority,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x != null);
