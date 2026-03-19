@@ -799,7 +799,6 @@ const EditOrderContent = () => {
             productionOrder: String(i.productionOrder ?? ''),
             article: String(i.article ?? ''),
             status: (i.status ?? OrderStatus.PENDING) as OrderStatusType,
-            priority: i.priority,
           }));
           try {
             await updateMachineOrderAssignment(assn.id, { productionOrderItems: payloadItems });
@@ -822,10 +821,9 @@ const EditOrderContent = () => {
             productionOrder: String(i.productionOrder ?? ''),
             article: String(i.article ?? ''),
             status: (i.status ?? OrderStatus.PENDING) as OrderStatusType,
-            priority: i.priority,
           }));
           const articlesOnThisMachine = formData.articles.filter((a) => toMid(a.machineId) === mid);
-          const newItems: { productionOrder: string; article: string; priority: number; status: OrderStatusType }[] = [];
+          const newItems: { productionOrder: string; article: string; status: OrderStatusType }[] = [];
           for (let i = 0; i < articlesOnThisMachine.length; i++) {
             const a = articlesOnThisMachine[i];
             const formIndex = formData.articles.indexOf(a);
@@ -837,7 +835,6 @@ const EditOrderContent = () => {
             newItems.push({
               productionOrder: orderId!,
               article: articleId,
-              priority: a.queuePriority != null && a.queuePriority >= 1 ? a.queuePriority : i + 1,
               status: OrderStatus.PENDING,
             });
           }

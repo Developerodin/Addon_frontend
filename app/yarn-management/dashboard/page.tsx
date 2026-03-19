@@ -274,19 +274,28 @@ const DashboardPage = () => {
                 {inventory.length}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowAlertsModal(true)}
-              className="relative w-9 h-9 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-50 transition-colors"
-              aria-label="View inventory alerts"
-            >
-              <i className="ri-notification-3-line text-lg text-gray-600"></i>
-              {alerts.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white">
-                  {alerts.length > 99 ? "99+" : alerts.length}
-                </span>
-              )}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <Link
+                href="/yarn-management/dashboard/report"
+                className="w-9 h-9 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-50 transition-colors text-gray-600"
+                aria-label="Yarn report"
+              >
+                <i className="ri-file-chart-line text-lg"></i>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setShowAlertsModal(true)}
+                className="relative w-9 h-9 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-50 transition-colors"
+                aria-label="View inventory alerts"
+              >
+                <i className="ri-notification-3-line text-lg text-gray-600"></i>
+                {alerts.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white">
+                    {alerts.length > 99 ? "99+" : alerts.length}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 

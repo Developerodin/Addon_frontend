@@ -609,7 +609,7 @@ const AddOrderPage = () => {
       }
 
       // Resolve articleId per row – must be Mongo _id (24-char hex), never short code (e.g. ARTMLJSS8X0039)
-      const byMachine = new Map<string, { productionOrder: string; article: string; priority?: number }[]>();
+      const byMachine = new Map<string, { productionOrder: string; article: string }[]>();
       formData.articles.forEach((article, i) => {
         const machineId = (article.machineId ?? '').toString().trim();
         if (!machineId) return;
@@ -620,11 +620,9 @@ const AddOrderPage = () => {
         const articleId = typeof rawId === 'string' && /^[a-fA-F0-9]{24}$/.test(rawId) ? rawId : null;
         if (!articleId) return;
         if (!byMachine.has(machineId)) byMachine.set(machineId, []);
-        const queuePriority = article.queuePriority != null && article.queuePriority >= 1 ? article.queuePriority : i + 1;
         byMachine.get(machineId)!.push({
           productionOrder: orderId!,
           article: articleId,
-          priority: queuePriority,
         });
       });
 
