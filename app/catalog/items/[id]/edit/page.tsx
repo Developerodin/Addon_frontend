@@ -181,6 +181,7 @@ const EditProductPage = () => {
           brand: sc.brand,
           pack: sc.pack,
         }));
+        // Set initial options; may be extended below if product contains IDs not in this page.
         setStyleCodeOptions(styleOptions);
 
         // Normalize product data
@@ -200,13 +201,61 @@ const EditProductPage = () => {
           }
         }
 
-        // Normalize styleCodes - backend may send array of IDs only, or array of objects
+        // Normalize styleCodes - backend may send array of IDs only, or array of objects.
+        // Fix: styleCode master list here is limited; resolve missing IDs on-demand so edit page never shows blanks.
         if (product.styleCodes && Array.isArray(product.styleCodes)) {
+          type StyleOption = {
+            styleCodeId: string;
+            styleCode: string;
+            eanCode: string;
+            mrp: number;
+            brand?: string;
+            pack?: string;
+          };
+
+          const rawIds: string[] = product.styleCodes
+            .map((sc: any) => (typeof sc === 'string' ? sc : (sc?.styleCodeId ?? sc?._id ?? sc?.id ?? '')))
+            .map((id: any) => String(id || '').trim())
+            .filter((id: string): id is string => !!id);
+
+          const optionsById = new Map<string, StyleOption>(
+            styleOptions
+              .filter((o: any) => !!o?.styleCodeId)
+              .map((o: any) => [String(o.styleCodeId), o as StyleOption])
+          );
+
+          const missingIds: string[] = Array.from(new Set(rawIds.filter((id: string) => !optionsById.has(id))));
+          if (missingIds.length > 0) {
+            const fetched = await Promise.all(
+              missingIds.map((id: string) =>
+                styleCodeService
+                  .get(id)
+                  .then((sc): StyleOption => ({
+                    styleCodeId: sc.id,
+                    styleCode: sc.styleCode ?? '',
+                    eanCode: sc.eanCode ?? '',
+                    mrp: sc.mrp ?? 0,
+                    brand: sc.brand ?? '',
+                    pack: sc.pack ?? '',
+                  }))
+                  .catch(() => null)
+              )
+            );
+            fetched
+              .filter((x): x is StyleOption => x != null && !!x.styleCodeId)
+              .forEach((opt: StyleOption) => optionsById.set(String(opt.styleCodeId), opt));
+          }
+
+          // Ensure dropdown options also contain fetched entries (so modal/search sees them)
+          const mergedOptions = Array.from(optionsById.values());
+          setStyleCodeOptions(mergedOptions);
+
           product.styleCodes = product.styleCodes.map((sc: any) => {
-            const id = typeof sc === 'string' ? sc : (sc.styleCodeId ?? sc._id ?? sc.id ?? '');
-            const match = styleOptions.find((opt: any) => (opt.styleCodeId || opt.id) === id);
+            const id = typeof sc === 'string' ? sc : (sc?.styleCodeId ?? sc?._id ?? sc?.id ?? '');
+            const sid = String(id || '').trim();
+            const match = sid ? optionsById.get(sid) : undefined;
             return {
-              styleCodeId: id,
+              styleCodeId: sid,
               styleCode: match?.styleCode ?? (typeof sc === 'object' ? sc.styleCode : '') ?? '',
               eanCode: match?.eanCode ?? (typeof sc === 'object' ? sc.eanCode : '') ?? '',
               mrp: match?.mrp ?? (typeof sc === 'object' && (sc.mrp != null) ? sc.mrp : 0) ?? 0,
@@ -226,6 +275,8 @@ const EditProductPage = () => {
         } else {
           product.styleCodes = [{ styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }];
         }
+
+        // (styleCodeOptions already set above)
         
         product.productionType = product.productionType || 'internal';
 
