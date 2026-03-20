@@ -675,9 +675,9 @@ const CataloguingPage = () => {
               <button type="button" onClick={handleExport} disabled={isExporting} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
                 {isExporting ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-download-2-line text-xs"></i>} Export
               </button>
-              <button type="button" onClick={handleExportAll} disabled={isExportingAll} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-[11px] font-bold rounded hover:bg-indigo-700 transition-colors shadow-sm">
+              {/* <button type="button" onClick={handleExportAll} disabled={isExportingAll} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-[11px] font-bold rounded hover:bg-indigo-700 transition-colors shadow-sm">
                 {isExportingAll ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-download-cloud-2-line text-xs"></i>} Export All
-              </button>
+              </button> */}
               <button type="button" onClick={handleSyncCatalogWithSupplier} disabled={isSyncing} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-[11px] font-bold rounded hover:bg-sky-700 transition-colors shadow-sm" title="Sync catalog with supplier">
                 {isSyncing ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-refresh-line text-xs"></i>} Sync catalog with supplier
               </button>
@@ -743,9 +743,9 @@ const CataloguingPage = () => {
                         <Link href={`/yarn-management/cataloguing/edit/${yarn.id}`} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors" title="Edit">
                           <i className="ri-pencil-line text-xs"></i>
                         </Link>
-                        <button onClick={() => handleDeleteYarn(yarn.id)} className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors" title="Delete" disabled={isDeleting && deleteId === yarn.id}>
+                        {/* <button onClick={() => handleDeleteYarn(yarn.id)} className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors" title="Delete" disabled={isDeleting && deleteId === yarn.id}>
                           {isDeleting && deleteId === yarn.id ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-delete-bin-line text-xs"></i>}
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                   </tr>

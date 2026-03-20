@@ -303,14 +303,14 @@ export default function AssignmentsCards({
                       >
                         <i className="ri-file-list-3-line text-sm" />
                       </button>
-                      <button
+                      {/* <button
                         type="button"
                         onClick={() => onReset?.(row)}
                         className={`flex items-center justify-center rounded-lg bg-[#5b5f9e]/70 text-white hover:bg-[#5b5f9e] transition-colors ${columnsPerRow === 5 ? "w-7 h-7" : "w-9 h-9"}`}
                         title="Reset"
                       >
                         <i className="ri-restart-line text-sm" />
-                      </button>
+                      </button> */}
                     </div>
                   )}
                 </div>

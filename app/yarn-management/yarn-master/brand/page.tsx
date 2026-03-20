@@ -1471,7 +1471,7 @@ const BrandPage = () => {
                                 >
                                   <i className="ri-edit-line text-sm"></i>
                                 </Link>
-                                <button
+                                {/* <button
                                   type="button"
                                   className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-600 border border-red-100 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
                                   onClick={() => handleDelete(brand.id)}
@@ -1482,7 +1482,7 @@ const BrandPage = () => {
                                   ) : (
                                     <i className="ri-delete-bin-line text-sm"></i>
                                   )}
-                                </button>
+                                </button> */}
                               </div>
                             </td>
                           </tr>
