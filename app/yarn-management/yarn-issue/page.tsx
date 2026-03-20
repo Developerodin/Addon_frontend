@@ -397,6 +397,7 @@ const YarnIssuePage = () => {
   const [endDate, setEndDate] = useState<string>("");
   const [fetchingWeight, setFetchingWeight] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
+  const issueSubmitButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Issue");
 
@@ -1129,6 +1130,24 @@ const YarnIssuePage = () => {
     }, 0);
     return () => clearTimeout(timer);
   }, [showScanIssuePanel, activeRequirementId]);
+
+  useEffect(() => {
+    if (!showIssueModal) return;
+    const weightReady =
+      (parseFloat(transactionForm.totalWeight) || 0) > 0 ||
+      (parseFloat(transactionForm.totalNetWeight) || 0) > 0;
+    if (!weightReady || submittingTransaction) return;
+
+    const timer = setTimeout(() => {
+      issueSubmitButtonRef.current?.focus();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [
+    showIssueModal,
+    transactionForm.totalWeight,
+    transactionForm.totalNetWeight,
+    submittingTransaction,
+  ]);
 
   const handleBarcodeSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2320,6 +2339,7 @@ const YarnIssuePage = () => {
                   Cancel
                 </button>
                 <button
+                  ref={issueSubmitButtonRef}
                   type="submit"
                   className="ti-btn ti-btn-primary"
                   disabled={submittingTransaction}
