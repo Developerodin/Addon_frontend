@@ -299,7 +299,6 @@ class ProductionService {
 
   // Transform API response to match our interfaces
   private transformOrder(order: any): ProductionOrder {
-    console.log('Transforming order:', order);
     const transformed = {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -321,12 +320,10 @@ class ProductionService {
       createdBy: order.createdBy,
       lastModifiedBy: order.lastModifiedBy
     };
-    console.log('Transformed order:', transformed);
     return transformed;
   }
 
   private transformArticle(article: any, orderId: string): Article {
-    console.log('Transforming article:', article);
     const transformed = {
       id: article.id || article._id,
       _id: article._id || article.id,
@@ -356,7 +353,6 @@ class ProductionService {
       updatedAt: article.updatedAt,
       floorQuantities: article.floorQuantities
     };
-    console.log('Transformed article:', transformed);
     return transformed;
   }
 

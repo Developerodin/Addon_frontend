@@ -22,8 +22,64 @@ import {
   type ProductionOrderItem,
 } from "@/shared/services/machineOrderAssignmentService";
 import { containersMasterService, hasActiveItems } from "@/shared/services/containersMasterService";
+import { machinesService } from "@/shared/services/machinesService";
 import QRCode from "qrcode";
 type KnittingTab = "orders" | "machine-view" | "article-view" | "planning";
+
+/** GET /machines/:id — includes needleSizeConfig for cutoff vs remaining (active needle from assignment). */
+type MachineNeedleConfigResponse = {
+  id?: string;
+  needleSizeConfig?: Array<{ needleSize?: string; cutoffQuantity?: number }>;
+};
+
+function getMachineIdFromAssignment(a: MachineOrderAssignment): string {
+  const m = a.machine;
+  if (typeof m === "object" && m) {
+    const o = m as { id?: string; _id?: string };
+    return String(o.id ?? o._id ?? "");
+  }
+  return typeof m === "string" ? m : "";
+}
+
+function needlesMatch(activeNeedle: string, configNeedle: string): boolean {
+  const a = String(activeNeedle).trim().toLowerCase();
+  const b = String(configNeedle).trim().toLowerCase();
+  if (a === b) return true;
+  const da = a.replace(/\D/g, "");
+  const db = b.replace(/\D/g, "");
+  return Boolean(da && db && da === db);
+}
+
+function getCutoffForActiveNeedle(
+  activeNeedle: string,
+  config: MachineNeedleConfigResponse["needleSizeConfig"]
+): number | null {
+  if (!activeNeedle?.trim()) {
+    console.log("[Knitting yarn cutoff] getCutoff: no activeNeedle");
+    return null;
+  }
+  if (!Array.isArray(config)) {
+    console.log("[Knitting yarn cutoff] getCutoff: needleSizeConfig missing or not array", { config });
+    return null;
+  }
+  const row = config.find((c) => needlesMatch(activeNeedle, String(c?.needleSize ?? "")));
+  if (!row || typeof row.cutoffQuantity !== "number") {
+    console.log("[Knitting yarn cutoff] getCutoff: no matching row for needle", {
+      activeNeedle,
+      configNeedles: config.map((c) => ({
+        needleSize: c?.needleSize,
+        cutoffQuantity: c?.cutoffQuantity,
+      })),
+    });
+    return null;
+  }
+  console.log("[Knitting yarn cutoff] getCutoff: matched", {
+    activeNeedle,
+    matchedNeedleSize: row.needleSize,
+    cutoffQuantity: row.cutoffQuantity,
+  });
+  return row.cutoffQuantity;
+}
 
 /** Print 50×70mm label with QR code (articleId + orderId) and article number */
 async function printContainerLabel(articleId: string, orderId: string, articleNumber: string): Promise<void> {
@@ -155,6 +211,8 @@ const KnittingFloorSupervisorPage = () => {
   const [updateModalAssignmentItems, setUpdateModalAssignmentItems] = useState<ProductionOrderItem[] | null>(null);
   const [updatingStatusItemId, setUpdatingStatusItemId] = useState<string | null>(null);
   const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
+  /** Full machine doc from GET /machines/:id when edit drawer opened from machine view (needle cutoffs). */
+  const [fetchedMachineDetail, setFetchedMachineDetail] = useState<MachineNeedleConfigResponse | null>(null);
 
   // Load knitting floor orders from API
   const loadOrders = async () => {
@@ -369,6 +427,7 @@ const KnittingFloorSupervisorPage = () => {
     setUpdateModalAssignmentItems(null);
     setUpdatingStatusItemId(null);
     setUpdatingYarnItemId(null);
+    setFetchedMachineDetail(null);
     setShowWeightModal(false);
     setWeightInput('');
     setShowContainerModal(false);
@@ -383,6 +442,34 @@ const KnittingFloorSupervisorPage = () => {
 
   /** Open the same data-entry (update) modal from machine view: only priority orders, first editable, rest read-only. */
   const handleOpenUpdateModalFromMachine = async (assignment: MachineOrderAssignment) => {
+    const machineId = getMachineIdFromAssignment(assignment);
+    console.log("[Knitting yarn cutoff] open edit drawer", {
+      machineId: machineId || "(empty)",
+      assignmentActiveNeedle: assignment.activeNeedle,
+      rawMachineField: assignment.machine,
+      assignmentId: assignment.id,
+    });
+    setFetchedMachineDetail(null);
+    const machineFetch = machineId
+      ? machinesService
+          .getMachine(machineId)
+          .then((m) => {
+            const raw = m as unknown as MachineNeedleConfigResponse & Record<string, unknown>;
+            console.log("[Knitting yarn cutoff] GET /machines/:id success", {
+              id: raw?.id ?? machineId,
+              topLevelKeys: raw && typeof raw === "object" ? Object.keys(raw) : [],
+              needleSizeConfig: raw?.needleSizeConfig,
+              needleSizeConfigLength: Array.isArray(raw?.needleSizeConfig) ? raw.needleSizeConfig.length : null,
+            });
+            return m as MachineNeedleConfigResponse;
+          })
+          .catch((err) => {
+            console.error("[Knitting yarn cutoff] GET /machines/:id failed", machineId, err);
+            toast.error("Could not load machine needle configuration");
+            return null;
+          })
+      : Promise.resolve(null);
+
     const items = (assignment.productionOrderItems ?? [])
       .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
       .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
@@ -397,11 +484,13 @@ const KnittingFloorSupervisorPage = () => {
       const res = await productionService.getOrder(oid);
       if (res.success && res.data) orders.push(res.data);
     }
+    /** Only articles assigned to this machine (same order may have many articles on other machines). */
     const articles: Article[] = [];
     for (const item of items) {
       const order = orders.find((o) => o.id === item.productionOrder);
       if (!order) continue;
-      const article = order.articles.find((a) => (a.id || a._id) === item.article);
+      const wantId = String(item.article ?? "");
+      const article = order.articles.find((a) => String(a.id ?? "") === wantId || String(a._id ?? "") === wantId);
       if (article) articles.push(article);
     }
     if (articles.length === 0) {
@@ -409,12 +498,21 @@ const KnittingFloorSupervisorPage = () => {
       return;
     }
     const firstOrder = orders.find((o) => o.id === items[0].productionOrder);
-    if (!firstOrder) return;
+    if (!firstOrder) {
+      return;
+    }
     const syntheticOrder: ProductionOrder = {
       ...firstOrder,
       id: firstOrder.id,
+      // Only assignment line(s) for this machine — API order can have many more articles.
       articles,
     };
+    console.log("[Knitting machine drawer] order meta + only assignment articles", {
+      orderId: syntheticOrder.id,
+      orderNumber: syntheticOrder.orderNumber,
+      articlesShown: articles.length,
+      articleNumbers: articles.map((a) => a.articleNumber ?? a.id ?? a._id),
+    });
     setSelectedOrder(syntheticOrder);
     const initialData: { [key: string]: { completedQuantity: number; remarks: string; m4Quantity: number } } = {};
     const firstArticleId = articles[0].id || articles[0]._id;
@@ -431,7 +529,51 @@ const KnittingFloorSupervisorPage = () => {
     setUpdateModalAssignmentItems(items);
     setInitialUpdateData(JSON.parse(JSON.stringify(initialData)));
     setShowUpdateModal(true);
+
+    const loadedMachine = await machineFetch;
+    console.log("[Knitting yarn cutoff] machine fetch settled, storing detail", {
+      hasDetail: Boolean(loadedMachine),
+      needleSizeConfig: loadedMachine?.needleSizeConfig,
+    });
+    setFetchedMachineDetail(loadedMachine);
   };
+
+  /** When first-priority article remaining drops below active-needle cutoff, "Ask for yarn" is allowed for the next article row. */
+  const nextArticleYarnUnlockedByCutoff = React.useMemo(() => {
+    if (!updateModalAssignment || !selectedOrder?.articles?.[0]) {
+      console.log("[Knitting yarn cutoff] memo: no assignment or first article", {
+        hasAssignment: Boolean(updateModalAssignment),
+        articlesLen: selectedOrder?.articles?.length ?? 0,
+      });
+      return { unlocked: false, cutoff: null as number | null, remaining: 0 as number };
+    }
+    const activeNeedle = (updateModalAssignment.activeNeedle ?? "").trim();
+    const cutoff = getCutoffForActiveNeedle(activeNeedle, fetchedMachineDetail?.needleSizeConfig);
+    const remaining = selectedOrder.articles[0].floorQuantities?.knitting?.remaining ?? 0;
+    const firstArticleId = selectedOrder.articles[0].id ?? selectedOrder.articles[0]._id;
+    const floorKnit = selectedOrder.articles[0].floorQuantities?.knitting;
+    if (cutoff == null) {
+      console.log("[Knitting yarn cutoff] memo: unlock false (no cutoff)", {
+        activeNeedle,
+        remaining,
+        firstArticleId,
+        floorKnit,
+        hasFetchedMachine: Boolean(fetchedMachineDetail),
+      });
+      return { unlocked: false, cutoff: null, remaining };
+    }
+    const unlocked = remaining < cutoff;
+    console.log("[Knitting yarn cutoff] memo: cutoff check", {
+      activeNeedle,
+      cutoff,
+      remaining,
+      comparison: `${remaining} < ${cutoff}`,
+      unlocked,
+      firstArticleId,
+      floorKnit,
+    });
+    return { unlocked, cutoff, remaining };
+  }, [updateModalAssignment, selectedOrder, fetchedMachineDetail]);
 
   /** Update item status from update modal (when opened from machine view). */
   const handleModalItemStatusChange = async (itemId: string, newStatus: OrderStatusType) => {
@@ -1116,6 +1258,16 @@ const KnittingFloorSupervisorPage = () => {
                       const assignmentItem = updateModalAssignmentItems?.[idx];
                       const hasStatusYarn = Boolean(updateModalAssignment && assignmentItem?.itemId);
                       const isReadOnly = updateModalReadOnlyFromIndex !== undefined && idx >= updateModalReadOnlyFromIndex;
+                      const upcomingYarnIss = assignmentItem?.yarnIssueStatus ? String(assignmentItem.yarnIssueStatus) : "";
+                      /** Upcoming row: hide Status/Yarn until needle cutoff passes, or yarn issue already started on that line. */
+                      const showUpcomingStatusYarn =
+                        !isReadOnly ||
+                        (isReadOnly &&
+                          idx === 1 &&
+                          hasStatusYarn &&
+                          (nextArticleYarnUnlockedByCutoff.unlocked ||
+                            upcomingYarnIss === "In Progress" ||
+                            upcomingYarnIss === "Completed"));
                       const currentUpdateData = updateData[articleId] || { completedQuantity: 0, remarks: article.remarks || '', m4Quantity: 0 };
                       const currentM4FromArticle = article.floorQuantities?.knitting?.m4Quantity || 0;
                       const completedQty = article.floorQuantities?.knitting?.completed ?? 0;
@@ -1206,7 +1358,7 @@ const KnittingFloorSupervisorPage = () => {
                                     );
                                   })()}
                                 </div>
-                                {updateModalAssignment && updateModalAssignmentItems && !isReadOnly && (
+                                {updateModalAssignment && updateModalAssignmentItems && showUpcomingStatusYarn && (
                                   <div className="flex flex-wrap items-center gap-3 shrink-0">
                                     <div>
                                       <label className="block text-[10px] font-semibold text-gray-600 mb-1">Status</label>
@@ -1291,7 +1443,19 @@ const KnittingFloorSupervisorPage = () => {
                                             </button>
                                           );
                                         }
-                                        if (idx <= 1) {
+                                        if (idx === 0) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleModalAskForYarn(assignmentItem!.itemId!)}
+                                              disabled={updatingYarnItemId === assignmentItem?.itemId}
+                                              className="px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60"
+                                            >
+                                              Ask for yarn
+                                            </button>
+                                          );
+                                        }
+                                        if (idx === 1) {
                                           return (
                                             <button
                                               type="button"
