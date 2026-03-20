@@ -398,6 +398,13 @@ const YarnIssuePage = () => {
   const [fetchingWeight, setFetchingWeight] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
   const issueSubmitButtonRef = useRef<HTMLButtonElement | null>(null);
+  const focusBarcodeInput = useCallback(() => {
+    const timer = setTimeout(() => {
+      barcodeInputRef.current?.focus();
+      barcodeInputRef.current?.select();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Issue");
 
@@ -1120,16 +1127,19 @@ const YarnIssuePage = () => {
     setActiveRequirementId(requirementId);
     resetScanState();
     setShowScanIssuePanel(true);
+    focusBarcodeInput();
   };
 
   useEffect(() => {
     if (!showScanIssuePanel) return;
-    const timer = setTimeout(() => {
-      barcodeInputRef.current?.focus();
-      barcodeInputRef.current?.select();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [showScanIssuePanel, activeRequirementId]);
+    return focusBarcodeInput();
+  }, [showScanIssuePanel, activeRequirementId, focusBarcodeInput]);
+
+  useEffect(() => {
+    // After closing the issue modal, return focus to barcode scan input.
+    if (!showScanIssuePanel || showIssueModal) return;
+    return focusBarcodeInput();
+  }, [showIssueModal, showScanIssuePanel, focusBarcodeInput]);
 
   useEffect(() => {
     if (!showIssueModal) return;
