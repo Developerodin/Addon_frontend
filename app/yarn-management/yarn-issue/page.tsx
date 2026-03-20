@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -396,6 +396,7 @@ const YarnIssuePage = () => {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [fetchingWeight, setFetchingWeight] = useState(false);
+  const barcodeInputRef = useRef<HTMLInputElement | null>(null);
 
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Issue");
 
@@ -798,10 +799,8 @@ const YarnIssuePage = () => {
           return updated;
         });
 
-        // Auto-select first requirement
-        if (allBoms.length > 0) {
-          setActiveRequirementId(allBoms[0].id);
-        }
+        // Keep no active requirement by default; user must choose explicitly.
+        setActiveRequirementId(null);
       } catch (error) {
         console.error("Error fetching article BOMs:", error);
         toast.error("Failed to load product details");
@@ -850,10 +849,8 @@ const YarnIssuePage = () => {
           };
         });
 
-        // Auto-select first requirement
-        if (allBoms.length > 0) {
-          setActiveRequirementId(allBoms[0].id);
-        }
+        // Keep no active requirement by default; user must choose explicitly.
+        setActiveRequirementId(null);
 
         return updated;
       } else {
@@ -870,10 +867,8 @@ const YarnIssuePage = () => {
             };
           });
 
-          // Auto-select first requirement of this article
-          if (articleBom.length > 0) {
-            setActiveRequirementId(articleBom[0].id);
-          }
+          // Keep no active requirement by default; user must choose explicitly.
+          setActiveRequirementId(null);
 
           return updated;
         }
@@ -965,11 +960,8 @@ const YarnIssuePage = () => {
       return;
     }
 
-    if (
-      !activeRequirementId ||
-      !selectedOrder.bom.some((requirement) => requirement.id === activeRequirementId)
-    ) {
-      setActiveRequirementId(selectedOrder.bom[0]?.id ?? null);
+    if (activeRequirementId && !selectedOrder.bom.some((requirement) => requirement.id === activeRequirementId)) {
+      setActiveRequirementId(null);
     }
   }, [selectedOrder, activeRequirementId]);
 
@@ -1128,6 +1120,15 @@ const YarnIssuePage = () => {
     resetScanState();
     setShowScanIssuePanel(true);
   };
+
+  useEffect(() => {
+    if (!showScanIssuePanel) return;
+    const timer = setTimeout(() => {
+      barcodeInputRef.current?.focus();
+      barcodeInputRef.current?.select();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [showScanIssuePanel, activeRequirementId]);
 
   const handleBarcodeSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1459,7 +1460,7 @@ const YarnIssuePage = () => {
               <div className="relative mb-3">
                 <input
                   type="text"
-                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
+                  className="bg-white border border-gray-600 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-700 font-medium"
                   placeholder="Search machine..."
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
@@ -1849,11 +1850,11 @@ const YarnIssuePage = () => {
           <div className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto">
             <div className="box h-full flex flex-col">
               <div className="box-header border-b border-gray-200 flex-shrink-0">
-                <div className="flex justify-between items-center">
-                  <h3 className="box-title text-lg">Issue</h3>
+                <div className="relative w-full">
+                  <h3 className="box-title text-lg pr-10">Issue</h3>
                   <button
                     onClick={() => setShowScanIssuePanel(false)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    className="absolute right-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center text-black hover:text-black transition-colors"
                     aria-label="Close panel"
                   >
                     <i className="ri-close-line text-xl"></i>
@@ -1911,6 +1912,7 @@ const YarnIssuePage = () => {
                       </label>
                       <div className="relative">
                         <input
+                          ref={barcodeInputRef}
                           type="text"
                           className="form-control ps-10"
                           placeholder="Scan or enter cone barcode"
@@ -2143,20 +2145,29 @@ const YarnIssuePage = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="box-header border-b border-gray-200 px-6 py-4">
-              <div className="flex justify-between items-center">
-                <h3 className="box-title text-lg">Issue Yarn</h3>
+              <div className="relative">
+                <h3 className="box-title text-lg pr-10">Issue Yarn</h3>
                 <button
                   onClick={() => {
                     setShowIssueModal(false);
                     setConeData(null);
                   }}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center text-black hover:text-black transition-colors"
+                  aria-label="Close issue modal"
                 >
                   <i className="ri-close-line text-xl"></i>
                 </button>
               </div>
             </div>
-            <div className="box-body p-6">
+              <form
+                className="box-body p-6"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!submittingTransaction) {
+                    handleIssueSubmit();
+                  }
+                }}
+              >
               {coneData && (
                 <div className="mb-6 p-4 bg-gray-50 rounded-md">
                   <h4 className="text-sm font-semibold text-gray-900 mb-3">Cone Details</h4>
@@ -2309,8 +2320,7 @@ const YarnIssuePage = () => {
                   Cancel
                 </button>
                 <button
-                  type="button"
-                  onClick={handleIssueSubmit}
+                  type="submit"
                   className="ti-btn ti-btn-primary"
                   disabled={submittingTransaction}
                 >
@@ -2324,7 +2334,7 @@ const YarnIssuePage = () => {
                   )}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
