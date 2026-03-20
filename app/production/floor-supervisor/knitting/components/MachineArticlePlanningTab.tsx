@@ -237,15 +237,15 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
         <head>
           <title>Planning Working - ${dateStr}</title>
           <style>
-            @page { size: A4; margin: 12mm; }
+            @page { size: A4; margin: 10mm; }
             * { box-sizing: border-box; }
-            body { margin: 0; font-family: system-ui, sans-serif; font-size: 10px; }
-            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-            h1 { margin: 0; font-size: 14px; font-weight: bold; }
-            .date { font-size: 11px; color: #444; }
+            body { margin: 0; font-family: system-ui, sans-serif; font-size: 9px; }
+            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+            h1 { margin: 0; font-size: 13px; font-weight: bold; }
+            .date { font-size: 10px; color: #444; }
             table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #333; padding: 4px 6px; text-align: left; }
-            th { background: #f0f0f0; font-weight: bold; font-size: 9px; }
+            th, td { border: 1px solid #333; padding: 2px 4px; text-align: left; }
+            th { background: #f0f0f0; font-weight: bold; font-size: 8px; }
             tr:nth-child(even) { background: #f9f9f9; }
             .no-print { display: none; }
           </style>
