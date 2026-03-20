@@ -8,7 +8,6 @@ import HelpIcon from '@/shared/components/HelpIcon';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 import { styleCodeService, StyleCode } from '@/shared/services/styleCodeService';
 import { StyleCodeSelectModal } from '@/app/catalog/style-codes/components/StyleCodeSelectModal';
-import { RawMaterialBomTable, RawMaterialBomItem } from '@/app/catalog/items/components/RawMaterialBomTable';
 import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
@@ -166,7 +165,6 @@ const AddProductPage = () => {
   const [modalTotalYarnPages, setModalTotalYarnPages] = useState(1);
   const [modalTotalYarnResults, setModalTotalYarnResults] = useState(0);
   const [isModalLoading, setIsModalLoading] = useState(false);
-  const [rawMaterialRows, setRawMaterialRows] = useState<RawMaterialBomItem[]>([]);
 
   // Style code select modal
   const [styleCodeModalOpen, setStyleCodeModalOpen] = useState(false);
@@ -654,12 +652,6 @@ const AddProductPage = () => {
             yarnName: item.yarnName,
             quantity: item.quantity
           }));
-
-        if (rawMaterialRows.length > 0) {
-          productData.rawMaterials = rawMaterialRows
-            .filter(rm => rm.rawMaterialId && (rm.quantity ?? 0) >= 0)
-            .map(rm => ({ rawMaterialId: rm.rawMaterialId, quantity: Number(rm.quantity) }));
-        }
 
         productData.processes = processItems
           .filter(item => item.processId)
@@ -1419,12 +1411,6 @@ const AddProductPage = () => {
                         </tbody>
                       </table>
                     </div>
-
-                    <RawMaterialBomTable
-                      items={rawMaterialRows}
-                      onChange={setRawMaterialRows}
-                      disabled={isLoading}
-                    />
 
                     {/* Yarn Catalog Selection Modal */}
                     {isYarnModalOpen && (

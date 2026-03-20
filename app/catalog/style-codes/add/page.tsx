@@ -6,6 +6,7 @@ import { toast, Toaster } from 'react-hot-toast'
 import Seo from '@/shared/layout-components/seo/seo'
 import { styleCodeService } from '@/shared/services/styleCodeService'
 import { API_BASE_URL } from '@/shared/data/utilities/api'
+import { RawMaterialBomTable, RawMaterialBomItem } from '@/app/catalog/items/components/RawMaterialBomTable'
 
 type Status = 'active' | 'inactive'
 
@@ -30,6 +31,7 @@ const AddStyleCodePage = () => {
     pack: '',
     status: 'active',
   })
+  const [bomItems, setBomItems] = useState<RawMaterialBomItem[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
 
@@ -76,6 +78,13 @@ const AddStyleCodePage = () => {
     if (!validate()) return
     try {
       setSubmitting(true)
+      const bom =
+        bomItems
+          .filter((rm) => rm.rawMaterialId && (rm.quantity ?? 0) >= 0)
+          .map((rm) => ({
+            rawMaterial: rm.rawMaterialId,
+            quantity: Number(rm.quantity),
+          })) || undefined
       await styleCodeService.create({
         styleCode: form.styleCode.trim(),
         eanCode: form.eanCode.trim(),
@@ -83,6 +92,7 @@ const AddStyleCodePage = () => {
         brand: form.brand.trim() || undefined,
         pack: form.pack.trim() || undefined,
         status: form.status,
+        ...(bom.length > 0 && { bom }),
       })
       toast.success('Style code created')
       router.push('/catalog/style-codes')
@@ -202,6 +212,12 @@ const AddStyleCodePage = () => {
                 </select>
               </div>
             </div>
+
+            <RawMaterialBomTable
+              items={bomItems}
+              onChange={setBomItems}
+              disabled={submitting}
+            />
 
             <div className="flex justify-end gap-2">
               <Link

@@ -13,6 +13,7 @@ interface NavigationPermissions {
     Processes: boolean;
     Attributes: boolean;
     'Style Codes': boolean;
+    'Style Code Pairs': boolean;
     Machines: boolean;
     'Needle Configuration': boolean;
     'Team Master': boolean;
@@ -102,6 +103,7 @@ const defaultPermissions: NavigationPermissions = {
     Processes: false,
     Attributes: false,
     'Style Codes': false,
+    'Style Code Pairs': false,
     Machines: false,
     'Needle Configuration': false,
     'Team Master': false,

@@ -6,6 +6,7 @@ import { toast, Toaster } from 'react-hot-toast'
 import Seo from '@/shared/layout-components/seo/seo'
 import { styleCodeService, StyleCode } from '@/shared/services/styleCodeService'
 import { API_BASE_URL } from '@/shared/data/utilities/api'
+import { RawMaterialBomTable, RawMaterialBomItem } from '@/app/catalog/items/components/RawMaterialBomTable'
 
 type Status = 'active' | 'inactive'
 
@@ -33,6 +34,7 @@ const EditStyleCodePage = () => {
     pack: '',
     status: 'active',
   })
+  const [bomItems, setBomItems] = useState<RawMaterialBomItem[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -77,6 +79,21 @@ const EditStyleCodePage = () => {
         pack: data.pack || '',
         status: data.status,
       })
+      const rawBom = (data as any).bom
+      if (Array.isArray(rawBom) && rawBom.length > 0) {
+        setBomItems(
+          rawBom.map((b: any) => {
+            const rm = b.rawMaterial
+            const id = typeof rm === 'string' ? rm : rm?._id ?? rm?.id ?? ''
+            const name = typeof rm === 'object' && rm ? rm.name ?? '' : ''
+            return {
+              rawMaterialId: id,
+              rawMaterialName: name,
+              quantity: Number(b.quantity) ?? 0,
+            }
+          })
+        )
+      }
     } catch (error) {
       console.error('Failed to load style code', error)
       toast.error('Failed to load style code')
@@ -108,6 +125,13 @@ const EditStyleCodePage = () => {
     if (!styleCodeId) return
     try {
       setSubmitting(true)
+      const bom =
+        bomItems
+          .filter((rm) => rm.rawMaterialId && (rm.quantity ?? 0) >= 0)
+          .map((rm) => ({
+            rawMaterial: rm.rawMaterialId,
+            quantity: Number(rm.quantity),
+          })) || []
       await styleCodeService.update(styleCodeId, {
         styleCode: form.styleCode.trim(),
         eanCode: form.eanCode.trim(),
@@ -115,6 +139,7 @@ const EditStyleCodePage = () => {
         brand: form.brand.trim() || undefined,
         pack: form.pack.trim() || undefined,
         status: form.status,
+        bom,
       })
       toast.success('Style code updated')
       router.push('/catalog/style-codes')
@@ -248,6 +273,12 @@ const EditStyleCodePage = () => {
                 </select>
               </div>
             </div>
+
+            <RawMaterialBomTable
+              items={bomItems}
+              onChange={setBomItems}
+              disabled={submitting}
+            />
 
             <div className="flex justify-end gap-2">
               <Link

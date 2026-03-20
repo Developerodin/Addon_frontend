@@ -1,7 +1,6 @@
 "use client"
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { toast, Toaster } from 'react-hot-toast'
 import Seo from '@/shared/layout-components/seo/seo'
 import { styleCodeService, StyleCode } from '@/shared/services/styleCodeService'
@@ -15,22 +14,40 @@ interface Filters {
   status: Status
 }
 
-const formatDate = (value?: string) => {
-  if (!value) return '-'
-  return new Date(value).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
-}
-
 const formatMoney = (value?: number) => {
   if (value === undefined || value === null) return '-'
   return value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+/** Extract BOM from row: BOM 1 Raw Material, BOM 1 Quantity, BOM 2 Raw Material, etc. */
+const extractBomFromRow = (row: Record<string, unknown>): Array<{ rawMaterial: string; quantity: number }> => {
+  const bom: Array<{ rawMaterial: string; quantity: number }> = []
+  const keys = Object.keys(row)
+  const indices = new Set<number>()
+  for (const k of keys) {
+    const m = k.match(/bom\s*(\d+)/i)
+    if (m) indices.add(parseInt(m[1], 10))
+  }
+  for (const i of Array.from(indices).sort((a, b) => a - b)) {
+    const qtyKey = keys.find((k) => {
+      const n = k.replace(/_/g, ' ').toLowerCase()
+      return n.includes(`bom ${i}`) && (n.includes('quantity') || n.includes('qty'))
+    })
+    const rawKey = keys.find((k) => {
+      const n = k.replace(/_/g, ' ').toLowerCase()
+      if (!n.includes(`bom ${i}`) || n.includes('quantity') || n.includes('qty')) return false
+      return true
+    })
+    const rawMaterial = rawKey ? String(row[rawKey] ?? '').trim() : ''
+    const quantity = qtyKey ? Number(row[qtyKey] ?? 0) : 0
+    if (rawMaterial && !Number.isNaN(quantity) && quantity >= 0) {
+      bom.push({ rawMaterial, quantity })
+    }
+  }
+  return bom
+}
+
 const StyleCodesPage = () => {
-  const router = useRouter()
   const [rows, setRows] = useState<StyleCode[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -41,9 +58,9 @@ const StyleCodesPage = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isBomImporting, setIsBomImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
-
-  const visibleCount = useMemo(() => rows.length, [rows])
+  const bomImportInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setPage(1)
@@ -205,6 +222,88 @@ const StyleCodesPage = () => {
 
   const handleImportClick = () => importInputRef.current?.click()
 
+  const handleDownloadBomTemplate = () => {
+    const templateRows = [
+      {
+        styleCodeId: '69bd044ab399809ef74b0e26',
+        'BOM 1 Raw Material': '6841517d98f9ff407c4e9ada',
+        'BOM 1 Quantity': 1000,
+        'BOM 2 Raw Material': '684a71ec9db38a0bfcaf67d1',
+        'BOM 2 Quantity': 100,
+        'BOM 3 Raw Material': '',
+        'BOM 3 Quantity': '',
+      },
+      {
+        styleCodeId: '69bd044ab399809ef74b0e27',
+        'BOM 1 Raw Material': '6841517d98f9ff407c4e9ada',
+        'BOM 1 Quantity': 500,
+        'BOM 2 Raw Material': '',
+        'BOM 2 Quantity': '',
+      },
+    ]
+    const instructions = [
+      { Field: 'styleCodeId', Description: 'Style code ID (required)' },
+      {
+        Field: 'BOM 1 Raw Material, BOM 1 Quantity, BOM 2...',
+        Description: 'Add BOM 1 Raw Material, BOM 1 Quantity, BOM 2 Raw Material, BOM 2 Quantity, etc.',
+      },
+    ]
+    const ws = XLSX.utils.json_to_sheet(templateRows)
+    const wsInst = XLSX.utils.json_to_sheet(instructions)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'BOM')
+    XLSX.utils.book_append_sheet(wb, wsInst, 'Instructions')
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([wbout], { type: 'application/octet-stream' })
+    saveAs(blob, 'style-codes-bom-template.xlsx')
+    toast.success('BOM template downloaded')
+  }
+
+  const handleBomImportClick = () => bomImportInputRef.current?.click()
+
+  const handleBomImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setIsBomImporting(true)
+    try {
+      const data = await file.arrayBuffer()
+      const workbook = XLSX.read(data, { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const rowsJson = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet || {}, { defval: '' })
+      if (!rowsJson.length) {
+        toast.error('No rows found in file')
+        return
+      }
+      const items = rowsJson
+        .map((row) => {
+          const r = row as Record<string, unknown>
+          const styleCodeId = String(r.styleCodeId ?? r['Style Code ID'] ?? r['styleCodeId'] ?? '').trim()
+          const bom = extractBomFromRow(r)
+          if (!styleCodeId || bom.length === 0) return null
+          return { styleCodeId, bom }
+        })
+        .filter((x): x is { styleCodeId: string; bom: Array<{ rawMaterial: string; quantity: number }> } => x !== null)
+
+      if (items.length === 0) {
+        toast.error('No valid rows. Need styleCodeId and bom.')
+        return
+      }
+
+      const summary = await styleCodeService.bulkImportBom({
+        items,
+        batchSize: Math.min(items.length, 50),
+      })
+      toast.success(`BOM imported: ${summary.updated ?? summary.created ?? 0} updated. Failed: ${summary.failed}`)
+      await fetchStyleCodes()
+    } catch (error) {
+      console.error('BOM import failed', error)
+      toast.error('BOM import failed')
+    } finally {
+      setIsBomImporting(false)
+    }
+  }
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -249,239 +348,248 @@ const StyleCodesPage = () => {
   }
 
   return (
-    <div className="main-content">
+    <div className="main-content !p-[10px]">
       <Seo title="Style Codes" />
       <Toaster position="top-right" />
 
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
-            <h1 className="text-xl font-semibold text-gray-900">Style Codes</h1>
-            <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-              {visibleCount} shown
-            </span>
-          </div>
-          <p className="text-sm text-gray-600">
-            Manage standalone style codes. Use search or status to narrow results.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <input
-              type="text"
-              value={filters.search}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search style code / EAN / brand / pack..."
-              className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-sm rounded focus:ring-0 focus:border-purple-300 w-72"
-            />
-            <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-          </div>
-          <select
-            value={filters.status}
-            onChange={(e) => handleStatusChange(e.target.value as Status)}
-            className="bg-white border border-gray-200 text-sm rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300"
-          >
-            <option value="">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <button
-            type="button"
-            onClick={handleDownloadTemplate}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50"
-          >
-            <i className="ri-download-line"></i>
-            Template
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleExport()}
-            disabled={isExporting}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isExporting ? (
-              <>
-                <div className="animate-spin h-3.5 w-3.5 border-2 border-gray-400 border-t-transparent rounded-full" />
-                Exporting…
-              </>
-            ) : (
-              <>
-                <i className="ri-file-excel-2-line"></i>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 relative">
+        <div className="p-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
+              <h1 className="text-sm font-bold text-gray-800">Style Codes</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {totalResults}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={filters.search}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder="Search style code / EAN / brand / pack..."
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 min-w-[120px] placeholder:text-gray-400 font-medium"
+                />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+              </div>
+              <select
+                value={filters.status}
+                onChange={(e) => handleStatusChange(e.target.value as Status)}
+                className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300"
+              >
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <select
+                value={limit}
+                onChange={(e) => handleLimitChange(Number(e.target.value))}
+                className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300"
+              >
+                {[10, 20, 50, 100].map((opt) => (
+                  <option key={opt} value={opt}>Show {opt}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                <i className="ri-download-line text-xs" />
+                Template
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadBomTemplate}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                <i className="ri-file-list-3-line text-xs" />
+                BOM Template
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExport()}
+                disabled={isExporting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              >
+                {isExporting ? (
+                  <i className="ri-loader-4-line text-xs animate-spin" />
+                ) : (
+                  <i className="ri-file-excel-2-line text-xs" />
+                )}
                 Export
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={handleImportClick}
-            disabled={isImporting}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {isImporting ? (
-              <>
-                <div className="animate-spin h-3.5 w-3.5 border-2 border-gray-400 border-t-transparent rounded-full" />
-                Importing…
-              </>
-            ) : (
-              <>
-                <i className="ri-upload-cloud-line"></i>
+              </button>
+              <button
+                type="button"
+                onClick={handleImportClick}
+                disabled={isImporting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm"
+              >
+                {isImporting ? (
+                  <i className="ri-loader-4-line text-xs animate-spin" />
+                ) : (
+                  <i className="ri-upload-cloud-line text-xs" />
+                )}
                 Import
-              </>
-            )}
-          </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={handleImport}
-          />
-          <Link
-            href="/catalog/style-codes/add"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm"
-          >
-            <i className="ri-add-line"></i>
-            Add Style Code
-          </Link>
+              </button>
+              <button
+                type="button"
+                onClick={handleBomImportClick}
+                disabled={isBomImporting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 transition-colors shadow-sm"
+              >
+                {isBomImporting ? (
+                  <i className="ri-loader-4-line text-xs animate-spin" />
+                ) : (
+                  <i className="ri-stack-line text-xs" />
+                )}
+                BOM Import
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={handleImport}
+              />
+              <input
+                ref={bomImportInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={handleBomImport}
+              />
+              <Link
+                href="/catalog/style-codes/add"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-add-line text-xs" />
+                Add Style Code
+              </Link>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="box relative">
-        {isImporting && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 rounded-lg">
-            <div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-200 border-t-purple-600 mb-3" />
-            <p className="text-sm font-semibold text-gray-700">Importing Excel…</p>
-            <p className="text-xs text-gray-500 mt-1">Uploading and processing your file</p>
-            <div className="mt-4 w-64 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full w-1/3 bg-purple-600 rounded-full animate-pulse" />
+        {(isImporting || isBomImporting) && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/90 rounded">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-200 border-t-purple-600 mb-3" />
+            <p className="text-[11px] font-bold text-gray-700">
+              {isBomImporting ? 'Importing BOM…' : 'Importing Excel…'}
+            </p>
+            <p className="text-[10px] text-gray-500 mt-1">Uploading and processing</p>
+          </div>
+        )}
+
+        <div className="overflow-x-auto min-h-[300px]">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50" />
+              <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-purchase-tag-line text-xl text-gray-200" />
+              </div>
+              <h3 className="text-[11px] font-bold text-gray-400 mb-1">No style codes found</h3>
+              <p className="text-[10px] text-gray-500">Try adjusting search or filters.</p>
+              <Link
+                href="/catalog/style-codes/add"
+                className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-add-line text-xs" />
+                Add First Style Code
+              </Link>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50/30">
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Style Code</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">EAN</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">MRP</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Brand</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Pack</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">{row.styleCode}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-700 border border-gray-200">{row.eanCode}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-700 border border-gray-200">{formatMoney(row.mrp)}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{row.brand || '-'}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{row.pack || '-'}</td>
+                    <td className="px-1.5 py-2.5 border border-gray-200">
+                      <span
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded uppercase ${
+                          row.status === 'active'
+                            ? 'bg-green-50 text-green-700 border border-green-100'
+                            : 'bg-gray-100 text-gray-600 border border-gray-200'
+                        }`}
+                      >
+                        <span className={`w-1 h-1 rounded-full ${row.status === 'active' ? 'bg-green-500' : 'bg-gray-400'}`} />
+                        {row.status}
+                      </span>
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                      <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <Link
+                          href={`/catalog/style-codes/${row.id}/edit`}
+                          className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-600 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors"
+                          title="Edit"
+                        >
+                          <i className="ri-pencil-line text-xs" />
+                        </Link>
+                        <button
+                          type="button"
+                          disabled={deletingId === row.id}
+                          onClick={() => handleDelete(row.id)}
+                          className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-500 border border-red-100 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+                          title="Delete"
+                        >
+                          {deletingId === row.id ? (
+                            <i className="ri-loader-4-line text-xs animate-spin" />
+                          ) : (
+                            <i className="ri-delete-bin-line text-xs" />
+                          )}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {!isLoading && rows.length > 0 && (
+          <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
+            <div className="text-[11px] font-medium text-[#495057] tracking-tight">
+              Showing {(page - 1) * limit + 1} to {Math.min(page * limit, totalResults)} of {totalResults} entries
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handlePageChange(page - 1)}
+                disabled={page <= 1}
+                className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Prev
+              </button>
+              <span className="text-[11px] font-medium text-gray-600">Page {page} of {totalPages}</span>
+              <button
+                onClick={() => handlePageChange(page + 1)}
+                disabled={page >= totalPages}
+                className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
             </div>
           </div>
         )}
-        <div className="box-header flex items-center justify-between">
-          <h3 className="box-title">Style Code List</h3>
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span>Page {page} of {totalPages}</span>
-            <select
-              value={limit}
-              onChange={(e) => handleLimitChange(Number(e.target.value))}
-              className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1 focus:ring-0 focus:border-gray-300"
-            >
-              {[10, 20, 50, 100].map((option) => (
-                <option key={option} value={option}>{option}/page</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="box-body p-0">
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-16">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mb-4 opacity-60"></div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-[0.2em]">Loading</p>
-            </div>
-          ) : rows.length === 0 ? (
-            <div className="py-16 text-center text-gray-500">
-              <p className="text-sm font-medium">No style codes found</p>
-              <p className="text-xs text-gray-400 mt-1">Try adjusting the search or filters.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead className="bg-gray-50/50">
-                  <tr>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      Style Code
-                    </th>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      EAN
-                    </th>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      MRP
-                    </th>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      Brand
-                    </th>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      Pack
-                    </th>
-                    <th className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      Status
-                    </th>
-                    <th className="px-3 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
-                      <td className="px-3 py-2.5 text-[12px] font-semibold text-gray-900">{row.styleCode}</td>
-                      <td className="px-3 py-2.5 text-[12px] text-gray-800">{row.eanCode}</td>
-                      <td className="px-3 py-2.5 text-[12px] text-gray-800">{formatMoney(row.mrp)}</td>
-                      <td className="px-3 py-2.5 text-[12px] text-gray-800">{row.brand || '-'}</td>
-                      <td className="px-3 py-2.5 text-[12px] text-gray-800">{row.pack || '-'}</td>
-                      <td className="px-3 py-2.5 text-[11px] font-bold">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded ${
-                            row.status === 'active'
-                              ? 'bg-green-50 text-green-700 border border-green-100'
-                              : 'bg-gray-100 text-gray-700 border border-gray-200'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'active' ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <Link
-                            href={`/catalog/style-codes/${row.id}/edit`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 bg-purple-50 border border-purple-100 rounded hover:bg-purple-100 transition-colors"
-                          >
-                            <i className="ri-edit-line"></i>
-                            Edit
-                          </Link>
-                          <button
-                            type="button"
-                            disabled={deletingId === row.id}
-                            onClick={() => handleDelete(row.id)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-100 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                            {deletingId === row.id ? 'Deleting...' : 'Delete'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
-        <div className="text-sm text-gray-600">
-          Showing page {page} of {totalPages} • {visibleCount} style codes on this page • {totalResults} total
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => handlePageChange(page - 1)}
-            disabled={page <= 1}
-            className="px-3 py-1.5 text-sm font-semibold text-gray-500 rounded border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
-          >
-            Prev
-          </button>
-          <div className="text-sm font-medium text-gray-700 px-2">Page {page}</div>
-          <button
-            onClick={() => handlePageChange(page + 1)}
-            disabled={page >= totalPages}
-            className="px-3 py-1.5 text-sm font-semibold text-gray-500 rounded border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
-          >
-            Next
-          </button>
-        </div>
       </div>
     </div>
   )

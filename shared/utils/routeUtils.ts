@@ -11,6 +11,7 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
     { path: '/catalog/items', permission: permissions.Catalog?.Items },
     { path: '/catalog/categories', permission: permissions.Catalog?.Categories },
     { path: '/catalog/raw-material', permission: permissions.Catalog?.['Raw Material'] },
+    { path: '/catalog/style-code-pairs', permission: permissions.Catalog?.['Style Code Pairs'] },
     { path: '/catalog/processes', permission: permissions.Catalog?.Processes },
     { path: '/catalog/attributes', permission: permissions.Catalog?.Attributes },
     { path: '/catalog/machines', permission: permissions.Catalog?.Machines },

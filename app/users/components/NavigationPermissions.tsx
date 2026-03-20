@@ -26,6 +26,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Processes', label: 'Processes' },
     { key: 'Attributes', label: 'Attributes' },
     { key: 'Style Codes', label: 'Style Codes' },
+    { key: 'Style Code Pairs', label: 'Style Code Pairs' },
     { key: 'Machines', label: 'Machines' },
     { key: 'Needle Configuration', label: 'Needle Configuration' },
     { key: 'Team Master', label: 'Team Master' },

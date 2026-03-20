@@ -12,6 +12,7 @@ export interface NavigationPermissions {
     Processes: boolean;
     Attributes: boolean;
     'Style Codes': boolean;
+    'Style Code Pairs': boolean;
     Machines: boolean;
     'Needle Configuration': boolean;
     'Team Master': boolean;

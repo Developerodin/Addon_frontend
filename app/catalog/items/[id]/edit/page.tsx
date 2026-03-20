@@ -7,8 +7,6 @@ import { API_BASE_URL } from '@/shared/data/utilities/api';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 import { styleCodeService, StyleCode } from '@/shared/services/styleCodeService';
 import { StyleCodeSelectModal } from '@/app/catalog/style-codes/components/StyleCodeSelectModal';
-import { RawMaterialBomTable, RawMaterialBomItem } from '@/app/catalog/items/components/RawMaterialBomTable';
-import { rawMaterialService } from '@/shared/services/rawMaterialService';
 import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
@@ -158,15 +156,13 @@ const EditProductPage = () => {
           categoriesResponse,
           attributesResponse,
           processesResponse,
-          styleCodesRes,
-          rawMaterialsList
+          styleCodesRes
         ] = await Promise.all([
           axios.get(`${API_ENDPOINTS.products}/${productId}`),
           axios.get(API_ENDPOINTS.categories),
           axios.get(API_ENDPOINTS.attributes),
           axios.get(API_ENDPOINTS.processes),
-          styleCodeService.list({ limit: 500, sortBy: 'styleCode:asc' }),
-          rawMaterialService.list().catch(() => [])
+          styleCodeService.list({ limit: 500, sortBy: 'styleCode:asc' })
         ]);
 
         // Normalize categories
@@ -321,35 +317,14 @@ const EditProductPage = () => {
             }))
           : [];
 
-        // Normalize rawMaterials to array of { rawMaterialId, rawMaterialName?, quantity }; resolve name from list if backend sent only id
-        const rawMaterialsLookup = Array.isArray(rawMaterialsList) ? rawMaterialsList : [];
-        const rawMaterialRows: RawMaterialBomItem[] = Array.isArray(product.rawMaterials)
-          ? product.rawMaterials.map((rm: any) => {
-              const id =
-                typeof rm === 'object' && rm !== null
-                  ? rm.rawMaterialId?.id ?? rm.rawMaterialId?._id ?? rm.rawMaterialId ?? rm.id ?? rm._id ?? ''
-                  : String(rm);
-              let name =
-                typeof rm === 'object' && rm !== null
-                  ? rm.rawMaterialId?.name ?? rm.rawMaterialName ?? rm.name ?? ''
-                  : '';
-              if (!name && id) {
-                const found = rawMaterialsLookup.find((m: any) => (m.id || m._id) === id);
-                name = found?.name ?? '';
-              }
-              const qty = typeof rm?.quantity === 'number' ? rm.quantity : Number(rm?.quantity) || 0;
-              return { rawMaterialId: id, rawMaterialName: name || undefined, quantity: qty };
-            })
-          : [];
-
         console.log('Normalized processes:', product.processes);
         
-        // Set the product data with normalized attributes
+        // Set the product data with normalized attributes (rawMaterials section removed from form)
         setFormData({
           ...product,
           attributes: normalizedAttributes,
           processes: product.processes,
-          rawMaterials: rawMaterialRows
+          rawMaterials: []
         });
         console.log('Product data loaded:', product);
         console.log('Product attributes:', product.attributes);
@@ -539,10 +514,6 @@ const EditProductPage = () => {
         attributes: updatedAttributes
       };
     });
-  };
-
-  const handleRawMaterialsChange = (items: RawMaterialBomItem[]) => {
-    setFormData(prev => ({ ...prev, rawMaterials: items }));
   };
 
   const handleBomItemChange = (index: number, field: 'yarnCatalogId' | 'quantity', value: string | number) => {
@@ -899,11 +870,6 @@ const EditProductPage = () => {
           yarnName: item.yarnName,
           quantity: Number(item.quantity)
         }));
-        if (Array.isArray(formData.rawMaterials) && formData.rawMaterials.length > 0) {
-          productData.rawMaterials = formData.rawMaterials
-            .filter(rm => rm.rawMaterialId && (rm.quantity ?? 0) >= 0)
-            .map(rm => ({ rawMaterialId: rm.rawMaterialId, quantity: Number(rm.quantity) }));
-        }
         productData.processes = formData.processes.filter(proc => proc.processId).map(proc => ({
           processId: proc.processId
         }));
@@ -1629,12 +1595,6 @@ const EditProductPage = () => {
                         </tbody>
                       </table>
                     </div>
-
-                    <RawMaterialBomTable
-                      items={formData.rawMaterials ?? []}
-                      onChange={handleRawMaterialsChange}
-                      disabled={isLoading}
-                    />
 
                     {/* Yarn Catalog Selection Modal */}
                     {isYarnModalOpen && (

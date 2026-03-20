@@ -127,6 +127,14 @@ const BaseMenuItems: any = [
         title: "Style Codes",
       },
       {
+        icon: StyleCodeIcon,
+        path: "/catalog/style-code-pairs",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Style Code Pairs",
+      },
+      {
         icon: MachinesIcon,
         path: "/catalog/machines",
         type: "link",
