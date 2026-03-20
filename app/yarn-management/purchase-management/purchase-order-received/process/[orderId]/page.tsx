@@ -181,7 +181,8 @@ const ProcessOrderPage = () => {
     yarnName: string;
     shadeCode: string;
     lotNumber: string;
-    boxWeight: string;
+    grossWeight: string;  // auto from scale
+    boxWeight: string;   // user fills
     numberOfCones: string;
   }>>({});
   const [showProcessedModal, setShowProcessedModal] = useState(false);
@@ -353,30 +354,25 @@ const ProcessOrderPage = () => {
             ? box.yarnName
             : '';
 
-          // Update boxData with fetched weight, ensuring all fields exist
+          // Update boxData: grossWeight from scale (auto), boxWeight stays user-filled
           setBoxData(prev => ({
             ...prev,
             [activeBoxId]: {
               yarnName: prev[activeBoxId]?.yarnName || defaultYarnName,
               shadeCode: prev[activeBoxId]?.shadeCode || box.shadeCode || '',
               lotNumber: prev[activeBoxId]?.lotNumber || box.lotNumber || '',
-              boxWeight: weight.toString(),
+              grossWeight: weight.toString(),
+              boxWeight: prev[activeBoxId]?.boxWeight || '',
               numberOfCones: prev[activeBoxId]?.numberOfCones || box.numberOfCones?.toString() || ''
             }
           }));
 
-          // Also update rawInputValues to show the weight in the input field
-          setRawInputValues(prev => ({
-            ...prev,
-            [`box-${activeBoxId}-boxWeight`]: weight.toString()
-          }));
-
-          // Auto-focus cones input after weight is fetched
+          // Auto-focus box weight input after gross weight is fetched
           setTimeout(() => {
-            const coneInput = document.querySelector(`input[data-box-cones="${activeBoxId}"]`) as HTMLInputElement;
-            if (coneInput) {
-              coneInput.focus();
-              coneInput.select();
+            const boxWeightInput = document.querySelector(`input[data-box-weight="${activeBoxId}"]`) as HTMLInputElement;
+            if (boxWeightInput) {
+              boxWeightInput.focus();
+              boxWeightInput.select();
             }
           }, 300);
         }
@@ -479,6 +475,7 @@ const ProcessOrderPage = () => {
                   yarnName: autoFilledYarnName,
                   shadeCode: autoFilledShadeCode,
                   lotNumber: boxLotNumber,
+                  grossWeight: (box as any).grossWeight?.toString() || existingData.grossWeight || '',
                   boxWeight: box.boxWeight?.toString() || '',
                   numberOfCones: box.numberOfCones?.toString() || ''
                 };
@@ -488,6 +485,7 @@ const ProcessOrderPage = () => {
                   yarnName: existingData.yarnName || autoFilledYarnName,
                   shadeCode: existingData.shadeCode || autoFilledShadeCode,
                   lotNumber: existingData.lotNumber || boxLotNumber,
+                  grossWeight: existingData.grossWeight || (box as any).grossWeight?.toString() || '',
                   boxWeight: existingData.boxWeight || box.boxWeight?.toString() || '',
                   numberOfCones: existingData.numberOfCones || box.numberOfCones?.toString() || ''
                 };
@@ -670,6 +668,7 @@ const ProcessOrderPage = () => {
             yarnName: autoFilledData.yarnName,
             shadeCode: autoFilledData.shadeCode,
             lotNumber: autoFilledData.lotNumber,
+            grossWeight: prev[boxId]?.grossWeight || '',
             boxWeight: prev[boxId]?.boxWeight || '',
             numberOfCones: prev[boxId]?.numberOfCones || ''
           }
@@ -1217,10 +1216,12 @@ const ProcessOrderPage = () => {
 
     setUpdatingBoxId(boxId);
     try {
+      const grossWeightNum = data.grossWeight ? parseFloat(data.grossWeight) : undefined;
       const payload: UpdateYarnBoxPayload = {
         yarnName: data.yarnName,
         shadeCode: data.shadeCode,
         lotNumber: data.lotNumber,
+        ...(grossWeightNum !== undefined && grossWeightNum >= 0 && { grossWeight: grossWeightNum }),
         boxWeight: parseFloat(data.boxWeight),
         numberOfCones: parseFloat(data.numberOfCones)
       };
@@ -1267,6 +1268,7 @@ const ProcessOrderPage = () => {
                   yarnName: refreshedYarnName,
                   shadeCode: box.shadeCode || '',
                   lotNumber: box.lotNumber || '',
+                  grossWeight: (box as any).grossWeight?.toString() || '',
                   boxWeight: box.boxWeight?.toString() || '',
                   numberOfCones: box.numberOfCones?.toString() || ''
                 };
@@ -1276,6 +1278,7 @@ const ProcessOrderPage = () => {
                   yarnName: existingData.yarnName || refreshedYarnName,
                   shadeCode: existingData.shadeCode || box.shadeCode || '',
                   lotNumber: existingData.lotNumber || box.lotNumber || '',
+                  grossWeight: existingData.grossWeight || (box as any).grossWeight?.toString() || '',
                   boxWeight: existingData.boxWeight || box.boxWeight?.toString() || '',
                   numberOfCones: existingData.numberOfCones || box.numberOfCones?.toString() || ''
                 };
@@ -1929,6 +1932,7 @@ const ProcessOrderPage = () => {
           "Supplier": order.supplier ?? "",
           "Yarn Name": data?.yarnName ?? box.yarnName ?? "",
           "Shade Code": data?.shadeCode ?? box.shadeCode ?? "",
+          "Gross Weight (kg)": data?.grossWeight ? parseFloat(data.grossWeight) : ((box as any).grossWeight ?? ""),
           "Box Weight (kg)": data?.boxWeight ? parseFloat(data.boxWeight) : (box.boxWeight ?? ""),
           "Number of Cones": data?.numberOfCones ?? box.numberOfCones ?? "",
           "Received Date": order.receivedDate ? new Date(order.receivedDate).toLocaleDateString() : "",
@@ -1987,6 +1991,7 @@ const ProcessOrderPage = () => {
             const poNumber = get(row, "PO Number", "poNumber", "PO Number", "PONumber");
             const yarnName = get(row, "Yarn Name", "yarnName", "YarnName");
             const shadeCode = get(row, "Shade Code", "shadeCode", "ShadeCode");
+            const grossWeight = num(row, "Gross Weight (kg)", "Gross Weight (kg)", "grossWeight", "Gross Weight");
             const boxWeight = num(row, "Box Weight (kg)", "Box Weight (kg)", "boxWeight", "Box Weight");
             const numberOfCones = num(row, "Number of Cones", "numberOfCones", "Number of Cones", "NumberOfCones");
             if (!boxId && !barcode) continue; // skip empty rows
@@ -1995,6 +2000,7 @@ const ProcessOrderPage = () => {
               poNumber: poNumber || "",
               yarnName: yarnName || "",
               shadeCode: shadeCode || "",
+              ...(grossWeight > 0 && { grossWeight }),
               boxWeight,
               numberOfCones: Math.round(numberOfCones),
               barcode: barcode || "",
@@ -2547,6 +2553,7 @@ const ProcessOrderPage = () => {
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Gross Wt (kg)</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">No. of Cones</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
@@ -2565,6 +2572,7 @@ const ProcessOrderPage = () => {
                               yarnName: defaultYarnName,
                               shadeCode: box.shadeCode || '',
                               lotNumber: box.lotNumber || '',
+                              grossWeight: (box as any).grossWeight?.toString() || '',
                               boxWeight: box.boxWeight?.toString() || '',
                               numberOfCones: box.numberOfCones?.toString() || ''
                             };
@@ -2633,6 +2641,9 @@ const ProcessOrderPage = () => {
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   <span className="text-[12px] text-gray-900">{data.lotNumber || '-'}</span>
+                                </td>
+                                <td className="px-1.5 py-2 border border-gray-200">
+                                  <span className="text-[12px] text-gray-900" title="Auto from scale">{data.grossWeight || '-'}</span>
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   {isActive ? (
@@ -2829,6 +2840,7 @@ const ProcessOrderPage = () => {
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Gross Wt (kg)</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">No. of Cones</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
@@ -2846,6 +2858,7 @@ const ProcessOrderPage = () => {
                             yarnName: defaultYarnName,
                             shadeCode: box.shadeCode || '',
                             lotNumber: box.lotNumber || '',
+                            grossWeight: (box as any).grossWeight?.toString() || '',
                             boxWeight: box.boxWeight?.toString() || '',
                             numberOfCones: box.numberOfCones?.toString() || ''
                           };
@@ -2914,6 +2927,9 @@ const ProcessOrderPage = () => {
                               </td>
                               <td className="px-1.5 py-2 border border-gray-200">
                                 <span className="text-[12px] text-yellow-600 font-medium">{data.lotNumber || 'Not assigned'}</span>
+                              </td>
+                              <td className="px-1.5 py-2 border border-gray-200">
+                                <span className="text-[12px] text-gray-900" title="Auto from scale">{data.grossWeight || '-'}</span>
                               </td>
                               <td className="px-1.5 py-2 border border-gray-200">
                                 {isActive ? (
@@ -3200,6 +3216,15 @@ const ProcessOrderPage = () => {
                     {(() => {
                       const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
                       return boxData[boxId]?.lotNumber || selectedBoxForDetails.lotNumber || '-';
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Gross Weight (kg)</label>
+                  <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
+                    {(() => {
+                      const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
+                      return boxData[boxId]?.grossWeight || (selectedBoxForDetails as any).grossWeight || '-';
                     })()}
                   </div>
                 </div>

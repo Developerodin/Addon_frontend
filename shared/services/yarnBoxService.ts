@@ -24,6 +24,9 @@ export interface YarnBox {
   supplier?: { _id?: string; id?: string; brandName?: string; name?: string };
   orderQty?: number;
   lotNumber?: string;
+  /** Gross weight from scale (auto-captured). */
+  grossWeight?: number;
+  /** Net/box weight (user-entered). */
   boxWeight?: number;
   numberOfCones?: number;
   receivedDate?: string;
@@ -51,6 +54,7 @@ export interface UpdateYarnBoxPayload {
   shadeCode?: string;
   orderQty?: number;
   lotNumber?: string;
+  grossWeight?: number;
   boxWeight?: number;
   numberOfCones?: number;
   storageLocation?: string;
@@ -136,6 +140,7 @@ export interface BulkMatchUpdateItem {
   poNumber: string;
   yarnName: string;
   shadeCode: string;
+  grossWeight?: number;
   boxWeight: number;
   numberOfCones: number;
   barcode: string;
