@@ -7,7 +7,6 @@ import {
   listMachineOrderAssignments,
   createMachineOrderAssignment,
   updateMachineOrderAssignment,
-  resetMachineOrderAssignment,
   type MachineOrderAssignment,
   type CreateAssignmentBody,
   type UpdateAssignmentBody,
@@ -190,21 +189,6 @@ const NeedleConfigurationPage = () => {
     }
   };
 
-  const handleReset = async (a: MachineOrderAssignment) => {
-    if (!a.id) return;
-    if (!window.confirm("Reset this assignment? This may clear or reset its configuration.")) return;
-    const t = toast.loading("Resetting…");
-    try {
-      await resetMachineOrderAssignment(a.id);
-      toast.dismiss(t);
-      toast.success("Assignment reset");
-      fetchList();
-    } catch (e) {
-      toast.dismiss(t);
-      toast.error(e instanceof Error ? e.message : "Failed to reset");
-    }
-  };
-
   return (
     <div className="main-content !p-[10px]">
       <Seo title="Needle Configuration" />
@@ -291,7 +275,6 @@ const NeedleConfigurationPage = () => {
           onChangeNeedle={openActiveNeedle}
           onLogs={openLogs}
           onToggleActive={handleToggleActive}
-          onReset={handleReset}
         />
 
           <AddEditAssignmentModal
