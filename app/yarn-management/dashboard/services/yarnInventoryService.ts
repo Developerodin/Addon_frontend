@@ -38,7 +38,8 @@ export interface StorageInfo {
 
 export interface YarnInventoryResponse {
   _id?: string;
-  yarn: YarnCatalogInfo;
+  /** Present when API embeds catalog; list endpoints may omit. */
+  yarn?: YarnCatalogInfo;
   yarnId: string;
   yarnName: string;
   longTermStorage: StorageInfo;
@@ -68,7 +69,9 @@ export interface YarnInventoryQueryParams {
 export interface YarnRequisitionResponse {
   _id: string;
   yarnName: string;
-  yarn: YarnCatalogInfo;
+  /** Embedded catalog when populated; otherwise use top-level yarnId. */
+  yarn?: YarnCatalogInfo | string;
+  yarnId?: string;
   minQty: number;
   availableQty: number;
   blockedQty: number;
@@ -80,6 +83,16 @@ export interface YarnRequisitionResponse {
 
 export interface UpdateRequisitionStatusRequest {
   poSent: boolean;
+}
+
+/** Resolve yarn id whether API returns embedded `yarn`, a string id, or top-level `yarnId`. */
+export function requisitionYarnId(req: YarnRequisitionResponse): string | undefined {
+  const y = req.yarn;
+  if (typeof y === 'string' && y) return y;
+  if (y && typeof y === 'object' && '_id' in y && typeof (y as YarnCatalogInfo)._id === 'string') {
+    return (y as YarnCatalogInfo)._id;
+  }
+  return req.yarnId;
 }
 
 /** Yarn report row from GET /yarn-management/yarn-report */
@@ -186,6 +199,29 @@ class YarnInventoryService {
     const endpoint = `/yarn-inventories${queryString ? `?${queryString}` : ''}`;
 
     return this.makeRequest<YarnInventoryListResponse>(endpoint);
+  }
+
+  /**
+   * Fetches every inventory row. The API caps `limit` per request (e.g. 100), so we page until a short page.
+   */
+  async getAllYarnInventories(
+    params: Omit<YarnInventoryQueryParams, 'limit' | 'page'> = {}
+  ): Promise<YarnInventoryResponse[]> {
+    const pageSize = 100;
+    const maxPages = 1000;
+    const aggregated: YarnInventoryResponse[] = [];
+
+    for (let page = 1; page <= maxPages; page++) {
+      const res = await this.getYarnInventories({
+        ...params,
+        limit: pageSize,
+        page,
+      });
+      aggregated.push(...res.results);
+      if (res.results.length < pageSize) break;
+    }
+
+    return aggregated;
   }
 
   async getYarnInventoryById(

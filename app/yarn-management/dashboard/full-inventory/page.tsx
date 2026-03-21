@@ -5,7 +5,10 @@ import Link from "next/link";
 import Seo from "@/shared/layout-components/seo/seo";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { YarnInventory } from "../types";
-import { yarnInventoryService } from "../services/yarnInventoryService";
+import {
+  yarnInventoryService,
+  requisitionYarnId,
+} from "../services/yarnInventoryService";
 
 type SortField = keyof YarnInventory;
 type SortDirection = "asc" | "desc";
@@ -33,10 +36,8 @@ const FullInventoryPage = () => {
         setLoading(true);
         setError(null);
 
-        // Fetch yarn inventories
-        const inventoryResponse = await yarnInventoryService.getYarnInventories({
-          limit: 1000, // Get all inventories
-        });
+        const inventoryResults =
+          await yarnInventoryService.getAllYarnInventories();
 
         // Fetch requisitions to get blocked quantities
         const endDate = new Date();
@@ -50,7 +51,7 @@ const FullInventoryPage = () => {
 
         // Transform API response to UI format
         const transformedInventory: YarnInventory[] =
-          inventoryResponse.results.map((item) => {
+          inventoryResults.map((item) => {
             const totalWeight =
               item.longTermStorage.totalWeight +
               item.shortTermStorage.totalWeight;
@@ -60,7 +61,7 @@ const FullInventoryPage = () => {
 
             // Find blocked quantity from requisitions
             const relatedRequisitions = requisitions.filter(
-              (req) => req.yarn._id === item.yarnId
+              (req) => requisitionYarnId(req) === item.yarnId
             );
             const blockedQty = relatedRequisitions.reduce(
               (sum, req) => sum + req.blockedQty,

@@ -11,7 +11,10 @@ import {
   InventorySummary,
   InventoryAlert,
 } from "./types";
-import { yarnInventoryService } from "./services/yarnInventoryService";
+import {
+  yarnInventoryService,
+  requisitionYarnId,
+} from "./services/yarnInventoryService";
 
 const DashboardPage = () => {
   const { hasSubPermission } = useNavigation();
@@ -43,14 +46,13 @@ const DashboardPage = () => {
         setLoading(true);
         setError(null);
 
-        // Fetch yarn inventories
-        const inventoryResponse = await yarnInventoryService.getYarnInventories({
-          limit: 1000, // Get all inventories
-        });
+        // API caps limit (~100); service pages until all rows are loaded
+        const inventoryResults =
+          await yarnInventoryService.getAllYarnInventories();
 
         // Transform API response to UI format
         const transformedInventory: YarnInventory[] =
-          inventoryResponse.results.map((item) => {
+          inventoryResults.map((item) => {
             const totalWeight =
               item.longTermStorage.totalWeight +
               item.shortTermStorage.totalWeight;
@@ -130,7 +132,7 @@ const DashboardPage = () => {
 
             return {
               id: req._id,
-              yarnId: req.yarn._id,
+              yarnId: requisitionYarnId(req) ?? "",
               yarnName: req.yarnName,
               alertType: alertType,
               message: message,
@@ -146,7 +148,7 @@ const DashboardPage = () => {
         // Update blocked quantities from requisitions
         transformedInventory.forEach((inv) => {
           const relatedRequisitions = requisitions.filter(
-            (req) => req.yarn._id === inv.yarnId
+            (req) => requisitionYarnId(req) === inv.yarnId
           );
           if (relatedRequisitions.length > 0) {
             const totalBlocked = relatedRequisitions.reduce(
@@ -154,7 +156,7 @@ const DashboardPage = () => {
               0
             );
             inv.blockedQty = totalBlocked;
-            const inventoryItem = inventoryResponse.results.find(
+            const inventoryItem = inventoryResults.find(
               (item) => item.yarnId === inv.yarnId
             );
             if (inventoryItem) {
