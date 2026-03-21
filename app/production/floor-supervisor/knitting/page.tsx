@@ -15,6 +15,7 @@ import ArticleViewTab from "./components/ArticleViewTab";
 import MachineArticlePlanningTab from "./components/MachineArticlePlanningTab";
 import {
   OrderStatus,
+  getMachineOrderAssignment,
   updateAssignmentItemStatus,
   updateAssignmentItemYarnIssueStatus,
   type MachineOrderAssignment,
@@ -22,6 +23,7 @@ import {
   type ProductionOrderItem,
 } from "@/shared/services/machineOrderAssignmentService";
 import { containersMasterService, hasActiveItems } from "@/shared/services/containersMasterService";
+import { machinesService } from "@/shared/services/machinesService";
 import QRCode from "qrcode";
 type KnittingTab = "orders" | "machine-view" | "article-view" | "planning";
 
@@ -83,6 +85,42 @@ function getStatusOptionsForItem(idx: number, currentStatus?: OrderStatusType): 
     return [current, ...restricted.filter((s) => s !== current)];
   }
   return restricted;
+}
+
+/** Machine code/name for labels (aligned with MachineViewTab). */
+function machineLabelFromAssignment(a: MachineOrderAssignment): string {
+  const m = a.machine;
+  if (typeof m === "object" && m) {
+    return (
+      (m as { machineCode?: string; name?: string; id?: string }).machineCode ??
+      (m as { name?: string }).name ??
+      (m as { id?: string }).id ??
+      "-"
+    );
+  }
+  return typeof m === "string" ? m : "-";
+}
+
+/** Cutoff qty for the active needle from machine `needleSizeConfig` (catalog machines). */
+function cutoffQuantityForActiveNeedle(machine: unknown, activeNeedle: string): number | null {
+  const needle = activeNeedle.trim();
+  if (!needle) return null;
+  if (typeof machine !== "object" || !machine) return null;
+  const cfg = (machine as { needleSizeConfig?: { needleSize?: string; cutoffQuantity?: number }[] }).needleSizeConfig;
+  if (!Array.isArray(cfg) || cfg.length === 0) return null;
+  const n = needle.toLowerCase();
+  const row = cfg.find((c) => String(c?.needleSize ?? "").trim().toLowerCase() === n);
+  const q = row?.cutoffQuantity;
+  return typeof q === "number" && !Number.isNaN(q) ? q : null;
+}
+
+function machineIdFromAssignmentMachine(m: MachineOrderAssignment["machine"]): string | null {
+  if (typeof m === "string" && m.trim()) return m.trim();
+  if (typeof m === "object" && m) {
+    const o = m as { id?: string; _id?: string };
+    return o.id ?? o._id ?? null;
+  }
+  return null;
 }
 
 const KnittingFloorSupervisorPage = () => {
@@ -152,6 +190,8 @@ const KnittingFloorSupervisorPage = () => {
   const [updateModalReadOnlyFromIndex, setUpdateModalReadOnlyFromIndex] = useState<number | undefined>(undefined);
   /** When update modal opened from machine view: assignment + items so we can call status/yarn APIs. */
   const [updateModalAssignment, setUpdateModalAssignment] = useState<MachineOrderAssignment | null>(null);
+  /** Cutoff for active needle (machine config); null = unknown / not configured. */
+  const [updateModalNeedleCutoff, setUpdateModalNeedleCutoff] = useState<number | null>(null);
   const [updateModalAssignmentItems, setUpdateModalAssignmentItems] = useState<ProductionOrderItem[] | null>(null);
   const [updatingStatusItemId, setUpdatingStatusItemId] = useState<string | null>(null);
   const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
@@ -333,6 +373,7 @@ const KnittingFloorSupervisorPage = () => {
     setSelectedOrder(order);
     setActiveUpdateTabIndex(0);
     setUpdateModalAssignment(null);
+    setUpdateModalNeedleCutoff(null);
     setUpdateModalAssignmentItems(null);
     // Initialize update data with current values; M4 input starts empty (user enters increment)
     const initialData: {[key: string]: {completedQuantity: number, remarks: string, m4Quantity: number}} = {};
@@ -366,6 +407,7 @@ const KnittingFloorSupervisorPage = () => {
     setInitialUpdateData({});
     setUpdateModalReadOnlyFromIndex(undefined);
     setUpdateModalAssignment(null);
+    setUpdateModalNeedleCutoff(null);
     setUpdateModalAssignmentItems(null);
     setUpdatingStatusItemId(null);
     setUpdatingYarnItemId(null);
@@ -383,7 +425,15 @@ const KnittingFloorSupervisorPage = () => {
 
   /** Open the same data-entry (update) modal from machine view: only priority orders, first editable, rest read-only. */
   const handleOpenUpdateModalFromMachine = async (assignment: MachineOrderAssignment) => {
-    const items = (assignment.productionOrderItems ?? [])
+    let assignmentForModal = assignment;
+    if (!assignment.id.startsWith("placeholder-")) {
+      try {
+        assignmentForModal = await getMachineOrderAssignment(assignment.id);
+      } catch {
+        // keep list snapshot if GET fails
+      }
+    }
+    const items = (assignmentForModal.productionOrderItems ?? [])
       .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
       .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
       .slice(0, 2);
@@ -427,7 +477,20 @@ const KnittingFloorSupervisorPage = () => {
     }
     setUpdateData(initialData);
     setUpdateModalReadOnlyFromIndex(1);
-    setUpdateModalAssignment(assignment);
+    setUpdateModalAssignment(assignmentForModal);
+    let cutoff = cutoffQuantityForActiveNeedle(assignmentForModal.machine, assignmentForModal.activeNeedle ?? "");
+    if (cutoff === null) {
+      const mid = machineIdFromAssignmentMachine(assignmentForModal.machine);
+      if (mid) {
+        try {
+          const fullMachine = await machinesService.getMachine(mid);
+          cutoff = cutoffQuantityForActiveNeedle(fullMachine as unknown, assignmentForModal.activeNeedle ?? "");
+        } catch {
+          cutoff = null;
+        }
+      }
+    }
+    setUpdateModalNeedleCutoff(cutoff);
     setUpdateModalAssignmentItems(items);
     setInitialUpdateData(JSON.parse(JSON.stringify(initialData)));
     setShowUpdateModal(true);
@@ -474,6 +537,7 @@ const KnittingFloorSupervisorPage = () => {
     try {
       await updateAssignmentItemStatus(updateModalAssignment.id, completeConfirmData.itemId, OrderStatus.COMPLETED);
       setUpdateModalAssignment(null);
+      setUpdateModalNeedleCutoff(null);
       setUpdateModalAssignmentItems(null);
       setUpdateModalReadOnlyFromIndex(undefined);
       setShowCompleteConfirmModal(false);
@@ -1061,6 +1125,27 @@ const KnittingFloorSupervisorPage = () => {
               </button>
             </div>
 
+            {updateModalAssignment && (
+              <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 rounded border border-purple-200 bg-purple-50/90 px-3 py-2 text-[11px]">
+                <div>
+                  <span className="font-bold uppercase tracking-wide text-gray-500">Machine</span>
+                  <div className="font-mono text-sm font-semibold text-purple-900">{machineLabelFromAssignment(updateModalAssignment)}</div>
+                </div>
+                <div>
+                  <span className="font-bold uppercase tracking-wide text-gray-500">Active needle</span>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {updateModalAssignment.activeNeedle?.trim() ? updateModalAssignment.activeNeedle : "—"}
+                  </div>
+                </div>
+                <div>
+                  <span className="font-bold uppercase tracking-wide text-gray-500">Cutoff (this needle)</span>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {updateModalNeedleCutoff != null ? updateModalNeedleCutoff.toLocaleString() : "—"}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Order Summary */}
             <div className="grid grid-cols-2 gap-2 mb-3 p-2 bg-gray-50 rounded border border-gray-300">
               <div>
@@ -1110,7 +1195,23 @@ const KnittingFloorSupervisorPage = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white">
-                    {selectedOrder.articles.map((article, idx) => {
+                    {(() => {
+                      const firstRemaining =
+                        selectedOrder.articles[0]?.floorQuantities?.knitting?.remaining ?? 0;
+                      /** Upcoming article: allow Ask for yarn when first row is In Progress and remaining &lt; needle cutoff. */
+                      const canAskYarnForUpcoming =
+                        Boolean(updateModalAssignment) &&
+                        updateModalAssignmentItems?.[0]?.status === OrderStatus.IN_PROGRESS &&
+                        updateModalNeedleCutoff != null &&
+                        firstRemaining < (updateModalNeedleCutoff as number);
+                      const upcomingYarnAskTitle = canAskYarnForUpcoming
+                        ? undefined
+                        : updateModalAssignmentItems?.[0]?.status !== OrderStatus.IN_PROGRESS
+                          ? "Mark the first article In Progress first."
+                          : updateModalNeedleCutoff == null
+                            ? "Configure needle cutoff on the machine."
+                            : `When remaining (${firstRemaining.toLocaleString()}) is below cutoff (${(updateModalNeedleCutoff as number).toLocaleString()}), you can request yarn for the upcoming article.`;
+                      return selectedOrder.articles.map((article, idx) => {
                       const articleId = article.id || article._id;
                       if (!articleId) return null;
                       const assignmentItem = updateModalAssignmentItems?.[idx];
@@ -1312,12 +1413,49 @@ const KnittingFloorSupervisorPage = () => {
                                     </div>
                                   </div>
                                 )}
+                                {updateModalAssignment && updateModalAssignmentItems && isReadOnly && idx === updateModalReadOnlyFromIndex && (
+                                  <div className="flex flex-wrap items-center gap-3 shrink-0">
+                                    <div>
+                                      <label className="block text-[10px] font-semibold text-gray-600 mb-1">Yarn issue</label>
+                                      {hasStatusYarn ? (() => {
+                                        const yarnStatus = assignmentItem?.yarnIssueStatus ? String(assignmentItem.yarnIssueStatus) : "";
+                                        const isInProgressOrCompleted = yarnStatus === "In Progress" || yarnStatus === "Completed";
+                                        if (isInProgressOrCompleted) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              disabled
+                                              className="px-3 py-1.5 text-[11px] font-bold rounded bg-green-600 text-white cursor-not-allowed opacity-90"
+                                            >
+                                              {yarnStatus}
+                                            </button>
+                                          );
+                                        }
+                                        const askDisabled = !canAskYarnForUpcoming || updatingYarnItemId === assignmentItem?.itemId;
+                                        return (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleModalAskForYarn(assignmentItem!.itemId!)}
+                                            disabled={askDisabled}
+                                            title={askDisabled ? upcomingYarnAskTitle : undefined}
+                                            className="px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                          >
+                                            Ask for yarn
+                                          </button>
+                                        );
+                                      })() : (
+                                        <span className="text-[11px] text-gray-400 py-1.5 block">—</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
                         </React.Fragment>
                       );
-                    })}
+                    });
+                    })()}
                   </tbody>
                 </table>
               </div>
