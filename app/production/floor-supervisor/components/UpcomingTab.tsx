@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
+import * as XLSX from "xlsx";
 import {
   containersMasterService,
   type ContainerActiveArticlePopulated,
@@ -31,6 +32,12 @@ function getArticleNumber(
   if (!article) return "—";
   if (typeof article === "string") return article;
   return article.articleNumber ?? article._id ?? "—";
+}
+
+/** Safe filename segment from floor label */
+function floorSlug(label: string): string {
+  const t = label.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
+  return t || "floor";
 }
 
 /**
@@ -87,6 +94,32 @@ export default function UpcomingTab({ floorName }: UpcomingTabProps) {
     }
   }
 
+  const downloadExcel = () => {
+    if (rows.length === 0) {
+      toast.error("No upcoming rows to export");
+      return;
+    }
+    const exportRows = rows.map((row) => {
+      const art = typeof row.article === "object" ? (row.article as ArticleLike) : null;
+      return {
+        Container: row.container.containerName ?? "",
+        Barcode: row.container.barcode,
+        Article: getArticleNumber(row.article),
+        Qty: row.qty,
+        "Order #": getOrderNumber(art),
+        Status: row.container.status ?? "",
+        Type: row.container.type ?? "",
+        "Active floor": row.container.activeFloor ?? floorLabel,
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Upcoming");
+    const date = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `upcoming_${floorSlug(floorLabel)}_${date}.xlsx`);
+    toast.success("Excel downloaded");
+  };
+
   return (
     <div className="p-[10px]">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -103,15 +136,26 @@ export default function UpcomingTab({ floorName }: UpcomingTabProps) {
             </>
           ) : null}
         </p>
-        <button
-          type="button"
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-gray-200 bg-white hover:bg-gray-50"
-        >
-          <i className={`ri-refresh-line text-xs ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={downloadExcel}
+            disabled={loading || rows.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 disabled:opacity-50 disabled:pointer-events-none"
+          >
+            <i className="ri-file-excel-2-line text-xs" />
+            Download Excel
+          </button>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-gray-200 bg-white hover:bg-gray-50"
+          >
+            <i className={`ri-refresh-line text-xs ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {loading ? (
