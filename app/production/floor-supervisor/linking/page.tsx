@@ -11,10 +11,11 @@ import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuan
 import { getRepairInfo } from "@/shared/utils/repairUtils";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
+import UpcomingTab from "../components/UpcomingTab";
 import { containersMasterService, type ContainerMaster, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 
-type LinkingTab = "orders" | "article-view" | "my-team";
+type LinkingTab = "orders" | "article-view" | "my-team" | "upcoming";
 
 const LinkingFloorSupervisorPage = () => {
   const [activeTab, setActiveTab] = useState<LinkingTab>("article-view");
@@ -703,6 +704,13 @@ const LinkingFloorSupervisorPage = () => {
             >
               My Team
             </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "upcoming" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("upcoming")}
+            >
+              Upcoming
+            </button>
           </div>
         </div>
 
@@ -710,6 +718,8 @@ const LinkingFloorSupervisorPage = () => {
         <div className="min-h-[300px]">
           {activeTab === "my-team" ? (
             <MyTeamTab />
+          ) : activeTab === "upcoming" ? (
+            <UpcomingTab floorName="Linking" />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
               orders={paginatedOrders}

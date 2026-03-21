@@ -103,6 +103,13 @@ export interface PaginatedContainers {
   totalResults: number;
 }
 
+/** GET /by-floor/:floor/with-articles?status=ACTIVE */
+export interface ContainersByFloorWithArticlesResponse {
+  floor: string;
+  count: number;
+  containers: ContainerMaster[];
+}
+
 export interface CreateContainerBody {
   containerName?: string;
   status?: ContainerStatus;
@@ -196,6 +203,23 @@ class ContainersMasterService {
   async getByBarcode(barcode: string): Promise<ContainerMaster> {
     if (!barcode) throw new Error('barcode is required');
     return this.request<ContainerMaster>(`/barcode/${encodeURIComponent(barcode)}`);
+  }
+
+  /**
+   * GET /by-floor/:floor/with-articles — containers on a floor with populated articles.
+   * Encode floor names with spaces/special chars (e.g. Final%20Checking).
+   */
+  async getByFloorWithArticles(
+    floorName: string,
+    params?: { status?: string }
+  ): Promise<ContainersByFloorWithArticlesResponse> {
+    const floor = floorName?.trim();
+    if (!floor) throw new Error('floorName is required');
+    const sp = new URLSearchParams();
+    if (params?.status) sp.append('status', params.status);
+    const q = sp.toString() ? `?${sp.toString()}` : '';
+    const path = `/by-floor/${encodeURIComponent(floor)}/with-articles${q}`;
+    return this.request<ContainersByFloorWithArticlesResponse>(path);
   }
 
   async create(body: CreateContainerBody): Promise<ContainerMaster> {
