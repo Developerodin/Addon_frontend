@@ -244,11 +244,11 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     };
   }, [result?.box?.poNumber, cones, coneInputs]);
 
-  // Fetch latest weight from API (tries localhost:7001 then 192.168.0.28:7001, uses whichever responds)
+  // Fetch latest weight from knitting scale API (same as floor supervisor knitting flow)
   const fetchLatestWeight = async (): Promise<number | null> => {
     try {
       setIsFetchingWeight(true);
-      const weight = await fetchWeightLatest();
+      const weight = await fetchWeightLatest("knitting");
       return weight;
     } catch (error) {
       console.error('Failed to fetch weight:', error);
