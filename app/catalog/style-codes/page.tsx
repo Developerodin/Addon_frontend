@@ -57,9 +57,11 @@ const StyleCodesPage = () => {
   const [filters, setFilters] = useState<Filters>({ search: '', status: '' })
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
-  const [isExporting, setIsExporting] = useState(false)
+  // const [isSyncing, setIsSyncing] = useState(false) // bulk-sync UI commented out
+  // const [isExporting, setIsExporting] = useState(false) // Export All commented out
   const [isBomImporting, setIsBomImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
+  // const syncInputRef = useRef<HTMLInputElement>(null)
   const bomImportInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -159,65 +161,79 @@ const StyleCodesPage = () => {
     toast.success('Template downloaded')
   }
 
-  const handleExport = async () => {
-    setIsExporting(true)
-    try {
-      const exportLimit = 500
-      let allRows: StyleCode[] = []
-      let currentPage = 1
-      let totalToFetch = 1
-
-      do {
-        const resp = await styleCodeService.list({
-          styleCode: filters.search || undefined,
-          eanCode: filters.search || undefined,
-          brand: filters.search || undefined,
-          pack: filters.search || undefined,
-          status: filters.status || undefined,
-          sortBy: 'styleCode:asc',
-          limit: exportLimit,
-          page: currentPage,
-        })
-        const results = resp.results || []
-        allRows = allRows.concat(results)
-        totalToFetch = resp.totalResults ?? allRows.length
-        if (results.length < exportLimit || allRows.length >= totalToFetch) break
-        currentPage += 1
-      } while (allRows.length < totalToFetch)
-
-      if (allRows.length === 0) {
-        toast.error('No style codes to export')
-        return
-      }
-
-      const exportRows = allRows.map((row) => ({
-        id: row.id,
-        styleCode: row.styleCode,
-        eanCode: row.eanCode,
-        mrp: row.mrp ?? 0,
-        brand: row.brand ?? '',
-        pack: row.pack ?? '',
-        status: row.status ?? 'active',
-      }))
-      const ws = XLSX.utils.json_to_sheet(exportRows)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Style Codes')
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-      const blob = new Blob([wbout], { type: 'application/octet-stream' })
-      const filename = `style-codes-export-${new Date().toISOString().slice(0, 10)}.xlsx`
-      saveAs(blob, filename)
-      toast.success(`Exported all ${allRows.length} style code(s)`)
-    } catch (error) {
-      console.error('Export failed', error)
-      toast.error('Export failed')
-    } finally {
-      setIsExporting(false)
-    }
-  }
+  // const handleExport = async () => {
+  //   setIsExporting(true)
+  //   try {
+  //     const exportLimit = 500
+  //     let allRows: StyleCode[] = []
+  //     let currentPage = 1
+  //     let totalToFetch = 1
+  //
+  //     do {
+  //       const resp = await styleCodeService.list({
+  //         sortBy: 'styleCode:asc',
+  //         limit: exportLimit,
+  //         page: currentPage,
+  //       })
+  //       const results = resp.results || []
+  //       allRows = allRows.concat(results)
+  //       totalToFetch = resp.totalResults ?? allRows.length
+  //       if (results.length < exportLimit || allRows.length >= totalToFetch) break
+  //       currentPage += 1
+  //     } while (allRows.length < totalToFetch)
+  //
+  //     if (allRows.length === 0) {
+  //       toast.error('No style codes to export')
+  //       return
+  //     }
+  //
+  //     const exportRows = allRows.map((row) => ({
+  //       id: row.id,
+  //       styleCode: row.styleCode,
+  //       eanCode: row.eanCode,
+  //       mrp: row.mrp ?? 0,
+  //       brand: row.brand ?? '',
+  //       pack: row.pack ?? '',
+  //       status: row.status ?? 'active',
+  //     }))
+  //     const ws = XLSX.utils.json_to_sheet(exportRows)
+  //     const wb = XLSX.utils.book_new()
+  //     XLSX.utils.book_append_sheet(wb, ws, 'Style Codes')
+  //     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+  //     const blob = new Blob([wbout], { type: 'application/octet-stream' })
+  //     const filename = `style-codes-export-${new Date().toISOString().slice(0, 10)}.xlsx`
+  //     saveAs(blob, filename)
+  //     toast.success(`Exported all ${allRows.length} style code(s)`)
+  //   } catch (error) {
+  //     console.error('Export failed', error)
+  //     toast.error('Export failed')
+  //   } finally {
+  //     setIsExporting(false)
+  //   }
+  // }
 
   const parseStatus = (value: any): 'active' | 'inactive' => {
     const v = String(value || '').toLowerCase()
     return v === 'inactive' ? 'inactive' : 'active'
+  }
+
+  const parseStyleCodesFromRows = (rowsJson: Record<string, any>[]) =>
+    rowsJson
+      .map((row) => ({
+        styleCode: String(row.styleCode || row.StyleCode || row['Style Code'] || '').trim(),
+        eanCode: String(row.eanCode || row.EAN || row['eanCode'] || '').trim(),
+        mrp: Number(row.mrp ?? row.MRP ?? 0),
+        brand: String(row.brand || row.Brand || '').trim() || undefined,
+        pack: String(row.pack || row.Pack || '').trim() || undefined,
+        status: parseStatus(row.status || row.Status),
+      }))
+      .filter((r) => r.styleCode && r.eanCode && !Number.isNaN(r.mrp))
+
+  const readExcelFirstSheetRows = async (file: File): Promise<Record<string, any>[]> => {
+    const data = await file.arrayBuffer()
+    const workbook = XLSX.read(data, { type: 'array' })
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    return XLSX.utils.sheet_to_json<Record<string, any>>(sheet || {}, { defval: '' })
   }
 
   const handleImportClick = () => importInputRef.current?.click()
@@ -310,22 +326,12 @@ const StyleCodesPage = () => {
     if (!file) return
     setIsImporting(true)
     try {
-      const data = await file.arrayBuffer()
-      const workbook = XLSX.read(data, { type: 'array' })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rowsJson = XLSX.utils.sheet_to_json<Record<string, any>>(sheet || {}, { defval: '' })
+      const rowsJson = await readExcelFirstSheetRows(file)
       if (!rowsJson.length) {
         toast.error('No rows found in file')
         return
       }
-      const styleCodes = rowsJson.map((row) => ({
-        styleCode: String(row.styleCode || row.StyleCode || row['Style Code'] || '').trim(),
-        eanCode: String(row.eanCode || row.EAN || row['eanCode'] || '').trim(),
-        mrp: Number(row.mrp ?? row.MRP ?? 0),
-        brand: String(row.brand || row.Brand || '').trim() || undefined,
-        pack: String(row.pack || row.Pack || '').trim() || undefined,
-        status: parseStatus(row.status || row.Status),
-      })).filter((r) => r.styleCode && r.eanCode && !Number.isNaN(r.mrp))
+      const styleCodes = parseStyleCodesFromRows(rowsJson)
 
       if (styleCodes.length === 0) {
         toast.error('No valid style codes in file')
@@ -346,6 +352,45 @@ const StyleCodesPage = () => {
       setIsImporting(false)
     }
   }
+
+  // const handleSyncClick = () => syncInputRef.current?.click()
+  //
+  // const handleSyncFromExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const file = e.target.files?.[0]
+  //   e.target.value = ''
+  //   if (!file) return
+  //   const confirmed = window.confirm(
+  //     'Sync replaces the catalog from this file: rows are upserted, then style codes not present in successful rows are deleted. If every row fails, nothing is deleted. Continue?',
+  //   )
+  //   if (!confirmed) return
+  //   setIsSyncing(true)
+  //   try {
+  //     const rowsJson = await readExcelFirstSheetRows(file)
+  //     if (!rowsJson.length) {
+  //       toast.error('No rows found in file')
+  //       return
+  //     }
+  //     const styleCodes = parseStyleCodesFromRows(rowsJson)
+  //     if (styleCodes.length === 0) {
+  //       toast.error('No valid style codes in file')
+  //       return
+  //     }
+  //     const summary = await styleCodeService.bulkSync({
+  //       styleCodes,
+  //       batchSize: Math.min(styleCodes.length, 500),
+  //     })
+  //     const deletedCount = summary.deleted ?? 0
+  //     toast.success(
+  //       `Synced: ${summary.created} new, ${summary.updated} updated. Failed: ${summary.failed}. Removed: ${deletedCount}`,
+  //     )
+  //     await fetchStyleCodes()
+  //   } catch (error) {
+  //     console.error('Sync failed', error)
+  //     toast.error('Sync failed')
+  //   } finally {
+  //     setIsSyncing(false)
+  //   }
+  // }
 
   return (
     <div className="main-content !p-[10px]">
@@ -407,6 +452,7 @@ const StyleCodesPage = () => {
                 <i className="ri-file-list-3-line text-xs" />
                 BOM Template
               </button>
+              {/* Export All — uncomment isExporting state and handleExport above to re-enable
               <button
                 type="button"
                 onClick={() => void handleExport()}
@@ -418,13 +464,14 @@ const StyleCodesPage = () => {
                 ) : (
                   <i className="ri-file-excel-2-line text-xs" />
                 )}
-                Export
+                Export All
               </button>
+              */}
               <button
                 type="button"
                 onClick={handleImportClick}
                 disabled={isImporting}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isImporting ? (
                   <i className="ri-loader-4-line text-xs animate-spin" />
@@ -433,11 +480,27 @@ const StyleCodesPage = () => {
                 )}
                 Import
               </button>
+              {/* Sync Excel — bulk-sync; uncomment state/ref/handlers above to re-enable
+              <button
+                type="button"
+                onClick={handleSyncClick}
+                disabled={isImporting || isSyncing}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 text-white text-[11px] font-bold rounded hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                title="Upsert from Excel; removes style codes not in successful rows"
+              >
+                {isSyncing ? (
+                  <i className="ri-loader-4-line text-xs animate-spin" />
+                ) : (
+                  <i className="ri-refresh-line text-xs" />
+                )}
+                Sync Excel
+              </button>
+              */}
               <button
                 type="button"
                 onClick={handleBomImportClick}
-                disabled={isBomImporting}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 transition-colors shadow-sm"
+                disabled={isBomImporting || isImporting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isBomImporting ? (
                   <i className="ri-loader-4-line text-xs animate-spin" />
@@ -453,6 +516,13 @@ const StyleCodesPage = () => {
                 className="hidden"
                 onChange={handleImport}
               />
+              {/* <input
+                ref={syncInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={handleSyncFromExcel}
+              /> */}
               <input
                 ref={bomImportInputRef}
                 type="file"

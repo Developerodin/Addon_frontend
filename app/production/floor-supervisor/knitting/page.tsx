@@ -312,6 +312,29 @@ const KnittingFloorSupervisorPage = () => {
     };
   }, [showContainerModal, containerBarcode, containerNextFloor]);
 
+  // When weight modal opens: try scale over IP first (tablet-friendly); user can still tap "From scale" to retry.
+  useEffect(() => {
+    if (!showWeightModal) return;
+    let cancelled = false;
+    setFetchingWeight(true);
+    (async () => {
+      try {
+        const w = await fetchWeightLatest("knitting");
+        if (cancelled) return;
+        if (w != null && w > 0) {
+          const truncated = Math.trunc(w * 1000) / 1000;
+          setWeightInput(truncated.toFixed(3));
+          toast.success(`Weight from scale: ${truncated.toFixed(3)} kg`);
+        }
+      } finally {
+        if (!cancelled) setFetchingWeight(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showWeightModal]);
+
   // When article changes in container modal, pre-fill quantity and next floor from article processes
   useEffect(() => {
     if (!showContainerModal || !containerArticleId || !selectedOrder) return;

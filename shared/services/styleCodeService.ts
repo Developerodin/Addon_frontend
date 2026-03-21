@@ -57,6 +57,8 @@ export interface BulkImportSummary {
   failed: number
   errors: any[]
   processingTime?: number
+  /** Present on bulk-sync: documents removed because they were not in the successful import set */
+  deleted?: number
 }
 
 const getAccessToken = (): string | null => {
@@ -152,6 +154,17 @@ class StyleCodeService {
       throw new Error('styleCodes array is required')
     }
     return this.request<BulkImportSummary>('/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  }
+
+  /** Upsert from file rows, then delete DB rows whose styleCode was not successfully synced (same body as bulkImport). */
+  async bulkSync(payload: BulkImportPayload): Promise<BulkImportSummary> {
+    if (!payload || !Array.isArray(payload.styleCodes) || payload.styleCodes.length === 0) {
+      throw new Error('styleCodes array is required')
+    }
+    return this.request<BulkImportSummary>('/bulk-sync', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
