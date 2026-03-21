@@ -55,6 +55,18 @@ function getCacheKey(context: WeightApiContext): string {
   return CACHE_KEY;
 }
 
+/** Reject cached URLs from the wrong scale (e.g. cones URL stored under knitting key). */
+function urlMatchesContext(url: string, context: WeightApiContext): boolean {
+  try {
+    const path = new URL(url).pathname.replace(/\/+$/, '');
+    if (context === 'knitting') return path.endsWith('/knitting');
+    if (context === 'boxes') return path.endsWith('/box');
+    return path.endsWith('/cones');
+  } catch {
+    return false;
+  }
+}
+
 function getCachedUrl(context: WeightApiContext): string | null {
   if (context === 'boxes') return cachedUrlBoxes;
   if (context === 'knitting') return cachedUrlKnitting;
@@ -75,10 +87,22 @@ function setCachedUrl(context: WeightApiContext, url: string | null): void {
 export async function getResolvedWeightApiUrl(context: WeightApiContext = 'cones'): Promise<string> {
   const candidates = getCandidates(context);
   const cacheKey = getCacheKey(context);
-  const fromStorage =
+  const rawFromStorage =
     typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null;
+  const fromStorage =
+    rawFromStorage && urlMatchesContext(rawFromStorage, context)
+      ? rawFromStorage
+      : null;
+  if (rawFromStorage && !fromStorage && typeof window !== 'undefined') {
+    localStorage.removeItem(cacheKey);
+  }
   let toTry: readonly string[] = fromStorage ? [fromStorage, ...candidates.filter((u) => u !== fromStorage)] : [...candidates];
-  const currentCached = getCachedUrl(context);
+  let currentCached = getCachedUrl(context);
+  if (currentCached && !urlMatchesContext(currentCached, context)) {
+    setCachedUrl(context, null);
+    if (typeof window !== 'undefined') localStorage.removeItem(cacheKey);
+    currentCached = null;
+  }
 
   if (currentCached && toTry[0] === currentCached) {
     const ok = await probe(currentCached);
