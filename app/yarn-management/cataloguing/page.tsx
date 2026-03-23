@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast, Toaster } from "react-hot-toast";
 import yarnCatalogService, { BulkImportYarnCatalogRequest, YarnCatalog } from "@/shared/services/yarnCatalogService";
-import supplierService from "@/shared/services/supplierService";
+// import supplierService from "@/shared/services/supplierService";
 import * as XLSX from "xlsx";
 
 const CataloguingPage = () => {
@@ -21,7 +21,7 @@ const CataloguingPage = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingAll, setIsExportingAll] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  // const [isSyncing, setIsSyncing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -584,18 +584,18 @@ const CataloguingPage = () => {
     }
   };
 
-  const handleSyncCatalogWithSupplier = async () => {
-    setIsSyncing(true);
-    try {
-      await supplierService.syncYarnCatalog();
-      toast.success("Yarn catalog synced with supplier successfully");
-      await fetchYarnCatalogs();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to sync catalog with supplier");
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+  // const handleSyncCatalogWithSupplier = async () => {
+  //   setIsSyncing(true);
+  //   try {
+  //     await supplierService.syncYarnCatalog();
+  //     toast.success("Yarn catalog synced with supplier successfully");
+  //     await fetchYarnCatalogs();
+  //   } catch (error) {
+  //     toast.error(error instanceof Error ? error.message : "Failed to sync catalog with supplier");
+  //   } finally {
+  //     setIsSyncing(false);
+  //   }
+  // };
 
   if (!hasPermission) {
     return (
@@ -678,9 +678,9 @@ const CataloguingPage = () => {
               {/* <button type="button" onClick={handleExportAll} disabled={isExportingAll} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-[11px] font-bold rounded hover:bg-indigo-700 transition-colors shadow-sm">
                 {isExportingAll ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-download-cloud-2-line text-xs"></i>} Export All
               </button> */}
-              <button type="button" onClick={handleSyncCatalogWithSupplier} disabled={isSyncing} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-[11px] font-bold rounded hover:bg-sky-700 transition-colors shadow-sm" title="Sync catalog with supplier">
+              {/* <button type="button" onClick={handleSyncCatalogWithSupplier} disabled={isSyncing} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-[11px] font-bold rounded hover:bg-sky-700 transition-colors shadow-sm" title="Sync catalog with supplier">
                 {isSyncing ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-refresh-line text-xs"></i>} Sync catalog with supplier
-              </button>
+              </button> */}
               <Link href="/yarn-management/cataloguing/add" className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm">
                 <i className="ri-add-line text-xs"></i> Add Yarn
               </Link>
@@ -715,6 +715,7 @@ const CataloguingPage = () => {
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Blend</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Color Family</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Pantone Name</th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Season</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">GST</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Min Qty</th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
@@ -731,6 +732,7 @@ const CataloguingPage = () => {
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.blend?.name || (yarn.blend as { brandName?: string })?.brandName || '—'}</td>
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.colorFamily?.name || '—'}</td>
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.pantonName || '—'}</td>
+                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.season?.trim() ? yarn.season : '—'}</td>
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.gst != null ? `${yarn.gst}%` : '—'}</td>
                     <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{yarn.minQuantity != null ? yarn.minQuantity : '—'}</td>
                     <td className="px-1.5 py-2.5 border border-gray-200">

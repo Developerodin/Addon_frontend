@@ -12,10 +12,11 @@ import { getPreviousFloor, getArticleMongoId, resolveNextFloorFromProcesses } fr
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
+import UpcomingTab from "../components/UpcomingTab";
 import { containersMasterService, type ContainerMaster, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 
-type CheckingTab = "orders" | "article-view" | "my-team";
+type CheckingTab = "orders" | "article-view" | "my-team" | "upcoming";
 
 interface ArticleLog {
   id: string;
@@ -1038,6 +1039,13 @@ const CheckingFloorSupervisorPage = () => {
             >
               My Team
             </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "upcoming" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("upcoming")}
+            >
+              Upcoming
+            </button>
           </div>
         </div>
 
@@ -1045,6 +1053,8 @@ const CheckingFloorSupervisorPage = () => {
         <div className="min-h-[300px]">
           {activeTab === "my-team" ? (
             <MyTeamTab />
+          ) : activeTab === "upcoming" ? (
+            <UpcomingTab floorName="Checking" />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
               orders={paginatedOrders}
