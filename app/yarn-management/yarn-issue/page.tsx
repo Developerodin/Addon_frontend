@@ -14,7 +14,9 @@ import {
   type PopulatedOrderRef,
   type PopulatedArticleRef,
 } from "@/shared/services/machineOrderAssignmentService";
-import AssignmentsCards from "@/app/catalog/needle-configuration/components/AssignmentsCards";
+import AssignmentsCards, {
+  sortMachineAssignmentsByYarnIssueTone,
+} from "@/app/catalog/needle-configuration/components/AssignmentsCards";
 
 type RequirementStatus = "Not Issued" | "Partially Issued" | "Issued";
 
@@ -305,6 +307,16 @@ const formatKgDisplay = (valueInGrams: number) => {
     return `${trimmed}0 kg`;
   }
   return `${trimmed} kg`;
+};
+
+/** Calendar date only for activity log (no time). Uses YYYY-MM-DD from ISO so UTC midnight does not shift the day. */
+const formatIsoDateOnly = (iso: string) => {
+  const day = iso?.split("T")[0] ?? "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    const [y, m, d] = day.split("-").map((x) => parseInt(x, 10));
+    return new Date(y, m - 1, d).toLocaleDateString();
+  }
+  return new Date(iso).toLocaleDateString();
 };
 
 const requirementStatusBadge = (status: RequirementStatus) => {
@@ -603,12 +615,24 @@ const YarnIssuePage = () => {
     }
   }, []);
 
+  /** Blue → yellow → green, then by machine label (same order as compact cards). */
+  const sortedMachineAssignmentsAll = useMemo(
+    () => sortMachineAssignmentsByYarnIssueTone(machineAssignments) as MachineOrderAssignmentTopItems[],
+    [machineAssignments]
+  );
+
+  const machineAssignmentsForCards = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return sortedMachineAssignmentsAll;
+    return sortedMachineAssignmentsAll.filter((a) => machineLabel(a).toLowerCase().includes(q));
+  }, [sortedMachineAssignmentsAll, searchTerm]);
+
   // Default: select first machine and its first order when machines have loaded
   useEffect(() => {
-    if (!machineAssignmentsLoading && machineAssignments.length > 0 && selectedMachineAssignmentId === null) {
-      loadOrdersForMachine(machineAssignments[0]);
+    if (!machineAssignmentsLoading && sortedMachineAssignmentsAll.length > 0 && selectedMachineAssignmentId === null) {
+      loadOrdersForMachine(sortedMachineAssignmentsAll[0]);
     }
-  }, [machineAssignmentsLoading, machineAssignments, selectedMachineAssignmentId, loadOrdersForMachine]);
+  }, [machineAssignmentsLoading, sortedMachineAssignmentsAll, selectedMachineAssignmentId, loadOrdersForMachine]);
 
   // Fetch product details for a single article
   const fetchArticleBOM = async (
@@ -899,8 +923,14 @@ const YarnIssuePage = () => {
   //   }
   // }, [orders, selectedOrderId]);
 
-  // Use yarnTransactions directly since API handles filtering
-  const filteredTransactions = yarnTransactions;
+  /** Activity log: newest first (by createdAt, then transactionDate). */
+  const yarnTransactionsNewestFirst = useMemo(() => {
+    return [...yarnTransactions].sort((a, b) => {
+      const ta = new Date(a.createdAt || a.transactionDate).getTime();
+      const tb = new Date(b.createdAt || b.transactionDate).getTime();
+      return tb - ta;
+    });
+  }, [yarnTransactions]);
 
   const filteredOrders = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -1461,12 +1491,53 @@ const YarnIssuePage = () => {
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px] border-b border-gray-100">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
-              <h1 className="text-sm font-bold text-gray-800">Yarn Issue</h1>
-              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
-                {filteredOrders.length}
-              </span>
+            <div className="flex flex-col gap-2 min-w-0 sm:flex-row sm:items-center sm:flex-wrap sm:gap-x-4 sm:gap-y-2">
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
+                <h1 className="text-sm font-bold text-gray-800">Yarn Issue</h1>
+                <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                  {filteredOrders.length}
+                </span>
+              </div>
+              <div
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-0 sm:border-l sm:border-gray-200 sm:pl-4 text-[12px] text-gray-600"
+                aria-label="Machine card colors"
+              >
+                <span className="font-semibold text-gray-500 shrink-0">Machine cards:</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className="h-3 w-5 shrink-0 rounded-sm border border-gray-300/80 shadow-sm"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, #4a5590 0%, #5c6aa8 50%, #7280c0 100%)",
+                    }}
+                    title="Blue"
+                  />
+                  <span>Blue — yarn requested (In progress) or On hold</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className="h-3 w-5 shrink-0 rounded-sm border border-gray-300/80 shadow-sm"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, #a16207 0%, #eab308 50%, #facc15 100%)",
+                    }}
+                    title="Yellow"
+                  />
+                  <span>Yellow — waiting for floor &quot;Ask for yarn&quot;</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className="h-3 w-5 shrink-0 rounded-sm border border-gray-300/80 shadow-sm"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, #2d6b48 0%, #3d8f5e 50%, #52a872 100%)",
+                    }}
+                    title="Green"
+                  />
+                  <span>Green — yarn issue marked completed</span>
+                </span>
+              </div>
             </div>
             <button
               type="button"
@@ -1503,23 +1574,17 @@ const YarnIssuePage = () => {
                 </div>
               ) : (
                 <AssignmentsCards
-                  rows={searchTerm.trim()
-                    ? machineAssignments.filter((a) =>
-                        machineLabel(a).toLowerCase().includes(searchTerm.trim().toLowerCase())
-                      )
-                    : machineAssignments}
+                  rows={machineAssignmentsForCards}
                   page={1}
                   limit={machineAssignments.length || 20}
-                  totalResults={searchTerm.trim() ? machineAssignments.filter((a) =>
-                    machineLabel(a).toLowerCase().includes(searchTerm.trim().toLowerCase())
-                  ).length : machineAssignments.length}
+                  totalResults={machineAssignmentsForCards.length}
                   totalPages={1}
                   isLoading={false}
                   onPageChange={() => {}}
                   readOnly
                   compact
                   nameOnly
-                  onCardClick={(a) => loadOrdersForMachine(a)}
+                  onCardClick={(a) => loadOrdersForMachine(a as MachineOrderAssignmentTopItems)}
                 />
               )}
             </div>
@@ -1993,69 +2058,69 @@ const YarnIssuePage = () => {
             onClick={() => setShowActivityLogPanel(false)}
           />
           {/* Side Panel */}
-          <div className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto">
-            <div className="box h-full flex flex-col">
-              <div className="box-header border-b border-gray-200 flex-shrink-0">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="box-title text-lg">Issue Activity Log</h3>
-                  <button
-                    onClick={() => setShowActivityLogPanel(false)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                    aria-label="Close panel"
-                  >
-                    <i className="ri-close-line text-xl"></i>
-                  </button>
-                </div>
-                
-                {/* Date Filters */}
-                <div className="space-y-3 pb-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="form-label text-xs font-semibold text-gray-700 mb-1">
-                        Start Date
-                      </label>
-                      <input
-                        type="date"
-                        className="form-control text-sm"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="form-label text-xs font-semibold text-gray-700 mb-1">
-                        End Date
-                      </label>
-                      <input
-                        type="date"
-                        className="form-control text-sm"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        min={startDate || undefined}
-                      />
+          <div className="fixed top-0 right-0 h-full w-full max-w-6xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col">
+            <div className="box h-full flex flex-col min-h-0">
+              <div className="box-header border-b border-gray-200 flex-shrink-0 px-4 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 w-full">
+                  <div className="flex flex-wrap items-center gap-3 min-w-0">
+                    <h3 className="box-title text-lg mb-0 leading-tight shrink-0">Issue Activity Log</h3>
+                    <div className="grid grid-cols-2 gap-2 w-[200px] sm:w-[220px] shrink-0">
+                      <div className="min-w-0">
+                        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5 leading-tight">
+                          Start Date
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control w-full py-1 px-2 text-[11px] leading-tight h-8 min-h-0"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5 leading-tight">
+                          End Date
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control w-full py-1 px-2 text-[11px] leading-tight h-8 min-h-0"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          min={startDate || undefined}
+                        />
+                      </div>
                     </div>
                   </div>
-                  {(startDate || endDate) && (
-                    <>
-                      <button
-                        onClick={() => {
-                          setStartDate("");
-                          setEndDate("");
-                        }}
-                        className="ti-btn ti-btn-outline w-full text-xs py-1.5"
-                      >
-                        <i className="ri-close-line me-1"></i>
-                        Clear Filters
-                      </button>
-                      {yarnTransactions.length > 0 && (
-                        <p className="text-xs text-gray-500 text-center">
-                          Showing {yarnTransactions.length} transaction{yarnTransactions.length !== 1 ? "s" : ""} for selected date range
-                        </p>
-                      )}
-                    </>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowActivityLogPanel(false)}
+                    className="shrink-0 inline-flex items-center justify-center rounded-md p-1.5 text-gray-800 hover:text-gray-950 hover:bg-gray-100 transition-colors"
+                    aria-label="Close panel"
+                  >
+                    <i className="ri-close-line text-xl leading-none" />
+                  </button>
                 </div>
+                {(startDate || endDate) && (
+                  <div className="mt-3 space-y-2 pt-3 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStartDate("");
+                        setEndDate("");
+                      }}
+                      className="ti-btn ti-btn-outline w-full text-xs py-1.5"
+                    >
+                      <i className="ri-close-line me-1"></i>
+                      Clear Filters
+                    </button>
+                    {yarnTransactions.length > 0 && (
+                      <p className="text-xs text-gray-500 text-center">
+                        Showing {yarnTransactions.length} transaction{yarnTransactions.length !== 1 ? "s" : ""} for selected date range
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="box-body flex-1 overflow-y-auto">
+              <div className="box-body flex-1 min-h-0 overflow-auto px-4 pb-4">
                 {transactionsLoading ? (
                   <div className="text-center py-12 text-sm text-gray-500">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
@@ -2082,85 +2147,61 @@ const YarnIssuePage = () => {
                     )}
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {yarnTransactions.map((transaction) => (
-                      <div
-                        key={transaction._id}
-                        className="border border-gray-200 rounded-lg p-4 bg-white hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-gray-900 mb-1">
-                              {transaction.yarnName}
-                            </h4>
-                            <p className="text-xs text-gray-500">
-                              Order: {transaction.orderno}
-                            </p>
-                          </div>
-                          <span className="text-xs text-gray-500">
-                            {transaction.yarn?.yarnType?.name || "N/A"}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 mb-3">
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Transaction ID</p>
-                            <p className="text-xs font-mono text-gray-900 break-all">
+                  <div className="overflow-x-auto border border-gray-300 bg-white">
+                    <table className="w-full min-w-[1200px] border-collapse text-[11px]">
+                      <thead className="sticky top-0 z-10 shadow-sm">
+                        <tr className="bg-[#f2f2f2] border-b border-gray-300">
+                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">#</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 bg-[#f2f2f2] min-w-[280px]">Yarn</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Order</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Type</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Txn date</th>
+                          <th className="border border-gray-300 px-2 py-2 text-right font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Cones</th>
+                          <th className="border border-gray-300 px-2 py-2 text-right font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Net (kg)</th>
+                          <th className="border border-gray-300 px-2 py-2 text-right font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Total (kg)</th>
+                          <th className="border border-gray-300 px-2 py-2 text-right font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Tear (kg)</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Created</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Updated</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-mono font-bold text-gray-800 min-w-[200px] bg-[#f2f2f2]">Transaction ID</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {yarnTransactionsNewestFirst.map((transaction, index) => (
+                          <tr
+                            key={transaction._id}
+                            className="hover:bg-[#f9f9f9] border-b border-gray-300 bg-white even:bg-[#fafafa]"
+                          >
+                            <td className="border border-gray-300 px-2 py-1.5 text-gray-600 tabular-nums">{index + 1}</td>
+                            <td className="border border-gray-300 px-2 py-1.5 align-top min-w-[280px]">
+                              <div className="font-semibold text-gray-900 whitespace-normal break-words">
+                                {transaction.yarnName}
+                              </div>
+                              <div className="text-[10px] text-gray-500 whitespace-normal break-words mt-0.5">
+                                {transaction.yarn?.yarnType?.name || "—"}
+                              </div>
+                            </td>
+                            <td className="border border-gray-300 px-2 py-1.5 text-gray-900 whitespace-nowrap">{transaction.orderno}</td>
+                            <td className="border border-gray-300 px-2 py-1.5 text-gray-800">{transaction.transactionType}</td>
+                            <td className="border border-gray-300 px-2 py-1.5 text-gray-800 whitespace-nowrap">
+                              {formatIsoDateOnly(transaction.transactionDate)}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums text-gray-900">{transaction.transactionConeCount}</td>
+                            <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums font-semibold text-blue-700">{transaction.transactionNetWeight}</td>
+                            <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums text-gray-900">{transaction.transactionTotalWeight}</td>
+                            <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums text-gray-900">{transaction.transactionTearWeight}</td>
+                            <td className="border border-gray-300 px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                              {new Date(transaction.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                              {new Date(transaction.updatedAt).toLocaleDateString()}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-1.5 font-mono text-[10px] text-gray-800 break-all align-top">
                               {transaction._id}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Transaction Type</p>
-                            <p className="text-xs text-gray-900">
-                              {transaction.transactionType}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Transaction Date</p>
-                            <p className="text-xs text-gray-900">
-                              {new Date(transaction.transactionDate).toLocaleString()}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Cone Count</p>
-                            <p className="text-xs font-semibold text-gray-900">
-                              {transaction.transactionConeCount}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Net Weight</p>
-                            <p className="text-xs font-semibold text-blue-600">
-                              {transaction.transactionNetWeight} kg
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Total Weight</p>
-                            <p className="text-xs text-gray-900">
-                              {transaction.transactionTotalWeight} kg
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Tear Weight</p>
-                            <p className="text-xs text-gray-900">
-                              {transaction.transactionTearWeight} kg
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="pt-3 border-t border-gray-100">
-                          <div className="flex items-center justify-between text-xs text-gray-500">
-                            <div>
-                              <span className="font-medium">Created:</span>{" "}
-                              {new Date(transaction.createdAt).toLocaleString()}
-                            </div>
-                            <div>
-                              <span className="font-medium">Updated:</span>{" "}
-                              {new Date(transaction.updatedAt).toLocaleString()}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
