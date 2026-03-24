@@ -1881,6 +1881,41 @@ interface GoodsReceivedModalProps {
   onLotDeleted?: () => Promise<void>;
 }
 
+/** Local-only row: stable key for React, persisted flag for read-only, panelSeq for Lot N label */
+type GoodsReceivedLotRow = ReceivedLotDetail & {
+  rowId: string;
+  isPersistedLot: boolean;
+  panelSeq: number;
+};
+
+const newGoodsReceivedRowId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `gr-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+const newEmptyGoodsReceivedLotRow = (panelSeq: number): GoodsReceivedLotRow => ({
+  lotNumber: "",
+  numberOfCones: 0,
+  totalWeight: 0,
+  numberOfBoxes: 0,
+  poItems: [],
+  status: "lot_pending",
+  rowId: newGoodsReceivedRowId(),
+  isPersistedLot: false,
+  panelSeq,
+});
+
+function toReceivedLotPayload(lot: GoodsReceivedLotRow): ReceivedLotDetail {
+  return {
+    lotNumber: lot.lotNumber,
+    numberOfCones: lot.numberOfCones,
+    totalWeight: lot.totalWeight,
+    numberOfBoxes: lot.numberOfBoxes,
+    poItems: lot.poItems,
+    status: lot.status,
+  };
+}
+
 const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   isOpen,
   onClose,
@@ -1889,16 +1924,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   isSubmitting,
   onLotDeleted
 }) => {
-  const [lots, setLots] = useState<ReceivedLotDetail[]>([
-    {
-      lotNumber: '',
-      numberOfCones: 0,
-      totalWeight: 0,
-      numberOfBoxes: 0,
-      poItems: [],
-      status: 'lot_pending'
-    }
-  ]);
+  const [lots, setLots] = useState<GoodsReceivedLotRow[]>(() => [newEmptyGoodsReceivedLotRow(1)]);
   // Store original lots to track which ones are existing vs new
   const [originalLots, setOriginalLots] = useState<Map<string, ReceivedLotDetail>>(new Map());
   // Store raw input values as strings to allow typing "0" and "0.5"
@@ -1946,10 +1972,10 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   useEffect(() => {
     if (!scrollNewLotAfterAdd.current) return;
     scrollNewLotAfterAdd.current = false;
-    const idx = lots.length - 1;
-    if (idx < 0) return;
+    const rowId = lots[0]?.rowId;
+    if (!rowId) return;
     const scrollAndFocus = () => {
-      const el = document.getElementById(`goods-received-lot-${idx}`);
+      const el = document.getElementById(`goods-received-lot-${rowId}`);
       el?.scrollIntoView({ behavior: "smooth", block: "start" });
       const firstInput = el?.querySelector<HTMLInputElement>(
         "input:not([disabled])"
@@ -1958,12 +1984,6 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     };
     requestAnimationFrame(() => requestAnimationFrame(scrollAndFocus));
   }, [lots]);
-
-  // Helper function to check if a lot is saved (exists in original lots)
-  const isLotSaved = (lotNumber: string): boolean => {
-    if (!lotNumber || !lotNumber.trim()) return false;
-    return originalLots.has(lotNumber.trim().toUpperCase());
-  };
 
   useEffect(() => {
     if (isOpen) {
@@ -1982,13 +2002,16 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
         setOriginalLots(originalLotsMap);
         
         // Load existing received lot details
-        const loadedLots = order.receivedLotDetails.map(lot => ({
+        const loadedLots: GoodsReceivedLotRow[] = order.receivedLotDetails.map((lot, i) => ({
           lotNumber: lot.lotNumber || '',
           numberOfCones: lot.numberOfCones || 0,
           totalWeight: lot.totalWeight || 0,
           numberOfBoxes: lot.numberOfBoxes || 0,
           poItems: lot.poItems || [],
-          status: lot.status || 'lot_pending'
+          status: lot.status || 'lot_pending',
+          rowId: newGoodsReceivedRowId(),
+          isPersistedLot: true,
+          panelSeq: i + 1,
         }));
         setLots(loadedLots);
         
@@ -1996,14 +2019,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
       } else {
         // Reset form when modal opens with no existing data
         setOriginalLots(new Map());
-        setLots([{
-          lotNumber: '',
-          numberOfCones: 0,
-          totalWeight: 0,
-          numberOfBoxes: 0,
-          poItems: [],
-          status: 'lot_pending'
-        }]);
+        setLots([newEmptyGoodsReceivedLotRow(1)]);
         setRawInputValues({});
       }
       setGrPoDropdown(null);
@@ -2014,14 +2030,24 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
 
   const addLot = () => {
     scrollNewLotAfterAdd.current = true;
-    setLots([...lots, {
-      lotNumber: '',
-      numberOfCones: 0,
-      totalWeight: 0,
-      numberOfBoxes: 0,
-      poItems: [],
-      status: 'lot_pending'
-    }]);
+    const nextSeq =
+      lots.length === 0 ? 1 : Math.max(...lots.map((l) => l.panelSeq)) + 1;
+    setLots([newEmptyGoodsReceivedLotRow(nextSeq), ...lots]);
+    // Prepending shifts every existing lot index up by 1 — rekey raw inputs
+    setRawInputValues((prev) => {
+      const next: Record<string, string> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        const m = key.match(/^lot-(\d+)-(.*)$/);
+        if (m) {
+          const i = parseInt(m[1], 10);
+          const rest = m[2];
+          next[`lot-${i + 1}-${rest}`] = value;
+        } else {
+          next[key] = value;
+        }
+      });
+      return next;
+    });
   };
 
   const removeLot = (index: number) => {
@@ -2030,7 +2056,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
 
     if (lots.length > 1) {
       setLots(lots.filter((_, i) => i !== index));
-      if (lot.lotNumber && isLotSaved(lot.lotNumber)) {
+      if (lot.isPersistedLot && lot.lotNumber.trim()) {
         setOriginalLots(prev => {
           const next = new Map(prev);
           next.delete(lot.lotNumber.trim().toUpperCase());
@@ -2057,8 +2083,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     const lot = lots[index];
     if (!lot) return;
     
-    // Check if this lot is saved (exists in original lots)
-    if (isLotSaved(lot.lotNumber)) {
+    if (lot.isPersistedLot) {
       toast.error('Cannot edit a saved lot. Saved lots can only be viewed.');
       return;
     }
@@ -2123,8 +2148,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     const lot = lots[lotIndex];
     if (!lot) return;
     
-    // Check if this lot is saved (exists in original lots)
-    if (isLotSaved(lot.lotNumber)) {
+    if (lot.isPersistedLot) {
       toast.error('Cannot edit a saved lot. Saved lots can only be viewed.');
       return;
     }
@@ -2146,8 +2170,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     const lot = lots[lotIndex];
     if (!lot) return;
     
-    // Check if this lot is saved (exists in original lots)
-    if (isLotSaved(lot.lotNumber)) {
+    if (lot.isPersistedLot) {
       toast.error('Cannot edit a saved lot. Saved lots can only be viewed.');
       return;
     }
@@ -2161,8 +2184,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     const lot = lots[lotIndex];
     if (!lot) return;
     
-    // Check if this lot is saved (exists in original lots)
-    if (isLotSaved(lot.lotNumber)) {
+    if (lot.isPersistedLot) {
       toast.error('Cannot edit a saved lot. Saved lots can only be viewed.');
       return;
     }
@@ -2183,18 +2205,19 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
       alert(message);
     };
 
-    // Check if any saved lots were modified
+    // Check if any persisted (server) lots were modified — use row flag, not lot# string
     for (let i = 0; i < lots.length; i++) {
       const lot = lots[i];
-      if (isLotSaved(lot.lotNumber)) {
+      if (lot.isPersistedLot && lot.lotNumber.trim()) {
         const originalLot = originalLots.get(lot.lotNumber.trim().toUpperCase());
         if (originalLot) {
+          const cur = toReceivedLotPayload(lot);
           const wasModified =
-            lot.numberOfCones !== originalLot.numberOfCones ||
-            lot.totalWeight !== originalLot.totalWeight ||
-            lot.numberOfBoxes !== originalLot.numberOfBoxes ||
-            lot.lotNumber.trim().toUpperCase() !== originalLot.lotNumber.trim().toUpperCase() ||
-            JSON.stringify(lot.poItems) !== JSON.stringify(originalLot.poItems);
+            cur.numberOfCones !== originalLot.numberOfCones ||
+            cur.totalWeight !== originalLot.totalWeight ||
+            cur.numberOfBoxes !== originalLot.numberOfBoxes ||
+            cur.lotNumber.trim().toUpperCase() !== originalLot.lotNumber.trim().toUpperCase() ||
+            JSON.stringify(cur.poItems) !== JSON.stringify(originalLot.poItems);
 
           if (wasModified) {
             showError(`Lot ${lot.lotNumber} is saved and cannot be modified. Saved lots can only be viewed.`);
@@ -2207,34 +2230,35 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     // Validation
     for (let i = 0; i < lots.length; i++) {
       const lot = lots[i];
+      const label = lot.panelSeq;
       if (!lot.lotNumber.trim()) {
-        showError(`Lot ${i + 1}: Lot Number is required`);
+        showError(`Lot ${label}: Lot Number is required`);
         return;
       }
       if (lot.numberOfCones <= 0) {
-        showError(`Lot ${i + 1}: Number of Cones must be greater than 0`);
+        showError(`Lot ${label}: Number of Cones must be greater than 0`);
         return;
       }
       if (lot.totalWeight <= 0) {
-        showError(`Lot ${i + 1}: Total Weight must be greater than 0`);
+        showError(`Lot ${label}: Total Weight must be greater than 0`);
         return;
       }
       if (lot.numberOfBoxes <= 0) {
-        showError(`Lot ${i + 1}: Number of Boxes must be greater than 0`);
+        showError(`Lot ${label}: Number of Boxes must be greater than 0`);
         return;
       }
       if (lot.poItems.length === 0) {
-        showError(`Lot ${i + 1}: At least one PO Item is required`);
+        showError(`Lot ${label}: At least one PO Item is required`);
         return;
       }
       for (let j = 0; j < lot.poItems.length; j++) {
         const poItem = lot.poItems[j];
         if (!poItem.poItem) {
-          showError(`Lot ${i + 1}, PO Item ${j + 1}: PO Item is required`);
+          showError(`Lot ${label}, PO Item ${j + 1}: PO Item is required`);
           return;
         }
         if (poItem.receivedQuantity <= 0) {
-          showError(`Lot ${i + 1}, PO Item ${j + 1}: Received Quantity must be greater than 0`);
+          showError(`Lot ${label}, PO Item ${j + 1}: Received Quantity must be greater than 0`);
           return;
         }
       }
@@ -2242,23 +2266,23 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
 
     // Preserve existing lot statuses, only set lot_pending for new lots
     // For saved lots, use the original data to ensure no changes
-    const lotsWithPreservedStatus = lots.map(lot => {
+    // UI prepends new lots on top; API expects append order (Lot 1…N) — sort by panelSeq before sending
+    const lotsInPayloadOrder = [...lots].sort((a, b) => a.panelSeq - b.panelSeq);
+
+    const lotsWithPreservedStatus = lotsInPayloadOrder.map(lot => {
       const lotNumberKey = lot.lotNumber.trim().toUpperCase();
       const originalLot = originalLots.get(lotNumberKey);
-      
-      // If this lot is saved, use original data
-      if (isLotSaved(lot.lotNumber) && originalLot) {
+      const base = toReceivedLotPayload(lot);
+
+      if (lot.isPersistedLot && originalLot) {
         return {
           ...originalLot,
-          // Keep the status from original
           status: originalLot.status || 'lot_pending'
         };
       }
-      
-      // If this lot exists in original lots, preserve its status
-      // Otherwise, it's a new lot, so set status to lot_pending
+
       return {
-        ...lot,
+        ...base,
         status: originalLot ? (originalLot.status || 'lot_pending') : 'lot_pending' as const
       };
     });
@@ -2460,7 +2484,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                       onClick={async () => {
                         if (lots.length === 0) return;
                         const totalCount = lots.length;
-                        const savedCount = lots.filter(l => isLotSaved(l.lotNumber)).length;
+                        const savedCount = lots.filter(l => l.isPersistedLot).length;
                         if (typeof window !== 'undefined' && !window.confirm(`Delete all ${totalCount} lot(s)?${savedCount > 0 ? ` ${savedCount} saved lot(s) will be removed from the system via API.` : ''}`)) return;
                         setIsDeletingAllLots(true);
                         const poLabel = order.orderNumber || '';
@@ -2468,7 +2492,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                         try {
                           for (let i = currentLots.length - 1; i >= 0; i--) {
                             const lot = currentLots[i];
-                            if (lot.lotNumber?.trim() && isLotSaved(lot.lotNumber)) {
+                            if (lot.isPersistedLot && lot.lotNumber?.trim()) {
                               await yarnPurchaseOrderService.deleteLot(poLabel, lot.lotNumber.trim());
                             }
                             currentLots.splice(i, 1);
@@ -2478,14 +2502,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               next.delete(lot.lotNumber.trim().toUpperCase());
                               return next;
                             });
-                            setLots(currentLots.length > 0 ? [...currentLots] : [{
-                              lotNumber: '',
-                              numberOfCones: 0,
-                              totalWeight: 0,
-                              numberOfBoxes: 0,
-                              poItems: [],
-                              status: 'lot_pending'
-                            }]);
+                            setLots(currentLots.length > 0 ? [...currentLots] : [newEmptyGoodsReceivedLotRow(1)]);
                           }
                           await onLotDeleted?.();
                           toast.success('All lots deleted.');
@@ -2507,20 +2524,20 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
               </div>
 
               {lots.map((lot, lotIndex) => {
-                const lotIsSaved = isLotSaved(lot.lotNumber);
+                const lotIsPersisted = lot.isPersistedLot;
                 
                 return (
                 <div
-                  key={lotIndex}
-                  id={`goods-received-lot-${lotIndex}`}
+                  key={lot.rowId}
+                  id={`goods-received-lot-${lot.rowId}`}
                   className={`mb-4 border border-gray-400 rounded-sm bg-white overflow-hidden shadow-sm relative ${
-                    lotIsSaved ? "ring-1 ring-gray-400 bg-gray-100/50" : ""
+                    lotIsPersisted ? "ring-1 ring-gray-400 bg-gray-100/50" : ""
                   }`}
                 >
                   <div className="flex justify-between items-center px-2 py-1.5 bg-gray-50/80 border-b border-gray-400">
                     <div className="flex items-center gap-2">
-                      <h5 className="text-xs font-semibold text-gray-800">Lot {lotIndex + 1}</h5>
-                      {lotIsSaved && (
+                      <h5 className="text-xs font-semibold text-gray-800">Lot {lot.panelSeq}</h5>
+                      {lotIsPersisted && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-gray-200 text-gray-800">
                           <i className="ri-save-line text-[10px]"></i>
                           Saved
@@ -2531,7 +2548,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (lotIsSaved) {
+                          if (lotIsPersisted) {
                             setDeleteConfirmLotIndex(lotIndex);
                             return;
                           }
@@ -2544,7 +2561,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                       </button>
                     )}
                   </div>
-                  {lotIsSaved && (
+                  {lotIsPersisted && (
                     <span className="text-[10px] text-gray-500 italic block px-2 pt-1.5 pb-0.5">
                       Cannot edit — saved lots are read-only
                     </span>
@@ -2570,9 +2587,9 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               className={grExcelInput}
                               placeholder="Lot number"
                               required
-                              disabled={lotIsSaved}
+                              disabled={lotIsPersisted}
                             />
-                            {lotIsSaved && (
+                            {lotIsPersisted && (
                               <p className="text-[10px] text-gray-500 px-1.5 pb-1">
                                 This lot is saved and cannot be edited.
                               </p>
@@ -2588,7 +2605,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                                     ? ""
                                     : lot.numberOfCones.toString()
                               }
-                              disabled={lotIsSaved}
+                              disabled={lotIsPersisted}
                               onChange={(e) => {
                                 const value = e.target.value;
                                 const key = `lot-${lotIndex}-cones`;
@@ -2637,7 +2654,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                                     ? ""
                                     : lot.totalWeight.toString()
                               }
-                              disabled={lotIsSaved}
+                              disabled={lotIsPersisted}
                               onChange={(e) => {
                                 const value = e.target.value;
                                 const key = `lot-${lotIndex}-totalWeight`;
@@ -2686,7 +2703,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                                     ? ""
                                     : lot.numberOfBoxes.toString()
                               }
-                              disabled={lotIsSaved}
+                              disabled={lotIsPersisted}
                               onChange={(e) => {
                                 const value = e.target.value;
                                 const key = `lot-${lotIndex}-numberOfBoxes`;
@@ -2735,7 +2752,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                       <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">
                         PO Items <span className="text-red-500">*</span>
                       </span>
-                      {!lotIsSaved && (
+                      {!lotIsPersisted && (
                         <button
                           type="button"
                           onClick={() => addPoItemToLot(lotIndex)}
@@ -2764,7 +2781,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                                     <button
                                       type="button"
                                       data-gr-po-trigger
-                                      disabled={lotIsSaved}
+                                      disabled={lotIsPersisted}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         const rect = e.currentTarget.getBoundingClientRect();
@@ -2835,7 +2852,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                                         ? ""
                                         : poItem.receivedQuantity.toString()
                                   }
-                                  disabled={lotIsSaved}
+                                  disabled={lotIsPersisted}
                                   onChange={(e) => {
                                     const value = e.target.value;
                                     const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
@@ -2880,7 +2897,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                                 />
                               </td>
                               <td className={`${grExcelTd} text-center`}>
-                                {!lotIsSaved && (
+                                {!lotIsPersisted && (
                                   <button
                                     type="button"
                                     onClick={() => removePoItemFromLot(lotIndex, poItemIndex)}
@@ -2913,8 +2930,8 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
             ? createPortal(
                 (() => {
                   const lot = lots[deleteConfirmLotIndex];
-                  const saved = isLotSaved(lot.lotNumber);
-                  const lotLabel = (lot.lotNumber || "").trim() || `Lot ${deleteConfirmLotIndex + 1}`;
+                  const saved = lot.isPersistedLot;
+                  const lotLabel = (lot.lotNumber || "").trim() || `Lot ${lot.panelSeq}`;
                   const poLabel = order.orderNumber || "this order";
                   const handleConfirmDelete = async () => {
                     if (saved) {
