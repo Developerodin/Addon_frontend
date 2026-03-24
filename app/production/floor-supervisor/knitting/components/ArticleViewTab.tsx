@@ -40,6 +40,12 @@ function machineLabel(m: { machineCode?: string; name?: string; id?: string } | 
   return m?.machineCode ?? m?.name ?? m?.id ?? "—";
 }
 
+function csvCell(value: string | number): string {
+  const s = String(value ?? "");
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
 export default function ArticleViewTab({
   orders,
   onViewOrder,
@@ -86,6 +92,67 @@ export default function ArticleViewTab({
     );
   }, [articleRows, articleSearch]);
 
+  const handleExportExcel = () => {
+    const headers = [
+      "Article",
+      "Linking Type",
+      "Knitting Code",
+      "Order",
+      "Machine",
+      "Order Status",
+      "Priority",
+      "Planned",
+      "Received",
+      "Completed",
+      "Transferred",
+      "Remaining",
+      "M4",
+    ];
+
+    const rows = filteredRows.map(({ article, order }) => {
+      const planned = article.plannedQuantity ?? 0;
+      const received = article.floorQuantities?.knitting?.received ?? 0;
+      const completed = article.floorQuantities?.knitting?.completed ?? 0;
+      const transferred = article.floorQuantities?.knitting?.transferred ?? 0;
+      const remaining = article.floorQuantities?.knitting?.remaining ?? 0;
+      const m4 = article.floorQuantities?.knitting?.m4Quantity ?? 0;
+      const machine = articleToMachineMap.get(`${order.id}|${article.id ?? article._id}`) ?? "—";
+
+      return [
+        article.articleNumber ?? "—",
+        article.linkingType ?? "N/A",
+        article.knittingCode ?? "",
+        order.orderNumber ?? order.id ?? "—",
+        machine,
+        order.status ?? "",
+        order.priority ?? "",
+        planned,
+        received,
+        completed,
+        transferred,
+        remaining,
+        m4,
+      ];
+    });
+
+    const csvContent = [
+      headers.map(csvCell).join(","),
+      ...rows.map((r) => r.map(csvCell).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const now = new Date();
+    const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    a.href = url;
+    a.download = `knitting-article-view-${ts}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   if (orders.length === 0) {
     return (
       <div className="p-[10px] flex flex-col items-center justify-center py-20 text-center">
@@ -114,6 +181,16 @@ export default function ArticleViewTab({
         <span className="text-[11px] font-medium text-gray-500">
           {filteredRows.length} article{filteredRows.length !== 1 ? "s" : ""}
         </span>
+        <button
+          type="button"
+          onClick={handleExportExcel}
+          disabled={filteredRows.length === 0}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Download current table rows as Excel-compatible CSV"
+        >
+          <i className="ri-file-excel-2-line text-xs text-emerald-600" />
+          Download Excel
+        </button>
       </div>
 
       {/* Excel-like table: series-wise (one row per article) */}
@@ -166,7 +243,7 @@ export default function ArticleViewTab({
                   </td>
                   <td className="px-2 py-1.5 border-r border-gray-300">
                     <span className="font-medium text-gray-700">
-                      {articleToMachineMap.get(`${order.id ?? order._id}|${article.id ?? article._id}`) ?? "—"}
+                      {articleToMachineMap.get(`${order.id}|${article.id ?? article._id}`) ?? "—"}
                     </span>
                   </td>
                   <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{planned.toLocaleString()}</td>
