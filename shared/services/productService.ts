@@ -77,6 +77,68 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+/** Row from GET /v1/products (catalog list — same as Catalog → Items). */
+export interface ProductListItem {
+  id: string;
+  name: string;
+  factoryCode?: string;
+  vendorCode?: string;
+  softwareCode?: string;
+  internalCode?: string;
+  status?: string;
+  category?: string | { id?: string; name?: string };
+}
+
+export interface ListProductsResponse {
+  results: ProductListItem[];
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalResults: number;
+}
+
+/**
+ * GET /v1/products?page=&limit=&search=
+ * Paginated catalog list (aligned with `app/catalog/items/page.tsx`).
+ */
+export async function listProducts(params: {
+  page?: number;
+  limit?: number;
+  search?: string;
+}): Promise<ListProductsResponse> {
+  const sp = new URLSearchParams();
+  sp.set('page', String(params.page ?? 1));
+  sp.set('limit', String(params.limit ?? 10));
+  if (params.search?.trim()) sp.set('search', params.search.trim());
+  const url = `${API_BASE_URL}/products?${sp.toString()}`;
+  return request<ListProductsResponse>(url, { method: 'GET' });
+}
+
+/** Full product from GET /v1/products/:id (same shape as catalog item detail). */
+export interface ProductById {
+  id?: string;
+  _id?: string;
+  name?: string;
+  factoryCode?: string;
+  vendorCode?: string;
+  softwareCode?: string;
+  internalCode?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * GET /v1/products/:id — used to fill factory/vendor codes when vendor populate omits them.
+ */
+export async function getProductById(productId: string): Promise<ProductById | null> {
+  if (!productId?.trim()) return null;
+  try {
+    const url = `${API_BASE_URL}/products/${encodeURIComponent(productId.trim())}`;
+    return await request<ProductById>(url, { method: 'GET' });
+  } catch {
+    return null;
+  }
+}
+
 /**
  * GET /v1/products/bulk-export
  * Returns products in bulk format: id, name, knittingCode, factoryCode, Needles, styleCodeId1…styleCodeId10
@@ -156,6 +218,8 @@ export async function getProductByCode(
 }
 
 export const productService = {
+  list: listProducts,
+  getById: getProductById,
   bulkExport: bulkExportProducts,
   bulkUpsert: bulkUpsertProducts,
   getByFactoryCodes: getProductsByFactoryCodes,

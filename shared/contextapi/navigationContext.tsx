@@ -76,11 +76,13 @@ interface NavigationPermissions {
     'Vendor List': boolean;
     'Vendor PO Raise': boolean;
     'Vendor PO Receive': boolean;
-    Checking: boolean;
-    GRN: boolean;
-    Branding: boolean;
+    'Secondary Checking': boolean;
+    'Washing': boolean;
+    'Boarding': boolean;
+    'Branding': boolean;
     'Final Checking': boolean;
     'Counting & Dispatch': boolean;
+    'GRN': boolean;
   };
 }
 
@@ -166,11 +168,13 @@ const defaultPermissions: NavigationPermissions = {
     'Vendor List': false,
     'Vendor PO Raise': false,
     'Vendor PO Receive': false,
-    Checking: false,
-    GRN: false,
-    Branding: false,
+    'Secondary Checking': false,
+    'Washing': false,
+    'Boarding': false,
+    'Branding': false,
     'Final Checking': false,
     'Counting & Dispatch': false,
+    'GRN': false,
   },
 };
 
@@ -332,6 +336,17 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       return false;
     }
 
+    /** Vendor PO → Purchase Management hub (vendors + PO + receive) */
+    if (path === '/vendor-po/purchase-management') {
+      const vendorPO = (permissions as any)['Vendor PO'];
+      if (vendorPO && typeof vendorPO === 'object') {
+        return ['Vendor List', 'Vendor PO Raise', 'Vendor PO Receive'].some(
+          (key) => vendorPO[key] === true
+        );
+      }
+      return false;
+    }
+
     // Special handling for yarn-master path
     if (path === '/yarn-management/yarn-master') {
       const yarnManagement = permissions['Yarn Management'];
@@ -410,6 +425,21 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         if (yarnMaster && typeof yarnMaster === 'object') {
           return yarnMaster[child] === true;
         }
+      }
+      return false;
+    }
+
+    /** Vendor PO → Purchase Management nested routes map to existing Vendor PO keys */
+    if (parent === '/vendor-po/purchase-management') {
+      const vendorPO = (permissions as any)['Vendor PO'];
+      if (vendorPO && typeof vendorPO === 'object') {
+        const keyMap: Record<string, string> = {
+          'Vendor List': 'Vendor List',
+          'Purchase Order': 'Vendor PO Raise',
+          'Purchase Order Received': 'Vendor PO Receive',
+        };
+        const permKey = keyMap[child] ?? child;
+        return vendorPO[permKey] === true;
       }
       return false;
     }

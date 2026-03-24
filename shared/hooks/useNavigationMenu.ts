@@ -34,6 +34,22 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
     }
     return displayTitle;
   };
+
+  const hasVendorPOPurchaseManagementPermission = (): boolean =>
+    hasSubPermission('/vendor-po', 'Vendor List') ||
+    hasSubPermission('/vendor-po', 'Vendor PO Raise') ||
+    hasSubPermission('/vendor-po', 'Vendor PO Receive');
+
+  const hasVendorPOPurchaseManagementChildPermission = (path: string): boolean => {
+    if (path === '/vendor-po/vendor-list') return hasSubPermission('/vendor-po', 'Vendor List');
+    if (path.startsWith('/vendor-po/purchase-management/purchase-order-received')) {
+      return hasSubPermission('/vendor-po', 'Vendor PO Receive');
+    }
+    if (path.startsWith('/vendor-po/purchase-management/purchase')) {
+      return hasSubPermission('/vendor-po', 'Vendor PO Raise');
+    }
+    return false;
+  };
   
   // Debug: Log permissions
   if (permissions) {
@@ -94,10 +110,16 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 return false;
               }
             }
+            if (child.path === '/vendor-po/purchase-management' && !hasVendorPOPurchaseManagementPermission()) {
+              return false;
+            }
             
             // Check if nested submenu has any visible children
             const hasVisibleChildren = child.children.some(nestedChild => {
               if (nestedChild.type === 'link' && nestedChild.path) {
+                if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
+                  return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
+                }
                 if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                   return hasSubPermission('/yarn-management/yarn-master', permissionKey);
@@ -171,6 +193,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               return hasSubPermission('/warehouse-management', childName);
             }
             if (child.path.startsWith('/vendor-po/')) {
+              if (child.path === '/vendor-po/purchase-management') {
+                return hasVendorPOPurchaseManagementPermission();
+              }
+              if (child.path.startsWith('/vendor-po/purchase-management/')) {
+                return hasVendorPOPurchaseManagementChildPermission(child.path);
+              }
               const childName = child.title;
               return hasSubPermission('/vendor-po', childName);
             }
@@ -187,6 +215,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               // Filter nested children
               const nestedFilteredChildren = child.children.filter(nestedChild => {
                 if (nestedChild.type === 'link' && nestedChild.path) {
+                  if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
+                    return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
+                  }
                   if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                     return hasSubPermission('/yarn-management/yarn-master', permissionKey);
@@ -243,10 +274,16 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 return false;
               }
             }
+            if (child.path === '/vendor-po/purchase-management' && !hasVendorPOPurchaseManagementPermission()) {
+              return false;
+            }
             
             // Check if nested submenu has any visible children
             const hasVisibleChildren = child.children.some(nestedChild => {
               if (nestedChild.type === 'link' && nestedChild.path) {
+                if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
+                  return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
+                }
                 if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                   return hasSubPermission('/yarn-management/yarn-master', permissionKey);
@@ -327,6 +364,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               return hasSubPermission('/warehouse-management', childName);
             }
             if (child.path.startsWith('/vendor-po/')) {
+              if (child.path === '/vendor-po/purchase-management') {
+                return hasVendorPOPurchaseManagementPermission();
+              }
+              if (child.path.startsWith('/vendor-po/purchase-management/')) {
+                return hasVendorPOPurchaseManagementChildPermission(child.path);
+              }
               const childName = child.title;
               return hasSubPermission('/vendor-po', childName);
             }
@@ -341,6 +384,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               // Filter nested children
               const nestedFilteredChildren = child.children.filter(nestedChild => {
                 if (nestedChild.type === 'link' && nestedChild.path) {
+                  if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
+                    return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
+                  }
                   if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                     return hasSubPermission('/yarn-management/yarn-master', permissionKey);

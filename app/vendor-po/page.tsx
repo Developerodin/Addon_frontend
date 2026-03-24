@@ -5,14 +5,14 @@ import Link from "next/link";
 
 const VendorPOPage = () => {
   const modules = [
-    { title: "Vendor List", path: "/vendor-po/vendor-list", icon: "ri-user-search-line" },
-    { title: "Vendor PO Raise", path: "/vendor-po/raise", icon: "ri-arrow-up-circle-line" },
-    { title: "Vendor PO Receive", path: "/vendor-po/receive", icon: "ri-inbox-archive-line" },
-    { title: "Checking", path: "/vendor-po/checking", icon: "ri-checkbox-circle-line" },
+    { title: "Purchase Management", path: "/vendor-po/purchase-management", icon: "ri-shopping-cart-line" },
+    { title: "Secondary Checking", path: "/vendor-po/secondary-checking", icon: "ri-checkbox-circle-line" },
+    { title: "Washing", path: "/vendor-po/washing", icon: "ri-water-flash-line" },
+    { title: "Boarding", path: "/vendor-po/boarding", icon: "ri-airplay-line" },
     { title: "GRN", path: "/vendor-po/grn", icon: "ri-draft-line" },
     { title: "Branding", path: "/vendor-po/branding", icon: "ri-price-tag-3-line" },
-    { title: "Final Checking and Counting", path: "/vendor-po/final-checking-counting", icon: "ri-check-double-line" },
-    { title: "Dispatch", path: "/vendor-po/dispatch", icon: "ri-truck-line" },
+    { title: "Final Checking", path: "/vendor-po/final-checking", icon: "ri-check-double-line" },
+    { title: "Counting & Dispatch", path: "/vendor-po/counting", icon: "ri-truck-line" },
   ];
 
   return (

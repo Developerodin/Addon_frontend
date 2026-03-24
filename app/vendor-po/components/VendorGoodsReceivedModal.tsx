@@ -1,0 +1,376 @@
+"use client";
+
+import React, { useState, useEffect, useMemo } from "react";
+import { toast } from "react-hot-toast";
+import vendorPurchaseOrderService, {
+  VendorPurchaseOrder,
+} from "@/shared/services/vendorPurchaseOrderService";
+import { getPoLineItemId, readVendorName } from "./vendorPacklistHelpers";
+import {
+  type VendorLotDraft,
+  buildVendorLotDrafts,
+  draftsToReceivedLotDetails,
+  emptyLineQtyMap,
+  maxQtyForLineInLot,
+  orderedQtyByLine,
+  totalReceivedFromDrafts,
+  validateVendorLotDrafts,
+} from "./vendorGoodsReceivedModalHelpers";
+
+export interface VendorGoodsReceivedModalProps {
+  isOpen: boolean;
+  purchaseOrder: VendorPurchaseOrder | null;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function packlistToArray(pd: VendorPurchaseOrder["packListDetails"]) {
+  if (!pd) return [];
+  return Array.isArray(pd) ? pd : [pd];
+}
+
+/**
+ * Yarn PO Received parity: right slide-over, order + packlist summary, multiple lot cards with per-line qty.
+ */
+export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSaved }: VendorGoodsReceivedModalProps) {
+  const [detailPo, setDetailPo] = useState<VendorPurchaseOrder | null>(null);
+  const [loadingPo, setLoadingPo] = useState(false);
+  const [lots, setLots] = useState<VendorLotDraft[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !purchaseOrder?.id) {
+      setDetailPo(null);
+      setLots([]);
+      return;
+    }
+    setLoadingPo(true);
+    setDetailPo(null);
+    let cancelled = false;
+    void vendorPurchaseOrderService
+      .getById(purchaseOrder.id, { populate: "vendor,poItems.productId" })
+      .then((d) => {
+        if (cancelled) return;
+        setDetailPo(d);
+        setLots(buildVendorLotDrafts(d));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDetailPo(purchaseOrder);
+        setLots(buildVendorLotDrafts(purchaseOrder));
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPo(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, purchaseOrder?.id]);
+
+  const po = detailPo;
+  const poItems = po?.poItems || [];
+  const orderedMap = useMemo(() => orderedQtyByLine(poItems), [poItems]);
+  const packlists = useMemo(() => (po ? packlistToArray(po.packListDetails) : []), [po]);
+
+  const totals = useMemo(() => {
+    if (!po) return { ordered: 0, inForm: 0 };
+    const ordered = poItems.reduce((s, i) => s + Number(i.quantity || 0), 0);
+    return { ordered, inForm: totalReceivedFromDrafts(lots) };
+  }, [po, poItems, lots]);
+
+  const setLineQty = (lotIndex: number, lineId: string, value: number) => {
+    setLots((prev) => {
+      const max = maxQtyForLineInLot(lineId, lotIndex, prev, orderedMap);
+      const v = Math.max(0, Math.min(Number(value) || 0, max));
+      const next = [...prev];
+      const lot = next[lotIndex];
+      if (!lot) return prev;
+      next[lotIndex] = {
+        ...lot,
+        lineQty: { ...lot.lineQty, [lineId]: v },
+      };
+      return next;
+    });
+  };
+
+  const addLot = () => {
+    setLots((prev) => [...prev, { lotNumber: "", numberOfBoxes: 1, lineQty: emptyLineQtyMap(poItems) }]);
+  };
+
+  const removeLot = (index: number) => {
+    setLots((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!po) return;
+    const err = validateVendorLotDrafts(lots, orderedMap, poItems);
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const fresh = await vendorPurchaseOrderService.getById(po.id, { populate: "vendor,poItems.productId" });
+      const merged = draftsToReceivedLotDetails(lots);
+      const newTotal = merged.reduce(
+        (sum, lot) => sum + (lot.poItems || []).reduce((s, p) => s + Number(p.receivedQuantity || 0), 0),
+        0
+      );
+      const totalOrdered = (fresh.poItems || []).reduce((s, i) => s + Number(i.quantity || 0), 0);
+      const nextStatus =
+        newTotal >= totalOrdered - 1e-6 ? "goods_received" : "goods_partially_received";
+      const vendorName =
+        typeof fresh.vendor === "object" && fresh.vendor?.header?.vendorName
+          ? fresh.vendor.header.vendorName
+          : "";
+
+      await vendorPurchaseOrderService.update(po.id, {
+        ...(vendorName ? { vendorName } : {}),
+        receivedLotDetails: merged,
+        currentStatus: nextStatus,
+        goodsReceivedDate: new Date().toISOString(),
+      });
+      toast.success(nextStatus === "goods_received" ? "Fully received" : "Partial receipt saved");
+      onSaved();
+      onClose();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!isOpen || !purchaseOrder) return null;
+
+  return (
+    <div className={`fixed inset-0 z-[60] overflow-hidden ${isOpen ? "" : "pointer-events-none"}`}>
+      <div
+        className={`fixed inset-0 z-[61] bg-gray-500/60 transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"}`}
+        aria-hidden
+        onClick={() => !submitting && onClose()}
+      />
+      <div
+        className={`fixed right-0 top-0 z-[62] h-full w-full max-w-2xl bg-white shadow-xl flex flex-col transform transition-transform duration-300 ease-out ${
+          isOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0">
+          <div className="bg-primary text-white px-4 py-3 flex-shrink-0 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">Goods received</h3>
+              <p className="text-xs text-white/80 mt-0.5">{purchaseOrder.vpoNumber}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-white hover:text-gray-200 p-1"
+              disabled={submitting}
+              aria-label="Close"
+            >
+              <i className="ri-close-line text-lg" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            {loadingPo || !po ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-2">
+                <div className="h-8 w-8 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Loading PO…</p>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <h4 className="text-xs font-semibold text-gray-700 mb-2">Order details</h4>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] text-gray-500">Vendor</span>
+                      <div className="font-medium text-gray-900">{readVendorName(po.vendor)}</div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-gray-500">Total</span>
+                      <div className="font-medium text-gray-900">₹{Number(po.total || 0).toLocaleString()}</div>
+                    </div>
+                  </div>
+                  {poItems.length > 0 && (
+                    <div className="mt-3 overflow-x-auto border border-gray-200 rounded">
+                      <table className="min-w-full text-[10px]">
+                        <thead className="bg-gray-50/80">
+                          <tr>
+                            <th className="px-2 py-1.5 text-left font-bold text-gray-600 border-b">Article</th>
+                            <th className="px-2 py-1.5 text-right font-bold text-gray-600 border-b">Ordered</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {poItems.map((it) => {
+                            const id = getPoLineItemId(it);
+                            return (
+                              <tr key={id || it.productName} className="bg-white">
+                                <td className="px-2 py-1.5 border-b border-gray-100">{it.productName || "—"}</td>
+                                <td className="px-2 py-1.5 text-right border-b border-gray-100">
+                                  {Number(it.quantity || 0).toLocaleString()}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {packlists.length > 0 && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <h4 className="text-xs font-semibold text-gray-700 mb-2">Packlist (in transit)</h4>
+                    <div className="space-y-2">
+                      {packlists.map((p, idx) => (
+                        <div key={idx} className="p-2 bg-white rounded border border-gray-100 text-[10px] grid grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-gray-500">Challan</span>
+                            <div>{p.challanNumber || "—"}</div>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Boxes</span>
+                            <div>{p.numberOfBoxes ?? "—"}</div>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-gray-500">Courier</span>
+                            <div>{p.courierName || "—"}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-gray-800">Received lot details</h4>
+                  <button
+                    type="button"
+                    onClick={addLot}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 shadow-sm"
+                  >
+                    <i className="ri-add-line text-xs" />
+                    Add lot
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 mb-3">
+                  Ordered: {totals.ordered.toLocaleString()} pcs · In this form: {totals.inForm.toLocaleString()} pcs
+                </p>
+
+                <div className="space-y-4">
+                  {lots.map((lot, lotIndex) => (
+                    <div
+                      key={lotIndex}
+                      className="border border-gray-200 rounded-lg p-3 space-y-3 bg-white shadow-sm"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-gray-800">Lot {lotIndex + 1}</span>
+                        {lots.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeLot(lotIndex)}
+                            className="text-[10px] font-bold text-red-600 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-medium text-gray-600">Lot number *</label>
+                          <input
+                            className="mt-0.5 w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-400"
+                            value={lot.lotNumber}
+                            onChange={(e) =>
+                              setLots((prev) => {
+                                const n = [...prev];
+                                if (n[lotIndex]) n[lotIndex] = { ...n[lotIndex], lotNumber: e.target.value };
+                                return n;
+                              })
+                            }
+                            placeholder="e.g. LOT-001"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-medium text-gray-600">Number of boxes *</label>
+                          <input
+                            type="number"
+                            min={1}
+                            className="mt-0.5 w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-400"
+                            value={lot.numberOfBoxes}
+                            onChange={(e) =>
+                              setLots((prev) => {
+                                const n = [...prev];
+                                if (n[lotIndex])
+                                  n[lotIndex] = { ...n[lotIndex], numberOfBoxes: Math.max(1, Number(e.target.value) || 1) };
+                                return n;
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="border border-gray-100 rounded overflow-hidden">
+                        <table className="min-w-full text-[10px]">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-2 py-2 text-left font-bold text-gray-600">Article</th>
+                              <th className="px-2 py-2 text-right">Max</th>
+                              <th className="px-2 py-2 text-right w-[88px]">This lot</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {poItems.map((it) => {
+                              const id = getPoLineItemId(it);
+                              if (!id) return null;
+                              const max = maxQtyForLineInLot(id, lotIndex, lots, orderedMap);
+                              const v = lot.lineQty[id] ?? 0;
+                              return (
+                                <tr key={`${lotIndex}-${id}`} className="border-t border-gray-100">
+                                  <td className="px-2 py-2 text-gray-900">{it.productName || "—"}</td>
+                                  <td className="px-2 py-2 text-right text-gray-500">{max}</td>
+                                  <td className="px-2 py-2">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={max}
+                                      className="w-full px-1.5 py-1 text-right text-xs border border-gray-200 rounded"
+                                      value={v === 0 ? "" : v}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        setLineQty(lotIndex, id, raw === "" ? 0 : Number(raw));
+                                      }}
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="border-t border-gray-100 px-4 py-3 flex justify-end gap-2 flex-shrink-0 bg-white">
+            <button
+              type="button"
+              className="ti-btn ti-btn-light ti-btn-sm"
+              onClick={onClose}
+              disabled={submitting || loadingPo}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="ti-btn ti-btn-primary ti-btn-sm" disabled={submitting || loadingPo || !po}>
+              {submitting ? "Saving…" : "Save receipt"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

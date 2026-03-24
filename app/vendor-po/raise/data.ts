@@ -1,12 +1,4 @@
-import type { Vendor } from "../vendor-list/types";
 import type { VendorPOArticle, VendorPO } from "./types";
-
-/** Base vendor list – matches vendor-list mock. Merge with sessionStorage new vendor when available. */
-export const MOCK_VENDORS: Vendor[] = [
-  { id: "1", vendorCode: "VND001", vendorName: "ABC Textiles Ltd", contactPerson: "Raj Kumar", phone: "+91 98765 43210", city: "Coimbatore", status: "active", email: "raj@abctextiles.com", address: "123 Industrial Area, Coimbatore" },
-  { id: "2", vendorCode: "VND002", vendorName: "Premier Yarn Co", contactPerson: "Sita Devi", phone: "+91 87654 32109", city: "Tiruppur", status: "active", email: "sita@premieryarn.com" },
-  { id: "3", vendorCode: "VND003", vendorName: "Global Fibres Inc", contactPerson: "Amit Shah", phone: "+91 76543 21098", city: "Chennai", status: "inactive" },
-];
 
 /** Articles for dropdown/search – replace with API when ready */
 export const MOCK_ARTICLES: VendorPOArticle[] = [
@@ -19,7 +11,6 @@ export const MOCK_ARTICLES: VendorPOArticle[] = [
   { id: "art7", code: "EL-01", name: "Elastic Band" },
 ];
 
-const STORAGE_KEY_NEW_VENDOR = "vendor-po-new-vendor";
 const STORAGE_KEY_ORDERS = "vendor-po-orders";
 
 /** Default list when no sessionStorage data – replace with API later */
@@ -33,7 +24,7 @@ export const MOCK_VENDOR_POS: VendorPO[] = [
     priority: "High",
     totalQty: 500,
     receivedQty: 0,
-    status: "Approved",
+    status: "In transit",
     articleSummary: "Article A, Article B",
     remarks: "Initial fabric PO for season launch",
     lineItems: [
@@ -52,7 +43,7 @@ export const MOCK_VENDOR_POS: VendorPO[] = [
     priority: "Medium",
     totalQty: 1200,
     receivedQty: 600,
-    status: "Partially Received",
+    status: "Goods partially received",
     articleSummary: "Article X, Article Y",
     remarks: "Yarn replenishment for knitting lines",
     lineItems: [
@@ -71,7 +62,7 @@ export const MOCK_VENDOR_POS: VendorPO[] = [
     priority: "Urgent",
     totalQty: 800,
     receivedQty: 800,
-    status: "Fully Received",
+    status: "Goods received",
     articleSummary: "Article Z",
     remarks: "Urgent thread requirement for export order",
     lineItems: [
@@ -89,7 +80,7 @@ export const MOCK_VENDOR_POS: VendorPO[] = [
     priority: "Low",
     totalQty: 950,
     receivedQty: 150,
-    status: "Approved",
+    status: "In transit",
     articleSummary: "Article X, Article Y",
     remarks: "Accessories PO for upcoming styles",
     lineItems: [
@@ -100,19 +91,6 @@ export const MOCK_VENDOR_POS: VendorPO[] = [
     updatedAt: "2024-01-23T09:40:00.000Z",
   },
 ];
-
-/** Get vendors list: merge sessionStorage new vendor with base list (for use in PO form). */
-export function getVendors(): Vendor[] {
-  if (typeof window === "undefined") return MOCK_VENDORS;
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY_NEW_VENDOR);
-    if (!raw) return MOCK_VENDORS;
-    const newVendor = JSON.parse(raw) as Vendor;
-    const exists = MOCK_VENDORS.some((v) => v.id === newVendor.id || v.vendorCode === newVendor.vendorCode);
-    if (!exists) return [newVendor, ...MOCK_VENDORS];
-  } catch (_) {}
-  return MOCK_VENDORS;
-}
 
 /** Get stored POs from sessionStorage (used by list and edit). */
 export function getStoredOrders(): VendorPO[] | null {

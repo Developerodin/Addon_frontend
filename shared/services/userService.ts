@@ -73,11 +73,13 @@ export interface NavigationPermissions {
     'Vendor List': boolean;
     'Vendor PO Raise': boolean;
     'Vendor PO Receive': boolean;
-    Checking: boolean;
-    GRN: boolean;
-    Branding: boolean;
+    'Secondary Checking': boolean;
+    'Washing': boolean;
+    'Boarding': boolean;
+    'Branding': boolean;
     'Final Checking': boolean;
     'Counting & Dispatch': boolean;
+    'GRN': boolean;
   };
 }
 

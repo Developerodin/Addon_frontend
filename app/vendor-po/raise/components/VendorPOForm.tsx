@@ -1,33 +1,21 @@
 "use client";
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
-import {
-  VendorPOFormData,
-  VendorPOLineItem,
-  VendorPOPriority,
-  VendorPOArticle,
-} from "../types";
-
-const PRIORITIES: VendorPOPriority[] = ["Low", "Medium", "High", "Urgent"];
-
-function newLineItem(): VendorPOLineItem {
-  return {
-    id: `li-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    articleId: "",
-    articleCode: "",
-    articleName: "",
-    orderedQty: 0,
-    lineRemarks: "",
-  };
-}
+import { VendorPOFormData, VendorPOLineItem, VendorPOArticle } from "../types";
+import { newVendorPOLineItem } from "./vendorPoFormLineDefaults";
+import VendorPOFormHeaderSection from "./VendorPOFormHeaderSection";
+import VendorPOLineItemsTable from "./VendorPOLineItemsTable";
+import VendorPOOrderTotalsSection from "./VendorPOOrderTotalsSection";
+import VendorPOArticlePickerPortal from "./VendorPOArticlePickerPortal";
+import VendorPOFormActions from "./VendorPOFormActions";
 
 interface VendorPOFormProps {
   initialData: VendorPOFormData | null;
   vendors: { id: string; vendorCode: string; vendorName: string }[];
   articles: VendorPOArticle[];
+  onVendorChange?: (vendorId: string) => void;
   isApproved?: boolean;
-  onSaveDraft: (data: VendorPOFormData) => void;
-  onApprove: (data: VendorPOFormData) => void;
+  onSubmit: (data: VendorPOFormData) => void;
+  submitButtonText?: string;
   onCancel: () => void;
   isSubmitting?: boolean;
 }
@@ -36,21 +24,26 @@ export default function VendorPOForm({
   initialData,
   vendors,
   articles,
+  onVendorChange,
   isApproved = false,
-  onSaveDraft,
-  onApprove,
+  onSubmit,
+  submitButtonText = "Create PO",
   onCancel,
   isSubmitting = false,
 }: VendorPOFormProps) {
   const [vendorId, setVendorId] = useState(initialData?.vendorId ?? "");
-  const [priority, setPriority] = useState<VendorPOPriority>(
-    initialData?.priority ?? "Medium"
+  const [creditDays, setCreditDays] = useState<number>(initialData?.creditDays ?? 0);
+  const [estimatedOrderDeliveryDate, setEstimatedOrderDeliveryDate] = useState<string>(
+    initialData?.estimatedOrderDeliveryDate ?? ""
   );
   const [remarks, setRemarks] = useState(initialData?.remarks ?? "");
   const [lineItems, setLineItems] = useState<VendorPOLineItem[]>(
     initialData?.lineItems?.length
-      ? initialData.lineItems.map((li) => ({ ...li, id: li.id || `li-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }))
-      : [newLineItem()]
+      ? initialData.lineItems.map((li) => ({
+          ...li,
+          id: li.id || `li-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        }))
+      : [newVendorPOLineItem()]
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [articleSearch, setArticleSearch] = useState<Record<string, string>>({});
@@ -60,6 +53,7 @@ export default function VendorPOForm({
   const articleDropdownRef = useRef<HTMLDivElement>(null);
 
   const locked = isApproved;
+  const lineItemsDisabled = locked || !vendorId;
 
   const updateDropdownPosition = useCallback(() => {
     const input = articleInputRef.current;
@@ -96,8 +90,10 @@ export default function VendorPOForm({
     function handleClickOutside(e: MouseEvent) {
       const target = e.target as Node;
       if (
-        articleDropdownRef.current && !articleDropdownRef.current.contains(target) &&
-        articleInputRef.current && !articleInputRef.current.contains(target)
+        articleDropdownRef.current &&
+        !articleDropdownRef.current.contains(target) &&
+        articleInputRef.current &&
+        !articleInputRef.current.contains(target)
       ) {
         setArticleOpen(null);
       }
@@ -109,10 +105,15 @@ export default function VendorPOForm({
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!vendorId.trim()) e.vendor = "Vendor is required";
+    if (creditDays < 0) e.creditDays = "Credit days must be 0 or greater";
+    if (!estimatedOrderDeliveryDate?.trim()) {
+      e.estimatedOrderDeliveryDate = "Estimated order delivery date is required";
+    }
     if (!lineItems.length) e.lineItems = "At least one line item is required";
-    lineItems.forEach((row, idx) => {
+    lineItems.forEach((row) => {
       if (!row.articleId) e[`article_${row.id}`] = "Article is required";
       if (row.orderedQty <= 0) e[`qty_${row.id}`] = "Qty must be greater than 0";
+      if ((row.rate ?? 0) <= 0) e[`rate_${row.id}`] = "Rate must be greater than 0";
     });
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -120,33 +121,35 @@ export default function VendorPOForm({
 
   const getFormData = (): VendorPOFormData => ({
     vendorId,
-    priority,
+    creditDays: Number(creditDays || 0),
+    estimatedOrderDeliveryDate: estimatedOrderDeliveryDate || undefined,
     remarks,
-    lineItems: lineItems.map(({ id, articleId, articleCode, articleName, orderedQty, lineRemarks }) => ({
-      id,
-      articleId,
-      articleCode,
-      articleName,
-      orderedQty,
-      lineRemarks: lineRemarks || undefined,
-    })),
+    lineItems: lineItems.map(
+      ({ id, articleId, articleCode, articleName, orderedQty, rate, gstRate, estimatedDeliveryDate, lineRemarks }) => ({
+        id,
+        articleId,
+        articleCode,
+        articleName,
+        orderedQty,
+        rate: Number(rate || 0),
+        gstRate: Number(gstRate || 0),
+        estimatedDeliveryDate: estimatedDeliveryDate || undefined,
+        lineRemarks: lineRemarks || undefined,
+      })
+    ),
   });
 
-  const handleSaveDraft = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    onSaveDraft(getFormData());
+    onSubmit(getFormData());
   };
 
-  const handleApprove = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-    onApprove(getFormData());
-  };
+  const clearError = (key: string) => setErrors((p) => ({ ...p, [key]: "" }));
 
   const addRow = () => {
-    if (locked) return;
-    setLineItems((prev) => [...prev, newLineItem()]);
+    if (lineItemsDisabled) return;
+    setLineItems((prev) => [...prev, newVendorPOLineItem()]);
     setErrors((prev) => {
       const next = { ...prev };
       delete next.lineItems;
@@ -155,15 +158,11 @@ export default function VendorPOForm({
   };
 
   const removeRow = (id: string) => {
-    if (locked) return;
+    if (lineItemsDisabled) return;
     if (lineItems.length <= 1) return;
     setLineItems((prev) => prev.filter((r) => r.id !== id));
     setErrors((prev) => {
       const next = { ...prev };
-      Object.keys(next).forEach((k) => {
-        if (k.startsWith("article_") && next[k] && lineItems.find((r) => `article_${r.id}` === k)) {}
-        if (k === `article_${id}` || k === `qty_${id}`) delete next[k];
-      });
       delete next[`article_${id}`];
       delete next[`qty_${id}`];
       return next;
@@ -171,7 +170,7 @@ export default function VendorPOForm({
   };
 
   const setLineItemArticle = (rowId: string, article: VendorPOArticle) => {
-    if (locked) return;
+    if (lineItemsDisabled) return;
     setLineItems((prev) =>
       prev.map((r) =>
         r.id === rowId
@@ -194,7 +193,7 @@ export default function VendorPOForm({
   };
 
   const setLineItemQty = (rowId: string, value: number) => {
-    if (locked) return;
+    if (lineItemsDisabled) return;
     const n = Number(value);
     setLineItems((prev) =>
       prev.map((r) => (r.id === rowId ? { ...r, orderedQty: isNaN(n) ? 0 : n } : r))
@@ -206,8 +205,29 @@ export default function VendorPOForm({
     });
   };
 
+  const setLineItemRate = (rowId: string, value: number) => {
+    if (lineItemsDisabled) return;
+    const n = Number(value);
+    setLineItems((prev) =>
+      prev.map((r) => (r.id === rowId ? { ...r, rate: isNaN(n) ? 0 : n } : r))
+    );
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[`rate_${rowId}`];
+      return next;
+    });
+  };
+
+  const setLineItemGstRate = (rowId: string, value: number) => {
+    if (lineItemsDisabled) return;
+    const n = Number(value);
+    setLineItems((prev) =>
+      prev.map((r) => (r.id === rowId ? { ...r, gstRate: isNaN(n) ? 0 : n } : r))
+    );
+  };
+
   const setLineItemRemarks = (rowId: string, value: string) => {
-    if (locked) return;
+    if (lineItemsDisabled) return;
     setLineItems((prev) =>
       prev.map((r) => (r.id === rowId ? { ...r, lineRemarks: value } : r))
     );
@@ -217,284 +237,80 @@ export default function VendorPOForm({
     const q = (articleSearch[rowId] ?? "").trim().toLowerCase();
     if (!q) return articles;
     return articles.filter(
-      (a) =>
-        a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)
+      (a) => a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)
     );
   };
 
+  const portalFiltered = articleOpen ? filteredArticles(articleOpen) : [];
+
+  const totals = useMemo(() => {
+    const subTotal = lineItems.reduce(
+      (sum, item) => sum + Number(item.orderedQty || 0) * Number(item.rate || 0),
+      0
+    );
+    const gst = lineItems.reduce(
+      (sum, item) =>
+        sum +
+        (Number(item.orderedQty || 0) * Number(item.rate || 0) * Number(item.gstRate || 0)) / 100,
+      0
+    );
+    const total = subTotal + gst;
+    return { subTotal, gst, total };
+  }, [lineItems]);
+
   return (
-    <form onSubmit={(e) => e.preventDefault()}>
-      {/* Header section */}
-      <div className="box mb-4">
-        <div className="box-header">
-          <h3 className="box-title">Header</h3>
-        </div>
-        <div className="box-body">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="form-label text-sm font-medium">
-                Vendor <span className="text-danger">*</span>
-              </label>
-              <select
-                className={`form-select ${errors.vendor ? "border-danger" : ""}`}
-                value={vendorId}
-                onChange={(e) => {
-                  setVendorId(e.target.value);
-                  if (errors.vendor) setErrors((p) => ({ ...p, vendor: "" }));
-                }}
-                disabled={locked}
-              >
-                <option value="">Select vendor</option>
-                {vendors.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.vendorCode} – {v.vendorName}
-                  </option>
-                ))}
-              </select>
-              {errors.vendor && (
-                <p className="text-danger text-xs mt-1">{errors.vendor}</p>
-              )}
-            </div>
-            <div>
-              <label className="form-label text-sm font-medium">
-                Priority <span className="text-danger">*</span>
-              </label>
-              <select
-                className="form-select"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as VendorPOPriority)}
-                disabled={locked}
-              >
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="mt-4">
-            <label className="form-label text-sm font-medium">Remarks</label>
-            <textarea
-              className="form-control"
-              rows={2}
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              disabled={locked}
-              placeholder="Header remarks (optional)"
-            />
-          </div>
-        </div>
-      </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <VendorPOFormHeaderSection
+        locked={locked}
+        vendorId={vendorId}
+        creditDays={creditDays}
+        estimatedOrderDeliveryDate={estimatedOrderDeliveryDate}
+        remarks={remarks}
+        vendors={vendors}
+        errors={errors}
+        onVendorChange={onVendorChange}
+        setVendorId={setVendorId}
+        setCreditDays={setCreditDays}
+        setEstimatedOrderDeliveryDate={setEstimatedOrderDeliveryDate}
+        setRemarks={setRemarks}
+        clearError={clearError}
+      />
 
-      {/* Line items */}
-      <div className="box mb-4">
-        <div className="box-header flex justify-between items-center">
-          <h3 className="box-title">Line items</h3>
-          {!locked && (
-            <button
-              type="button"
-              onClick={addRow}
-              className="ti-btn ti-btn-primary inline-flex items-center gap-2 py-2 px-4 whitespace-nowrap"
-            >
-              <i className="ri-add-line"></i>
-              <span>Add Article Row</span>
-            </button>
-          )}
-        </div>
-        <div className="box-body p-0">
-          {errors.lineItems && (
-            <div className="px-4 pt-2">
-              <p className="text-danger text-sm">{errors.lineItems}</p>
-            </div>
-          )}
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse border border-gray-300">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    Article <span className="text-danger">*</span>
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase w-32">
-                    Ordered Qty <span className="text-danger">*</span>
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    Line Remarks
-                  </th>
-                  {!locked && (
-                    <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-20">
-                      Remove
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="bg-white">
-                {lineItems.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50">
-                    <td className="border border-gray-300 px-4 py-2 align-top overflow-visible">
-                      <div className="relative">
-                        {locked ? (
-                          <span className="text-sm">
-                            {row.articleCode} – {row.articleName}
-                          </span>
-                        ) : (
-                          <>
-                            <input
-                              ref={articleOpen === row.id ? articleInputRef : undefined}
-                              type="text"
-                              className={`form-control form-control-sm ${errors[`article_${row.id}`] ? "border-danger" : ""}`}
-                              placeholder="Search article..."
-                              value={
-                                row.articleId
-                                  ? `${row.articleCode} – ${row.articleName}`
-                                  : articleSearch[row.id] ?? ""
-                              }
-                              onFocus={() => setArticleOpen(row.id)}
-                              onChange={(e) => {
-                                setArticleSearch((p) => ({ ...p, [row.id]: e.target.value }));
-                                if (!row.articleId) setArticleOpen(row.id);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Escape") setArticleOpen(null);
-                              }}
-                            />
-                            {errors[`article_${row.id}`] && (
-                              <p className="text-danger text-xs mt-1">{errors[`article_${row.id}`]}</p>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                    <td className="border border-gray-300 px-4 py-2 align-top">
-                      {locked ? (
-                        <span className="text-sm">{row.orderedQty}</span>
-                      ) : (
-                        <>
-                          <input
-                            type="number"
-                            min={1}
-                            className={`form-control form-control-sm text-right ${errors[`qty_${row.id}`] ? "border-danger" : ""}`}
-                            value={row.orderedQty || ""}
-                            onChange={(e) => setLineItemQty(row.id, e.target.value === "" ? 0 : Number(e.target.value))}
-                          />
-                          {errors[`qty_${row.id}`] && (
-                            <p className="text-danger text-xs mt-1">{errors[`qty_${row.id}`]}</p>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    <td className="border border-gray-300 px-4 py-2 align-top">
-                      {locked ? (
-                        <span className="text-sm text-gray-600">{row.lineRemarks || "–"}</span>
-                      ) : (
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="Optional"
-                          value={row.lineRemarks ?? ""}
-                          onChange={(e) => setLineItemRemarks(row.id, e.target.value)}
-                        />
-                      )}
-                    </td>
-                    {!locked && (
-                      <td className="border border-gray-300 px-4 py-2 align-top">
-                        <button
-                          type="button"
-                          onClick={() => removeRow(row.id)}
-                          disabled={lineItems.length <= 1}
-                          className="ti-btn ti-btn-danger inline-flex items-center justify-center w-8 h-8 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                          title="Remove row"
-                        >
-                          <i className="ri-delete-bin-line text-lg"></i>
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      <VendorPOLineItemsTable
+        lineItems={lineItems}
+        locked={locked}
+        lineItemsDisabled={lineItemsDisabled}
+        vendorId={vendorId}
+        errors={errors}
+        articleSearch={articleSearch}
+        articleOpen={articleOpen}
+        articleInputRef={articleInputRef}
+        setArticleSearch={setArticleSearch}
+        setArticleOpen={setArticleOpen}
+        setLineItemQty={setLineItemQty}
+        setLineItemRate={setLineItemRate}
+        setLineItemGstRate={setLineItemGstRate}
+        setLineItemRemarks={setLineItemRemarks}
+        addRow={addRow}
+        removeRow={removeRow}
+      />
 
-      {/* Article dropdown portal – renders above table so it is not clipped */}
-      {articleOpen && dropdownPosition && typeof document !== "undefined" &&
-        createPortal(
-          <div
-            ref={articleDropdownRef}
-            className="mt-1 max-h-48 overflow-auto bg-white border border-gray-300 rounded shadow-lg z-[9999]"
-            style={{
-              position: "fixed",
-              top: dropdownPosition.top + 4,
-              left: dropdownPosition.left,
-              width: dropdownPosition.width,
-              minWidth: 200,
-            }}
-          >
-            {filteredArticles(articleOpen).length === 0 ? (
-              <div className="px-3 py-2 text-sm text-gray-500">No articles found</div>
-            ) : (
-              filteredArticles(articleOpen).map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                  onClick={() => setLineItemArticle(articleOpen, a)}
-                >
-                  {a.code} – {a.name}
-                </button>
-              ))
-            )}
-          </div>,
-          document.body
-        )}
+      <VendorPOOrderTotalsSection totals={totals} />
 
-      {/* Buttons */}
-      <div className="box">
-        <div className="box-body flex flex-wrap gap-3">
-          {!locked ? (
-            <>
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                disabled={isSubmitting}
-                className="ti-btn ti-btn-primary inline-flex items-center gap-2 py-2 px-4 whitespace-nowrap"
-              >
-                {isSubmitting ? "Saving…" : "Save Draft"}
-              </button>
-              <button
-                type="button"
-                onClick={handleApprove}
-                disabled={isSubmitting}
-                className="ti-btn ti-btn-success inline-flex items-center gap-2 py-2 px-4 whitespace-nowrap"
-              >
-                {isSubmitting ? "Releasing…" : "Approve / Release PO"}
-              </button>
-              <button
-                type="button"
-                onClick={onCancel}
-                disabled={isSubmitting}
-                className="ti-btn ti-btn-light inline-flex items-center gap-2 py-2 px-4 whitespace-nowrap"
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <p className="text-sm text-gray-500">
-              Approved PO – vendor and line items are locked. Changes require a revision flow (coming later).
-            </p>
-          )}
-          {locked && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="ti-btn ti-btn-light inline-flex items-center gap-2 py-2 px-4 whitespace-nowrap"
-            >
-              Back to list
-            </button>
-          )}
-        </div>
-      </div>
+      <VendorPOArticlePickerPortal
+        articleOpen={articleOpen}
+        dropdownPosition={dropdownPosition}
+        articleDropdownRef={articleDropdownRef}
+        filteredArticles={portalFiltered}
+        onSelect={(a) => articleOpen && setLineItemArticle(articleOpen, a)}
+      />
+
+      <VendorPOFormActions
+        locked={locked}
+        isSubmitting={!!isSubmitting}
+        submitButtonText={submitButtonText}
+        onCancel={onCancel}
+      />
     </form>
   );
 }

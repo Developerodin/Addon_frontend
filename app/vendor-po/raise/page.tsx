@@ -1,10 +1,16 @@
 "use client";
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { toast } from "react-hot-toast";
+import { useNavigation } from "@/shared/contextapi/navigationContext";
+import VendorPOPurchaseListLayout from "../purchase-management/components/VendorPOPurchaseListLayout";
+import { VendorPacklistModal } from "../components/VendorPacklistModal";
+import { VendorPODetailsDrawer } from "../components/VendorPODetailsDrawer";
+import { mapVendorPurchaseOrderToUi, vendorPoUiStatusClass } from "../utils/vendorPoFlow";
 import { VendorPO, VendorPOStatus, VendorPOPriority } from "./types";
-import { MOCK_VENDOR_POS, getStoredOrders, setStoredOrders } from "./data";
+import vendorPurchaseOrderService, { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
+import type { VendorPackListEntry } from "@/shared/services/vendorPurchaseOrderService";
 
 const getDefaultStartDate = () => {
   const date = new Date();
@@ -12,23 +18,6 @@ const getDefaultStartDate = () => {
   return date.toISOString().split("T")[0];
 };
 const getDefaultEndDate = () => new Date().toISOString().split("T")[0];
-
-const getStatusColor = (status: VendorPOStatus) => {
-  switch (status) {
-    case "Draft":
-      return "bg-gray-100 text-gray-800";
-    case "Approved":
-      return "bg-blue-100 text-blue-800";
-    case "Partially Received":
-      return "bg-orange-100 text-orange-800";
-    case "Fully Received":
-      return "bg-green-100 text-green-800";
-    case "Closed":
-      return "bg-slate-100 text-slate-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-};
 
 const getPriorityColor = (priority: VendorPOPriority) => {
   switch (priority) {
@@ -46,7 +35,10 @@ const getPriorityColor = (priority: VendorPOPriority) => {
 };
 
 const VendorPORaisePage = () => {
-  const [orders, setOrders] = useState<VendorPO[]>(MOCK_VENDOR_POS);
+  const { hasSubPermission, isLoading: permLoading } = useNavigation();
+  const canAccess = hasSubPermission("/vendor-po", "Vendor PO Raise");
+  const [orders, setOrders] = useState<VendorPO[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
@@ -55,11 +47,30 @@ const VendorPORaisePage = () => {
   const [endDate, setEndDate] = useState<string>(getDefaultEndDate());
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<VendorPO | null>(null);
+  const [packlistFor, setPacklistFor] = useState<VendorPurchaseOrder | null>(null);
+  const [packlistSubmitting, setPacklistSubmitting] = useState(false);
+
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await vendorPurchaseOrderService.list({
+        page: 1,
+        limit: 500,
+        sortBy: "createdAt:desc",
+        populate: "vendor,poItems.productId",
+      });
+      setOrders((response.results || []).map(mapVendorPurchaseOrderToUi));
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to load vendor purchase orders");
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const stored = getStoredOrders();
-    if (stored?.length) setOrders(stored);
-  }, []);
+    void loadOrders();
+  }, [loadOrders]);
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
@@ -81,344 +92,274 @@ const VendorPORaisePage = () => {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [orders]);
 
-  const handleApprove = (order: VendorPO) => {
-    if (order.status !== "Draft") return;
-    const next = orders.map((o) => (o.id === order.id ? { ...o, status: "Approved" as VendorPOStatus } : o));
-    setOrders(next);
-    setStoredOrders(next);
-    if (selectedOrder?.id === order.id) setSelectedOrder((prev) => (prev ? { ...prev, status: "Approved" } : null));
-    toast.success(`PO ${order.poNo} approved`);
+  const handlePacklistSubmit = async (entries: VendorPackListEntry[]) => {
+    if (!packlistFor) return;
+    setPacklistSubmitting(true);
+    try {
+      const preserveLots =
+        packlistFor.currentStatus === "goods_partially_received" && packlistFor.receivedLotDetails?.length
+          ? { receivedLotDetails: packlistFor.receivedLotDetails }
+          : {};
+      await vendorPurchaseOrderService.update(packlistFor.id, {
+        packListDetails: entries,
+        ...(packlistFor.currentStatus === "submitted_to_vendor" ? { currentStatus: "in_transit" as const } : {}),
+        ...preserveLots,
+      });
+      const n = entries.length;
+      toast.success(
+        packlistFor.currentStatus === "submitted_to_vendor"
+          ? `PO updated with ${n} packlist ${n === 1 ? "entry" : "entries"} — marked in transit`
+          : `Packlist updated (${n} ${n === 1 ? "entry" : "entries"})`
+      );
+      setPacklistFor(null);
+      await loadOrders();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Failed to update PO");
+    } finally {
+      setPacklistSubmitting(false);
+    }
   };
 
-  return (
-    <div className="main-content">
-      <Seo title="Vendor POs" />
+  if (permLoading) {
+    return (
+      <div className="main-content flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600" />
+      </div>
+    );
+  }
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12">
-          {/* Page Header - same as Purchase Order */}
-          <div className="box !bg-transparent border-0 shadow-none">
-            <div className="box-header flex justify-between items-center">
-              <div>
-                <h1 className="box-title text-2xl font-semibold">Vendor POs</h1>
-                <p className="text-gray-600 mt-1">Manage vendor purchase orders</p>
-              </div>
-              <div className="box-tools">
-                <Link href="/vendor-po/raise/add" className="ti-btn ti-btn-primary inline-flex items-center gap-2 py-2 px-4 whitespace-nowrap">
-                  <i className="ri-add-line me-1"></i>
-                  Create PO
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* Search and Filters - same layout as Purchase Order */}
-          <div className="box">
-            <div className="box-body">
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col md:flex-row gap-4">
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Search by PO No, Vendor or Article..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <select
-                      className="form-select"
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                    >
-                      <option value="">All Status</option>
-                      <option value="Draft">Draft</option>
-                      <option value="Approved">Approved</option>
-                      <option value="Partially Received">Partially Received</option>
-                      <option value="Fully Received">Fully Received</option>
-                      <option value="Closed">Closed</option>
-                    </select>
-                    <select
-                      className="form-select"
-                      value={priorityFilter}
-                      onChange={(e) => setPriorityFilter(e.target.value)}
-                    >
-                      <option value="">All Priority</option>
-                      <option value="Urgent">Urgent</option>
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
-                    </select>
-                    <select
-                      className="form-select"
-                      value={vendorFilter}
-                      onChange={(e) => setVendorFilter(e.target.value)}
-                    >
-                      <option value="">All Vendors</option>
-                      {uniqueVendors.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button type="button" className="ti-btn ti-btn-light">
-                      <i className="ri-download-line me-1"></i>
-                      Export
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-col md:flex-row gap-4">
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="form-label text-xs text-gray-600">Start Date</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="form-label text-xs text-gray-600">End Date</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                      />
-                    </div>
-                    {(startDate || endDate) && (
-                      <button
-                        type="button"
-                        className="ti-btn ti-btn-light self-end"
-                        onClick={() => {
-                          setStartDate(getDefaultStartDate());
-                          setEndDate(getDefaultEndDate());
-                        }}
-                      >
-                        <i className="ri-close-line me-1"></i>
-                        Clear Dates
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Vendor POs Table - same table style as Purchase Order */}
-          <div className="box">
-            <div className="box-header">
-              <h3 className="box-title">Vendor POs ({filteredOrders.length})</h3>
-            </div>
-            <div className="box-body">
-              {filteredOrders.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-gray-400 mb-4">
-                    <i className="ri-shopping-cart-line text-4xl"></i>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Vendor POs</h3>
-                  <p className="text-gray-500 mb-4">
-                    {searchTerm || statusFilter || priorityFilter || vendorFilter
-                      ? "No orders match your search criteria. Try adjusting your search term."
-                      : "No vendor purchase orders found for the selected period."}
-                  </p>
-                  <Link href="/vendor-po/raise/add" className="ti-btn ti-btn-primary inline-flex items-center gap-2 py-2 px-4 whitespace-nowrap">
-                    <i className="ri-add-line me-1"></i>
-                    Create PO
-                  </Link>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PO No</th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PO Date</th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor</th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                        <th className="border border-gray-300 px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Qty</th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="border border-gray-300 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white">
-                      {filteredOrders.map((order) => (
-                        <tr key={order.id} className="hover:bg-gray-50">
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {order.poNo}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(order.poDate).toLocaleDateString()}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {order.vendorName}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(order.priority)}`}>
-                              {order.priority}
-                            </span>
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                            {order.totalQty.toLocaleString()}
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                              {order.status}
-                            </span>
-                          </td>
-                          <td className="border border-gray-300 px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div className="flex items-center space-x-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedOrder(order);
-                                  setDetailsModalOpen(true);
-                                }}
-                                className="text-purple-600 hover:text-purple-900 flex items-center justify-center"
-                                title="View Details"
-                              >
-                                <i className="ri-eye-line text-lg"></i>
-                              </button>
-                              {order.status === "Draft" && (
-                                <Link
-                                  href={`/vendor-po/raise/edit/${order.id}`}
-                                  className="text-green-600 hover:text-green-900 flex items-center justify-center"
-                                  title="Edit"
-                                >
-                                  <i className="ri-edit-line text-lg"></i>
-                                </Link>
-                              )}
-                              {order.status === "Draft" && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleApprove(order)}
-                                  className="text-xs border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded px-3 py-1 h-7 font-medium"
-                                  title="Approve"
-                                >
-                                  Approve
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+  if (!canAccess) {
+    return (
+      <div className="main-content">
+        <Seo title="Purchase Order" />
+        <div className="box">
+          <div className="box-body text-center py-12">
+            <p className="text-gray-500 mb-4">You don&apos;t have permission to access Purchase Order.</p>
+            <Link href="/vendor-po/purchase-management" className="ti-btn ti-btn-primary ti-btn-sm">
+              Back to Purchase Management
+            </Link>
           </div>
         </div>
       </div>
+    );
+  }
 
-      {/* View Details Modal - same pattern as Purchase Order */}
-      {selectedOrder && (
-        <div className={`fixed inset-0 z-50 overflow-y-auto ${detailsModalOpen ? "" : "hidden"}`}>
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-              onClick={() => {
-                setDetailsModalOpen(false);
-                setSelectedOrder(null);
-              }}
-            />
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full">
-              <div className="bg-primary text-white px-6 py-4 flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-semibold">Vendor PO Details</h3>
-                  <p className="text-sm text-white/80 mt-1">{selectedOrder.poNo}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDetailsModalOpen(false);
-                    setSelectedOrder(null);
-                  }}
-                  className="text-white hover:text-gray-200 transition-colors"
-                >
-                  <i className="ri-close-line text-xl"></i>
-                </button>
-              </div>
-              <div className="px-6 py-4 max-h-[calc(100vh-200px)] overflow-y-auto">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">PO No</label>
-                    <div className="mt-1 text-sm text-gray-900 font-medium">{selectedOrder.poNo}</div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">PO Date</label>
-                    <div className="mt-1 text-sm text-gray-900">
-                      {new Date(selectedOrder.poDate).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">Vendor</label>
-                    <div className="mt-1 text-sm text-gray-900">{selectedOrder.vendorName}</div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">Priority</label>
-                    <div className="mt-1">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(selectedOrder.priority)}`}>
-                        {selectedOrder.priority}
-                      </span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">Total Qty</label>
-                    <div className="mt-1 text-sm text-gray-900">{selectedOrder.totalQty.toLocaleString()}</div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">Received Qty</label>
-                    <div className="mt-1 text-sm text-gray-900">{selectedOrder.receivedQty.toLocaleString()}</div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">Status</label>
-                    <div className="mt-1">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedOrder.status)}`}>
-                        {selectedOrder.status}
-                      </span>
-                    </div>
-                  </div>
-                  {selectedOrder.articleSummary && (
-                    <div className="md:col-span-2">
-                      <label className="text-sm font-medium text-gray-600">Articles</label>
-                      <div className="mt-1 text-sm text-gray-900">{selectedOrder.articleSummary}</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
-                {selectedOrder.status === "Draft" && (
-                  <Link
-                    href={`/vendor-po/raise/edit/${selectedOrder.id}`}
-                    className="ti-btn ti-btn-primary inline-flex items-center gap-2 py-2 px-4 whitespace-nowrap"
-                  >
-                    <i className="ri-edit-line me-1"></i>
-                    Edit
-                  </Link>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDetailsModalOpen(false);
-                    setSelectedOrder(null);
-                  }}
-                  className="ti-btn ti-btn-light inline-flex items-center gap-2 py-2 px-4 whitespace-nowrap"
-                >
-                  Close
-                </button>
-              </div>
+  const selectCls =
+    "bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 pr-7 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer max-w-[140px]";
+
+  return (
+    <>
+      <Seo title="Purchase Order" />
+      <VendorPOPurchaseListLayout
+        listTitle="Purchase Order"
+        count={loading ? 0 : filteredOrders.length}
+        searchPlaceholder="Search PO, vendor, article…"
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
+        startDate={startDate}
+        endDate={endDate}
+        onStartDateChange={setStartDate}
+        onEndDateChange={setEndDate}
+        onClearDates={() => {
+          setStartDate(getDefaultStartDate());
+          setEndDate(getDefaultEndDate());
+        }}
+        headerActions={
+          <Link
+            href="/vendor-po/purchase-management/purchase/add"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+          >
+            <i className="ri-add-line text-xs" />
+            New Order
+          </Link>
+        }
+        filterSlot={
+          <>
+            <select
+              className={selectCls}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">Status</option>
+              <option value="Submitted to vendor">Submitted to vendor</option>
+              <option value="In transit">In transit</option>
+              <option value="Goods partially received">Goods partially received</option>
+              <option value="Goods received">Goods received</option>
+              <option value="QC pending">QC pending</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+            <select
+              className={selectCls}
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+            >
+              <option value="">Priority</option>
+              <option value="Urgent">Urgent</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+            <select
+              className={selectCls}
+              value={vendorFilter}
+              onChange={(e) => setVendorFilter(e.target.value)}
+            >
+              <option value="">Vendor</option>
+              {uniqueVendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-white text-gray-600 text-[10px] font-bold rounded border border-gray-200 hover:border-purple-300"
+            >
+              <i className="ri-download-line text-xs" />
+              Export
+            </button>
+          </>
+        }
+      >
+        {loading ? (
+          <div className="py-16 text-center text-gray-500 text-sm">Loading purchase orders...</div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+            <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+              <i className="ri-inbox-line text-xl text-gray-200" />
             </div>
+            <h3 className="text-xs font-bold text-gray-400 mb-1">DATA EMPTY</h3>
+            <p className="text-[11px] text-gray-500 mb-4 max-w-md">
+              {searchTerm || statusFilter || priorityFilter || vendorFilter
+                ? "No orders match your filters."
+                : "No vendor purchase orders for this range."}
+            </p>
+            <Link
+              href="/vendor-po/purchase-management/purchase/add"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+            >
+              <i className="ri-add-line text-xs" />
+              New Order
+            </Link>
           </div>
-        </div>
-      )}
-    </div>
+        ) : (
+          <table className="w-full border-collapse border border-gray-200">
+            <thead>
+              <tr className="bg-gray-50/30">
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  PO No
+                </th>
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  PO Date
+                </th>
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Vendor
+                </th>
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Priority
+                </th>
+                <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Total Qty
+                </th>
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Status
+                </th>
+                <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredOrders.map((order) => (
+                <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">{order.poNo}</td>
+                  <td className="px-1.5 py-2.5 text-[12px] text-gray-600 border border-gray-200">
+                    {new Date(order.poDate).toLocaleDateString()}
+                  </td>
+                  <td className="px-1.5 py-2.5 text-[12px] text-gray-700 border border-gray-200">{order.vendorName}</td>
+                  <td className="px-1.5 py-2.5 border border-gray-200">
+                    <span
+                      className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full ${getPriorityColor(order.priority)}`}
+                    >
+                      {order.priority}
+                    </span>
+                  </td>
+                  <td className="px-1.5 py-2.5 text-[12px] text-gray-900 text-right border border-gray-200">
+                    {order.totalQty.toLocaleString()}
+                  </td>
+                  <td className="px-1.5 py-2.5 border border-gray-200">
+                    <span
+                      className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full ${vendorPoUiStatusClass(order.status)}`}
+                    >
+                      {order.status}
+                    </span>
+                  </td>
+                  <td className="px-1.5 py-2.5 text-right border border-gray-200">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedOrder(order);
+                          setDetailsModalOpen(true);
+                        }}
+                        className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100 transition-colors"
+                        title="View details"
+                      >
+                        <i className="ri-eye-line text-xs" />
+                      </button>
+                      {order.status === "Submitted to vendor" && (
+                        <Link
+                          href={`/vendor-po/purchase-management/purchase/edit/${order.id}`}
+                          className="p-1 text-green-600 hover:bg-green-50 rounded"
+                          title="Edit"
+                        >
+                          <i className="ri-edit-line text-base" />
+                        </Link>
+                      )}
+                      {(order.status === "Submitted to vendor" ||
+                        order.status === "Goods partially received" ||
+                        order.status === "In transit") &&
+                        order.rawPurchaseOrder && (
+                          <button
+                            type="button"
+                            onClick={() => setPacklistFor(order.rawPurchaseOrder!)}
+                            className="h-7 px-2 text-[9px] font-bold bg-white text-purple-600 border border-purple-200 rounded hover:bg-purple-50 transition-colors uppercase shadow-sm"
+                            title={
+                              order.status === "Submitted to vendor"
+                                ? "Packlist — mark in transit"
+                                : "Add or update packlist entries"
+                            }
+                          >
+                            Mark in transit
+                          </button>
+                        )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </VendorPOPurchaseListLayout>
+
+      <VendorPODetailsDrawer
+        isOpen={detailsModalOpen && !!selectedOrder}
+        summary={selectedOrder}
+        onClose={() => {
+          setDetailsModalOpen(false);
+          setSelectedOrder(null);
+        }}
+      />
+
+      <VendorPacklistModal
+        isOpen={!!packlistFor}
+        purchaseOrder={packlistFor}
+        existingPacklistData={packlistFor?.packListDetails ?? null}
+        onClose={() => setPacklistFor(null)}
+        onSubmit={handlePacklistSubmit}
+        isSubmitting={packlistSubmitting}
+      />
+    </>
   );
 };
 

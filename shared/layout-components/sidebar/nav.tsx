@@ -52,6 +52,8 @@ const GRNIcon = <i className="ri ri-file-text-line side-menu__icon" style={{ mar
 const BrandingIcon = <i className="ri ri-price-tag-3-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const FinalCheckIcon = <i className="ri ri-task-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const DispatchIcon = <i className="ri ri-truck-fill side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const WashingIcon = <i className="ri ri-water-flash-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const BoardingIcon = <i className="ri ri-airplay-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 // Badges if needed
 const badge = (
   <span className="badge !bg-warning/10 !text-warning !py-[0.25rem] !px-[0.45rem] !text-[0.75em] ms-1">
@@ -492,44 +494,62 @@ const BaseMenuItems: any = [
     path: "/vendor-po",
     children: [
       {
-        icon: VendorListIcon,
-        path: "/vendor-po/vendor-list",
-        type: "link",
+        icon: PurchaseIcon,
+        title: "Purchase Management",
+        type: "sub",
         active: false,
         selected: false,
-        title: "Vendor List",
-      },
-      {
-        icon: RaiseIcon,
-        path: "/vendor-po/raise",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Vendor PO Raise",
-      },
-      {
-        icon: ReceiveIcon,
-        path: "/vendor-po/receive",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Vendor PO Receive",
+        path: "/vendor-po/purchase-management",
+        children: [
+          {
+            icon: VendorListIcon,
+            path: "/vendor-po/vendor-list",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Vendor List",
+          },
+          {
+            icon: PurchaseIcon,
+            path: "/vendor-po/purchase-management/purchase",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Vendor PO Raise",
+          },
+          {
+            icon: PurchaseReceivedIcon,
+            path: "/vendor-po/purchase-management/purchase-order-received",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Vendor PO Receive",
+          },
+        ],
       },
       {
         icon: CheckingIcon,
-        path: "/vendor-po/checking",
+        path: "/vendor-po/secondary-checking",
         type: "link",
         active: false,
         selected: false,
-        title: "Checking",
+        title: "Secondary Checking",
       },
       {
-        icon: GRNIcon,
-        path: "/vendor-po/grn",
+        icon: WashingIcon,
+        path: "/vendor-po/washing",
         type: "link",
         active: false,
         selected: false,
-        title: "GRN",
+        title: "Washing",
+      },
+      {
+        icon: BoardingIcon,
+        path: "/vendor-po/boarding",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Boarding",
       },
       {
         icon: BrandingIcon,
@@ -554,6 +574,14 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Counting & Dispatch",
+      },
+      {
+        icon: GRNIcon,
+        path: "/vendor-po/grn",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "GRN",
       },
     ],
   },
