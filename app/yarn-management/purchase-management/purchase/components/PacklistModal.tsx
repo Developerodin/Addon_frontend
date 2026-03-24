@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "react-hot-toast";
 import { FileUploadService, formatFileSize, getFileIcon } from "@/shared/services/fileUploadService";
 
@@ -111,6 +112,14 @@ function normalizeExistingPacklist(
   }));
 }
 
+/** Spreadsheet-style cells — dark grid lines for readability */
+const excelTh =
+  "border border-gray-600 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider bg-gray-50/30 whitespace-nowrap";
+const excelTd = "border border-gray-600 p-0 align-middle bg-white";
+const excelInput =
+  "w-full min-h-[30px] px-1.5 py-1 text-xs text-gray-900 border-0 bg-transparent focus:outline-none focus:ring-0 focus:bg-purple-50/60 placeholder:text-gray-400 disabled:opacity-50";
+const excelTextarea =
+  "w-full min-h-[52px] px-1.5 py-1.5 text-xs text-gray-900 border-0 bg-transparent focus:outline-none focus:ring-0 focus:bg-purple-50/60 placeholder:text-gray-400 resize-y disabled:opacity-50";
 const PacklistModal: React.FC<PacklistModalProps> = ({
   isOpen,
   onClose,
@@ -121,7 +130,31 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
 }) => {
   const [packlistEntries, setPacklistEntries] = useState<PacklistDetails[]>([defaultEntry(null)]);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
+  const [poDropdown, setPoDropdown] = useState<{
+    entryIndex: number;
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
   const prevOpenRef = React.useRef(false);
+
+  useEffect(() => {
+    if (!poDropdown) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest("[data-packlist-po-floating]") || t.closest("[data-packlist-po-trigger]")) return;
+      setPoDropdown(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPoDropdown(null);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [poDropdown]);
 
   // When modal opens: pre-fill from existingPacklistData (e.g. goods partially received) or default one entry
   useEffect(() => {
@@ -138,6 +171,7 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
     if (!isOpen) {
       setPacklistEntries([defaultEntry(order)]);
       setUploadingFiles({});
+      setPoDropdown(null);
     }
   }, [isOpen, order]);
 
@@ -218,6 +252,21 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
           ? { ...entry, poItems: selectedItemIds }
           : entry
       )
+    );
+  };
+
+  const togglePoItem = (index: number, itemId: string, checked: boolean) => {
+    const idStr = String(itemId);
+    setPacklistEntries((prev) =>
+      prev.map((entry, idx) => {
+        if (idx !== index) return entry;
+        const cur = entry.poItems || [];
+        if (checked) {
+          if (cur.some((x) => String(x) === idStr)) return entry;
+          return { ...entry, poItems: [...cur, idStr] };
+        }
+        return { ...entry, poItems: cur.filter((x) => String(x) !== idStr) };
+      })
     );
   };
 
@@ -336,18 +385,19 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
   };
 
   return (
+    <>
     <div className={`fixed inset-0 z-50 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`}>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[51] bg-gray-500 bg-opacity-75 transition-opacity duration-300 ${
           isOpen ? 'opacity-100' : 'opacity-0'
         }`}
         onClick={onClose}
       ></div>
 
-      {/* Side Modal */}
+      {/* Side panel: wide enough to align with main content (matches purchase order Excel-style tables) */}
       <div
-        className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
+        className={`fixed right-0 top-0 z-[52] h-full w-full max-w-[min(78rem,calc(100vw-16rem))] bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -400,24 +450,38 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                   <div className="mt-3">
                     <label className="text-[10px] font-medium text-gray-600 mb-1 block">Order Items</label>
                     <div className="overflow-x-auto">
-                      <table className="min-w-full border border-gray-200">
+                      <table className="min-w-full border border-gray-600 bg-white">
                         <thead className="bg-gray-50/30">
                           <tr>
-                            <th className="px-2 py-1 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Yarn Name</th>
-                            <th className="px-2 py-1 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Size/Count</th>
-                            <th className="px-2 py-1 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Shade Code</th>
-                            <th className="px-2 py-1 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Quantity</th>
-                            <th className="px-2 py-1 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Rate</th>
+                            <th className="border border-gray-600 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[180px]">
+                              Yarn Name
+                            </th>
+                            <th className="border border-gray-600 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[100px]">
+                              Size
+                            </th>
+                            <th className="border border-gray-600 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[100px]">
+                              Shade Code
+                            </th>
+                            <th className="border border-gray-600 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[90px]">
+                              Qty (kg)
+                            </th>
+                            <th className="border border-gray-600 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[90px]">
+                              Rate (₹)
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
                           {order.items.map((item, idx) => (
-                            <tr key={idx} className="bg-white">
-                              <td className="px-2 py-1 border border-gray-200 text-xs text-gray-900">{item.yarnName}</td>
-                              <td className="px-2 py-1 border border-gray-200 text-xs text-gray-900">{item.sizeCount}</td>
-                              <td className="px-2 py-1 border border-gray-200 text-xs text-gray-900">{item.shadeCode}</td>
-                              <td className="px-2 py-1 text-right border border-gray-200 text-xs text-gray-900">{item.quantity.toLocaleString()}</td>
-                              <td className="px-2 py-1 text-right border border-gray-200 text-xs text-gray-900">₹{item.rate.toLocaleString()}</td>
+                            <tr key={idx} className="bg-white hover:bg-gray-50">
+                              <td className="border border-gray-600 px-2 py-1.5 text-xs text-gray-900">{item.yarnName}</td>
+                              <td className="border border-gray-600 px-2 py-1.5 text-xs text-gray-900">{item.sizeCount}</td>
+                              <td className="border border-gray-600 px-2 py-1.5 text-xs text-gray-900">{item.shadeCode}</td>
+                              <td className="border border-gray-600 px-2 py-1.5 text-right text-xs text-gray-900">
+                                {item.quantity.toLocaleString()}
+                              </td>
+                              <td className="border border-gray-600 px-2 py-1.5 text-right text-xs text-gray-900">
+                                ₹{item.rate.toLocaleString()}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -429,14 +493,17 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
             )}
 
             <p className="text-xs text-gray-600 mb-3">
-              Please provide packlist details to update the order status to "In Transit". You can add multiple packlist entries.
+              Each packlist entry is one Excel row: use the first cell to select PO lines (Ctrl+click or ⌘+click for multiple), then fill packing, courier, dates, boxes, weight, and notes in the same row.
             </p>
 
             <div className="space-y-4">
               {packlistEntries.map((entry, entryIndex) => (
-                <div key={entryIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-xs font-semibold text-gray-800">
+                <div
+                  key={entryIndex}
+                  className="border border-gray-600 rounded-sm bg-white overflow-hidden shadow-sm"
+                >
+                  <div className="flex items-center justify-between px-2 py-1.5 bg-gray-50/80 border-b border-gray-600">
+                    <h4 className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">
                       Packlist Entry {entryIndex + 1}
                     </h4>
                     {packlistEntries.length > 1 && (
@@ -452,254 +519,259 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                     )}
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">
-                          Packing Number <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          name="packingNumber"
-                          value={entry.packingNumber}
-                          onChange={(e) => handleInputChange(entryIndex, e)}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                          placeholder="Enter packing number"
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">
-                          Courier Name <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          name="courierName"
-                          value={entry.courierName}
-                          onChange={(e) => handleInputChange(entryIndex, e)}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                          placeholder="Enter courier name"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">
-                          Courier Number
-                        </label>
-                        <input
-                          type="text"
-                          name="courierNumber"
-                          value={entry.courierNumber || ''}
-                          onChange={(e) => handleInputChange(entryIndex, e)}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                          placeholder="Enter courier number"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">
-                          Vehicle Number
-                        </label>
-                        <input
-                          type="text"
-                          name="vehicleNumber"
-                          value={entry.vehicleNumber || ''}
-                          onChange={(e) => handleInputChange(entryIndex, e)}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                          placeholder="Enter vehicle number"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">
-                          Challan Number
-                        </label>
-                        <input
-                          type="text"
-                          name="challanNumber"
-                          value={entry.challanNumber || ''}
-                          onChange={(e) => handleInputChange(entryIndex, e)}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                          placeholder="Enter challan number"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">
-                          Dispatch Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          name="dispatchDate"
-                          value={entry.dispatchDate}
-                          onChange={(e) => handleInputChange(entryIndex, e)}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">
-                          Estimated Delivery Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          name="estimatedDeliveryDate"
-                          value={entry.estimatedDeliveryDate}
-                          onChange={(e) => handleInputChange(entryIndex, e)}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                          min={entry.dispatchDate}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">
-                          Number of Boxes <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          name="numberOfBoxes"
-                          value={entry.numberOfBoxes || ""}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            // Allow empty string or valid positive integer (no leading zeros except single digit)
-                            if (value === "") {
-                              handleInputChange(entryIndex, e);
-                            } else if (/^[1-9]\d*$/.test(value) || /^[1-9]$/.test(value)) {
-                              // Allow positive integers starting with 1-9, or single digit 1-9
-                              handleInputChange(entryIndex, e);
-                            } else if (/^0$/.test(value)) {
-                              // Prevent just "0"
-                              return;
-                            }
-                          }}
-                          onBlur={(e) => {
-                            // Ensure valid number on blur
-                            const value = e.target.value;
-                            const numValue = parseInt(value, 10);
-                            if (!value || isNaN(numValue) || numValue < 1) {
-                              const currentValue = entry.numberOfBoxes || 0;
-                              e.target.value = currentValue > 0 ? currentValue.toString() : "";
-                              if (currentValue > 0) {
-                                handleInputChange(entryIndex, e);
-                              }
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            // Prevent non-numeric keys except backspace, delete, tab, arrow keys
-                            if (!/[0-9]/.test(e.key) && 
-                                !['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) &&
-                                !(e.ctrlKey && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase()))) {
-                              e.preventDefault();
-                            }
-                          }}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                          placeholder="Enter number of boxes"
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">
-                          Total Weight (kg) <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          name="totalWeight"
-                          step="0.01"
-                          min="0"
-                          value={entry.totalWeight || ""}
-                          onChange={(e) => handleInputChange(entryIndex, e)}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                          placeholder="Enter weight in kg (e.g. 12.5)"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">
-                        PO Items <span className="text-red-500">*</span>
-                        {entry.poItems && entry.poItems.length > 0 && (
-                          <span className="text-[10px] text-gray-600 ml-2">
-                            ({entry.poItems.length} selected)
-                          </span>
-                        )}
-                      </label>
-                      <div className="border border-gray-200 rounded-lg p-2 max-h-48 overflow-y-auto bg-white">
-                        {order?.items && order.items.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {order.items.map((item) => {
-                              const currentPoItems = entry.poItems || [];
-                              const isSelected = currentPoItems.some(id => String(id) === String(item.id));
-                              return (
-                                <label
-                                  key={item.id}
-                                  className={`flex items-start p-1.5 rounded cursor-pointer hover:bg-gray-50 ${
-                                    isSelected ? 'bg-blue-50 border border-blue-200' : ''
-                                  }`}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[960px] w-full border-collapse border border-gray-600 bg-white">
+                      <thead>
+                        <tr>
+                          <th className={`${excelTh} min-w-[11rem] align-top`}>
+                            PO Items <span className="text-red-500">*</span>
+                          </th>
+                          <th className={`${excelTh} min-w-[120px]`}>
+                            Packing # <span className="text-red-500">*</span>
+                          </th>
+                          <th className={`${excelTh} min-w-[120px]`}>
+                            Courier <span className="text-red-500">*</span>
+                          </th>
+                          <th className={`${excelTh} min-w-[100px]`}>Courier #</th>
+                          <th className={`${excelTh} min-w-[100px]`}>Vehicle #</th>
+                          <th className={`${excelTh} min-w-[100px]`}>Challan #</th>
+                          <th className={`${excelTh} min-w-[118px]`}>
+                            Dispatch <span className="text-red-500">*</span>
+                          </th>
+                          <th className={`${excelTh} min-w-[118px]`}>
+                            Est. Delivery <span className="text-red-500">*</span>
+                          </th>
+                          <th className={`${excelTh} min-w-[72px] text-right`}>
+                            Boxes <span className="text-red-500">*</span>
+                          </th>
+                          <th className={`${excelTh} min-w-[88px] text-right`}>
+                            Wt (kg) <span className="text-red-500">*</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td className={`${excelTd} align-top p-0`}>
+                            {order?.items && order.items.length > 0 ? (
+                              <div className="min-h-[30px] min-w-[10.5rem] max-w-[18rem]">
+                                <button
+                                  type="button"
+                                  data-packlist-po-trigger
+                                  disabled={isSubmitting}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setPoDropdown((prev) => {
+                                      if (prev?.entryIndex === entryIndex) return null;
+                                      return {
+                                        entryIndex,
+                                        top: rect.bottom + 4,
+                                        left: rect.left,
+                                        width: Math.max(rect.width, 260),
+                                      };
+                                    });
+                                  }}
+                                  className={`${excelInput} flex w-full min-h-[30px] items-center justify-between gap-1 px-1.5 text-left`}
+                                  aria-expanded={poDropdown?.entryIndex === entryIndex}
+                                  aria-haspopup="listbox"
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={(e) => {
-                                      const currentItems = entry.poItems || [];
-                                      if (e.target.checked) {
-                                        handlePoItemsChange(entryIndex, [...currentItems, item.id]);
-                                      } else {
-                                        handlePoItemsChange(entryIndex, currentItems.filter(id => id !== item.id));
-                                      }
-                                    }}
-                                    className="mt-0.5 me-2 h-3.5 w-3.5 text-blue-600 focus:ring-0 border-gray-300 rounded"
+                                  <span className="truncate">
+                                    {(entry.poItems || []).length === 0 ? (
+                                      <span className="text-gray-400">Select PO lines…</span>
+                                    ) : (entry.poItems || []).length === 1 ? (
+                                      (() => {
+                                        const id = (entry.poItems || [])[0];
+                                        const line = order.items.find(
+                                          (it) => String(it.id) === String(id)
+                                        );
+                                        return line
+                                          ? `${line.yarnName} · ${line.sizeCount}`
+                                          : "1 line";
+                                      })()
+                                    ) : (
+                                      `${(entry.poItems || []).length} lines selected`
+                                    )}
+                                  </span>
+                                  <i
+                                    className={`ri-arrow-down-s-line shrink-0 text-gray-500 transition-transform ${
+                                      poDropdown?.entryIndex === entryIndex ? "rotate-180" : ""
+                                    }`}
+                                    aria-hidden
                                   />
-                                  <div className="flex-1">
-                                    <div className="text-xs font-medium text-gray-900">
-                                      {item.yarnName}
-                                    </div>
-                                    <div className="text-[10px] text-gray-600 mt-0.5">
-                                      <span className="me-2">Size/Count: {item.sizeCount}</span>
-                                      <span className="me-2">Shade: {item.shadeCode}</span>
-                                      <span>Qty: {item.quantity}</span>
-                                    </div>
-                                  </div>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-gray-500 text-center py-3">
-                            No PO items available
-                          </p>
-                        )}
-                      </div>
-                      {entry.poItems && entry.poItems.length === 0 && (
-                        <p className="text-[10px] text-red-500 mt-1">
-                          Please select at least one PO item
-                        </p>
-                      )}
-                    </div>
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="px-1.5 py-2 text-[10px] text-gray-500">
+                                No PO lines on this order.
+                              </p>
+                            )}
+                          </td>
+                          <td className={excelTd}>
+                            <input
+                              type="text"
+                              name="packingNumber"
+                              value={entry.packingNumber}
+                              onChange={(e) => handleInputChange(entryIndex, e)}
+                              className={excelInput}
+                              placeholder="—"
+                              required
+                              disabled={isSubmitting}
+                            />
+                          </td>
+                          <td className={excelTd}>
+                            <input
+                              type="text"
+                              name="courierName"
+                              value={entry.courierName}
+                              onChange={(e) => handleInputChange(entryIndex, e)}
+                              className={excelInput}
+                              placeholder="—"
+                              required
+                              disabled={isSubmitting}
+                            />
+                          </td>
+                          <td className={excelTd}>
+                            <input
+                              type="text"
+                              name="courierNumber"
+                              value={entry.courierNumber || ""}
+                              onChange={(e) => handleInputChange(entryIndex, e)}
+                              className={excelInput}
+                              placeholder="—"
+                              disabled={isSubmitting}
+                            />
+                          </td>
+                          <td className={excelTd}>
+                            <input
+                              type="text"
+                              name="vehicleNumber"
+                              value={entry.vehicleNumber || ""}
+                              onChange={(e) => handleInputChange(entryIndex, e)}
+                              className={excelInput}
+                              placeholder="—"
+                              disabled={isSubmitting}
+                            />
+                          </td>
+                          <td className={excelTd}>
+                            <input
+                              type="text"
+                              name="challanNumber"
+                              value={entry.challanNumber || ""}
+                              onChange={(e) => handleInputChange(entryIndex, e)}
+                              className={excelInput}
+                              placeholder="—"
+                              disabled={isSubmitting}
+                            />
+                          </td>
+                          <td className={excelTd}>
+                            <input
+                              type="date"
+                              name="dispatchDate"
+                              value={entry.dispatchDate}
+                              onChange={(e) => handleInputChange(entryIndex, e)}
+                              className={`${excelInput} min-w-[7.5rem]`}
+                              required
+                              disabled={isSubmitting}
+                            />
+                          </td>
+                          <td className={excelTd}>
+                            <input
+                              type="date"
+                              name="estimatedDeliveryDate"
+                              value={entry.estimatedDeliveryDate}
+                              onChange={(e) => handleInputChange(entryIndex, e)}
+                              className={`${excelInput} min-w-[7.5rem]`}
+                              min={entry.dispatchDate}
+                              required
+                              disabled={isSubmitting}
+                            />
+                          </td>
+                          <td className={excelTd}>
+                            <input
+                              type="text"
+                              name="numberOfBoxes"
+                              value={entry.numberOfBoxes || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                if (value === "") {
+                                  handleInputChange(entryIndex, e);
+                                } else if (/^[1-9]\d*$/.test(value) || /^[1-9]$/.test(value)) {
+                                  handleInputChange(entryIndex, e);
+                                } else if (/^0$/.test(value)) {
+                                  return;
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const value = e.target.value;
+                                const numValue = parseInt(value, 10);
+                                if (!value || isNaN(numValue) || numValue < 1) {
+                                  const currentValue = entry.numberOfBoxes || 0;
+                                  e.target.value = currentValue > 0 ? currentValue.toString() : "";
+                                  if (currentValue > 0) {
+                                    handleInputChange(entryIndex, e);
+                                  }
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (
+                                  !/[0-9]/.test(e.key) &&
+                                  !["Backspace", "Delete", "Tab", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key) &&
+                                  !(e.ctrlKey && ["a", "c", "v", "x"].includes(e.key.toLowerCase()))
+                                ) {
+                                  e.preventDefault();
+                                }
+                              }}
+                              className={`${excelInput} text-right tabular-nums`}
+                              placeholder="0"
+                              required
+                              disabled={isSubmitting}
+                            />
+                          </td>
+                          <td className={excelTd}>
+                            <input
+                              type="number"
+                              name="totalWeight"
+                              step="0.01"
+                              min="0"
+                              value={entry.totalWeight || ""}
+                              onChange={(e) => handleInputChange(entryIndex, e)}
+                              className={`${excelInput} text-right tabular-nums`}
+                              placeholder="0.00"
+                              required
+                              disabled={isSubmitting}
+                            />
+                          </td>
+                        </tr>
+                        <tr>
+                          <th colSpan={10} className={`${excelTh} border-t-2 border-gray-600`}>
+                            Notes
+                          </th>
+                        </tr>
+                        <tr>
+                          <td colSpan={10} className={excelTd}>
+                            <textarea
+                              name="notes"
+                              value={entry.notes || ""}
+                              onChange={(e) => handleInputChange(entryIndex, e)}
+                              className={excelTextarea}
+                              rows={2}
+                              placeholder="Optional remarks…"
+                              disabled={isSubmitting}
+                            />
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  {(!entry.poItems || entry.poItems.length === 0) &&
+                    order?.items &&
+                    order.items.length > 0 && (
+                      <p className="text-[10px] text-red-600 px-2 py-1.5 bg-amber-50/60 border-t border-amber-100">
+                        Select at least one PO line in the first column (multi-select list).
+                      </p>
+                    )}
 
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">Notes</label>
-                      <textarea
-                        name="notes"
-                        value={entry.notes || ''}
-                        onChange={(e) => handleInputChange(entryIndex, e)}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                        rows={2}
-                        placeholder="Additional notes about the shipment..."
-                      />
-                    </div>
-
+                  <div className="p-2 space-y-3 border-t border-gray-200 bg-gray-50/30">
                     <div>
                       <label className="text-xs font-medium text-gray-600 mb-1 block">
                         Files
@@ -721,7 +793,7 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
                           />
                           <label
                             htmlFor={`file-upload-${entryIndex}`}
-                            className={`flex items-center justify-center gap-2 px-3 py-2 text-xs border border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 transition-colors ${
+                            className={`flex items-center justify-center gap-2 px-3 py-2 text-xs border border-dashed border-gray-600 rounded cursor-pointer hover:bg-gray-50 transition-colors ${
                               isSubmitting || Object.values(uploadingFiles).some(v => v) ? 'opacity-50 cursor-not-allowed' : ''
                             }`}
                           >
@@ -823,6 +895,54 @@ const PacklistModal: React.FC<PacklistModalProps> = ({
         </form>
       </div>
     </div>
+    {poDropdown &&
+      order &&
+      typeof document !== "undefined" &&
+      createPortal(
+        <div
+          data-packlist-po-floating
+          className="fixed max-h-[min(20rem,55vh)] overflow-y-auto overscroll-contain rounded border border-gray-600 bg-white pt-1 pb-4 shadow-xl"
+          style={{
+            top: poDropdown.top,
+            left: poDropdown.left,
+            width: poDropdown.width,
+            zIndex: 10000,
+          }}
+          role="listbox"
+          aria-multiselectable
+          onMouseDown={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
+        >
+          {(() => {
+            const entry = packlistEntries[poDropdown.entryIndex];
+            if (!entry) return null;
+            const idx = poDropdown.entryIndex;
+            return order.items.map((item) => {
+              const selected = (entry.poItems || []).some(
+                (id) => String(id) === String(item.id)
+              );
+              const label = `${item.yarnName} · ${item.sizeCount} · ${item.shadeCode}`;
+              return (
+                <label
+                  key={item.id}
+                  className="flex cursor-pointer items-start gap-2 px-2 py-1.5 text-[11px] hover:bg-purple-50/80"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    disabled={isSubmitting}
+                    onChange={(e) => togglePoItem(idx, String(item.id), e.target.checked)}
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-gray-600 text-purple-600 focus:ring-0"
+                  />
+                  <span className="leading-snug text-gray-800">{label}</span>
+                </label>
+              );
+            });
+          })()}
+        </div>,
+        document.body
+      )}
+    </>
   );
 };
 

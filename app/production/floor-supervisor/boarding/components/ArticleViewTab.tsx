@@ -29,6 +29,12 @@ function flattenOrdersToArticles(orders: ProductionOrder[]): ArticleRow[] {
   return rows;
 }
 
+function csvCell(value: string | number): string {
+  const s = String(value ?? "");
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
 export default function ArticleViewTab({
   orders,
   onViewOrder,
@@ -53,6 +59,60 @@ export default function ArticleViewTab({
         (r.article.linkingType ?? "").toLowerCase().includes(q)
     );
   }, [articleRows, articleSearch]);
+
+  const handleExportExcel = () => {
+    const headers = [
+      "Article",
+      "Linking Type",
+      "Order",
+      "Order Status",
+      "Priority",
+      "Planned",
+      "Received",
+      "Done",
+      "Transferred",
+      "Remaining",
+    ];
+
+    const rows = filteredRows.map(({ article, order }) => {
+      const planned = article.plannedQuantity ?? 0;
+      const board = (article as { floorQuantities?: { boarding?: { received?: number; completed?: number; transferred?: number; remaining?: number } } }).floorQuantities?.boarding;
+      const received = board?.received ?? 0;
+      const done = board?.completed ?? 0;
+      const transferred = board?.transferred ?? 0;
+      const remaining = board?.remaining ?? Math.max(0, received - transferred);
+
+      return [
+        article.articleNumber ?? "—",
+        article.linkingType ?? "N/A",
+        order.orderNumber ?? order.id ?? "—",
+        order.status ?? "",
+        order.priority ?? "",
+        planned,
+        received,
+        done,
+        transferred,
+        remaining,
+      ];
+    });
+
+    const csvContent = [
+      headers.map(csvCell).join(","),
+      ...rows.map((r) => r.map(csvCell).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const now = new Date();
+    const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    a.href = url;
+    a.download = `boarding-article-view-${ts}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   if (orders.length === 0) {
     return (
@@ -92,6 +152,16 @@ export default function ArticleViewTab({
           <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
         </div>
         <span className="text-[11px] font-medium text-[#495057]">{filteredRows.length} article{filteredRows.length !== 1 ? "s" : ""}</span>
+        <button
+          type="button"
+          onClick={handleExportExcel}
+          disabled={filteredRows.length === 0}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Download current table rows as Excel-compatible CSV"
+        >
+          <i className="ri-file-excel-2-line text-xs text-emerald-600" />
+          Download Excel
+        </button>
       </div>
       <div className="overflow-x-auto border border-gray-200 rounded">
         <table className="w-full border-collapse border border-gray-200">

@@ -1773,6 +1773,10 @@ const YarnReturnPage = () => {
                 yarnId = txData.yarn;
               } else if (txData.yarn && typeof txData.yarn === "object") {
                 yarnId = txData.yarn._id || txData.yarn.id || null;
+              } else if (typeof txData.yarnCatalogId === "string") {
+                yarnId = txData.yarnCatalogId;
+              } else if (txData.yarnCatalogId && typeof txData.yarnCatalogId === "object") {
+                yarnId = txData.yarnCatalogId._id || txData.yarnCatalogId.id || null;
               }
               console.log("✅ Got yarn ID from transaction:", yarnId);
             } else {

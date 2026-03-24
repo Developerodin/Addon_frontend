@@ -2609,9 +2609,9 @@ const ProductListPage = () => {
               </button>
               {showMoreExports && (
                 <div className="flex flex-wrap gap-2 mt-2 w-full">
-                  {/* <button type="button" onClick={handleExportAll} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 text-[11px] font-bold rounded hover:bg-purple-100" disabled={isLoading}>
+                  <button type="button" onClick={handleExportAll} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 text-[11px] font-bold rounded hover:bg-purple-100" disabled={isLoading}>
                     <i className="ri-download-2-line text-xs"></i> Export All
-                  </button> */}
+                  </button>
                   {/* <span className="text-[11px] font-bold text-gray-500 self-center mr-1">Process Excel:</span>
                   <button type="button" onClick={handleProcessExcelExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold rounded hover:bg-amber-100" disabled={isLoading}>
                     <i className="ri-download-2-line text-xs"></i> Process Excel Export

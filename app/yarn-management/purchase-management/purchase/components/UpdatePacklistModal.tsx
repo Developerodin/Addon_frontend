@@ -358,7 +358,7 @@ const UpdatePacklistModal: React.FC<UpdatePacklistModalProps> = ({
 
         {/* Modal panel */}
         <div 
-          className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full max-h-[90vh] overflow-y-auto"
+          className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle w-full max-w-[min(calc(100vw-2rem),92rem)] sm:w-full max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           <form onSubmit={handleSubmit}>
@@ -403,24 +403,38 @@ const UpdatePacklistModal: React.FC<UpdatePacklistModalProps> = ({
                     <div className="mt-4">
                       <label className="text-xs font-medium text-gray-600 mb-2 block">Order Items</label>
                       <div className="overflow-x-auto">
-                        <table className="min-w-full text-xs border border-gray-200">
-                          <thead className="bg-gray-100">
+                        <table className="min-w-full border border-gray-300 bg-white text-xs">
+                          <thead className="bg-gray-50/30">
                             <tr>
-                              <th className="px-2 py-1 text-left border border-gray-200">Yarn Name</th>
-                              <th className="px-2 py-1 text-left border border-gray-200">Size/Count</th>
-                              <th className="px-2 py-1 text-left border border-gray-200">Shade Code</th>
-                              <th className="px-2 py-1 text-right border border-gray-200">Quantity (kg)</th>
-                              <th className="px-2 py-1 text-right border border-gray-200">Rate</th>
+                              <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[180px]">
+                                Yarn Name
+                              </th>
+                              <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[100px]">
+                                Size
+                              </th>
+                              <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[100px]">
+                                Shade Code
+                              </th>
+                              <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[90px]">
+                                Qty (kg)
+                              </th>
+                              <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[90px]">
+                                Rate (₹)
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
                             {order.items.map((item, idx) => (
-                              <tr key={idx} className="bg-white">
-                                <td className="px-2 py-1 border border-gray-200">{item.yarnName}</td>
-                                <td className="px-2 py-1 border border-gray-200">{item.sizeCount}</td>
-                                <td className="px-2 py-1 border border-gray-200">{item.shadeCode}</td>
-                                <td className="px-2 py-1 text-right border border-gray-200">{item.quantity.toLocaleString()}</td>
-                                <td className="px-2 py-1 text-right border border-gray-200">₹{item.rate.toLocaleString()}</td>
+                              <tr key={idx} className="bg-white hover:bg-gray-50">
+                                <td className="border border-gray-300 px-2 py-1.5 text-gray-900">{item.yarnName}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-gray-900">{item.sizeCount}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-gray-900">{item.shadeCode}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-right text-gray-900">
+                                  {item.quantity.toLocaleString()}
+                                </td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-right text-gray-900">
+                                  ₹{item.rate.toLocaleString()}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -642,48 +656,81 @@ const UpdatePacklistModal: React.FC<UpdatePacklistModalProps> = ({
                             </span>
                           )}
                         </label>
-                        <div className="border border-gray-300 rounded-lg p-3 max-h-60 overflow-y-auto bg-white">
+                        <p className="text-xs text-gray-500 mb-2">
+                          Select lines in this shipment using the same spreadsheet-style grid as purchase order entry.
+                        </p>
+                        <div className="overflow-x-auto max-h-[min(60vh,28rem)] overflow-y-auto rounded border border-gray-300 bg-white">
                           {order?.items && order.items.length > 0 ? (
-                            <div className="space-y-2">
-                              {order.items.map((item) => {
-                                const currentPoItems = entry.poItems || [];
-                                const isSelected = currentPoItems.some(id => String(id) === String(item.id));
-                                return (
-                                  <label
-                                    key={item.id}
-                                    className={`flex items-start p-2 rounded cursor-pointer hover:bg-gray-50 ${
-                                      isSelected ? 'bg-blue-50 border border-blue-200' : ''
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={(e) => {
-                                        const currentItems = entry.poItems || [];
-                                        if (e.target.checked) {
-                                          handlePoItemsChange(entryIndex, [...currentItems, item.id]);
-                                        } else {
-                                          handlePoItemsChange(entryIndex, currentItems.filter(id => id !== item.id));
-                                        }
-                                      }}
-                                      className="mt-1 me-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                    />
-                                    <div className="flex-1">
-                                      <div className="text-sm font-medium text-gray-900">
+                            <table className="min-w-full border-collapse border border-gray-300 bg-white">
+                              <thead className="bg-gray-50/30 sticky top-0 z-[1]">
+                                <tr>
+                                  <th className="border border-gray-300 px-1.5 py-1.5 text-center text-[10px] font-bold text-gray-700 uppercase tracking-wider w-10">
+                                    Incl.
+                                  </th>
+                                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[200px]">
+                                    Yarn Name
+                                  </th>
+                                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[100px]">
+                                    Size
+                                  </th>
+                                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[100px]">
+                                    Shade
+                                  </th>
+                                  <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[90px]">
+                                    Qty (kg)
+                                  </th>
+                                  <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[90px]">
+                                    Rate (₹)
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {order.items.map((item) => {
+                                  const currentPoItems = entry.poItems || [];
+                                  const isSelected = currentPoItems.some(id => String(id) === String(item.id));
+                                  return (
+                                    <tr
+                                      key={item.id}
+                                      className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50/80' : 'bg-white'}`}
+                                    >
+                                      <td className="border border-gray-300 px-1.5 py-1 text-center align-middle">
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          onChange={(e) => {
+                                            const currentItems = entry.poItems || [];
+                                            if (e.target.checked) {
+                                              handlePoItemsChange(entryIndex, [...currentItems, item.id]);
+                                            } else {
+                                              handlePoItemsChange(entryIndex, currentItems.filter(id => id !== item.id));
+                                            }
+                                          }}
+                                          className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                                          aria-label={`Include ${item.yarnName}`}
+                                        />
+                                      </td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-sm font-medium text-gray-900">
                                         {item.yarnName}
-                                      </div>
-                                      <div className="text-xs text-gray-600 mt-1">
-                                        <span className="me-3">Size/Count: {item.sizeCount}</span>
-                                        <span className="me-3">Shade: {item.shadeCode}</span>
-                                        <span>Qty: {item.quantity}</span>
-                                      </div>
-                                    </div>
-                                  </label>
-                                );
-                              })}
-                            </div>
+                                      </td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-sm text-gray-900">
+                                        {item.sizeCount}
+                                      </td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-sm text-gray-900">
+                                        {item.shadeCode}
+                                      </td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-right text-sm text-gray-900">
+                                        {item.quantity.toLocaleString()}
+                                      </td>
+                                      <td className="border border-gray-300 px-2 py-1.5 text-right text-sm text-gray-900">
+                                        ₹{item.rate.toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           ) : (
-                            <p className="text-sm text-gray-500 text-center py-4">
+                            <p className="text-sm text-gray-500 text-center py-6 px-3">
                               No PO items available
                             </p>
                           )}

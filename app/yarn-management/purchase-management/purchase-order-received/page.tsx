@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
@@ -307,6 +307,13 @@ const getOrderSortValue = (order: PurchaseOrder, field: OrderSortField) => {
       return (order[field] as string).toLowerCase();
   }
 };
+
+/** Goods Received drawer — spreadsheet cells (neutral grays, darker than gray-200, no blue/purple tint) */
+const grExcelTh =
+  "border border-gray-400 px-2 py-1.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider bg-gray-50/50 whitespace-nowrap";
+const grExcelTd = "border border-gray-400 p-0 align-middle bg-white";
+const grExcelInput =
+  "w-full min-h-[30px] px-1.5 py-1 text-xs text-gray-900 border-0 bg-transparent focus:outline-none focus:ring-0 focus:bg-gray-100/90 placeholder:text-gray-400 disabled:opacity-50";
 
 const PurchaseOrderReceivedPage = () => {
   const router = useRouter();
@@ -934,7 +941,7 @@ const PurchaseOrderReceivedPage = () => {
                 `}} />
                 <input
                   type="text"
-                  className="purchase-order-received-search w-full bg-white border-2 border-gray-600 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:!border-2 focus:!border-gray-600 focus:outline-none placeholder:text-gray-600 transition-all font-medium"
+                  className="purchase-order-received-search w-full bg-white border-2 border-gray-400 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:!border-2 focus:!border-gray-400 focus:outline-none placeholder:text-gray-600 transition-all font-medium"
                   placeholder="Search"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -1900,6 +1907,57 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   const [deleteConfirmLotIndex, setDeleteConfirmLotIndex] = useState<number | null>(null);
   const [isDeletingLot, setIsDeletingLot] = useState(false);
   const [isDeletingAllLots, setIsDeletingAllLots] = useState(false);
+  /** After Add Lot: scroll to new block and focus first field */
+  const scrollNewLotAfterAdd = useRef(false);
+
+  /** Packlist-style floating PO line picker (single-select per row) */
+  const [grPoDropdown, setGrPoDropdown] = useState<{
+    lotIndex: number;
+    poItemIndex: number;
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setGrPoDropdown(null);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!grPoDropdown) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest("[data-gr-po-floating]") || t.closest("[data-gr-po-trigger]")) return;
+      setGrPoDropdown(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setGrPoDropdown(null);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [grPoDropdown]);
+
+  useEffect(() => {
+    if (!scrollNewLotAfterAdd.current) return;
+    scrollNewLotAfterAdd.current = false;
+    const idx = lots.length - 1;
+    if (idx < 0) return;
+    const scrollAndFocus = () => {
+      const el = document.getElementById(`goods-received-lot-${idx}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const firstInput = el?.querySelector<HTMLInputElement>(
+        "input:not([disabled])"
+      );
+      firstInput?.focus();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scrollAndFocus));
+  }, [lots]);
 
   // Helper function to check if a lot is saved (exists in original lots)
   const isLotSaved = (lotNumber: string): boolean => {
@@ -1948,12 +2006,14 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
         }]);
         setRawInputValues({});
       }
+      setGrPoDropdown(null);
     }
   }, [isOpen, order]);
 
   if (!isOpen) return null;
 
   const addLot = () => {
+    scrollNewLotAfterAdd.current = true;
     setLots([...lots, {
       lotNumber: '',
       numberOfCones: 0,
@@ -2211,6 +2271,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   };
 
   return (
+    <>
     <div className={`fixed inset-0 z-50 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`}>
       {/* Backdrop */}
       <div
@@ -2222,7 +2283,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
 
       {/* Side Modal - z-[52] so it's above backdrop and receives clicks */}
       <div
-        className={`fixed right-0 top-0 z-[52] h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
+        className={`fixed right-0 top-0 z-[52] h-full w-full max-w-[min(78rem,calc(100vw-16rem))] bg-white shadow-xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -2273,24 +2334,24 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                 <div className="mt-3">
                   <label className="text-[10px] font-medium text-gray-600 mb-1 block">Order Items</label>
                   <div className="overflow-x-auto">
-                    <table className="min-w-full border border-gray-200">
+                    <table className="min-w-full border-collapse border border-gray-400 bg-white">
                       <thead className="bg-gray-50/30">
                         <tr>
-                          <th className="px-2 py-1 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Yarn Name</th>
-                          <th className="px-2 py-1 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Size/Count</th>
-                          <th className="px-2 py-1 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Shade Code</th>
-                          <th className="px-2 py-1 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Quantity</th>
-                          <th className="px-2 py-1 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider border border-gray-200">Rate</th>
+                          <th className={grExcelTh}>Yarn Name</th>
+                          <th className={grExcelTh}>Size/Count</th>
+                          <th className={grExcelTh}>Shade Code</th>
+                          <th className={`${grExcelTh} text-right`}>Quantity</th>
+                          <th className={`${grExcelTh} text-right`}>Rate</th>
                         </tr>
                       </thead>
                       <tbody>
                         {order.items.map((item, idx) => (
-                          <tr key={idx} className="bg-white">
-                            <td className="px-2 py-1 border border-gray-200 text-xs text-gray-900">{item.yarnName}</td>
-                            <td className="px-2 py-1 border border-gray-200 text-xs text-gray-900">{item.sizeCount}</td>
-                            <td className="px-2 py-1 border border-gray-200 text-xs text-gray-900">{item.shadeCode}</td>
-                            <td className="px-2 py-1 text-right border border-gray-200 text-xs text-gray-900">{item.quantity.toLocaleString()}</td>
-                            <td className="px-2 py-1 text-right border border-gray-200 text-xs text-gray-900">₹{item.rate.toLocaleString()}</td>
+                          <tr key={idx} className="bg-white hover:bg-gray-50/50">
+                            <td className="border border-gray-400 px-2 py-1.5 text-xs text-gray-900">{item.yarnName}</td>
+                            <td className="border border-gray-400 px-2 py-1.5 text-xs text-gray-900">{item.sizeCount}</td>
+                            <td className="border border-gray-400 px-2 py-1.5 text-xs text-gray-900">{item.shadeCode}</td>
+                            <td className="border border-gray-400 px-2 py-1.5 text-right text-xs text-gray-900">{item.quantity.toLocaleString()}</td>
+                            <td className="border border-gray-400 px-2 py-1.5 text-right text-xs text-gray-900">₹{item.rate.toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2300,82 +2361,78 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
               )}
             </div>
 
-            {/* Packlist Details */}
+            {/* Packlist Details — read-only spreadsheet rows */}
             {(order.packListDetails && order.packListDetails.length > 0) || order.packlistDetails ? (
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-400">
                 <h4 className="text-xs font-semibold text-gray-700 mb-2">Packlist Details</h4>
                   {(() => {
-                    // Handle both array and single object formats
                     const packListData = order.packListDetails || (order.packlistDetails ? [order.packlistDetails] : []);
-                    
+
                     return packListData.map((packlist: any, packIndex: number) => {
-                      // Get PO item names for display
-                      const poItemNames = packlist.poItems && Array.isArray(packlist.poItems) 
-                        ? packlist.poItems.map((poItemId: string) => {
-                            const item = order.items.find((i: any) => String(i.id) === String(poItemId));
-                            return item ? `${item.yarnName} - ${item.sizeCount} - ${item.shadeCode}` : `PO Item ${poItemId}`;
-                          }).join(', ')
-                        : 'N/A';
+                      const poItemNames =
+                        packlist.poItems && Array.isArray(packlist.poItems)
+                          ? packlist.poItems
+                              .map((poItemId: string) => {
+                                const item = order.items.find((i: any) => String(i.id) === String(poItemId));
+                                return item
+                                  ? `${item.yarnName} - ${item.sizeCount} - ${item.shadeCode}`
+                                  : `PO Item ${poItemId}`;
+                              })
+                              .join(", ")
+                          : "N/A";
+
+                      const rows: [string, string][] = [
+                        ["Packing Number", packlist.packingNumber || packlist.packing_number || "N/A"],
+                        ["Courier Name", packlist.courierName || packlist.courier_name || "N/A"],
+                        ["Courier Number", packlist.courierNumber || packlist.courier_number || "N/A"],
+                        ["Vehicle Number", packlist.vehicleNumber || packlist.vehicle_number || "N/A"],
+                        ["Challan Number", packlist.challanNumber || packlist.challan_number || "N/A"],
+                        [
+                          "Dispatch Date",
+                          packlist.dispatchDate || packlist.dispatch_date
+                            ? new Date(packlist.dispatchDate || packlist.dispatch_date).toLocaleDateString()
+                            : "N/A",
+                        ],
+                        [
+                          "Estimated Delivery Date",
+                          packlist.estimatedDeliveryDate || packlist.estimated_delivery_date
+                            ? new Date(
+                                packlist.estimatedDeliveryDate || packlist.estimated_delivery_date
+                              ).toLocaleDateString()
+                            : "N/A",
+                        ],
+                        [
+                          "Number of Boxes",
+                          String(packlist.numberOfBoxes ?? packlist.number_of_boxes ?? 0),
+                        ],
+                        ["Total Weight (kg)", String(packlist.totalWeight ?? packlist.total_weight ?? 0)],
+                      ];
+                      if (packlist.notes) {
+                        rows.push(["Notes", packlist.notes]);
+                      }
+                      rows.push(["PO Items", poItemNames]);
 
                       return (
-                        <div key={packIndex} className="mb-3 last:mb-0 p-3 bg-white rounded-lg border border-gray-200">
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            <div>
-                              <label className="text-[10px] font-medium text-gray-600">Packing Number</label>
-                              <div className="mt-0.5 text-xs text-gray-900 font-medium">{packlist.packingNumber || packlist.packing_number || 'N/A'}</div>
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-medium text-gray-600">Courier Name</label>
-                              <div className="mt-0.5 text-xs text-gray-900">{packlist.courierName || packlist.courier_name || 'N/A'}</div>
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-medium text-gray-600">Courier Number</label>
-                              <div className="mt-0.5 text-xs text-gray-900">{packlist.courierNumber || packlist.courier_number || 'N/A'}</div>
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-medium text-gray-600">Vehicle Number</label>
-                              <div className="mt-0.5 text-xs text-gray-900">{packlist.vehicleNumber || packlist.vehicle_number || 'N/A'}</div>
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-medium text-gray-600">Challan Number</label>
-                              <div className="mt-0.5 text-xs text-gray-900">{packlist.challanNumber || packlist.challan_number || 'N/A'}</div>
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-medium text-gray-600">Dispatch Date</label>
-                              <div className="mt-0.5 text-xs text-gray-900">
-                                {packlist.dispatchDate || packlist.dispatch_date 
-                                  ? new Date(packlist.dispatchDate || packlist.dispatch_date).toLocaleDateString()
-                                  : 'N/A'}
-                              </div>
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-medium text-gray-600">Estimated Delivery Date</label>
-                              <div className="mt-0.5 text-xs text-gray-900">
-                                {packlist.estimatedDeliveryDate || packlist.estimated_delivery_date 
-                                  ? new Date(packlist.estimatedDeliveryDate || packlist.estimated_delivery_date).toLocaleDateString()
-                                  : 'N/A'}
-                              </div>
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-medium text-gray-600">Number of Boxes</label>
-                              <div className="mt-0.5 text-xs text-gray-900 font-medium">{packlist.numberOfBoxes || packlist.number_of_boxes || 0}</div>
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-medium text-gray-600">Total Weight (kg)</label>
-                              <div className="mt-0.5 text-xs text-gray-900 font-medium">{packlist.totalWeight || packlist.total_weight || 0}</div>
-                            </div>
-                            {packlist.notes && (
-                              <div className="md:col-span-2 lg:col-span-3">
-                                <label className="text-[10px] font-medium text-gray-600">Notes</label>
-                                <div className="mt-0.5 text-xs text-gray-900">{packlist.notes}</div>
-                              </div>
-                            )}
-                            {poItemNames && (
-                              <div className="md:col-span-2 lg:col-span-3">
-                                <label className="text-[10px] font-medium text-gray-600">PO Items</label>
-                                <div className="mt-0.5 text-xs text-gray-900">{poItemNames}</div>
-                              </div>
-                            )}
+                        <div
+                          key={packIndex}
+                          className="mb-3 last:mb-0 border border-gray-400 rounded-sm bg-white overflow-hidden shadow-sm"
+                        >
+                          <div className="px-2 py-1.5 text-[10px] font-bold text-gray-700 uppercase tracking-wider bg-gray-50/30 border-b border-gray-400">
+                            Packlist {packIndex + 1}
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full border-collapse border border-gray-400 bg-white">
+                              <tbody>
+                                {rows.map(([label, val], rowIdx) => (
+                                  <tr key={rowIdx}>
+                                    <td className={`${grExcelTh} w-[38%] max-w-[12rem]`}>{label}</td>
+                                    <td className="border border-gray-400 px-2 py-1.5 text-xs text-gray-900 align-top">
+                                      {val}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       );
@@ -2392,7 +2449,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                   <button
                     type="button"
                     onClick={addLot}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 text-white text-[11px] font-bold rounded border border-gray-500 hover:bg-gray-800 transition-colors shadow-sm"
                   >
                     <i className="ri-add-line text-xs"></i>
                     Add Lot
@@ -2453,12 +2510,18 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                 const lotIsSaved = isLotSaved(lot.lotNumber);
                 
                 return (
-                <div key={lotIndex} className={`border rounded-lg p-3 space-y-3 relative ${lotIsSaved ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
-                  <div className="flex justify-between items-center">
+                <div
+                  key={lotIndex}
+                  id={`goods-received-lot-${lotIndex}`}
+                  className={`mb-4 border border-gray-400 rounded-sm bg-white overflow-hidden shadow-sm relative ${
+                    lotIsSaved ? "ring-1 ring-gray-400 bg-gray-100/50" : ""
+                  }`}
+                >
+                  <div className="flex justify-between items-center px-2 py-1.5 bg-gray-50/80 border-b border-gray-400">
                     <div className="flex items-center gap-2">
                       <h5 className="text-xs font-semibold text-gray-800">Lot {lotIndex + 1}</h5>
                       {lotIsSaved && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-blue-100 text-blue-800">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-gray-200 text-gray-800">
                           <i className="ri-save-line text-[10px]"></i>
                           Saved
                         </span>
@@ -2482,306 +2545,361 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                     )}
                   </div>
                   {lotIsSaved && (
-                    <span className="text-[10px] text-gray-500 italic block -mt-1">Cannot edit - saved lots are read-only</span>
+                    <span className="text-[10px] text-gray-500 italic block px-2 pt-1.5 pb-0.5">
+                      Cannot edit — saved lots are read-only
+                    </span>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">
-                        Lot Number <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={lot.lotNumber}
-                        onChange={(e) => updateLot(lotIndex, 'lotNumber', e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                        placeholder="Enter lot number"
-                        required
-                        disabled={lotIsSaved}
-                      />
-                      {lotIsSaved && (
-                        <p className="text-[10px] text-gray-500 mt-1">
-                          This lot is saved and cannot be edited. Saved lots can only be viewed.
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">
-                        Number of Cones <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={rawInputValues[`lot-${lotIndex}-cones`] !== undefined 
-                          ? rawInputValues[`lot-${lotIndex}-cones`] 
-                          : (lot.numberOfCones === 0 ? '' : lot.numberOfCones.toString())}
-                        disabled={lotIsSaved}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          const key = `lot-${lotIndex}-cones`;
-                          
-                          // Allow empty string, numbers, and decimal point
-                          if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                            // Store raw input value
-                            setRawInputValues(prev => ({
-                              ...prev,
-                              [key]: value
-                            }));
-                            
-                            // Also update the numeric value if valid
-                            if (value === '' || value === '.') {
-                              updateLot(lotIndex, 'numberOfCones', 0);
-                            } else {
-                              const numValue = parseFloat(value);
-                              if (!isNaN(numValue)) {
-                                updateLot(lotIndex, 'numberOfCones', numValue);
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[720px] w-full border-collapse border border-gray-400 bg-white">
+                      <thead>
+                        <tr>
+                          <th className={grExcelTh}>Lot # *</th>
+                          <th className={grExcelTh}>Cones *</th>
+                          <th className={grExcelTh}>Wt (kg) *</th>
+                          <th className={grExcelTh}>Boxes *</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td className={`${grExcelTd} align-top`}>
+                            <input
+                              type="text"
+                              value={lot.lotNumber}
+                              onChange={(e) => updateLot(lotIndex, "lotNumber", e.target.value)}
+                              className={grExcelInput}
+                              placeholder="Lot number"
+                              required
+                              disabled={lotIsSaved}
+                            />
+                            {lotIsSaved && (
+                              <p className="text-[10px] text-gray-500 px-1.5 pb-1">
+                                This lot is saved and cannot be edited.
+                              </p>
+                            )}
+                          </td>
+                          <td className={grExcelTd}>
+                            <input
+                              type="text"
+                              value={
+                                rawInputValues[`lot-${lotIndex}-cones`] !== undefined
+                                  ? rawInputValues[`lot-${lotIndex}-cones`]
+                                  : lot.numberOfCones === 0
+                                    ? ""
+                                    : lot.numberOfCones.toString()
                               }
-                            }
-                          }
-                        }}
-                        onBlur={(e) => {
-                          const value = e.target.value;
-                          const key = `lot-${lotIndex}-cones`;
-                          const numValue = parseFloat(value);
-                          
-                          // Clear raw input value on blur
-                          setRawInputValues(prev => {
-                            const newValues = { ...prev };
-                            delete newValues[key];
-                            return newValues;
-                          });
-                          
-                          // Update numeric value
-                          if (value === '' || isNaN(numValue) || numValue <= 0) {
-                            updateLot(lotIndex, 'numberOfCones', 0);
-                          } else {
-                            updateLot(lotIndex, 'numberOfCones', numValue);
-                          }
-                        }}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                        placeholder="0.00"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">
-                        Total Weight (kg) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={rawInputValues[`lot-${lotIndex}-totalWeight`] !== undefined 
-                          ? rawInputValues[`lot-${lotIndex}-totalWeight`] 
-                          : (lot.totalWeight === 0 ? '' : lot.totalWeight.toString())}
-                        disabled={lotIsSaved}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          const key = `lot-${lotIndex}-totalWeight`;
-                          
-                          // Allow empty string, numbers, and decimal point
-                          if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                            setRawInputValues(prev => ({
-                              ...prev,
-                              [key]: value
-                            }));
-                            
-                            if (value === '' || value === '.') {
-                              updateLot(lotIndex, 'totalWeight', 0);
-                            } else {
-                              const numValue = parseFloat(value);
-                              if (!isNaN(numValue)) {
-                                updateLot(lotIndex, 'totalWeight', numValue);
+                              disabled={lotIsSaved}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const key = `lot-${lotIndex}-cones`;
+                                if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                  setRawInputValues((prev) => ({
+                                    ...prev,
+                                    [key]: value,
+                                  }));
+                                  if (value === "" || value === ".") {
+                                    updateLot(lotIndex, "numberOfCones", 0);
+                                  } else {
+                                    const numValue = parseFloat(value);
+                                    if (!isNaN(numValue)) {
+                                      updateLot(lotIndex, "numberOfCones", numValue);
+                                    }
+                                  }
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const value = e.target.value;
+                                const key = `lot-${lotIndex}-cones`;
+                                const numValue = parseFloat(value);
+                                setRawInputValues((prev) => {
+                                  const newValues = { ...prev };
+                                  delete newValues[key];
+                                  return newValues;
+                                });
+                                if (value === "" || isNaN(numValue) || numValue <= 0) {
+                                  updateLot(lotIndex, "numberOfCones", 0);
+                                } else {
+                                  updateLot(lotIndex, "numberOfCones", numValue);
+                                }
+                              }}
+                              className={grExcelInput}
+                              placeholder="0"
+                              required
+                            />
+                          </td>
+                          <td className={grExcelTd}>
+                            <input
+                              type="text"
+                              value={
+                                rawInputValues[`lot-${lotIndex}-totalWeight`] !== undefined
+                                  ? rawInputValues[`lot-${lotIndex}-totalWeight`]
+                                  : lot.totalWeight === 0
+                                    ? ""
+                                    : lot.totalWeight.toString()
                               }
-                            }
-                          }
-                        }}
-                        onBlur={(e) => {
-                          const value = e.target.value;
-                          const key = `lot-${lotIndex}-totalWeight`;
-                          const numValue = parseFloat(value);
-                          
-                          setRawInputValues(prev => {
-                            const newValues = { ...prev };
-                            delete newValues[key];
-                            return newValues;
-                          });
-                          
-                          if (value === '' || isNaN(numValue) || numValue <= 0) {
-                            updateLot(lotIndex, 'totalWeight', 0);
-                          } else {
-                            updateLot(lotIndex, 'totalWeight', numValue);
-                          }
-                        }}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                        placeholder="0.00"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">
-                        Number of Boxes <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={rawInputValues[`lot-${lotIndex}-numberOfBoxes`] !== undefined 
-                          ? rawInputValues[`lot-${lotIndex}-numberOfBoxes`] 
-                          : (lot.numberOfBoxes === 0 ? '' : lot.numberOfBoxes.toString())}
-                        disabled={lotIsSaved}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          const key = `lot-${lotIndex}-numberOfBoxes`;
-                          
-                          // Allow empty string, numbers, and decimal point
-                          if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                            setRawInputValues(prev => ({
-                              ...prev,
-                              [key]: value
-                            }));
-                            
-                            if (value === '' || value === '.') {
-                              updateLot(lotIndex, 'numberOfBoxes', 0);
-                            } else {
-                              const numValue = parseFloat(value);
-                              if (!isNaN(numValue)) {
-                                updateLot(lotIndex, 'numberOfBoxes', numValue);
+                              disabled={lotIsSaved}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const key = `lot-${lotIndex}-totalWeight`;
+                                if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                  setRawInputValues((prev) => ({
+                                    ...prev,
+                                    [key]: value,
+                                  }));
+                                  if (value === "" || value === ".") {
+                                    updateLot(lotIndex, "totalWeight", 0);
+                                  } else {
+                                    const numValue = parseFloat(value);
+                                    if (!isNaN(numValue)) {
+                                      updateLot(lotIndex, "totalWeight", numValue);
+                                    }
+                                  }
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const value = e.target.value;
+                                const key = `lot-${lotIndex}-totalWeight`;
+                                const numValue = parseFloat(value);
+                                setRawInputValues((prev) => {
+                                  const newValues = { ...prev };
+                                  delete newValues[key];
+                                  return newValues;
+                                });
+                                if (value === "" || isNaN(numValue) || numValue <= 0) {
+                                  updateLot(lotIndex, "totalWeight", 0);
+                                } else {
+                                  updateLot(lotIndex, "totalWeight", numValue);
+                                }
+                              }}
+                              className={grExcelInput}
+                              placeholder="0.00"
+                              required
+                            />
+                          </td>
+                          <td className={grExcelTd}>
+                            <input
+                              type="text"
+                              value={
+                                rawInputValues[`lot-${lotIndex}-numberOfBoxes`] !== undefined
+                                  ? rawInputValues[`lot-${lotIndex}-numberOfBoxes`]
+                                  : lot.numberOfBoxes === 0
+                                    ? ""
+                                    : lot.numberOfBoxes.toString()
                               }
-                            }
-                          }
-                        }}
-                        onBlur={(e) => {
-                          const value = e.target.value;
-                          const key = `lot-${lotIndex}-numberOfBoxes`;
-                          const numValue = parseFloat(value);
-                          
-                          setRawInputValues(prev => {
-                            const newValues = { ...prev };
-                            delete newValues[key];
-                            return newValues;
-                          });
-                          
-                          if (value === '' || isNaN(numValue) || numValue <= 0) {
-                            updateLot(lotIndex, 'numberOfBoxes', 0);
-                          } else {
-                            updateLot(lotIndex, 'numberOfBoxes', numValue);
-                          }
-                        }}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                        placeholder="0.00"
-                        required
-                      />
-                    </div>
+                              disabled={lotIsSaved}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const key = `lot-${lotIndex}-numberOfBoxes`;
+                                if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                  setRawInputValues((prev) => ({
+                                    ...prev,
+                                    [key]: value,
+                                  }));
+                                  if (value === "" || value === ".") {
+                                    updateLot(lotIndex, "numberOfBoxes", 0);
+                                  } else {
+                                    const numValue = parseFloat(value);
+                                    if (!isNaN(numValue)) {
+                                      updateLot(lotIndex, "numberOfBoxes", numValue);
+                                    }
+                                  }
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const value = e.target.value;
+                                const key = `lot-${lotIndex}-numberOfBoxes`;
+                                const numValue = parseFloat(value);
+                                setRawInputValues((prev) => {
+                                  const newValues = { ...prev };
+                                  delete newValues[key];
+                                  return newValues;
+                                });
+                                if (value === "" || isNaN(numValue) || numValue <= 0) {
+                                  updateLot(lotIndex, "numberOfBoxes", 0);
+                                } else {
+                                  updateLot(lotIndex, "numberOfBoxes", numValue);
+                                }
+                              }}
+                              className={grExcelInput}
+                              placeholder="0"
+                              required
+                            />
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
 
-                  {/* PO Items */}
-                  <div className="mt-3">
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="text-xs font-medium text-gray-600">PO Items <span className="text-red-500">*</span></label>
+                  <div className="border-t border-gray-400">
+                    <div className="flex justify-between items-center px-2 py-1.5 bg-gray-50/50 border-b border-gray-400">
+                      <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">
+                        PO Items <span className="text-red-500">*</span>
+                      </span>
                       {!lotIsSaved && (
                         <button
                           type="button"
                           onClick={() => addPoItemToLot(lotIndex)}
-                          className="flex items-center gap-1 px-2 py-1 bg-white text-purple-600 text-[10px] font-bold rounded border border-purple-200 hover:bg-purple-50 transition-colors"
+                          className="flex items-center gap-1 px-2 py-1 bg-white text-gray-700 text-[10px] font-bold rounded border border-gray-400 hover:bg-gray-50 transition-colors"
                         >
                           <i className="ri-add-line text-xs"></i>
                           Add PO Item
                         </button>
                       )}
                     </div>
-
-                    {lot.poItems.map((poItem, poItemIndex) => (
-                      <div key={poItemIndex} className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2 p-2 bg-gray-50 rounded">
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">
-                            PO Item <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={poItem.poItem}
-                            onChange={(e) => updatePoItem(lotIndex, poItemIndex, 'poItem', e.target.value)}
-                            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                            required
-                            disabled={lotIsSaved}
-                          >
-                            <option value="">Select PO Item</option>
-                            {getFilteredPoItems().map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.yarnName} - {item.sizeCount} - {item.shadeCode} (Qty: {item.quantity})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">
-                            Received Quantity (kg) <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] !== undefined 
-                              ? rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] 
-                              : (poItem.receivedQuantity === 0 ? '' : poItem.receivedQuantity.toString())}
-                            disabled={lotIsSaved}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
-                              
-                              // Allow empty string, numbers, and decimal point
-                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                                setRawInputValues(prev => ({
-                                  ...prev,
-                                  [key]: value
-                                }));
-                                
-                                if (value === '' || value === '.') {
-                                  updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', 0);
-                                } else {
-                                  const numValue = parseFloat(value);
-                                  if (!isNaN(numValue)) {
-                                    updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', numValue);
+                    <div className="overflow-x-auto">
+                      <table className="min-w-[640px] w-full border-collapse border border-gray-400 border-t-0 bg-white">
+                        <thead>
+                          <tr>
+                            <th className={grExcelTh}>PO Item *</th>
+                            <th className={grExcelTh}>Rec. Qty (kg) *</th>
+                            <th className={`${grExcelTh} w-[7rem] text-center`}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lot.poItems.map((poItem, poItemIndex) => (
+                            <tr key={poItemIndex} className="hover:bg-gray-50/50">
+                              <td className={`${grExcelTd} align-top p-0`}>
+                                {order.items && order.items.length > 0 ? (
+                                  <div className="min-h-[30px] min-w-[10.5rem] max-w-[28rem]">
+                                    <button
+                                      type="button"
+                                      data-gr-po-trigger
+                                      disabled={lotIsSaved}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setGrPoDropdown((prev) => {
+                                          if (
+                                            prev?.lotIndex === lotIndex &&
+                                            prev?.poItemIndex === poItemIndex
+                                          ) {
+                                            return null;
+                                          }
+                                          return {
+                                            lotIndex,
+                                            poItemIndex,
+                                            top: rect.bottom + 4,
+                                            left: rect.left,
+                                            width: Math.max(rect.width, 280),
+                                          };
+                                        });
+                                      }}
+                                      className={`${grExcelInput} flex w-full min-h-[30px] items-center justify-between gap-1 px-1.5 text-left`}
+                                      aria-expanded={
+                                        grPoDropdown?.lotIndex === lotIndex &&
+                                        grPoDropdown?.poItemIndex === poItemIndex
+                                      }
+                                      aria-haspopup="listbox"
+                                    >
+                                      <span className="truncate">
+                                        {!poItem.poItem ? (
+                                          <span className="text-gray-400">Select PO line…</span>
+                                        ) : (
+                                          (() => {
+                                            const line = order.items.find(
+                                              (it) => String(it.id) === String(poItem.poItem)
+                                            );
+                                            return line
+                                              ? `${line.yarnName} · ${line.sizeCount} · ${line.shadeCode}`
+                                              : "—";
+                                          })()
+                                        )}
+                                      </span>
+                                      <i
+                                        className={`ri-arrow-down-s-line shrink-0 text-gray-500 transition-transform ${
+                                          grPoDropdown?.lotIndex === lotIndex &&
+                                          grPoDropdown?.poItemIndex === poItemIndex
+                                            ? "rotate-180"
+                                            : ""
+                                        }`}
+                                        aria-hidden
+                                      />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <p className="px-1.5 py-2 text-[10px] text-gray-500">
+                                    No PO lines on this order.
+                                  </p>
+                                )}
+                              </td>
+                              <td className={grExcelTd}>
+                                <input
+                                  type="text"
+                                  value={
+                                    rawInputValues[`lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`] !==
+                                    undefined
+                                      ? rawInputValues[
+                                          `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`
+                                        ]
+                                      : poItem.receivedQuantity === 0
+                                        ? ""
+                                        : poItem.receivedQuantity.toString()
                                   }
-                                }
-                              }
-                            }}
-                            onBlur={(e) => {
-                              const value = e.target.value;
-                              const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
-                              const numValue = parseFloat(value);
-                              
-                              setRawInputValues(prev => {
-                                const newValues = { ...prev };
-                                delete newValues[key];
-                                return newValues;
-                              });
-                              
-                              if (value === '' || isNaN(numValue) || numValue <= 0) {
-                                updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', 0);
-                              } else {
-                                updatePoItem(lotIndex, poItemIndex, 'receivedQuantity', numValue);
-                              }
-                            }}
-                            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-                            placeholder="0.00"
-                            required
-                          />
-                        </div>
-
-                        <div className="flex items-end">
-                          {!lotIsSaved && (
-                            <button
-                              type="button"
-                              onClick={() => removePoItemFromLot(lotIndex, poItemIndex)}
-                              className="flex items-center gap-1 px-2 py-1 bg-red-50 text-red-600 text-[10px] font-bold rounded border border-red-200 hover:bg-red-100 transition-colors w-full"
-                            >
-                              <i className="ri-delete-bin-line text-xs"></i>
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
+                                  disabled={lotIsSaved}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
+                                    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                      setRawInputValues((prev) => ({
+                                        ...prev,
+                                        [key]: value,
+                                      }));
+                                      if (value === "" || value === ".") {
+                                        updatePoItem(lotIndex, poItemIndex, "receivedQuantity", 0);
+                                      } else {
+                                        const numValue = parseFloat(value);
+                                        if (!isNaN(numValue)) {
+                                          updatePoItem(
+                                            lotIndex,
+                                            poItemIndex,
+                                            "receivedQuantity",
+                                            numValue
+                                          );
+                                        }
+                                      }
+                                    }
+                                  }}
+                                  onBlur={(e) => {
+                                    const value = e.target.value;
+                                    const key = `lot-${lotIndex}-poItem-${poItemIndex}-receivedQuantity`;
+                                    const numValue = parseFloat(value);
+                                    setRawInputValues((prev) => {
+                                      const newValues = { ...prev };
+                                      delete newValues[key];
+                                      return newValues;
+                                    });
+                                    if (value === "" || isNaN(numValue) || numValue <= 0) {
+                                      updatePoItem(lotIndex, poItemIndex, "receivedQuantity", 0);
+                                    } else {
+                                      updatePoItem(lotIndex, poItemIndex, "receivedQuantity", numValue);
+                                    }
+                                  }}
+                                  className={grExcelInput}
+                                  placeholder="0.00"
+                                  required
+                                />
+                              </td>
+                              <td className={`${grExcelTd} text-center`}>
+                                {!lotIsSaved && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removePoItemFromLot(lotIndex, poItemIndex)}
+                                    className="inline-flex items-center justify-center gap-1 px-2 py-1 m-0.5 bg-red-50 text-red-600 text-[10px] font-bold rounded border border-red-200 hover:bg-red-100 transition-colors"
+                                  >
+                                    <i className="ri-delete-bin-line text-xs"></i>
+                                    Remove
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                     {lot.poItems.length === 0 && (
-                      <p className="text-[10px] text-gray-500">No PO items added. Click "Add PO Item" to add items.</p>
+                      <p className="text-[10px] text-gray-500 px-2 py-2 bg-white">
+                        No PO items added. Click &quot;Add PO Item&quot; to add rows.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -2883,6 +3001,49 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
         </form>
       </div>
     </div>
+    {grPoDropdown &&
+      typeof document !== "undefined" &&
+      createPortal(
+        <div
+          data-gr-po-floating
+          className="fixed max-h-[min(20rem,55vh)] overflow-y-auto overscroll-contain rounded border border-gray-400 bg-white pt-1 pb-4 shadow-xl"
+          style={{
+            top: grPoDropdown.top,
+            left: grPoDropdown.left,
+            width: grPoDropdown.width,
+            zIndex: 10000,
+          }}
+          role="listbox"
+          onMouseDown={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
+        >
+          {getFilteredPoItems().map((item) => {
+            const d = grPoDropdown;
+            const rowPo = lots[d.lotIndex]?.poItems[d.poItemIndex];
+            const selected = rowPo && String(rowPo.poItem) === String(item.id);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`flex w-full cursor-pointer items-start gap-2 px-2 py-1.5 text-left text-[11px] hover:bg-gray-100 ${
+                  selected ? "bg-gray-100" : ""
+                }`}
+                onClick={() => {
+                  updatePoItem(d.lotIndex, d.poItemIndex, "poItem", item.id);
+                  setGrPoDropdown(null);
+                }}
+              >
+                <span className="leading-snug text-gray-800">
+                  {item.yarnName} · {item.sizeCount} · {item.shadeCode}{" "}
+                  <span className="text-gray-500">(Qty: {item.quantity})</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </>
   );
 };
 

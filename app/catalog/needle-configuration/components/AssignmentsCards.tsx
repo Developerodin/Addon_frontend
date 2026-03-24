@@ -34,43 +34,71 @@ function getItemCounts(a: AssignmentRow): { poCount: number; articleCount: numbe
 /** Dark purplish-blue gradient (top-left darker → bottom-right lighter bluish purple) */
 const CARD_BG = "linear-gradient(135deg, #2d2a4e 0%, #3a3768 50%, #4a4d8c 100%)";
 
-/** Brighter blue – no yarn issued (compact yarn-issue cards). */
-const CARD_BG_ISSUE_NONE =
+/** Yellow gradient – post cut-off, “Ask for yarn” not clicked yet (Pending / Not Started). */
+const CARD_BG_ISSUE_YELLOW =
+  "linear-gradient(135deg, #a16207 0%, #eab308 50%, #facc15 100%)";
+/** Blue gradient (same as earlier yarn-issue “not issued” cards) – In Progress or On Hold. */
+const CARD_BG_ISSUE_BLUE =
   "linear-gradient(135deg, #4a5590 0%, #5c6aa8 50%, #7280c0 100%)";
-/** Brighter green – yarn issued (all or partial) (compact yarn-issue cards). */
+/** Green – yarn issue marked Completed (all items). */
 const CARD_BG_ISSUE_GREEN =
   "linear-gradient(135deg, #2d6b48 0%, #3d8f5e 50%, #52a872 100%)";
 
-/** Aggregate yarnIssueStatus across a machine’s items. */
-function getMachineYarnIssueProgress(row: AssignmentRow): "none" | "partial" | "all" {
-  const items = (row as { productionOrderItems?: Array<{ yarnIssueStatus?: string }> }).productionOrderItems ?? [];
-  if (!items.length) return "none";
-  const statuses = items
-    .map((i) => (i?.yarnIssueStatus || "").toString())
-    .filter((s) => s.length > 0);
-  if (!statuses.length) return "none";
-  const completed = statuses.filter((s) => s.toLowerCase() === "completed").length;
-  if (completed === 0) return "none";
-  if (completed === statuses.length) return "all";
-  return "partial";
+function norm(s: string | undefined): string {
+  return (s ?? "").toString().trim().toLowerCase();
+}
+
+/**
+ * Compact yarn-issue machine cards:
+ * - Yellow: waiting for floor “Ask for yarn” (Pending / Not Started / empty).
+ * - Blue: In Progress (ask clicked) or order item On Hold.
+ * - Green: every item’s yarnIssueStatus is Completed.
+ */
+export function getMachineYarnIssueCardTone(row: AssignmentRow): "yellow" | "blue" | "green" {
+  const items =
+    (row as { productionOrderItems?: Array<{ yarnIssueStatus?: string; status?: string }> }).productionOrderItems ?? [];
+  if (!items.length) return "yellow";
+
+  const yarnStatuses = items.map((i) => norm(i.yarnIssueStatus));
+  const orderStatuses = items.map((i) => norm(i.status));
+
+  const allCompleted =
+    yarnStatuses.length > 0 && yarnStatuses.every((s) => s === "completed");
+  if (allCompleted) return "green";
+
+  const anyInProgress = yarnStatuses.some((s) => s === "in progress");
+  const anyOnHold = orderStatuses.some((s) => s === "on hold");
+  if (anyInProgress || anyOnHold) return "blue";
+
+  return "yellow";
+}
+
+/** Yarn-issue compact grid: blue machines first, then yellow, then green; stable tie-break by machine label. */
+export function sortMachineAssignmentsByYarnIssueTone(rows: AssignmentRow[]): AssignmentRow[] {
+  const toneRank: Record<ReturnType<typeof getMachineYarnIssueCardTone>, number> = {
+    blue: 0,
+    yellow: 1,
+    green: 2,
+  };
+  return [...rows].sort((a, b) => {
+    const d = toneRank[getMachineYarnIssueCardTone(a)] - toneRank[getMachineYarnIssueCardTone(b)];
+    if (d !== 0) return d;
+    return machineLabel(a).localeCompare(machineLabel(b), undefined, { numeric: true, sensitivity: "base" });
+  });
 }
 
 function getCardBackground(row: AssignmentRow, compact: boolean, nameOnly: boolean): string {
   // For the standard (non-compact) assignment view, keep existing look.
   if (!compact) return CARD_BG;
-  // In compact cards (used by yarn-issue page): issued = green, not issued = blue.
-  const progress = getMachineYarnIssueProgress(row);
-  switch (progress) {
-    case "all":
-      // All yarn issued → green
+  // Compact cards (yarn-issue): yellow / blue / green from yarn + order status.
+  switch (getMachineYarnIssueCardTone(row)) {
+    case "green":
       return CARD_BG_ISSUE_GREEN;
-    case "partial":
-      // Partially issued → green
-      return CARD_BG_ISSUE_GREEN;
-    case "none":
+    case "blue":
+      return CARD_BG_ISSUE_BLUE;
+    case "yellow":
     default:
-      // No yarn issued → blue
-      return CARD_BG_ISSUE_NONE;
+      return CARD_BG_ISSUE_YELLOW;
   }
 }
 
