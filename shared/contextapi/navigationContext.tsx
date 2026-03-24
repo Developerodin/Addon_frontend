@@ -81,6 +81,7 @@ interface NavigationPermissions {
     'Boarding': boolean;
     'Branding': boolean;
     'Final Checking': boolean;
+    'Dispatch': boolean;
     'Counting & Dispatch': boolean;
     'GRN': boolean;
   };
@@ -173,6 +174,7 @@ const defaultPermissions: NavigationPermissions = {
     'Boarding': false,
     'Branding': false,
     'Final Checking': false,
+    'Dispatch': false,
     'Counting & Dispatch': false,
     'GRN': false,
   },

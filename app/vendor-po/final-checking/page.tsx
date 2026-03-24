@@ -6,9 +6,11 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { CRM } from "../vendor-list/crmUiClasses";
 import vendorProductionFlowService, { 
+  type FinalCheckingM2TransferToFloorKey,
   VendorProductionFlow, 
-  FinalCheckingFloorQuantity 
+  FinalCheckingFloorQuantity,
 } from "@/shared/services/vendorProductionFlowService";
+import { VendorFinalCheckingProcessDrawer } from "./components/VendorFinalCheckingProcessDrawer";
 
 const FinalCheckingPage = () => {
   const [flows, setFlows] = useState<VendorProductionFlow[]>([]);
@@ -19,6 +21,8 @@ const FinalCheckingPage = () => {
   const [selectedFlow, setSelectedFlow] = useState<VendorProductionFlow | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingData, setProcessingData] = useState<Partial<FinalCheckingFloorQuantity>>({});
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const loadFlows = useCallback(async () => {
     setLoading(true);
@@ -79,13 +83,60 @@ const FinalCheckingPage = () => {
     }
   };
 
+  const handleTransferM2 = useCallback(
+    async (toFloorKey: FinalCheckingM2TransferToFloorKey, quantity: number) => {
+      if (!selectedFlow) return;
+      setTransferLoading(true);
+      try {
+        const updated = await vendorProductionFlowService.transferFinalCheckingM2(selectedFlow.id, {
+          toFloorKey,
+          quantity,
+        });
+        toast.success(`Transferred M2 ${quantity.toLocaleString()} -> ${toFloorKey}`);
+        setSelectedFlow(updated);
+        setFlows((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+        const q = updated.floorQuantities.finalChecking;
+        setProcessingData({
+          received: q.received ?? 0,
+          m1Quantity: q.m1Quantity ?? 0,
+          m2Quantity: q.m2Quantity ?? 0,
+          m4Quantity: q.m4Quantity ?? 0,
+          m1Transferred: q.m1Transferred ?? 0,
+          m2Transferred: q.m2Transferred ?? 0,
+          m2Remaining: q.m2Remaining ?? 0,
+          repairStatus: q.repairStatus ?? "NOT_REQUIRED",
+          repairRemarks: q.repairRemarks ?? "",
+          transferredData: q.transferredData ?? [],
+        });
+      } catch (err: any) {
+        toast.error(err.message || "M2 transfer failed");
+      } finally {
+        setTransferLoading(false);
+      }
+    },
+    [selectedFlow]
+  );
+
   const handleConfirmFinalQuality = async (id: string) => {
+    const flow = flows.find((f) => f.id === id);
+    const final = flow?.floorQuantities?.finalChecking;
+    const effectiveCompleted =
+      (final?.completed ?? 0) + (final?.m1Quantity ?? 0) + (final?.m2Quantity ?? 0) + (final?.m4Quantity ?? 0);
+    if (effectiveCompleted <= 0) {
+      toast.error("Cannot confirm: final checking has no QC quantities yet");
+      return;
+    }
+    setConfirmingId(id);
     try {
-      await vendorProductionFlowService.confirmFinalQuality(id);
+      await vendorProductionFlowService.confirmFinalQuality(id, {
+        remarks: "Dispatch ready and confirmed",
+      });
       toast.success("Batch quality confirmed and completed");
       loadFlows();
     } catch (err: any) {
       toast.error(err.message || "Confirmation failed");
+    } finally {
+      setConfirmingId(null);
     }
   };
 
@@ -133,6 +184,14 @@ const FinalCheckingPage = () => {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className={`${CRM.label} mb-0`}>Show:</label>
+              <select className={`${CRM.select} w-20`} value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))}>
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
             </div>
           </div>
 
@@ -187,15 +246,18 @@ const FinalCheckingPage = () => {
                          </td>
                          <td className={CRM.td}>
                             <div className={CRM.rowActions}>
-                               <button onClick={() => handleOpenProcess(flow)} className={CRM.btnSecondary + " h-7 w-7 !p-0"}>
+                               <button onClick={() => handleOpenProcess(flow)} className={CRM.btnPrimarySm}>
                                  <i className="ri-edit-line" />
+                                 Process
                                </button>
                                {!flow.finalQualityConfirmed && (
                                  <button 
+                                   type="button"
                                    onClick={() => handleConfirmFinalQuality(flow.id)}
                                    className={CRM.btnPrimarySm}
+                                   disabled={confirmingId === flow.id}
                                  >
-                                   Confirm Batch
+                                   {confirmingId === flow.id ? "..." : "Confirm Batch"}
                                  </button>
                                )}
                             </div>
@@ -207,100 +269,38 @@ const FinalCheckingPage = () => {
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
 
-      {/* Process Modal */}
-      {isProcessing && selectedFlow && (
-        <div className={CRM.modalOverlay}>
-          <div className={CRM.modalPanel}>
-             <div className={CRM.modalHeader}>
-                <h2 className={CRM.modalTitle}>Final QC Record — {selectedFlow.referenceCode || selectedFlow.id.slice(-6)}</h2>
-                <button onClick={() => setIsProcessing(false)} className="text-gray-400 hover:text-gray-600">
-                  <i className="ri-close-line text-lg" />
-                </button>
-             </div>
-             
-             <div className={CRM.modalBody}>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                   <div>
-                     <label className={CRM.label}>Total Received for QC</label>
-                     <input type="number" readOnly className={CRM.input + " bg-gray-50"} value={processingData.received} />
-                   </div>
-                   <div>
-                      <label className={CRM.label}>Repair Status</label>
-                      <select 
-                        className={CRM.select}
-                        value={processingData.repairStatus}
-                        onChange={(e) => setProcessingData(p => ({ ...p, repairStatus: e.target.value as any }))}
-                      >
-                        <option value="NOT_REQUIRED">Not Required</option>
-                        <option value="REQUIRED">Required</option>
-                        <option value="IN_PROGRESS">In Progress</option>
-                        <option value="REPAIRED">Repaired</option>
-                      </select>
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                   <div>
-                     <label className={CRM.label}>M1 Qty (Pass)</label>
-                     <input 
-                       type="number" 
-                       className={CRM.input + " border-emerald-200"} 
-                       value={processingData.m1Quantity}
-                       onChange={(e) => setProcessingData(p => ({ ...p, m1Quantity: Number(e.target.value) }))}
-                     />
-                   </div>
-                   <div>
-                     <label className={CRM.label}>M2 Qty (Fix)</label>
-                     <input 
-                       type="number" 
-                       className={CRM.input + " border-amber-200"} 
-                       value={processingData.m2Quantity}
-                       onChange={(e) => setProcessingData(p => ({ ...p, m2Quantity: Number(e.target.value) }))}
-                     />
-                   </div>
-                   <div>
-                     <label className={CRM.label}>M4 Qty (Reject)</label>
-                     <input 
-                       type="number" 
-                       className={CRM.input + " border-red-200"} 
-                       value={processingData.m4Quantity}
-                       onChange={(e) => setProcessingData(p => ({ ...p, m4Quantity: Number(e.target.value) }))}
-                     />
-                   </div>
-                </div>
-
-                <div className="mb-4">
-                   <label className={CRM.label}>M1 Transferred to Stock</label>
-                   <input 
-                     type="number" 
-                     className={CRM.input + " border-purple-200"} 
-                     value={processingData.m1Transferred}
-                     onChange={(e) => setProcessingData(p => ({ ...p, m1Transferred: Number(e.target.value) }))}
-                   />
-                </div>
-
-                <div className="mb-2">
-                   <h4 className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">Article Breakdown (Read-Only)</h4>
-                   <div className="mt-2 space-y-1">
-                      {processingData.transferredData?.map((t, i) => (
-                        <div key={i} className="text-[10px] text-gray-500 bg-white p-2 border border-gray-100 rounded">
-                           {t.brand} — {t.styleCode}: <span className="font-bold text-gray-800">{t.transferred} pcs</span>
-                        </div>
-                      ))}
-                    </div>
-                </div>
-             </div>
-
-             <div className={CRM.modalFooter}>
-                <button onClick={() => setIsProcessing(false)} className={CRM.btnSecondary}>Cancel</button>
-                <button onClick={handleSaveProcessing} className={CRM.btnPrimary}>Save QC Findings</button>
-             </div>
+          <div className={CRM.paginationBar}>
+            <p className={CRM.paginationSummary}>
+              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredFlows.length)} of{" "}
+              {filteredFlows.length} batches
+            </p>
+            <div className="flex gap-1">
+              <button type="button" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)} className={CRM.pageNavBtn}>
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+                className={CRM.pageNavBtn}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
-      )}
+      </div>
+      <VendorFinalCheckingProcessDrawer
+        open={isProcessing}
+        flow={selectedFlow}
+        onClose={() => setIsProcessing(false)}
+        processingData={processingData}
+        setProcessingData={setProcessingData}
+        onSave={handleSaveProcessing}
+        onTransferM2={handleTransferM2}
+        transferLoading={transferLoading}
+      />
     </div>
   );
 };

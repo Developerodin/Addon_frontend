@@ -7,8 +7,7 @@ import HelpIcon from "@/shared/components/HelpIcon";
 import { CRM } from "../vendor-list/crmUiClasses";
 import vendorProductionFlowService, {
   VendorProductionFlow,
-  BrandingFloorQuantity,
-  TransferredDataRow,
+  type BrandingFloorPatchPayload,
 } from "@/shared/services/vendorProductionFlowService";
 import { VendorProductionFloorDrawer } from "../components/VendorProductionFloorDrawer";
 import { VendorFloorBatchSummary } from "../components/VendorFloorBatchSummary";
@@ -21,7 +20,7 @@ const BrandingPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedFlow, setSelectedFlow] = useState<VendorProductionFlow | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingData, setProcessingData] = useState<Partial<BrandingFloorQuantity>>({});
+  const [completedQty, setCompletedQty] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const loadFlows = useCallback(async () => {
@@ -58,43 +57,16 @@ const BrandingPage = () => {
 
   const handleOpenProcess = (flow: VendorProductionFlow) => {
     setSelectedFlow(flow);
-    const q = flow.floorQuantities.branding;
-    setProcessingData({
-      received: q.received || 0,
-      completed: q.completed || 0,
-      transferred: q.transferred || 0,
-      transferredData: q.transferredData?.length ? q.transferredData : [{ transferred: 0, styleCode: "", brand: "" }],
-    });
+    setCompletedQty(flow.floorQuantities.branding.completed ?? 0);
     setIsProcessing(true);
-  };
-
-  const handleAddStyleRow = () => {
-    setProcessingData((p) => ({
-      ...p,
-      transferredData: [...(p.transferredData || []), { transferred: 0, styleCode: "", brand: "" }],
-    }));
-  };
-
-  const handleRemoveStyleRow = (index: number) => {
-    setProcessingData((p) => ({
-      ...p,
-      transferredData: (p.transferredData || []).filter((_, i) => i !== index),
-    }));
-  };
-
-  const handleStyleRowChange = (index: number, field: keyof TransferredDataRow, value: string | number) => {
-    setProcessingData((p) => {
-      const next = [...(p.transferredData || [])];
-      next[index] = { ...next[index], [field]: value };
-      return { ...p, transferredData: next };
-    });
   };
 
   const handleSaveProcessing = async () => {
     if (!selectedFlow) return;
     setSaving(true);
     try {
-      await vendorProductionFlowService.updateFloor(selectedFlow.id, "branding", processingData);
+      const payload: BrandingFloorPatchPayload = { completed: Number(completedQty) || 0 };
+      await vendorProductionFlowService.updateFloor(selectedFlow.id, "branding", payload);
       toast.success("Branding details updated");
       setIsProcessing(false);
       await loadFlows();
@@ -258,7 +230,7 @@ const BrandingPage = () => {
         saving={saving}
         hint={
           <p className={CRM.drawerHint}>
-            <strong>Branding floor:</strong> set branded totals and transit to final checking; add style/brand lines as needed.
+            <strong>Branding:</strong> only <strong>completed</strong> is sent to the API from this screen.
           </p>
         }
       >
@@ -266,78 +238,16 @@ const BrandingPage = () => {
           <>
             <VendorFloorBatchSummary flow={selectedFlow} />
             <div className={CRM.drawerSection}>
-              <div className={CRM.drawerSectionHead}>2. Totals</div>
-              <div className="p-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className={CRM.label}>Total received</label>
-                  <input type="number" readOnly className={`${CRM.input} bg-gray-50`} value={processingData.received} />
-                </div>
-                <div>
-                  <label className={CRM.label}>Total branded</label>
-                  <input
-                    type="number"
-                    className={`${CRM.input} border-emerald-200 focus:border-emerald-500`}
-                    value={processingData.completed}
-                    onChange={(e) => setProcessingData((p) => ({ ...p, completed: Number(e.target.value) }))}
-                  />
-                </div>
-                <div>
-                  <label className={CRM.label}>To final QC</label>
-                  <input
-                    type="number"
-                    className={`${CRM.input} border-sky-200 focus:border-sky-500`}
-                    value={processingData.transferred}
-                    onChange={(e) => setProcessingData((p) => ({ ...p, transferred: Number(e.target.value) }))}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className={CRM.drawerSection}>
-              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-gray-200 border-b-2 border-gray-300">
-                <span className="text-[11px] font-bold text-gray-800 uppercase tracking-wide">3. Style &amp; brand breakdown</span>
-                <button type="button" onClick={handleAddStyleRow} className={CRM.linkRowAction}>
-                  + Add row
-                </button>
-              </div>
-              <div className="p-3 space-y-3">
-                {processingData.transferredData?.map((row, i) => (
-                  <div
-                    key={i}
-                    className="flex flex-wrap gap-3 items-end p-3 bg-white border border-gray-200 rounded shadow-sm"
-                  >
-                    <div className="flex-1 min-w-[120px]">
-                      <label className={CRM.label}>Style code</label>
-                      <input
-                        type="text"
-                        className={CRM.input}
-                        value={row.styleCode}
-                        onChange={(e) => handleStyleRowChange(i, "styleCode", e.target.value)}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-[120px]">
-                      <label className={CRM.label}>Brand</label>
-                      <input
-                        type="text"
-                        className={CRM.input}
-                        value={row.brand}
-                        onChange={(e) => handleStyleRowChange(i, "brand", e.target.value)}
-                      />
-                    </div>
-                    <div className="w-24">
-                      <label className={CRM.label}>Qty</label>
-                      <input
-                        type="number"
-                        className={CRM.input}
-                        value={row.transferred}
-                        onChange={(e) => handleStyleRowChange(i, "transferred", Number(e.target.value))}
-                      />
-                    </div>
-                    <button type="button" onClick={() => handleRemoveStyleRow(i)} className={CRM.iconDanger} aria-label="Remove row">
-                      <i className="ri-delete-bin-line" />
-                    </button>
-                  </div>
-                ))}
+              <div className={CRM.drawerSectionHead}>2. Completed quantity</div>
+              <div className="p-3">
+                <label className={CRM.label}>Completed quantity</label>
+                <input
+                  type="number"
+                  min={0}
+                  className={`${CRM.input} border-emerald-200 focus:border-emerald-500 max-w-[200px]`}
+                  value={completedQty}
+                  onChange={(e) => setCompletedQty(Number(e.target.value))}
+                />
               </div>
             </div>
           </>

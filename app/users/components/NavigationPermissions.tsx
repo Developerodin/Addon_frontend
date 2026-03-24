@@ -94,6 +94,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Boarding', label: 'Boarding' },
     { key: 'Branding', label: 'Branding' },
     { key: 'Final Checking', label: 'Final Checking' },
+    { key: 'Dispatch', label: 'Dispatch' },
     { key: 'Counting & Dispatch', label: 'Counting & Dispatch' },
     { key: 'GRN', label: 'GRN' }
   ]

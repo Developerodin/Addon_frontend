@@ -78,6 +78,7 @@ export interface NavigationPermissions {
     'Boarding': boolean;
     'Branding': boolean;
     'Final Checking': boolean;
+    'Dispatch': boolean;
     'Counting & Dispatch': boolean;
     'GRN': boolean;
   };

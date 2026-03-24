@@ -12,6 +12,7 @@ const VendorPOPage = () => {
     { title: "GRN", path: "/vendor-po/grn", icon: "ri-draft-line" },
     { title: "Branding", path: "/vendor-po/branding", icon: "ri-price-tag-3-line" },
     { title: "Final Checking", path: "/vendor-po/final-checking", icon: "ri-check-double-line" },
+    { title: "Dispatch", path: "/vendor-po/dispatch", icon: "ri-truck-line" },
     { title: "Counting & Dispatch", path: "/vendor-po/counting", icon: "ri-truck-line" },
   ];
 

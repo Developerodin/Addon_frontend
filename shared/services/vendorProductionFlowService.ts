@@ -6,7 +6,8 @@ export type VendorFloorKey =
   | "washing"
   | "boarding"
   | "branding"
-  | "finalChecking";
+  | "finalChecking"
+  | "dispatch";
 
 export type RepairStatus = "NOT_REQUIRED" | "REQUIRED" | "IN_PROGRESS" | "REPAIRED";
 
@@ -39,6 +40,12 @@ export type StandardFloorPatchPayload = Pick<BaseFloorQuantity, "received" | "co
 
 /** Washing floor from vendor UI: PATCH only `completed` (received/transferred not sent from this screen) */
 export type WashingFloorPatchPayload = { completed: number };
+
+/** Boarding floor from vendor UI: PATCH only `completed` (received/transferred not sent from this screen) */
+export type BoardingFloorPatchPayload = { completed: number };
+
+/** Branding floor from vendor UI: PATCH only `completed` (transferred/style rows not sent from this screen) */
+export type BrandingFloorPatchPayload = { completed: number };
 
 export interface QualityFloorQuantity extends BaseFloorQuantity {
   m1Quantity: number;
@@ -103,6 +110,17 @@ export interface TransferProductionFlowPayload {
   fromFloorKey: "secondaryChecking" | "finalChecking";
   toFloorKey: VendorTransferToFloorKey;
   quantity: number;
+}
+
+export type FinalCheckingM2TransferToFloorKey = "washing" | "boarding" | "branding";
+
+export interface FinalCheckingM2TransferPayload {
+  toFloorKey: FinalCheckingM2TransferToFloorKey;
+  quantity: number;
+}
+
+export interface ConfirmFinalQualityPayload {
+  remarks?: string;
 }
 
 function getAccessToken(): string | null {
@@ -176,8 +194,22 @@ export const vendorProductionFlowService = {
     });
   },
 
-  confirmFinalQuality: async (id: string): Promise<VendorProductionFlow> => {
-    return requestJson(`${baseUrl}/${id}/confirm`, { method: "POST" });
+  /**
+   * Transfer M2 from final checking to a rework floor.
+   * Backend updates finalChecking.m2Transferred/m2Remaining and target.repairReceived/remaining.
+   */
+  transferFinalCheckingM2: async (flowId: string, payload: FinalCheckingM2TransferPayload): Promise<VendorProductionFlow> => {
+    return requestJson(`${baseUrl}/${flowId}/final-checking/m2-transfer`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  confirmFinalQuality: async (id: string, payload: ConfirmFinalQualityPayload = {}): Promise<VendorProductionFlow> => {
+    return requestJson(`${baseUrl}/${id}/confirm`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
 };
 

@@ -569,11 +569,11 @@ const BaseMenuItems: any = [
       },
       {
         icon: DispatchIcon,
-        path: "/vendor-po/counting",
+        path: "/vendor-po/dispatch",
         type: "link",
         active: false,
         selected: false,
-        title: "Counting & Dispatch",
+        title: "Dispatch",
       },
       {
         icon: GRNIcon,

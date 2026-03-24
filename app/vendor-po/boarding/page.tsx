@@ -5,7 +5,10 @@ import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { CRM } from "../vendor-list/crmUiClasses";
-import vendorProductionFlowService, { VendorProductionFlow, BaseFloorQuantity } from "@/shared/services/vendorProductionFlowService";
+import vendorProductionFlowService, {
+  VendorProductionFlow,
+  type BoardingFloorPatchPayload,
+} from "@/shared/services/vendorProductionFlowService";
 import { VendorProductionFloorDrawer } from "../components/VendorProductionFloorDrawer";
 import { VendorFloorBatchSummary } from "../components/VendorFloorBatchSummary";
 
@@ -17,7 +20,7 @@ const BoardingPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedFlow, setSelectedFlow] = useState<VendorProductionFlow | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingData, setProcessingData] = useState<Partial<BaseFloorQuantity>>({});
+  const [completedQty, setCompletedQty] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const loadFlows = useCallback(async () => {
@@ -54,13 +57,7 @@ const BoardingPage = () => {
 
   const handleOpenProcess = (flow: VendorProductionFlow) => {
     setSelectedFlow(flow);
-    const q = flow.floorQuantities.boarding;
-    setProcessingData({
-      received: q.received || 0,
-      completed: q.completed || 0,
-      transferred: q.transferred || 0,
-      repairReceived: q.repairReceived || 0,
-    });
+    setCompletedQty(flow.floorQuantities.boarding.completed ?? 0);
     setIsProcessing(true);
   };
 
@@ -68,7 +65,8 @@ const BoardingPage = () => {
     if (!selectedFlow) return;
     setSaving(true);
     try {
-      await vendorProductionFlowService.updateFloor(selectedFlow.id, "boarding", processingData);
+      const payload: BoardingFloorPatchPayload = { completed: Number(completedQty) || 0 };
+      await vendorProductionFlowService.updateFloor(selectedFlow.id, "boarding", payload);
       toast.success("Boarding floor updated");
       setIsProcessing(false);
       await loadFlows();
@@ -234,7 +232,7 @@ const BoardingPage = () => {
         saving={saving}
         hint={
           <p className={CRM.drawerHint}>
-            <strong>Boarding floor:</strong> record rectified receipt from wash, completion, and quantity moving to branding.
+            <strong>Boarding:</strong> only <strong>completed</strong> is sent to the API from this screen.
           </p>
         }
       >
@@ -242,49 +240,16 @@ const BoardingPage = () => {
           <>
             <VendorFloorBatchSummary flow={selectedFlow} />
             <div className={CRM.drawerSection}>
-              <div className={CRM.drawerSectionHead}>2. Receipt &amp; repair</div>
-              <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={CRM.label}>Batch rectified from wash</label>
-                  <input
-                    type="number"
-                    className={CRM.input}
-                    value={processingData.received}
-                    onChange={(e) => setProcessingData((p) => ({ ...p, received: Number(e.target.value) }))}
-                  />
-                </div>
-                <div>
-                  <label className={CRM.label}>Repair items received</label>
-                  <input
-                    type="number"
-                    className={CRM.input}
-                    value={processingData.repairReceived}
-                    onChange={(e) => setProcessingData((p) => ({ ...p, repairReceived: Number(e.target.value) }))}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className={CRM.drawerSection}>
-              <div className={CRM.drawerSectionHead}>3. Output &amp; branding transit</div>
-              <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={CRM.label}>Completed quantity</label>
-                  <input
-                    type="number"
-                    className={`${CRM.input} border-emerald-200 focus:border-emerald-500`}
-                    value={processingData.completed}
-                    onChange={(e) => setProcessingData((p) => ({ ...p, completed: Number(e.target.value) }))}
-                  />
-                </div>
-                <div>
-                  <label className={CRM.label}>To branding stage</label>
-                  <input
-                    type="number"
-                    className={`${CRM.input} border-sky-200 focus:border-sky-500`}
-                    value={processingData.transferred}
-                    onChange={(e) => setProcessingData((p) => ({ ...p, transferred: Number(e.target.value) }))}
-                  />
-                </div>
+              <div className={CRM.drawerSectionHead}>2. Completed quantity</div>
+              <div className="p-3">
+                <label className={CRM.label}>Completed quantity</label>
+                <input
+                  type="number"
+                  min={0}
+                  className={`${CRM.input} border-emerald-200 focus:border-emerald-500 max-w-[200px]`}
+                  value={completedQty}
+                  onChange={(e) => setCompletedQty(Number(e.target.value))}
+                />
               </div>
             </div>
           </>
