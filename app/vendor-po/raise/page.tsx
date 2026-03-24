@@ -49,6 +49,7 @@ const VendorPORaisePage = () => {
   const [selectedOrder, setSelectedOrder] = useState<VendorPO | null>(null);
   const [packlistFor, setPacklistFor] = useState<VendorPurchaseOrder | null>(null);
   const [packlistSubmitting, setPacklistSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -117,6 +118,21 @@ const VendorPORaisePage = () => {
       toast.error(error instanceof Error ? error.message : "Failed to update PO");
     } finally {
       setPacklistSubmitting(false);
+    }
+  };
+
+  const handleDeleteOrder = async (order: VendorPO) => {
+    const ok = window.confirm(`Delete PO ${order.poNo}? This cannot be undone.`);
+    if (!ok) return;
+    setDeletingId(order.id);
+    try {
+      await vendorPurchaseOrderService.delete(order.id);
+      toast.success("Purchase order deleted");
+      await loadOrders();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete purchase order");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -316,6 +332,15 @@ const VendorPORaisePage = () => {
                           <i className="ri-edit-line text-base" />
                         </Link>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteOrder(order)}
+                        disabled={deletingId === order.id}
+                        className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-600 border border-red-100 rounded hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Delete"
+                      >
+                        <i className="ri-delete-bin-line text-xs" />
+                      </button>
                       {(order.status === "Submitted to vendor" ||
                         order.status === "Goods partially received" ||
                         order.status === "In transit") &&
