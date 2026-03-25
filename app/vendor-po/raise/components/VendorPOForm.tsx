@@ -177,7 +177,7 @@ export default function VendorPOForm({
           ? {
               ...r,
               articleId: article.id,
-              articleCode: article.code,
+              articleCode: (article.internalCode?.trim() || article.code?.trim() || ""),
               articleName: article.name,
             }
           : r
@@ -236,9 +236,14 @@ export default function VendorPOForm({
   const filteredArticles = (rowId: string) => {
     const q = (articleSearch[rowId] ?? "").trim().toLowerCase();
     if (!q) return articles;
-    return articles.filter(
-      (a) => a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)
-    );
+    return articles.filter((a) => {
+      const ic = (a.internalCode ?? "").toLowerCase();
+      return (
+        a.code.toLowerCase().includes(q) ||
+        ic.includes(q) ||
+        a.name.toLowerCase().includes(q)
+      );
+    });
   };
 
   const portalFiltered = articleOpen ? filteredArticles(articleOpen) : [];

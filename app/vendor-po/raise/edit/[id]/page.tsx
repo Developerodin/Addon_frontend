@@ -48,8 +48,10 @@ const VendorPOEditPage = () => {
   const [po, setPo] = useState<VendorPO | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [vendors, setVendors] = useState<{ id: string; vendorCode: string; vendorName: string }[]>([]);
-  const [allCatalogArticles, setAllCatalogArticles] = useState<{ id: string; code: string; name: string }[]>([]);
-  const [articles, setArticles] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [allCatalogArticles, setAllCatalogArticles] = useState<
+    { id: string; code: string; name: string; internalCode?: string }[]
+  >([]);
+  const [articles, setArticles] = useState<{ id: string; code: string; name: string; internalCode?: string }[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -88,6 +90,7 @@ const VendorPOEditPage = () => {
               id: p.id,
               code: p.factoryCode || "",
               name: p.name,
+              internalCode: p.internalCode?.trim() || undefined,
             }));
           setAllCatalogArticles(mapped);
           setArticles(mapped);
@@ -115,17 +118,21 @@ const VendorPOEditPage = () => {
           vendorProducts.map(async (product) => {
             if (typeof product === "string") {
               const full = await getProductById(product);
+              const internalRaw = full?.internalCode as string | undefined;
               return {
                 id: product,
                 code: (full?.factoryCode as string | undefined) || "",
                 name: (full?.name as string | undefined) || "",
+                internalCode: internalRaw?.trim() || undefined,
               };
             }
             const productObj = product as Record<string, unknown>;
+            const ic = productObj.internalCode;
             return {
               id: String(productObj.id || productObj._id || ""),
               code: String(productObj.factoryCode || ""),
               name: String(productObj.name || ""),
+              internalCode: (typeof ic === "string" ? ic : String(ic || "")).trim() || undefined,
             };
           })
         );
@@ -152,17 +159,21 @@ const VendorPOEditPage = () => {
         vendorProducts.map(async (product) => {
           if (typeof product === "string") {
             const full = await getProductById(product);
+            const internalRaw = full?.internalCode as string | undefined;
             return {
               id: product,
               code: (full?.factoryCode as string | undefined) || "",
               name: (full?.name as string | undefined) || "",
+              internalCode: internalRaw?.trim() || undefined,
             };
           }
           const productObj = product as Record<string, unknown>;
+          const ic = productObj.internalCode;
           return {
             id: String(productObj.id || productObj._id || ""),
             code: String(productObj.factoryCode || ""),
             name: String(productObj.name || ""),
+            internalCode: (typeof ic === "string" ? ic : String(ic || "")).trim() || undefined,
           };
         })
       );

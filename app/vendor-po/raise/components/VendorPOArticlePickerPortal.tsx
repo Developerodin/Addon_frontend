@@ -40,17 +40,20 @@ export default function VendorPOArticlePickerPortal({
       {filteredArticles.length === 0 ? (
         <div className="px-3 py-2 text-sm text-gray-500">No articles found</div>
       ) : (
-        filteredArticles.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-            onClick={() => onSelect(a)}
-          >
-            {a.name}
-            {a.code ? <span className="text-xs text-gray-500 ml-2">Factory: {a.code}</span> : null}
-          </button>
-        ))
+        filteredArticles.map((a) => {
+          const codeUi = a.internalCode?.trim();
+          return (
+            <button
+              key={a.id}
+              type="button"
+              className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+              onClick={() => onSelect(a)}
+            >
+              {a.name}
+              {codeUi ? <span className="text-xs text-gray-500 ml-2">{codeUi}</span> : null}
+            </button>
+          );
+        })
       )}
     </div>,
     document.body

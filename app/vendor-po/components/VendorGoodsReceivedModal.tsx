@@ -5,7 +5,7 @@ import { toast } from "react-hot-toast";
 import vendorPurchaseOrderService, {
   VendorPurchaseOrder,
 } from "@/shared/services/vendorPurchaseOrderService";
-import { getPoLineItemId, readVendorName } from "./vendorPacklistHelpers";
+import { getPoLineItemId, productNameForPoLineId, readVendorName } from "./vendorPacklistHelpers";
 import {
   type VendorLotDraft,
   buildVendorLotDrafts,
@@ -23,6 +23,11 @@ export interface VendorGoodsReceivedModalProps {
   onClose: () => void;
   onSaved: () => void;
 }
+
+const lotInputCls =
+  "mt-0.5 w-full px-2 py-1.5 text-xs border border-gray-500 rounded bg-white text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-600";
+const lotQtyInputCls =
+  "w-full px-1.5 py-1 text-right text-xs border border-gray-500 rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-600";
 
 function packlistToArray(pd: VendorPurchaseOrder["packListDetails"]) {
   if (!pd) return [];
@@ -224,19 +229,33 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                     <h4 className="text-xs font-semibold text-gray-700 mb-2">Packlist (in transit)</h4>
                     <div className="space-y-2">
                       {packlists.map((p, idx) => (
-                        <div key={idx} className="p-2 bg-white rounded border border-gray-100 text-[10px] grid grid-cols-2 gap-2">
-                          <div>
-                            <span className="text-gray-500">Challan</span>
-                            <div>{p.challanNumber || "—"}</div>
+                        <div key={idx} className="p-2 bg-white rounded border border-gray-100 text-[10px] space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-gray-500">Challan</span>
+                              <div>{p.challanNumber || "—"}</div>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Boxes</span>
+                              <div>{p.numberOfBoxes ?? "—"}</div>
+                            </div>
+                            <div className="col-span-2">
+                              <span className="text-gray-500">Courier</span>
+                              <div>{p.courierName || "—"}</div>
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-gray-500">Boxes</span>
-                            <div>{p.numberOfBoxes ?? "—"}</div>
-                          </div>
-                          <div className="col-span-2">
-                            <span className="text-gray-500">Courier</span>
-                            <div>{p.courierName || "—"}</div>
-                          </div>
+                          {p.poItems && p.poItems.length > 0 && (
+                            <div className="border-t border-gray-100 pt-2">
+                              <span className="text-gray-500 block mb-0.5">PO lines</span>
+                              <ul className="list-disc list-inside text-gray-900 space-y-0.5">
+                                {p.poItems.map((lineId) => (
+                                  <li key={String(lineId)}>
+                                    {productNameForPoLineId(String(lineId), poItems)}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -280,7 +299,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                         <div>
                           <label className="text-[10px] font-medium text-gray-600">Lot number *</label>
                           <input
-                            className="mt-0.5 w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-400"
+                            className={lotInputCls}
                             value={lot.lotNumber}
                             onChange={(e) =>
                               setLots((prev) => {
@@ -297,7 +316,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                           <input
                             type="number"
                             min={1}
-                            className="mt-0.5 w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-400"
+                            className={lotInputCls}
                             value={lot.numberOfBoxes}
                             onChange={(e) =>
                               setLots((prev) => {
@@ -335,7 +354,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                       type="number"
                                       min={0}
                                       max={max}
-                                      className="w-full px-1.5 py-1 text-right text-xs border border-gray-200 rounded"
+                                      className={lotQtyInputCls}
                                       value={v === 0 ? "" : v}
                                       onChange={(e) => {
                                         const raw = e.target.value;
@@ -356,17 +375,28 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
             )}
           </div>
 
-          <div className="border-t border-gray-100 px-4 py-3 flex justify-end gap-2 flex-shrink-0 bg-white">
+          <div className="bg-gray-50 px-4 py-3 flex justify-end gap-3 flex-shrink-0 border-t border-gray-200">
             <button
               type="button"
-              className="ti-btn ti-btn-light ti-btn-sm"
+              className="flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 bg-white text-gray-700 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-100 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={onClose}
               disabled={submitting || loadingPo}
             >
               Cancel
             </button>
-            <button type="submit" className="ti-btn ti-btn-primary ti-btn-sm" disabled={submitting || loadingPo || !po}>
-              {submitting ? "Saving…" : "Save receipt"}
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={submitting || loadingPo || !po}
+            >
+              {submitting ? (
+                <>
+                  <i className="ri-loader-4-line animate-spin text-xs" />
+                  Saving…
+                </>
+              ) : (
+                "Save receipt"
+              )}
             </button>
           </div>
         </form>

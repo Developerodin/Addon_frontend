@@ -17,6 +17,8 @@ export interface VendorPacklistModalProps {
   isOpen: boolean;
   purchaseOrder: VendorPurchaseOrder | null;
   existingPacklistData?: VendorPackListEntry | VendorPackListEntry[] | null;
+  /** ISO or date-only string from list row when API omits `createdAt` on the PO document. */
+  orderDateFallback?: string;
   onClose: () => void;
   onSubmit: (entries: VendorPackListEntry[]) => void | Promise<void>;
   isSubmitting?: boolean;
@@ -29,6 +31,7 @@ export function VendorPacklistModal({
   isOpen,
   purchaseOrder,
   existingPacklistData,
+  orderDateFallback,
   onClose,
   onSubmit,
   isSubmitting = false,
@@ -211,7 +214,7 @@ export function VendorPacklistModal({
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-3">
-            <VendorPacklistOrderSummary po={po} />
+            <VendorPacklistOrderSummary po={po} orderDateFallback={orderDateFallback} />
             <p className="text-xs text-gray-600 mb-3">
               One row per shipment. Each row needs packing ref, courier, dates, weights, and which PO lines ship together.
             </p>

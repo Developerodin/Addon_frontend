@@ -31,8 +31,11 @@ export interface VendorPOLineItem {
 /** Article option for dropdown/search */
 export interface VendorPOArticle {
   id: string;
+  /** Factory code — used for search / fallback when internal code is empty */
   code: string;
   name: string;
+  /** Internal product code — shown next to name in catalog picker and line item */
+  internalCode?: string;
 }
 
 export interface VendorPO {

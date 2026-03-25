@@ -10,7 +10,7 @@ import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
 import vendorPurchaseOrderService, { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
 import vendorBoxService, { VendorBox } from "@/shared/services/vendorBoxService";
 import { lotDetailsForBulkBoxes } from "../../utils/vendorPoFlow";
-import { getVendorBoxId, getVendorPoItemOptionsForLot } from "./vendorReceiveProcessHelpers";
+import { getVendorBoxId, getVendorLotReceivedLines, getVendorPoItemOptionsForLot } from "./vendorReceiveProcessHelpers";
 import {
   exportVendorBoxesExcel,
   printAllVendorBoxLabels,
@@ -372,16 +372,43 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                 <thead>
                   <tr className={CRM.theadTr}>
                     <th className={CRM.th}>Lot</th>
+                    <th className={CRM.th}>Product</th>
+                    <th className={CRM.thRight}>Received qty</th>
                     <th className={CRM.thRight}>Boxes (expected)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {lotRows.map((l) => (
+                  {lotRows.map((l) => {
+                    const lines = getVendorLotReceivedLines(apiPo, l);
+                    return (
                     <tr key={l.lotNumber} className={CRM.tbodyTr}>
                       <td className={CRM.td}>{l.lotNumber}</td>
+                      <td className={CRM.td}>
+                        {lines.length === 0 ? (
+                          "—"
+                        ) : (
+                          <div className="flex flex-col gap-0.5">
+                            {lines.map((row, i) => (
+                              <span key={i}>{row.productName.trim() || "—"}</span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className={`${CRM.td} text-right tabular-nums`}>
+                        {lines.length === 0 ? (
+                          "—"
+                        ) : (
+                          <div className="flex flex-col gap-0.5 items-end">
+                            {lines.map((row, i) => (
+                              <span key={i}>{row.quantity}</span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                       <td className={`${CRM.td} text-right`}>{l.numberOfBoxes}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

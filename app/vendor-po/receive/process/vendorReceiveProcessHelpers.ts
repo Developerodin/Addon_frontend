@@ -1,4 +1,7 @@
-import type { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
+import type {
+  VendorPurchaseOrder,
+  VendorReceivedLotDetail,
+} from "@/shared/services/vendorPurchaseOrderService";
 import type { VendorBox } from "@/shared/services/vendorBoxService";
 
 /** Sanitize numeric input for weight/qty fields. */
@@ -33,6 +36,24 @@ export function getVendorPoItemOptionsForLot(
   }
   const key = (x: { productName: string; code: string }) => `${x.productName}__${x.code}`;
   return out.filter((x, i, a) => a.findIndex((y) => key(y) === key(x)) === i);
+}
+
+/** Per-line product and received qty for a receipt lot (from `receivedLotDetails[].poItems`). */
+export function getVendorLotReceivedLines(
+  po: VendorPurchaseOrder,
+  lot: VendorReceivedLotDetail
+): { productName: string; quantity: number }[] {
+  const byId = new Map((po.poItems || []).map((it) => [String(it._id ?? it.id), it]));
+  const out: { productName: string; quantity: number }[] = [];
+  for (const p of lot.poItems || []) {
+    const line = byId.get(String(p.poItem));
+    if (!line) continue;
+    const pid = line.productId;
+    const productName =
+      line.productName || (typeof pid === "object" ? pid?.name || "" : "") || "";
+    out.push({ productName, quantity: Number(p.receivedQuantity ?? 0) });
+  }
+  return out;
 }
 
 /** Default ZPL label settings — aligned with yarn process `50mm * 70mm` vertical preset. */

@@ -4,8 +4,27 @@ import React from "react";
 import type { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
 import { readVendorName } from "./vendorPacklistHelpers";
 
-/** PO header + line preview (yarn PacklistModal parity). */
-export function VendorPacklistOrderSummary({ po }: { po: VendorPurchaseOrder }) {
+function formatOrderDateLabel(raw: string | undefined): string {
+  if (!raw?.trim()) return "—";
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+}
+
+/** PO header + line preview (yarn PacklistModal parity). Order date = record created time (same as list `poDate`). */
+export function VendorPacklistOrderSummary({
+  po,
+  orderDateFallback,
+}: {
+  po: VendorPurchaseOrder;
+  /** When list API omits `createdAt` on the document, pass mapped row `createdAt` or `poDate`. */
+  orderDateFallback?: string;
+}) {
+  const createdLike =
+    po.createdAt ??
+    (po as { created_at?: string }).created_at ??
+    orderDateFallback ??
+    po.updatedAt;
+
   return (
     <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
       <h4 className="text-xs font-semibold text-gray-700 mb-2">Order details</h4>
@@ -20,9 +39,7 @@ export function VendorPacklistOrderSummary({ po }: { po: VendorPurchaseOrder }) 
         </div>
         <div>
           <label className="text-[10px] font-medium text-gray-600">Order date</label>
-          <div className="mt-0.5 text-xs text-gray-900">
-            {po.createdAt ? new Date(po.createdAt).toLocaleDateString() : "—"}
-          </div>
+          <div className="mt-0.5 text-xs text-gray-900">{formatOrderDateLabel(createdLike)}</div>
         </div>
         <div>
           <label className="text-[10px] font-medium text-gray-600">Total</label>

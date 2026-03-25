@@ -83,7 +83,6 @@ export function VendorReceiveProcessBoxTables({
                   <th className={CRM.th}>Box ID</th>
                   <th className={CRM.th}>Barcode</th>
                   <th className={CRM.th}>Product</th>
-                  <th className={CRM.th}>Code</th>
                   <th className={CRM.thRight}>Gross</th>
                   <th className={CRM.thRight}>Net kg</th>
                   <th className={CRM.thRight}>Units</th>
@@ -131,7 +130,6 @@ export function VendorReceiveProcessBoxTables({
                           <span>{d.productName || box.productName || "—"}</span>
                         )}
                       </td>
-                      <td className={CRM.td}>{d.articleCode || "—"}</td>
                       <td className={`${CRM.td} text-right`}>
                         {isActive ? (
                           <input

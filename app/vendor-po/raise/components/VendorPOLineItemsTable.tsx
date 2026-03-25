@@ -112,7 +112,7 @@ export default function VendorPOLineItemsTable({
                       <div className="relative">
                         {locked ? (
                           <span className="text-sm">
-                            {row.articleName} {row.articleCode ? `(Factory: ${row.articleCode})` : ""}
+                            {row.articleName} {row.articleCode ? <span className="text-gray-500"> ({row.articleCode})</span> : null}
                           </span>
                         ) : (
                           <>
@@ -123,7 +123,7 @@ export default function VendorPOLineItemsTable({
                               placeholder="Search article..."
                               value={
                                 row.articleId
-                                  ? `${row.articleName}${row.articleCode ? ` (Factory: ${row.articleCode})` : ""}`
+                                  ? `${row.articleName}${row.articleCode ? ` (${row.articleCode})` : ""}`
                                   : articleSearch[row.id] ?? ""
                               }
                               onFocus={() => setArticleOpen(row.id)}

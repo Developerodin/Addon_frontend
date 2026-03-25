@@ -7,10 +7,11 @@ import vendorPurchaseOrderService, {
   VendorPoApiStatus,
   VendorPurchaseOrder,
   VendorPackListEntry,
+  VendorLotStatus,
 } from "@/shared/services/vendorPurchaseOrderService";
 import { vendorPoApiStatusToUi, vendorPoUiStatusClass } from "../utils/vendorPoFlow";
 import type { VendorPO } from "../raise/types";
-import { getPoLineItemId } from "./vendorPacklistHelpers";
+import { getPoLineItemId, productNameForPoLineId } from "./vendorPacklistHelpers";
 
 function readVendorName(vendor: VendorPurchaseOrder["vendor"]): string {
   if (!vendor) return "—";
@@ -27,17 +28,35 @@ function formatMoney(n: number): string {
   return `₹${Number(n || 0).toLocaleString()}`;
 }
 
+function lotStatusLabel(s: VendorLotStatus | undefined): string | undefined {
+  if (!s) return undefined;
+  const map: Record<VendorLotStatus, string> = {
+    lot_pending: "Pending",
+    lot_qc_pending: "QC pending",
+    lot_rejected: "Rejected",
+    lot_accepted: "Accepted",
+  };
+  return map[s] ?? s.replace(/_/g, " ");
+}
+
 export interface VendorPODetailsDrawerProps {
   isOpen: boolean;
   /** List row (for instant header); merged with API fetch. */
   summary: VendorPO | null;
   onClose: () => void;
+  /** Receipt lots (`receivedLotDetails`); use on Receive only — hidden on Raise list by default. */
+  showReceivedLotDetails?: boolean;
 }
 
 /**
  * Yarn purchase “View” parity: right slide-over, tabs, loading fetch, lines + packlist + status history.
  */
-export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODetailsDrawerProps) {
+export function VendorPODetailsDrawer({
+  isOpen,
+  summary,
+  onClose,
+  showReceivedLotDetails = false,
+}: VendorPODetailsDrawerProps) {
   const [detail, setDetail] = useState<VendorPurchaseOrder | null>(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"details" | "history">("details");
@@ -76,14 +95,19 @@ export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODeta
   const total = d?.total ?? 0;
   const statusUi = d ? vendorPoApiStatusToUi(d.currentStatus) : summary.status;
   const notes = d?.notes ?? summary.remarks;
-  const created = d?.createdAt ?? summary.createdAt;
-  const updated = d?.updatedAt ?? summary.updatedAt;
+  /** Order date in UI = record created date (fallback to list poDate if API omits createdAt). */
+  const orderDateRaw = d?.createdAt ?? summary.createdAt ?? summary.poDate;
 
   const vendorObj = d?.vendor && typeof d.vendor === "object" ? d.vendor : null;
   const header = vendorObj?.header;
 
   const statusLogs = (d?.statusLogs as Array<Record<string, unknown>> | undefined) ?? [];
   const packlists = packlistToArray(d?.packListDetails);
+  const receivedLots = showReceivedLotDetails
+    ? d != null && d.receivedLotDetails !== undefined
+      ? d.receivedLotDetails
+      : summary.rawPurchaseOrder?.receivedLotDetails ?? []
+    : [];
 
   return (
     <div className={`fixed inset-0 z-50 overflow-hidden ${isOpen ? "" : "pointer-events-none"}`}>
@@ -159,8 +183,8 @@ export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODeta
                       <div>
                         <label className="text-xs font-medium text-gray-600">Order date</label>
                         <div className="mt-0.5 text-xs text-gray-900">
-                          {created
-                            ? new Date(created).toLocaleDateString("en-US", {
+                          {orderDateRaw
+                            ? new Date(orderDateRaw).toLocaleDateString("en-US", {
                                 year: "numeric",
                                 month: "long",
                                 day: "numeric",
@@ -184,6 +208,16 @@ export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODeta
                                   day: "numeric",
                                 })
                               : "—"}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600">Priority</label>
+                        <div className="mt-0.5 text-xs text-gray-900">{summary.priority}</div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600">Total qty / Received</label>
+                        <div className="mt-0.5 text-xs text-gray-900">
+                          {summary.totalQty.toLocaleString()} / {summary.receivedQty.toLocaleString()}
                         </div>
                       </div>
                     </div>
@@ -213,16 +247,6 @@ export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODeta
                       <div>
                         <label className="text-xs font-medium text-gray-600">Credit days</label>
                         <div className="mt-0.5 text-xs text-gray-900">{d?.creditDays ?? summary.creditDays ?? "—"}</div>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600">Priority</label>
-                        <div className="mt-0.5 text-xs text-gray-900">{summary.priority}</div>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600">Total qty / Received</label>
-                        <div className="mt-0.5 text-xs text-gray-900">
-                          {summary.totalQty.toLocaleString()} / {summary.receivedQty.toLocaleString()}
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -281,9 +305,6 @@ export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODeta
                             <th className="border border-gray-300 px-2 py-1 text-right font-medium text-gray-500 uppercase">
                               Subtotal
                             </th>
-                            <th className="border border-gray-300 px-2 py-1 text-left font-medium text-gray-500 uppercase">
-                              Est. delivery
-                            </th>
                           </tr>
                         </thead>
                         <tbody className="bg-white">
@@ -295,9 +316,6 @@ export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODeta
                             const rate = Number(item.rate || 0);
                             const g = Number(item.gstRate ?? 0);
                             const lineSub = qty * rate;
-                            const est = item.estimatedDeliveryDate
-                              ? new Date(item.estimatedDeliveryDate).toLocaleDateString()
-                              : "—";
                             const key = getPoLineItemId(item) ?? `row-${index}`;
                             return (
                               <tr key={key} className="hover:bg-gray-50">
@@ -306,7 +324,6 @@ export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODeta
                                 <td className="border border-gray-300 px-2 py-1.5 text-right">{formatMoney(rate)}</td>
                                 <td className="border border-gray-300 px-2 py-1.5 text-right">{g}%</td>
                                 <td className="border border-gray-300 px-2 py-1.5 text-right">{formatMoney(lineSub)}</td>
-                                <td className="border border-gray-300 px-2 py-1.5">{est}</td>
                               </tr>
                             );
                           })}
@@ -365,6 +382,18 @@ export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODeta
                                 </div>
                               )}
                             </div>
+                            {pl.poItems && pl.poItems.length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-blue-100">
+                                <span className="text-[10px] text-gray-600 block mb-1">PO lines in this shipment</span>
+                                <ul className="list-disc list-inside space-y-0.5 text-[11px] text-gray-900">
+                                  {pl.poItems.map((lineId) => (
+                                    <li key={String(lineId)}>
+                                      {productNameForPoLineId(String(lineId), d?.poItems)}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                             {pl.notes && (
                               <p className="text-[11px] text-gray-700 mt-2 border-t border-blue-100 pt-2">{pl.notes}</p>
                             )}
@@ -374,16 +403,67 @@ export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODeta
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-gray-500 pt-3 border-t border-gray-100">
-                    <div>
-                      <span className="font-medium">Created:</span>{" "}
-                      {created ? new Date(created).toLocaleString() : "—"}
+                  {receivedLots.length > 0 && (
+                    <div className="mb-4">
+                      <label className="text-xs font-medium text-gray-700 mb-2 block">
+                        Received lot details
+                        <span className="text-[10px] text-gray-500 ms-2">
+                          ({receivedLots.length} {receivedLots.length === 1 ? "lot" : "lots"})
+                        </span>
+                      </label>
+                      <div className="space-y-3">
+                        {receivedLots.map((lot, idx) => {
+                          const statusLbl = lotStatusLabel(lot.status);
+                          return (
+                            <div key={`${lot.lotNumber || "lot"}-${idx}`} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                              <h4 className="text-xs font-semibold text-gray-800 mb-2">Lot entry {idx + 1}</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                <div>
+                                  <span className="text-[10px] text-gray-600">Lot number</span>
+                                  <div className="text-gray-900 font-medium">{lot.lotNumber?.trim() || "—"}</div>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] text-gray-600">Boxes</span>
+                                  <div className="text-gray-900">{Number(lot.numberOfBoxes ?? 0).toLocaleString()}</div>
+                                </div>
+                                {statusLbl && (
+                                  <div>
+                                    <span className="text-[10px] text-gray-600">Status</span>
+                                    <div className="text-gray-900">{statusLbl}</div>
+                                  </div>
+                                )}
+                                {lot.numberOfCones != null && lot.numberOfCones > 0 && (
+                                  <div>
+                                    <span className="text-[10px] text-gray-600">Cones</span>
+                                    <div className="text-gray-900">{lot.numberOfCones}</div>
+                                  </div>
+                                )}
+                                {lot.totalWeight != null && Number(lot.totalWeight) > 0 && (
+                                  <div>
+                                    <span className="text-[10px] text-gray-600">Weight</span>
+                                    <div className="text-gray-900">{lot.totalWeight}</div>
+                                  </div>
+                                )}
+                              </div>
+                              {lot.poItems && lot.poItems.length > 0 && (
+                                <div className="mt-2 pt-2 border-t border-blue-100">
+                                  <span className="text-[10px] text-gray-600 block mb-1">Received by line</span>
+                                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-gray-900">
+                                    {lot.poItems.map((p, i) => (
+                                      <li key={`${String(p.poItem)}-${i}`}>
+                                        {productNameForPoLineId(String(p.poItem), d?.poItems)} —{" "}
+                                        {Number(p.receivedQuantity || 0).toLocaleString()} pcs
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-medium">Last updated:</span>{" "}
-                      {updated ? new Date(updated).toLocaleString() : "—"}
-                    </div>
-                  </div>
+                  )}
                 </>
               )}
 
@@ -438,16 +518,6 @@ export function VendorPODetailsDrawer({ isOpen, summary, onClose }: VendorPODeta
                       <p className="text-xs text-gray-500">No status changes recorded for this PO.</p>
                     </div>
                   )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-gray-500 pt-3 border-t border-gray-100">
-                    <div>
-                      <span className="font-medium">Created:</span>{" "}
-                      {created ? new Date(created).toLocaleString() : "—"}
-                    </div>
-                    <div>
-                      <span className="font-medium">Last updated:</span>{" "}
-                      {updated ? new Date(updated).toLocaleString() : "—"}
-                    </div>
-                  </div>
                 </>
               )}
             </>

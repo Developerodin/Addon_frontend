@@ -12,6 +12,25 @@ export function getPoLineItemId(item: VendorPurchaseOrderItem): string | undefin
   return String(raw);
 }
 
+/** Resolve a PO line `_id` from packlist `poItems[]` to a product display name using hydrated `po.poItems`. */
+export function productNameForPoLineId(
+  lineId: string,
+  poItems: VendorPurchaseOrderItem[] | undefined
+): string {
+  if (!poItems?.length) return lineId;
+  const id = String(lineId);
+  for (const item of poItems) {
+    const lid = getPoLineItemId(item);
+    if (lid != null && String(lid) === id) {
+      const pid = item.productId;
+      const name =
+        item.productName || (typeof pid === "object" && pid ? String((pid as { name?: string }).name || "") : "") || "";
+      return name || id;
+    }
+  }
+  return id;
+}
+
 export type PacklistRow = VendorPackListEntry & { files?: VendorPackListFile[] };
 
 export function readVendorName(vendor: VendorPurchaseOrder["vendor"]): string {

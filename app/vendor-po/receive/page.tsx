@@ -477,6 +477,7 @@ const VendorPOReceivePage = () => {
       <VendorPODetailsDrawer
         isOpen={detailsOpen && !!detailsOrder}
         summary={detailsOrder}
+        showReceivedLotDetails
         onClose={() => {
           setDetailsOpen(false);
           setDetailsOrder(null);

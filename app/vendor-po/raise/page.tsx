@@ -48,6 +48,7 @@ const VendorPORaisePage = () => {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<VendorPO | null>(null);
   const [packlistFor, setPacklistFor] = useState<VendorPurchaseOrder | null>(null);
+  const [packlistOrderDateFallback, setPacklistOrderDateFallback] = useState<string | undefined>(undefined);
   const [packlistSubmitting, setPacklistSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -113,6 +114,7 @@ const VendorPORaisePage = () => {
           : `Packlist updated (${n} ${n === 1 ? "entry" : "entries"})`
       );
       setPacklistFor(null);
+      setPacklistOrderDateFallback(undefined);
       await loadOrders();
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Failed to update PO");
@@ -347,7 +349,10 @@ const VendorPORaisePage = () => {
                         order.rawPurchaseOrder && (
                           <button
                             type="button"
-                            onClick={() => setPacklistFor(order.rawPurchaseOrder!)}
+                            onClick={() => {
+                              setPacklistOrderDateFallback(order.createdAt ?? order.poDate);
+                              setPacklistFor(order.rawPurchaseOrder!);
+                            }}
                             className="h-7 px-2 text-[9px] font-bold bg-white text-purple-600 border border-purple-200 rounded hover:bg-purple-50 transition-colors uppercase shadow-sm"
                             title={
                               order.status === "Submitted to vendor"
@@ -380,7 +385,11 @@ const VendorPORaisePage = () => {
         isOpen={!!packlistFor}
         purchaseOrder={packlistFor}
         existingPacklistData={packlistFor?.packListDetails ?? null}
-        onClose={() => setPacklistFor(null)}
+        orderDateFallback={packlistOrderDateFallback}
+        onClose={() => {
+          setPacklistFor(null);
+          setPacklistOrderDateFallback(undefined);
+        }}
         onSubmit={handlePacklistSubmit}
         isSubmitting={packlistSubmitting}
       />

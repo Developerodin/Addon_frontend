@@ -34,7 +34,7 @@ export function VendorPacklistShipmentRow({
   onFileRemove,
 }: VendorPacklistShipmentRowProps) {
   return (
-    <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+    <div className="border border-gray-300 rounded-lg p-3 bg-gray-50">
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-xs font-semibold text-gray-800">Packlist entry {entryIndex + 1}</h4>
         {canRemove && (
@@ -60,7 +60,7 @@ export function VendorPacklistShipmentRow({
               type="text"
               value={entry.packingNumber || ""}
               onChange={(e) => onFieldChange({ packingNumber: e.target.value })}
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
               placeholder="LR / packing ref"
             />
           </div>
@@ -72,7 +72,7 @@ export function VendorPacklistShipmentRow({
               type="text"
               value={entry.courierName || ""}
               onChange={(e) => onFieldChange({ courierName: e.target.value })}
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
               placeholder="Transporter"
             />
           </div>
@@ -85,7 +85,7 @@ export function VendorPacklistShipmentRow({
               type="text"
               value={entry.courierNumber || ""}
               onChange={(e) => onFieldChange({ courierNumber: e.target.value })}
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
             />
           </div>
           <div>
@@ -94,7 +94,7 @@ export function VendorPacklistShipmentRow({
               type="text"
               value={entry.vehicleNumber || ""}
               onChange={(e) => onFieldChange({ vehicleNumber: e.target.value })}
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
             />
           </div>
           <div>
@@ -103,7 +103,7 @@ export function VendorPacklistShipmentRow({
               type="text"
               value={entry.challanNumber || ""}
               onChange={(e) => onFieldChange({ challanNumber: e.target.value })}
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
             />
           </div>
         </div>
@@ -117,7 +117,7 @@ export function VendorPacklistShipmentRow({
               type="date"
               value={entry.dispatchDate?.slice(0, 10) || ""}
               onChange={(e) => onFieldChange({ dispatchDate: e.target.value })}
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
             />
           </div>
           <div>
@@ -129,7 +129,7 @@ export function VendorPacklistShipmentRow({
               value={entry.estimatedDeliveryDate?.slice(0, 10) || ""}
               min={entry.dispatchDate?.slice(0, 10)}
               onChange={(e) => onFieldChange({ estimatedDeliveryDate: e.target.value })}
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
             />
           </div>
         </div>
@@ -149,7 +149,7 @@ export function VendorPacklistShipmentRow({
                   numberOfBoxes: e.target.value === "" ? 0 : Math.max(0, Number(e.target.value)),
                 })
               }
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
             />
           </div>
           <div>
@@ -166,7 +166,7 @@ export function VendorPacklistShipmentRow({
                   totalWeight: e.target.value === "" ? 0 : parseFloat(e.target.value),
                 })
               }
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
             />
           </div>
         </div>
@@ -178,7 +178,7 @@ export function VendorPacklistShipmentRow({
               <span className="text-[10px] text-gray-600 ms-2">({entry.poItems.length} selected)</span>
             )}
           </div>
-          <div className="border border-gray-200 rounded-lg p-2 max-h-48 overflow-y-auto bg-white">
+          <div className="border border-gray-300 rounded-lg p-2 max-h-48 overflow-y-auto bg-white">
             {po.poItems && po.poItems.length > 0 ? (
               <div className="space-y-1.5">
                 {po.poItems.map((item, itemIdx) => {
@@ -192,7 +192,7 @@ export function VendorPacklistShipmentRow({
                   return (
                     <div
                       key={lineId}
-                      className={`flex items-start gap-2 p-1.5 rounded border border-transparent ${
+                      className={`flex items-center gap-2.5 p-2 rounded border border-transparent ${
                         selected ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50 border-gray-100"
                       }`}
                     >
@@ -204,11 +204,18 @@ export function VendorPacklistShipmentRow({
                           e.stopPropagation();
                           onPoItemToggle(lineId, e.target.checked);
                         }}
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600 focus:ring-2 focus:ring-purple-400 border-gray-300 rounded cursor-pointer"
+                        className="h-3.5 w-3.5 shrink-0 text-blue-600 focus:ring-2 focus:ring-purple-400 border-gray-300 rounded cursor-pointer"
                       />
-                      <label htmlFor={inputId} className="flex-1 cursor-pointer min-w-0">
-                        <div className="text-xs font-medium text-gray-900">{name}</div>
-                        <div className="text-[10px] text-gray-600 mt-0.5">Qty: {item.quantity}</div>
+                      <label
+                        htmlFor={inputId}
+                        className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-4"
+                      >
+                        <span className="min-w-0 flex-1 text-xs font-medium leading-snug text-gray-900">
+                          {name}
+                        </span>
+                        <span className="shrink-0 text-right text-[10px] font-medium tabular-nums leading-none text-gray-600">
+                          Qty: {item.quantity}
+                        </span>
                       </label>
                     </div>
                   );
@@ -225,7 +232,7 @@ export function VendorPacklistShipmentRow({
           <textarea
             value={entry.notes || ""}
             onChange={(e) => onFieldChange({ notes: e.target.value })}
-            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
             rows={2}
             placeholder="Optional notes"
           />
@@ -248,7 +255,7 @@ export function VendorPacklistShipmentRow({
           />
           <label
             htmlFor={`vpo-packlist-file-${entryIndex}`}
-            className={`flex items-center justify-center gap-2 px-3 py-2 text-xs border border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 ${
+            className={`flex items-center justify-center gap-2 px-3 py-2 text-xs border border-dashed border-gray-400 rounded cursor-pointer hover:bg-gray-50 ${
               isSubmitting || uploading ? "opacity-50 cursor-not-allowed" : ""
             }`}
           >
@@ -260,7 +267,7 @@ export function VendorPacklistShipmentRow({
               {entry.files.map((file) => (
                 <div
                   key={file.key}
-                  className="flex items-center justify-between p-2 bg-white border border-gray-200 rounded text-xs"
+                  className="flex items-center justify-between p-2 bg-white border border-gray-300 rounded text-xs"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <span>{getFileIcon(file.mimeType)}</span>
