@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -269,6 +270,27 @@ const statusBadgeColor = (status: ReturnStatus | OrderStatus) => {
   }
 };
 
+/** One line per distinct yarn; repeats as `name*count` (scan panel + yarn names drawer). */
+const yarnSummaryLinesFromCones = (cones: Cone[]): string[] => {
+  const counts = new Map<string, number>();
+  for (const c of cones) {
+    const name = (c.yarnName || "").trim();
+    if (!name) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  for (const c of cones) {
+    const name = (c.yarnName || "").trim();
+    if (!name) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const n = counts.get(name) ?? 1;
+    lines.push(n > 1 ? `${name}*${n}` : name);
+  }
+  return lines;
+};
+
 const YarnReturnPage = () => {
   const { hasSubPermission, isLoading } = useNavigation();
 
@@ -292,6 +314,9 @@ const YarnReturnPage = () => {
   const [orderSelectOpen, setOrderSelectOpen] = useState(true);
   const [submittingReturn, setSubmittingReturn] = useState(false);
   const [showScanReturnPanel, setShowScanReturnPanel] = useState(false);
+  /** Scan drawer dashed summary: collapsed by default; expand for yarn / floor / cones. */
+  const [scanPanelSummaryOpen, setScanPanelSummaryOpen] = useState(false);
+  const [yarnNamesDrawerRow, setYarnNamesDrawerRow] = useState<ArticleRow | null>(null);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
@@ -315,6 +340,8 @@ const YarnReturnPage = () => {
   });
 
   const pendingToastShown = useRef(false);
+  const scanBarcodeInputRef = useRef<HTMLInputElement>(null);
+  const returnModalPrimaryInputRef = useRef<HTMLInputElement>(null);
   const [fetchingWeight, setFetchingWeight] = useState(false);
   const [markingAllReturned, setMarkingAllReturned] = useState(false);
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Return");
@@ -765,6 +792,36 @@ const YarnReturnPage = () => {
     [orders, selectedOrderId]
   );
 
+  /** Keep focus on the scan barcode field when the panel is active (portal + modal transitions need explicit focus). */
+  useEffect(() => {
+    if (!showScanReturnPanel || !selectedOrderId) return;
+    if (showConeTypeModal || showReturnModal) return;
+    if (barcodeLoading || storingCone) return;
+    const t = window.setTimeout(() => {
+      scanBarcodeInputRef.current?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [
+    showScanReturnPanel,
+    selectedOrderId,
+    showConeTypeModal,
+    showReturnModal,
+    scanningMode,
+    currentConeBarcode,
+    scannedBarcodes.length,
+    barcodeLoading,
+    storingCone,
+  ]);
+
+  /** When the return modal opens, focus the first weight field so Enter can submit without clicking. */
+  useEffect(() => {
+    if (!showReturnModal) return;
+    const t = window.setTimeout(() => {
+      returnModalPrimaryInputRef.current?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [showReturnModal]);
+
   // Build article rows from orders (article-wise display)
   // Each article row shows only cones belonging to that article (by cone.articleId)
   const articleRows = useMemo(() => {
@@ -815,6 +872,16 @@ const YarnReturnPage = () => {
   const selectedArticleRow = useMemo(
     () => articleRows.find((r) => r.rowId === selectedArticleRowId) ?? null,
     [articleRows, selectedArticleRowId]
+  );
+
+  const scanPanelYarnSummaryLines = useMemo(
+    () => yarnSummaryLinesFromCones(selectedArticleRow?.cones ?? selectedOrder?.cones ?? []),
+    [selectedOrder, selectedArticleRow]
+  );
+
+  const yarnNamesDrawerLines = useMemo(
+    () => (yarnNamesDrawerRow ? yarnSummaryLinesFromCones(yarnNamesDrawerRow.cones) : []),
+    [yarnNamesDrawerRow]
   );
 
   // Sync selection to first pending article when current selection is not in pending list
@@ -1069,6 +1136,7 @@ const YarnReturnPage = () => {
     setSelectedOrderId(orderId);
     if (articleRowId) setSelectedArticleRowId(articleRowId);
     setShowScanReturnPanel(true);
+    setScanPanelSummaryOpen(false);
     setBarcodeInput("");
     setScannedBarcodes([]);
     setScannedConeData(new Map());
@@ -2475,9 +2543,6 @@ const YarnReturnPage = () => {
                             <h2 className="text-sm font-bold text-gray-800">
                               {selectedArticleRow?.articleNumber ?? selectedOrder?.orderNumber ?? "—"}
                             </h2>
-                            <p className="text-[11px] text-gray-500 mt-0.5">
-                              {selectedArticleRow?.yarnNames ?? "—"}
-                            </p>
                             <p className="text-[11px] text-gray-500">
                               PO: {selectedOrder?.orderNumber ?? "—"} · {selectedOrder?.floor ?? "—"}
                             </p>
@@ -2489,7 +2554,7 @@ const YarnReturnPage = () => {
                 )}
 
                 <div className="p-[10px] pt-0">
-                  <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Pending Cone Returns ({pendingArticles.length})</h3>
+                  <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Pending Articles Returns ({pendingArticles.length})</h3>
                 </div>
                 <div className="overflow-x-auto min-h-[200px]">
                   {pendingArticles.length === 0 ? (
@@ -2521,7 +2586,24 @@ const YarnReturnPage = () => {
                           return (
                             <tr key={row.rowId} className="hover:bg-gray-50/50 transition-colors">
                               <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{row.articleNumber}</td>
-                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.yarnNames || "—"}</td>
+                              <td className="px-1.5 py-2 border border-gray-200 text-center">
+                                {row.cones.some((c) => (c.yarnName || "").trim()) ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setYarnNamesDrawerRow(row);
+                                    }}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-purple-600 transition-colors hover:border-purple-300 hover:bg-purple-50"
+                                    title="View yarn names"
+                                    aria-label={`View yarn names for article ${row.articleNumber}`}
+                                  >
+                                    <i className="ri-eye-line text-lg" />
+                                  </button>
+                                ) : (
+                                  <span className="text-[12px] text-gray-400">—</span>
+                                )}
+                              </td>
                               <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.productionOrder}</td>
                               <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.floor}</td>
                               <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(row.knittingCompletedAt).toLocaleString()}</td>
@@ -2549,38 +2631,47 @@ const YarnReturnPage = () => {
           </div>
         </div>
 
-      {/* Scan & Return Side Panel */}
-      {showScanReturnPanel && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity"
-            onClick={() => {
-              setShowScanReturnPanel(false);
-              setBarcodeInput("");
-              setScanError(null);
-              setScannedBarcodes([]);
-              setScannedConeData(new Map());
-              setRackBarcodes(new Map());
-              setEmptyCones(new Set());
-              setShowConeTypeModal(false);
-              setPendingConeBarcode(null);
-              setPendingConeData(null);
-              setScanningMode("cone");
-              setCurrentConeBarcode(null);
-            }}
-          />
-          {/* Side Panel */}
-          <div className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto">
-            <div className="box h-full flex flex-col">
-              <div className="box-header border-b border-gray-200 flex-shrink-0">
+      {/* Scan & Return: portal to body so fixed + flex scroll are not broken by layout/transform; no global .box/.box-body */}
+      {showScanReturnPanel &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 z-[10040] bg-black/50 transition-opacity"
+              onClick={() => {
+                setShowScanReturnPanel(false);
+                setScanPanelSummaryOpen(false);
+                setBarcodeInput("");
+                setScanError(null);
+                setScannedBarcodes([]);
+                setScannedConeData(new Map());
+                setRackBarcodes(new Map());
+                setEmptyCones(new Set());
+                setShowConeTypeModal(false);
+                setPendingConeBarcode(null);
+                setPendingConeData(null);
+                setScanningMode("cone");
+                setCurrentConeBarcode(null);
+              }}
+            />
+            {/* Side panel: viewport height, scroll only inside body */}
+            <div
+              className="fixed top-0 right-0 z-[10050] flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="yarn-return-scan-panel-title"
+            >
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 py-3">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="box-title text-lg">Scan &amp; Return</h3>
+                    <h3 id="yarn-return-scan-panel-title" className="text-lg font-bold text-gray-800">
+                      Scan &amp; Return
+                    </h3>
                     {(selectedOrder || selectedArticleRowId) && (
                       <p className="text-xs text-gray-500 mt-1">
                         {selectedArticleRow?.articleNumber ?? selectedOrder?.productionOrder ?? "—"}
-                        {selectedArticleRow?.yarnNames && ` · ${selectedArticleRow.yarnNames}`}
                         {selectedOrder?.orderNumber && ` · PO: ${selectedOrder.orderNumber}`}
                       </p>
                     )}
@@ -2588,6 +2679,7 @@ const YarnReturnPage = () => {
                   <button
                     onClick={() => {
                       setShowScanReturnPanel(false);
+                      setScanPanelSummaryOpen(false);
                       setBarcodeInput("");
                       setScanError(null);
                       setScannedBarcodes([]);
@@ -2608,7 +2700,7 @@ const YarnReturnPage = () => {
                   </button>
                 </div>
               </div>
-              <div className="box-body flex-1 overflow-y-auto">
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pb-6 pt-2 text-[0.813rem] text-defaulttextcolor [scrollbar-gutter:stable]">
                 {!selectedOrder ? (
                   <div className="text-center py-12 text-sm text-gray-500">
                     <i className="ri-focus-2-line text-4xl text-gray-300 mb-2"></i>
@@ -2616,30 +2708,57 @@ const YarnReturnPage = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="border border-dashed border-primary/40 rounded-md p-4 bg-primary/5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {selectedArticleRow?.articleNumber ?? selectedOrder.productionOrder}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {selectedArticleRow?.yarnNames ?? "—"}
-                          </p>
+                    <div className="border border-dashed border-primary/40 rounded-md bg-primary/5 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setScanPanelSummaryOpen((o) => !o)}
+                        className="w-full flex items-center justify-between gap-3 p-3 text-left hover:bg-primary/[0.07] transition-colors"
+                        aria-expanded={scanPanelSummaryOpen}
+                        aria-label={scanPanelSummaryOpen ? "Hide yarn and floor details" : "Show yarn and floor details"}
+                      >
+                        <span className="text-sm font-semibold text-gray-900 truncate min-w-0">
+                          {selectedArticleRow?.articleNumber ?? selectedOrder.productionOrder}
+                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusBadgeColor(
+                              selectedOrder.status
+                            )}`}
+                          >
+                            {selectedOrder.status}
+                          </span>
+                          <i
+                            className={`ri-arrow-down-s-line text-lg text-gray-500 transition-transform ${scanPanelSummaryOpen ? "rotate-180" : ""}`}
+                            aria-hidden={true}
+                          />
+                        </div>
+                      </button>
+                      {scanPanelSummaryOpen && (
+                        <div className="px-3 pb-3 pt-0 border-t border-dashed border-primary/25 space-y-2">
+                          {scanPanelYarnSummaryLines.length > 0 && (
+                            <div
+                              className="max-h-[min(40vh,11rem)] overflow-y-auto overflow-x-hidden overscroll-y-contain rounded border border-gray-200/80 bg-white/60 px-2 py-1.5 [scrollbar-gutter:stable]"
+                              aria-label="Yarn list"
+                            >
+                              <div className="text-xs text-gray-500 space-y-0.5">
+                                {scanPanelYarnSummaryLines.map((line, i) => (
+                                  <div key={`${line}-${i}`} className="break-words">
+                                    {line}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           <p className="text-xs text-gray-500">
                             Floor: {selectedOrder.floor}
                           </p>
                           <p className="text-xs text-gray-500">
-                            Cones: {(selectedArticleRow ? selectedArticleRow.cones : selectedOrder.cones).filter((c) => c.status !== "Returned").length} pending
+                            Cones:{" "}
+                            {(selectedArticleRow ? selectedArticleRow.cones : selectedOrder.cones).filter((c) => c.status !== "Returned").length}{" "}
+                            pending
                           </p>
                         </div>
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusBadgeColor(
-                            selectedOrder.status
-                          )}`}
-                        >
-                          {selectedOrder.status}
-                        </span>
-                      </div>
+                      )}
                     </div>
 
                     <div className="space-y-4">
@@ -2766,6 +2885,7 @@ const YarnReturnPage = () => {
                         )}
                         <div className="relative">
                           <input
+                            ref={scanBarcodeInputRef}
                             type="text"
                             className={`form-control ps-10 ${scanError ? "border-red-500 focus:border-red-500" : ""}`}
                             placeholder={scanningMode === "cone" ? "Scan or enter cone barcode" : "Scan or enter rack barcode"}
@@ -2775,7 +2895,6 @@ const YarnReturnPage = () => {
                               if (scanError) setScanError(null);
                             }}
                             disabled={barcodeLoading || storingCone || (scanningMode === "cone" && scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1"))}
-                            autoFocus
                           />
                           <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                         </div>
@@ -2813,19 +2932,22 @@ const YarnReturnPage = () => {
                   </div>
                 )}
               </div>
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          </>
+        ,
+        document.body
+        )}
 
-      {/* Return Modal */}
+      {/* Return Modal — z above scan panel so focus and stacking match */}
       {showReturnModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10090]">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="box-header border-b border-gray-200 px-6 py-4">
               <div className="flex justify-between items-center">
                 <h3 className="box-title text-lg">Return Yarn</h3>
                 <button
+                  type="button"
                   onClick={() => {
                     setShowReturnModal(false);
                     setScannedBarcodes([]);
@@ -2842,7 +2964,13 @@ const YarnReturnPage = () => {
                 </button>
               </div>
             </div>
-            <div className="box-body p-6">
+            <form
+              className="box-body p-6"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!submittingReturn) void handleReturnSubmit();
+              }}
+            >
               {scannedBarcodes.length > 0 && selectedOrder && (
                 <>
                   <div className="mb-6 p-4 bg-gray-50 rounded-md">
@@ -2921,6 +3049,7 @@ const YarnReturnPage = () => {
                       </label>
                       <div className="flex gap-2">
                         <input
+                          ref={returnModalPrimaryInputRef}
                           type="text"
                           inputMode="decimal"
                           className="form-control flex-1"
@@ -3044,8 +3173,7 @@ const YarnReturnPage = () => {
                       Cancel
                     </button>
                     <button
-                      type="button"
-                      onClick={handleReturnSubmit}
+                      type="submit"
                       className="ti-btn ti-btn-primary"
                       disabled={submittingReturn}
                     >
@@ -3061,14 +3189,14 @@ const YarnReturnPage = () => {
                   </div>
                 </>
               )}
-            </div>
+            </form>
           </div>
         </div>
       )}
 
       {/* Cone Type Selection Modal */}
       {showConeTypeModal && pendingConeBarcode && pendingConeData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10090]">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="box-header border-b border-gray-200 px-6 py-4">
               <div className="flex justify-between items-center">
@@ -3219,6 +3347,61 @@ const YarnReturnPage = () => {
           </div>
         </>
       )}
+
+      {/* Pending table: yarn names — eye icon opens right drawer (portal) */}
+      {yarnNamesDrawerRow &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[10060] bg-black/50 transition-opacity"
+              onClick={() => setYarnNamesDrawerRow(null)}
+              aria-hidden={true}
+            />
+            <div
+              className="fixed top-0 right-0 z-[10070] flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="yarn-names-drawer-title"
+            >
+              <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <h3 id="yarn-names-drawer-title" className="text-lg font-bold text-gray-800">
+                    Yarn names
+                  </h3>
+                  <p className="mt-0.5 truncate text-xs text-gray-500">
+                    {yarnNamesDrawerRow.articleNumber} · PO {yarnNamesDrawerRow.orderNumber}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setYarnNamesDrawerRow(null)}
+                  className="rounded p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                  aria-label="Close"
+                >
+                  <i className="ri-close-line text-xl" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-3 [scrollbar-gutter:stable]">
+                {yarnNamesDrawerLines.length === 0 ? (
+                  <p className="text-sm text-gray-500">No yarn names for this article.</p>
+                ) : (
+                  <ul className="space-y-0">
+                    {yarnNamesDrawerLines.map((line, i) => (
+                      <li
+                        key={`${line}-${i}`}
+                        className="break-words border-b border-gray-100 py-2.5 text-sm text-gray-800 last:border-b-0"
+                      >
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
     </div>
     </div>
   );
