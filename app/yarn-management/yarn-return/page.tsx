@@ -270,17 +270,18 @@ const statusBadgeColor = (status: ReturnStatus | OrderStatus) => {
   }
 };
 
-/** One line per distinct yarn; repeats as `name*count` (scan panel + yarn names drawer). */
+/** One line per distinct yarn; repeats as `name*count` (scan panel + yarn names drawer). Only pending (not yet returned) cones. */
 const yarnSummaryLinesFromCones = (cones: Cone[]): string[] => {
+  const pending = cones.filter((c) => c.status !== "Returned");
   const counts = new Map<string, number>();
-  for (const c of cones) {
+  for (const c of pending) {
     const name = (c.yarnName || "").trim();
     if (!name) continue;
     counts.set(name, (counts.get(name) ?? 0) + 1);
   }
   const lines: string[] = [];
   const seen = new Set<string>();
-  for (const c of cones) {
+  for (const c of pending) {
     const name = (c.yarnName || "").trim();
     if (!name) continue;
     if (seen.has(name)) continue;
