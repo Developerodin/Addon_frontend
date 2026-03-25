@@ -102,8 +102,8 @@ export function VendorSecondaryCheckingProcessDrawer({
         </div>
         <div className={CRM.drawerBodyScroll}>
           <p className={CRM.drawerHint}>
-            <strong>How to update:</strong> set received quantity if it differs from planned, then enter M1/M2/M4 counts and
-            repair status. Click <strong>Save &amp; update</strong> when done.
+            <strong>How to update:</strong> set received quantity if it differs from planned, then enter M2/M4 counts and
+            repair status. M1 (good) is derived from received minus M2/M4. Click <strong>Save &amp; update</strong> when done.
           </p>
 
           <div className={CRM.drawerSection}>
@@ -168,23 +168,8 @@ export function VendorSecondaryCheckingProcessDrawer({
           </div>
 
           <div className={CRM.drawerSection}>
-            <div className={CRM.drawerSectionHead}>3. Quality counts (M1 / M2 / M4)</div>
-            <div className="p-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className={CRM.label}>M1 qty (good)</label>
-                <input
-                  type="number"
-                  className={`${CRM.input} border-emerald-200 focus:border-emerald-500`}
-                  value={processingData.m1Quantity}
-                  onChange={(e) => setProcessingData((p) => ({ ...p, m1Quantity: Number(e.target.value) }))}
-                />
-                {scLive && (
-                  <p className="text-[10px] text-gray-500 mt-1">
-                    M1 transferred: {(scLive.m1Transferred ?? 0).toLocaleString()} · M1 available to send:{" "}
-                    <strong className="text-emerald-700">{m1Avail.toLocaleString()}</strong>
-                  </p>
-                )}
-              </div>
+            <div className={CRM.drawerSectionHead}>3. Quality counts (M2 / M4)</div>
+            <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={CRM.label}>M2 qty (repair)</label>
                 <input

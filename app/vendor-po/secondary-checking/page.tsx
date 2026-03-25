@@ -16,6 +16,23 @@ import vendorPurchaseOrderService, { VendorPurchaseOrder } from "@/shared/servic
 import { VendorSecondaryCheckingCreateDrawer } from "./components/VendorSecondaryCheckingCreateDrawer";
 import { VendorSecondaryCheckingProcessDrawer } from "./components/VendorSecondaryCheckingProcessDrawer";
 
+/**
+ * M1 (good) is derived from received minus M2/M4 buckets.
+ * Keeping this derivation here ensures the backend still receives `m1Quantity`
+ * even if the drawer UI no longer exposes an M1 input.
+ */
+function deriveSecondaryCheckingM1(
+  received?: number,
+  m2Quantity?: number,
+  m4Quantity?: number
+): number {
+  const r = Number(received ?? 0);
+  const m2 = Number(m2Quantity ?? 0);
+  const m4 = Number(m4Quantity ?? 0);
+  if (![r, m2, m4].every(Number.isFinite)) return 0;
+  return Math.max(0, r - m2 - m4);
+}
+
 const SecondaryCheckingPage = () => {
   const [flows, setFlows] = useState<VendorProductionFlow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,7 +158,22 @@ const SecondaryCheckingPage = () => {
   const handleSaveProcessing = async () => {
     if (!selectedFlow) return;
     try {
-      await vendorProductionFlowService.updateFloor(selectedFlow.id, "secondaryChecking", processingData);
+      const received = Number(processingData.received ?? 0);
+      const m2Quantity = Number(processingData.m2Quantity ?? 0);
+      const m4Quantity = Number(processingData.m4Quantity ?? 0);
+
+      // Since M1 is derived from received - M2 - M4, enforce that M2+M4 doesn't exceed received.
+      if ([received, m2Quantity, m4Quantity].every(Number.isFinite) && m2Quantity + m4Quantity > received) {
+        toast.error("M2 + M4 cannot exceed Batch received quantity");
+        return;
+      }
+
+      const payload = {
+        ...processingData,
+        m1Quantity: deriveSecondaryCheckingM1(received, m2Quantity, m4Quantity),
+      };
+
+      await vendorProductionFlowService.updateFloor(selectedFlow.id, "secondaryChecking", payload);
       toast.success("Secondary checking updated");
       setIsProcessing(false);
       loadFlows();
