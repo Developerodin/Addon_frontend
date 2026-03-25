@@ -24,6 +24,10 @@ import {
   type PopulatedArticleRef,
 } from "@/shared/services/machineOrderAssignmentService";
 import AssignmentsCards from "@/app/catalog/needle-configuration/components/AssignmentsCards";
+import {
+  resolveYarnCatalogId,
+  resolveYarnCatalogIdFromTransaction,
+} from "./resolveYarnCatalogId";
 
 type ConeStatus = "Awaiting" | "Returned";
 type OrderStatus = "Awaiting Return" | "In Progress" | "Partial" | "Returned";
@@ -449,10 +453,11 @@ const YarnReturnPage = () => {
               rt.transactionType === "yarn_returned"
           );
           const uniqueConeId = coneIds.length > 1 ? `${coneId}-${idx + 1}` : coneId;
+          const catalogId = resolveYarnCatalogIdFromTransaction(tx);
           conesMap.set(coneId, {
             id: uniqueConeId,
             barcode: coneId,
-            yarnCode: tx.yarn?.id || tx.yarn || "N/A",
+            yarnCode: catalogId || (tx as { yarnCode?: string }).yarnCode || "N/A",
             yarnName: tx.yarnName || "Unknown Yarn",
             yarnType: tx.yarn?.yarnType?.name || "Unknown",
             issuedWeight: weightPerCone,
@@ -461,7 +466,7 @@ const YarnReturnPage = () => {
             status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
             lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
             transactionId: tx._id || tx.id,
-            yarnCatalogId: tx.yarn?.id || tx.yarn,
+            yarnCatalogId: catalogId || undefined,
             articleId,
             articleNumber,
           });
@@ -1579,10 +1584,11 @@ const YarnReturnPage = () => {
         });
         
         // Create a cone object from the API response (use selectedArticleRow.articleId when user selected article for return)
+        const scannedCatalogId = resolveYarnCatalogId(coneDetails);
         cone = {
           id: coneDetails._id || coneDetails.id || value,
           barcode: coneDetails.barcode || value,
-          yarnCode: coneDetails.yarn?.id || coneDetails.yarn || "N/A",
+          yarnCode: scannedCatalogId || (coneDetails as { yarnCode?: string }).yarnCode || "N/A",
           yarnName: coneDetails.yarnName || "Unknown Yarn",
           yarnType: coneDetails.yarn?.yarnType?.name || "Unknown",
           issuedWeight: coneDetails.issueWeight || 0,
@@ -1593,7 +1599,7 @@ const YarnReturnPage = () => {
           status: coneDetails.returnStatus === "returned" ? "Returned" as ConeStatus : "Awaiting" as ConeStatus,
           lastReturnedAt: coneDetails.returnDate,
           transactionId: coneDetails.transactionId,
-          yarnCatalogId: coneDetails.yarn?.id || coneDetails.yarn,
+          yarnCatalogId: scannedCatalogId || undefined,
           articleId: coneDetails.articleId ?? selectedArticleRow?.articleId,
         };
         
@@ -1725,37 +1731,34 @@ const YarnReturnPage = () => {
           console.log("📦 Empty cone detected, setting per-cone weights to 0:", barcode);
         }
 
-        // Get yarn ID from cone data - it should be a MongoDB ObjectId
-        // Strategy 1: Try to get from coneDataFromMap (API response)
+        // YarnCatalog _id only (not YarnInventory, box/cone/tx/order ids).
         let yarnId: string | null = null;
-        
+
         if (coneDataFromMap) {
-          if (typeof coneDataFromMap.yarn === "string") {
-            yarnId = coneDataFromMap.yarn;
-          } else if (coneDataFromMap.yarn && typeof coneDataFromMap.yarn === "object") {
-            yarnId = coneDataFromMap.yarn._id || coneDataFromMap.yarn.id || null;
-          }
+          yarnId = resolveYarnCatalogId({
+            yarnCatalogId:
+              coneDataFromMap.yarnCatalogId ?? coneDataFromMap.coneDetails?.yarnCatalogId,
+            yarn: coneDataFromMap.yarn ?? coneDataFromMap.coneDetails?.yarn,
+            inventory: coneDataFromMap.inventory ?? coneDataFromMap.coneDetails?.inventory,
+          });
         }
-        
-        // Strategy 2: Try from cone object's yarnCatalogId or yarnCode
+
         if (!yarnId || yarnId === "N/A") {
-          yarnId = cone.yarnCatalogId || (cone.yarnCode !== "N/A" ? cone.yarnCode : null);
+          yarnId = resolveYarnCatalogId({ yarnCatalogId: cone.yarnCatalogId });
         }
-        
-        // Strategy 3: Try to find the cone in the order's cones (which have yarnCatalogId from issued transactions)
+
         if ((!yarnId || yarnId === "N/A") && selectedOrder) {
           const orderCone = selectedOrder.cones.find(
             (c) => c.barcode.toLowerCase() === barcode.toLowerCase() || c.id === cone.id
           );
           if (orderCone && orderCone.yarnCatalogId && orderCone.yarnCatalogId !== "N/A") {
             yarnId = orderCone.yarnCatalogId;
-            console.log("✅ Got yarn ID from order's cone:", yarnId);
+            console.log("✅ Got yarn catalog id from order cone:", yarnId);
           }
         }
-        
-        // Strategy 4: Fetch from issued transaction if we have transactionId
+
         if ((!yarnId || yarnId === "N/A") && cone.transactionId) {
-          console.log("🔍 Fetching yarn ID from issued transaction:", cone.transactionId);
+          console.log("🔍 Fetching yarn catalog id from issued transaction:", cone.transactionId);
           try {
             const txResponse = await fetch(
               `${API_BASE_URL}/yarn-management/yarn-transactions/${cone.transactionId}`,
@@ -1766,19 +1769,11 @@ const YarnReturnPage = () => {
                 },
               }
             );
-            
+
             if (txResponse.ok) {
               const txData = await txResponse.json();
-              if (typeof txData.yarn === "string") {
-                yarnId = txData.yarn;
-              } else if (txData.yarn && typeof txData.yarn === "object") {
-                yarnId = txData.yarn._id || txData.yarn.id || null;
-              } else if (typeof txData.yarnCatalogId === "string") {
-                yarnId = txData.yarnCatalogId;
-              } else if (txData.yarnCatalogId && typeof txData.yarnCatalogId === "object") {
-                yarnId = txData.yarnCatalogId._id || txData.yarnCatalogId.id || null;
-              }
-              console.log("✅ Got yarn ID from transaction:", yarnId);
+              yarnId = resolveYarnCatalogId(txData);
+              console.log("✅ Resolved yarn catalog id from transaction:", yarnId);
             } else {
               console.warn("⚠️ Transaction fetch failed:", txResponse.status);
             }
@@ -1786,8 +1781,7 @@ const YarnReturnPage = () => {
             console.error("❌ Failed to fetch transaction:", txError);
           }
         }
-        
-        // Strategy 5: Query issued transactions for this order and find matching by yarnName or coneBarcode
+
         if ((!yarnId || yarnId === "N/A") && selectedOrder && cone.yarnName) {
           console.log("🔍 Querying issued transactions for order:", selectedOrder.orderNumber);
           try {
@@ -1800,41 +1794,36 @@ const YarnReturnPage = () => {
                 },
               }
             );
-            
+
             if (txListResponse.ok) {
               const txListData = await txListResponse.json();
               let issuedTransactions = extractTransactions(txListData);
               issuedTransactions = issuedTransactions.filter((tx: any) => tx.transactionType === "yarn_issued");
-              
+
               console.log("📋 Found issued transactions:", issuedTransactions.length);
-              
-              // Try to find transaction matching by coneBarcode first
-              let matchingTx = issuedTransactions.find((tx: any) => 
-                tx.coneBarcode === barcode || tx.coneBarcode?.toLowerCase() === barcode.toLowerCase()
+
+              let matchingTx = issuedTransactions.find(
+                (tx: any) =>
+                  tx.coneBarcode === barcode || tx.coneBarcode?.toLowerCase() === barcode.toLowerCase()
               );
-              
-              // If no match by barcode, try matching by yarnName
+
               if (!matchingTx && cone.yarnName) {
-                matchingTx = issuedTransactions.find((tx: any) => 
-                  tx.yarnName === cone.yarnName || 
-                  tx.yarnName?.toLowerCase() === cone.yarnName.toLowerCase()
+                matchingTx = issuedTransactions.find(
+                  (tx: any) =>
+                    tx.yarnName === cone.yarnName ||
+                    tx.yarnName?.toLowerCase() === cone.yarnName.toLowerCase()
                 );
                 console.log("🔍 Matching by yarnName:", cone.yarnName, matchingTx ? "Found" : "Not found");
               }
-              
-              // If still no match and there's only one transaction, use it
+
               if (!matchingTx && issuedTransactions.length === 1) {
                 matchingTx = issuedTransactions[0];
                 console.log("🔍 Using single transaction as fallback");
               }
-              
+
               if (matchingTx) {
-                if (typeof matchingTx.yarn === "string") {
-                  yarnId = matchingTx.yarn;
-                } else if (matchingTx.yarn && typeof matchingTx.yarn === "object") {
-                  yarnId = matchingTx.yarn._id || matchingTx.yarn.id || null;
-                }
-                console.log("✅ Got yarn ID from matching transaction:", {
+                yarnId = resolveYarnCatalogIdFromTransaction(matchingTx);
+                console.log("✅ Resolved yarn catalog id from matching transaction:", {
                   yarnId,
                   transactionId: matchingTx._id,
                   yarnName: matchingTx.yarnName,
@@ -1869,20 +1858,18 @@ const YarnReturnPage = () => {
           );
         }
 
-        // Normalise to a plain string so backend Joi sees a string, not an object
-        const yarnIdString =
-          typeof yarnId === "string"
-            ? yarnId
-            : (yarnId as any)?._id ?? (yarnId as any)?.id ?? String(yarnId);
+        // Plain string for POST (catalog id only; do not unwrap random object._id)
+        const yarnIdString = String(yarnId).trim();
 
-        console.log("📦 Using yarn ID for transaction:", {
-          yarnId: yarnIdString,
+        console.log("[yarn-return] POST yarn catalog id (verify: db.yarncatalogs.findOne({ _id: ObjectId(...) }) ):", {
+          yarnCatalogId: yarnIdString,
           yarnName: cone.yarnName,
           barcode,
         });
 
         const transactionData = {
-          yarn: yarnIdString, // Must be a valid MongoDB ObjectId
+          yarn: yarnIdString, // legacy: YarnCatalog _id
+          yarnCatalogId: yarnIdString,
           yarnName: cone.yarnName,
           transactionType: "yarn_returned",
           transactionDate: transactionDate,
@@ -2185,10 +2172,11 @@ const YarnReturnPage = () => {
                     rt.transactionType === "yarn_returned"
                 );
                 const uniqueConeId = coneIds.length > 1 ? `${coneId}-${idx + 1}` : coneId;
+                const catalogIdRefresh = resolveYarnCatalogIdFromTransaction(tx);
                 conesMap.set(coneId, {
                   id: uniqueConeId,
                   barcode: coneId,
-                  yarnCode: tx.yarn?.id || tx.yarn || "N/A",
+                  yarnCode: catalogIdRefresh || (tx as { yarnCode?: string }).yarnCode || "N/A",
                   yarnName: tx.yarnName || "Unknown Yarn",
                   yarnType: tx.yarn?.yarnType?.name || "Unknown",
                   issuedWeight: weightPerCone,
@@ -2197,7 +2185,7 @@ const YarnReturnPage = () => {
                   status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
                   lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
                   transactionId: tx._id || tx.id,
-                  yarnCatalogId: tx.yarn?.id || tx.yarn,
+                  yarnCatalogId: catalogIdRefresh || undefined,
                   articleId,
                 });
               });
