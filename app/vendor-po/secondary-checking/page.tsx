@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
@@ -15,23 +15,7 @@ import vendorManagementService, { VendorManagementDocument } from "@/shared/serv
 import vendorPurchaseOrderService, { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
 import { VendorSecondaryCheckingCreateDrawer } from "./components/VendorSecondaryCheckingCreateDrawer";
 import { VendorSecondaryCheckingProcessDrawer } from "./components/VendorSecondaryCheckingProcessDrawer";
-
-/**
- * M1 (good) is derived from received minus M2/M4 buckets.
- * Keeping this derivation here ensures the backend still receives `m1Quantity`
- * even if the drawer UI no longer exposes an M1 input.
- */
-function deriveSecondaryCheckingM1(
-  received?: number,
-  m2Quantity?: number,
-  m4Quantity?: number
-): number {
-  const r = Number(received ?? 0);
-  const m2 = Number(m2Quantity ?? 0);
-  const m4 = Number(m4Quantity ?? 0);
-  if (![r, m2, m4].every(Number.isFinite)) return 0;
-  return Math.max(0, r - m2 - m4);
-}
+import { VendorSecondaryCheckingTransferModal } from "./components/VendorSecondaryCheckingTransferModal";
 
 const SecondaryCheckingPage = () => {
   const [flows, setFlows] = useState<VendorProductionFlow[]>([]);
@@ -57,7 +41,12 @@ const SecondaryCheckingPage = () => {
   const [selectedFlow, setSelectedFlow] = useState<VendorProductionFlow | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingData, setProcessingData] = useState<Partial<QualityFloorQuantity>>({});
+  const [saving, setSaving] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferLoading, setTransferLoading] = useState(false);
+  /** True while GET-by-id runs after clicking Process — avoids stale list data in the drawer. */
+  const [processDrawerFetching, setProcessDrawerFetching] = useState(false);
+  const processDrawerSessionRef = useRef(0);
 
   const loadFlows = useCallback(async () => {
     setLoading(true);
@@ -142,75 +131,173 @@ const SecondaryCheckingPage = () => {
   };
 
   const handleOpenProcess = (flow: VendorProductionFlow) => {
-    setSelectedFlow(flow);
-    const q = flow.floorQuantities.secondaryChecking;
-    setProcessingData({
-      received: q.received || 0,
-      m1Quantity: q.m1Quantity || 0,
-      m2Quantity: q.m2Quantity || 0,
-      m4Quantity: q.m4Quantity || 0,
-      repairStatus: q.repairStatus || "NOT_REQUIRED",
-      repairRemarks: q.repairRemarks || "",
-    });
+    const session = ++processDrawerSessionRef.current;
     setIsProcessing(true);
+    setProcessDrawerFetching(true);
+    setSelectedFlow(null);
+    setProcessingData({});
+    void (async () => {
+      try {
+        const fresh = await vendorProductionFlowService.getById(flow.id);
+        if (session !== processDrawerSessionRef.current) return;
+        setSelectedFlow(fresh);
+        setFlows((prev) => prev.map((f) => (f.id === fresh.id ? fresh : f)));
+        const q = fresh.floorQuantities.secondaryChecking;
+        setProcessingData({
+          received: q.received || 0,
+          repairStatus: q.repairStatus || "NOT_REQUIRED",
+          repairRemarks: q.repairRemarks || "",
+        });
+      } catch (err: any) {
+        if (session !== processDrawerSessionRef.current) return;
+        toast.error(err.message || "Failed to load batch");
+        setIsProcessing(false);
+      } finally {
+        if (session === processDrawerSessionRef.current) {
+          setProcessDrawerFetching(false);
+        }
+      }
+    })();
   };
+
+  const closeProcessDrawer = useCallback(() => {
+    processDrawerSessionRef.current += 1;
+    setIsProcessing(false);
+    setProcessDrawerFetching(false);
+    setSelectedFlow(null);
+  }, []);
+
+  const handleOpenTransfer = useCallback(async (flow: VendorProductionFlow) => {
+    setIsTransferModalOpen(true);
+    setSelectedFlow(null);
+    setTransferLoading(true);
+    try {
+      const fresh = await vendorProductionFlowService.getById(flow.id);
+      setSelectedFlow(fresh);
+      setFlows((prev) => prev.map((f) => (f.id === fresh.id ? fresh : f)));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load batch for transfer");
+      setIsTransferModalOpen(false);
+    } finally {
+      setTransferLoading(false);
+    }
+  }, []);
 
   const handleSaveProcessing = async () => {
     if (!selectedFlow) return;
+    setSaving(true);
     try {
-      const received = Number(processingData.received ?? 0);
-      const m2Quantity = Number(processingData.m2Quantity ?? 0);
-      const m4Quantity = Number(processingData.m4Quantity ?? 0);
+      const received = Number(selectedFlow.floorQuantities.secondaryChecking.received ?? 0);
+      const currentSc = selectedFlow.floorQuantities.secondaryChecking;
+      const currentM1 = Number(currentSc.m1Quantity ?? 0);
+      const currentM2 = Number(currentSc.m2Quantity ?? 0);
+      const currentM4 = Number(currentSc.m4Quantity ?? 0);
+      const m1Quantity =
+        processingData.m1Quantity !== undefined && processingData.m1Quantity !== null
+          ? Number(processingData.m1Quantity)
+          : currentM1;
+      const m2Quantity =
+        processingData.m2Quantity !== undefined && processingData.m2Quantity !== null
+          ? Number(processingData.m2Quantity)
+          : currentM2;
+      const m4Quantity =
+        processingData.m4Quantity !== undefined && processingData.m4Quantity !== null
+          ? Number(processingData.m4Quantity)
+          : currentM4;
 
-      // Since M1 is derived from received - M2 - M4, enforce that M2+M4 doesn't exceed received.
-      if ([received, m2Quantity, m4Quantity].every(Number.isFinite) && m2Quantity + m4Quantity > received) {
-        toast.error("M2 + M4 cannot exceed Batch received quantity");
+      if ([m1Quantity, m2Quantity, m4Quantity].some((v) => !Number.isInteger(v) || v < 0)) {
+        toast.error("M1, M2, and M4 must be whole numbers ≥ 0");
         return;
       }
 
-      const payload = {
-        ...processingData,
-        m1Quantity: deriveSecondaryCheckingM1(received, m2Quantity, m4Quantity),
+      if ([received, m1Quantity, m2Quantity, m4Quantity].every(Number.isFinite) && m1Quantity + m2Quantity + m4Quantity > received) {
+        toast.error("M1 + M2 + M4 cannot exceed batch received quantity");
+        return;
+      }
+
+      const qtyEdited =
+        processingData.m1Quantity !== undefined && processingData.m1Quantity !== null
+          ? Number(processingData.m1Quantity)
+          : null;
+      const qtyEditedM2 =
+        processingData.m2Quantity !== undefined && processingData.m2Quantity !== null
+          ? Number(processingData.m2Quantity)
+          : null;
+      const qtyEditedM4 =
+        processingData.m4Quantity !== undefined && processingData.m4Quantity !== null
+          ? Number(processingData.m4Quantity)
+          : null;
+
+      const hasAnyChange =
+        (qtyEdited !== null && qtyEdited !== currentM1) ||
+        (qtyEditedM2 !== null && qtyEditedM2 !== currentM2) ||
+        (qtyEditedM4 !== null && qtyEditedM4 !== currentM4) ||
+        (processingData.repairStatus ?? "NOT_REQUIRED") !== (currentSc.repairStatus ?? "NOT_REQUIRED") ||
+        (processingData.repairRemarks ?? "") !== (currentSc.repairRemarks ?? "");
+
+      if (!hasAnyChange) {
+        toast("No changes to save");
+        return;
+      }
+
+      /** Explicit M1/M2/M4 — use absolute replace (no `mode: increment`). Blank inputs keep server values (resolved above). */
+      const payload: Record<string, unknown> = {
+        m1Quantity,
+        m2Quantity,
+        m4Quantity,
+        repairStatus: processingData.repairStatus,
+        repairRemarks: processingData.repairRemarks,
       };
 
-      await vendorProductionFlowService.updateFloor(selectedFlow.id, "secondaryChecking", payload);
+      const updated = await vendorProductionFlowService.updateFloor(selectedFlow.id, "secondaryChecking", payload);
       toast.success("Secondary checking updated");
-      setIsProcessing(false);
-      loadFlows();
+      setSelectedFlow(updated);
+      setFlows((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+      const q = updated.floorQuantities.secondaryChecking;
+      setProcessingData({
+        received: q.received ?? 0,
+        repairStatus: q.repairStatus ?? "NOT_REQUIRED",
+        repairRemarks: q.repairRemarks ?? "",
+      });
+
+      // After save, immediately ask destination + qty in modal.
+      setIsTransferModalOpen(true);
     } catch (err: any) {
       toast.error(err.message || "Update failed");
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleTransferM1 = useCallback(
-    async (toFloorKey: VendorTransferToFloorKey, quantity: number) => {
+    async (args: { toFloorKey: VendorTransferToFloorKey; quantity: number }) => {
       if (!selectedFlow) return;
       setTransferLoading(true);
       try {
         const updated = await vendorProductionFlowService.transfer(selectedFlow.id, {
+          mode: "increment",
           fromFloorKey: "secondaryChecking",
-          toFloorKey: toFloorKey,
-          quantity,
+          toFloorKey: args.toFloorKey,
+          quantity: args.quantity,
         });
-        toast.success(`Transferred ${quantity.toLocaleString()} → ${toFloorKey}`);
+        toast.success(`Transferred ${args.quantity.toLocaleString()} → ${args.toFloorKey}`);
         setSelectedFlow(updated);
         setFlows((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
         const q = updated.floorQuantities.secondaryChecking;
         setProcessingData({
           received: q.received ?? 0,
-          m1Quantity: q.m1Quantity ?? 0,
-          m2Quantity: q.m2Quantity ?? 0,
-          m4Quantity: q.m4Quantity ?? 0,
           repairStatus: q.repairStatus ?? "NOT_REQUIRED",
           repairRemarks: q.repairRemarks ?? "",
         });
+        setIsTransferModalOpen(false);
+        closeProcessDrawer();
       } catch (err: any) {
         toast.error(err.message || "Transfer failed");
       } finally {
         setTransferLoading(false);
       }
     },
-    [selectedFlow]
+    [selectedFlow, closeProcessDrawer]
   );
 
   const getStatusBadge = (flow: VendorProductionFlow) => {
@@ -308,6 +395,7 @@ const SecondaryCheckingPage = () => {
                     const sc = flow.floorQuantities.secondaryChecking;
                     const vendorName = typeof flow.vendor === "object" ? flow.vendor?.header?.vendorName : "Unknown";
                     const poNumber = typeof flow.vendorPurchaseOrder === "object" ? flow.vendorPurchaseOrder?.vpoNumber : "N/A";
+                    const hasM1ToTransfer = Math.max(0, (sc.m1Quantity ?? 0) - (sc.m1Transferred ?? 0)) > 0;
                     
                     return (
                       <tr key={flow.id} className={CRM.tbodyTr}>
@@ -347,6 +435,16 @@ const SecondaryCheckingPage = () => {
                              >
                                Process
                              </button>
+                             {hasM1ToTransfer && (
+                               <button
+                                 onClick={() => void handleOpenTransfer(flow)}
+                                 className={CRM.btnSecondary}
+                                 disabled={transferLoading}
+                                 title="Transfer M1 quantity to next floor"
+                               >
+                                 Transfer
+                               </button>
+                             )}
                            </div>
                         </td>
                       </tr>
@@ -394,12 +492,24 @@ const SecondaryCheckingPage = () => {
       <VendorSecondaryCheckingProcessDrawer
         open={isProcessing}
         flow={selectedFlow}
-        onClose={() => setIsProcessing(false)}
+        onClose={closeProcessDrawer}
+        loading={processDrawerFetching}
         processingData={processingData}
         setProcessingData={setProcessingData}
         onSave={handleSaveProcessing}
-        onTransferM1={handleTransferM1}
-        transferLoading={transferLoading}
+        saving={saving || transferLoading}
+      />
+
+      <VendorSecondaryCheckingTransferModal
+        open={isTransferModalOpen}
+        flow={selectedFlow}
+        loading={transferLoading}
+        onClose={() => {
+          // allow skipping transfer; just close modal and close drawer
+          setIsTransferModalOpen(false);
+          closeProcessDrawer();
+        }}
+        onSubmit={handleTransferM1}
       />
     </div>
   );

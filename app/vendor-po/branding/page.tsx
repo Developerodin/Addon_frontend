@@ -5,12 +5,9 @@ import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { CRM } from "../vendor-list/crmUiClasses";
-import vendorProductionFlowService, {
-  VendorProductionFlow,
-  type BrandingFloorPatchPayload,
-} from "@/shared/services/vendorProductionFlowService";
-import { VendorProductionFloorDrawer } from "../components/VendorProductionFloorDrawer";
-import { VendorFloorBatchSummary } from "../components/VendorFloorBatchSummary";
+import vendorProductionFlowService, { type VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
+import { formatTransferredRowLabel } from "../utils/transferredStyleRows";
+import { VendorBrandingProcessDrawer } from "./components/VendorBrandingProcessDrawer";
 
 const BrandingPage = () => {
   const [flows, setFlows] = useState<VendorProductionFlow[]>([]);
@@ -20,16 +17,15 @@ const BrandingPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedFlow, setSelectedFlow] = useState<VendorProductionFlow | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [completedQty, setCompletedQty] = useState(0);
-  const [saving, setSaving] = useState(false);
 
   const loadFlows = useCallback(async () => {
     setLoading(true);
     try {
       const data = await vendorProductionFlowService.list({ limit: 100 });
       setFlows(data.results || []);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load branding flows");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load branding flows";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -44,7 +40,8 @@ const BrandingPage = () => {
       const q = searchQuery.trim().toLowerCase();
       const refCode = f.referenceCode?.toLowerCase() || "";
       const vendorName = typeof f.vendor === "object" ? f.vendor?.header?.vendorName?.toLowerCase() || "" : "";
-      const poNumber = typeof f.vendorPurchaseOrder === "object" ? f.vendorPurchaseOrder?.vpoNumber?.toLowerCase() || "" : "";
+      const poNumber =
+        typeof f.vendorPurchaseOrder === "object" ? f.vendorPurchaseOrder?.vpoNumber?.toLowerCase() || "" : "";
       return !q || refCode.includes(q) || vendorName.includes(q) || poNumber.includes(q);
     });
   }, [flows, searchQuery]);
@@ -57,25 +54,13 @@ const BrandingPage = () => {
 
   const handleOpenProcess = (flow: VendorProductionFlow) => {
     setSelectedFlow(flow);
-    setCompletedQty(flow.floorQuantities.branding.completed ?? 0);
     setIsProcessing(true);
   };
 
-  const handleSaveProcessing = async () => {
-    if (!selectedFlow) return;
-    setSaving(true);
-    try {
-      const payload: BrandingFloorPatchPayload = { completed: Number(completedQty) || 0 };
-      await vendorProductionFlowService.updateFloor(selectedFlow.id, "branding", payload);
-      toast.success("Branding details updated");
-      setIsProcessing(false);
-      await loadFlows();
-    } catch (err: any) {
-      toast.error(err.message || "Update failed");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const handleBrandingSaved = useCallback((updated: VendorProductionFlow) => {
+    setFlows((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    setSelectedFlow(updated);
+  }, []);
 
   if (loading) {
     return (
@@ -98,7 +83,7 @@ const BrandingPage = () => {
           <h1 className={CRM.pageTitle}>Branding Stage</h1>
           <HelpIcon
             title="Branding Supervisor"
-            content="Mark items as branded and specify style codes/brands for final quality verification."
+            content="Record completed quantity and style/brand breakdown for transfers toward final checking (PATCH branding floor with transferredData)."
           />
         </div>
         <div className="flex items-center gap-2">
@@ -171,11 +156,15 @@ const BrandingPage = () => {
                         <td className={`${CRM.td} text-right font-bold text-emerald-600`}>{br.completed.toLocaleString()}</td>
                         <td className={CRM.td}>
                           <div className="text-[10px] flex flex-wrap gap-1">
-                            {br.transferredData?.map((row, i) => (
-                              <span key={i} className="bg-gray-50 border border-gray-100 px-1 py-0.5 rounded">
-                                {row.brand} ({row.styleCode}): {row.transferred}
-                              </span>
-                            ))}
+                            {br.transferredData?.length ? (
+                              br.transferredData.map((row, i) => (
+                                <span key={i} className="bg-gray-50 border border-gray-100 px-1 py-0.5 rounded">
+                                  {formatTransferredRowLabel(row)}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
                           </div>
                         </td>
                         <td className={CRM.td}>
@@ -220,39 +209,12 @@ const BrandingPage = () => {
         </div>
       </div>
 
-      <VendorProductionFloorDrawer
+      <VendorBrandingProcessDrawer
         open={isProcessing && !!selectedFlow}
-        title={`Branding — ${selectedFlow?.referenceCode || selectedFlow?.id.slice(-6) || ""}`}
-        titleId="vendor-branding-drawer-title"
+        flow={selectedFlow}
         onClose={() => setIsProcessing(false)}
-        onSave={handleSaveProcessing}
-        saveLabel="Save & move to final QC"
-        saving={saving}
-        hint={
-          <p className={CRM.drawerHint}>
-            <strong>Branding:</strong> only <strong>completed</strong> is sent to the API from this screen.
-          </p>
-        }
-      >
-        {selectedFlow && (
-          <>
-            <VendorFloorBatchSummary flow={selectedFlow} />
-            <div className={CRM.drawerSection}>
-              <div className={CRM.drawerSectionHead}>2. Completed quantity</div>
-              <div className="p-3">
-                <label className={CRM.label}>Completed quantity</label>
-                <input
-                  type="number"
-                  min={0}
-                  className={`${CRM.input} border-emerald-200 focus:border-emerald-500 max-w-[200px]`}
-                  value={completedQty}
-                  onChange={(e) => setCompletedQty(Number(e.target.value))}
-                />
-              </div>
-            </div>
-          </>
-        )}
-      </VendorProductionFloorDrawer>
+        onSaved={handleBrandingSaved}
+      />
     </div>
   );
 };

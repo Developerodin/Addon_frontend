@@ -217,6 +217,40 @@ export async function getProductByCode(
   }
 }
 
+/** Row from GET /v1/products/style-codes-by-vendor-code — use `id` as `styleCode` in branding floor payloads. */
+export interface StyleCodeByVendorRow {
+  id?: string;
+  /** Some API responses use Mongo `_id` instead of `id` */
+  _id?: string;
+  styleCode: string;
+  eanCode?: string;
+  brand: string;
+  pack?: string;
+  mrp?: number;
+  status?: string;
+}
+
+export interface StyleCodesByVendorCodeResponse {
+  vendorCode: string;
+  productCount: number;
+  styleCodes: StyleCodeByVendorRow[];
+}
+
+/**
+ * GET /v1/products/style-codes-by-vendor-code?vendorCode=
+ * Distinct style codes linked to products with this Product.vendorCode (case-insensitive).
+ */
+export async function getStyleCodesByVendorCode(
+  vendorCode: string
+): Promise<StyleCodesByVendorCodeResponse> {
+  const q = vendorCode?.trim();
+  if (!q) {
+    return { vendorCode: '', productCount: 0, styleCodes: [] };
+  }
+  const url = `${API_BASE_URL}/products/style-codes-by-vendor-code?vendorCode=${encodeURIComponent(q)}`;
+  return request<StyleCodesByVendorCodeResponse>(url, { method: 'GET' });
+}
+
 export const productService = {
   list: listProducts,
   getById: getProductById,
@@ -224,6 +258,7 @@ export const productService = {
   bulkUpsert: bulkUpsertProducts,
   getByFactoryCodes: getProductsByFactoryCodes,
   getByCode: getProductByCode,
+  getStyleCodesByVendorCode,
 };
 
 export default productService;

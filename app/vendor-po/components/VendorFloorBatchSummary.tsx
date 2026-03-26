@@ -8,12 +8,14 @@ type Props = {
   flow: VendorProductionFlow;
   /** Section heading, e.g. "1. Batch summary" */
   sectionTitle?: string;
+  /** Optional custom line rendered under the summary grid. */
+  footerInfo?: React.ReactNode;
 };
 
 /**
  * Read-only batch header block for vendor floor drawers (vendor, VPO, ref, planned, current floor).
  */
-export function VendorFloorBatchSummary({ flow, sectionTitle = "1. Batch summary" }: Props) {
+export function VendorFloorBatchSummary({ flow, sectionTitle = "1. Batch summary", footerInfo }: Props) {
   const vendorName = typeof flow.vendor === "object" ? flow.vendor?.header?.vendorName ?? "—" : "—";
   const poNumber = typeof flow.vendorPurchaseOrder === "object" ? flow.vendorPurchaseOrder?.vpoNumber ?? "—" : "—";
 
@@ -46,6 +48,7 @@ export function VendorFloorBatchSummary({ flow, sectionTitle = "1. Batch summary
           <span className="font-mono text-[10px] text-gray-600">{flow.id}</span>
         </div>
       </div>
+      {footerInfo ? <div className="px-3 pb-3 text-[10px] text-gray-600">{footerInfo}</div> : null}
     </div>
   );
 }

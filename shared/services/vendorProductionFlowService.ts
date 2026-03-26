@@ -39,13 +39,27 @@ export interface BaseFloorQuantity {
 export type StandardFloorPatchPayload = Pick<BaseFloorQuantity, "received" | "completed" | "transferred">;
 
 /** Washing floor from vendor UI: PATCH only `completed` (received/transferred not sent from this screen) */
-export type WashingFloorPatchPayload = { completed: number };
+export type WashingFloorPatchPayload =
+  | { completed: number }
+  | { mode: "increment"; completedDelta: number; autoTransferToNextFloor?: boolean };
 
 /** Boarding floor from vendor UI: PATCH only `completed` (received/transferred not sent from this screen) */
-export type BoardingFloorPatchPayload = { completed: number };
+export type BoardingFloorPatchPayload =
+  | { completed: number }
+  | { mode: "increment"; completedDelta: number; autoTransferToNextFloor?: boolean };
 
-/** Branding floor from vendor UI: PATCH only `completed` (transferred/style rows not sent from this screen) */
-export type BrandingFloorPatchPayload = { completed: number };
+/**
+ * Branding floor: counters + optional `transferredData` breakdown (style id + brand per row).
+ * Prefer `mode: "replace"` when sending full `transferredData` (replaces the array server-side).
+ */
+export type BrandingFloorPatchPayload =
+  | {
+      completed?: number;
+      mode?: "replace";
+      transferredData?: TransferredDataRow[];
+      receivedData?: ReceivedDataRow[];
+    }
+  | { mode: "increment"; completedDelta: number; autoTransferToNextFloor?: boolean };
 
 export interface QualityFloorQuantity extends BaseFloorQuantity {
   m1Quantity: number;
@@ -71,7 +85,7 @@ export interface VendorProductionFlow {
   id: string;
   vendor: string | { id: string; _id?: string; header?: { vendorName?: string; vendorCode?: string } };
   vendorPurchaseOrder?: string | { id: string; _id?: string; vpoNumber?: string };
-  product?: string | { id: string; _id?: string; name?: string; code?: string };
+  product?: string | { id: string; _id?: string; name?: string; code?: string; vendorCode?: string };
   referenceCode?: string;
   plannedQuantity: number;
   remarks?: string;
@@ -109,7 +123,13 @@ export type VendorTransferToFloorKey = "washing" | "boarding" | "branding" | "fi
 export interface TransferProductionFlowPayload {
   fromFloorKey: "secondaryChecking" | "finalChecking";
   toFloorKey: VendorTransferToFloorKey;
-  quantity: number;
+  /**
+   * Prefer `mode: "increment"` with `quantityDelta` (additive, idempotent counters).
+   * `quantity` is kept for backward compatibility with older backend versions.
+   */
+  mode?: "increment";
+  quantityDelta?: number;
+  quantity?: number;
 }
 
 export type FinalCheckingM2TransferToFloorKey = "washing" | "boarding" | "branding";
