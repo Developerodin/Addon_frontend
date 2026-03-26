@@ -274,16 +274,18 @@ const SecondaryCheckingPage = () => {
       if (!selectedFlow) return;
       setTransferLoading(true);
       try {
-        const updated = await vendorProductionFlowService.transfer(selectedFlow.id, {
+        await vendorProductionFlowService.transfer(selectedFlow.id, {
           mode: "increment",
           fromFloorKey: "secondaryChecking",
           toFloorKey: args.toFloorKey,
           quantity: args.quantity,
         });
         toast.success(`Transferred ${args.quantity.toLocaleString()} → ${args.toFloorKey}`);
-        setSelectedFlow(updated);
-        setFlows((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
-        const q = updated.floorQuantities.secondaryChecking;
+        // Transfer response may omit populated vendor/PO; refetch so the table matches list/refresh.
+        const fresh = await vendorProductionFlowService.getById(selectedFlow.id);
+        setSelectedFlow(fresh);
+        setFlows((prev) => prev.map((f) => (f.id === fresh.id ? fresh : f)));
+        const q = fresh.floorQuantities.secondaryChecking;
         setProcessingData({
           received: q.received ?? 0,
           repairStatus: q.repairStatus ?? "NOT_REQUIRED",
