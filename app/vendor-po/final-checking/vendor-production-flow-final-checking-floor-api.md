@@ -25,6 +25,20 @@ Same row shape as **branding** `transferredData`. Each row’s **`transferred`**
 
 If you send `transferredData` and do not send `completed`/`completedDelta`, backend derives floor **`completed`** from `sum(transferredData[].transferred)` (same behavior as branding), then applies normal forward rules.
 
+### Frontend rule (important): treat `transferredData[].transferred` as M1-out
+
+For final checking UI, each line `transferredData[].transferred` should be treated as the **good quantity (M1)** for that style/brand line that is ready to move forward.
+
+- Per-line meaning: `transferred` = **M1 line qty** for that style/brand.
+- Floor-level meaning: `sum(transferredData[].transferred)` = floor-level **completed** (auto-derived if `completed` is not sent).
+- Transfer relation: floor `transferred` is still maintained by transfer/confirm actions; when all completed qty is moved out, `completed` and `transferred` align.
+
+In short for FE:
+
+1. user enters style-wise good qty in `transferredData[].transferred`;
+2. backend auto-calculates `completed` from that total if you do not send `completed`;
+3. next transfer/confirm step moves that qty forward.
+
 | Field         | Type   | Required | Notes        |
 |---------------|--------|----------|--------------|
 | `transferred` | number | yes      | `>= 0` — completed + outbound for this line |
@@ -41,6 +55,27 @@ Example:
   ]
 }
 ```
+
+Example with quality split in same request:
+
+```json
+{
+  "mode": "replace",
+  "m1Quantity": 20,
+  "m2Quantity": 2,
+  "m4Quantity": 1,
+  "transferredData": [
+    { "transferred": 12, "styleCode": "699024260d1e1d92d979e147", "brand": "Van Heusen" },
+    { "transferred": 8, "styleCode": "699024260d1e1d92d979e999", "brand": "Arrow" }
+  ]
+}
+```
+
+Expected result from backend after PATCH:
+
+- `completed = 20` (auto-derived from `12 + 8`, if `completed` not provided)
+- `m1Quantity = 20`, `m2Quantity = 2`, `m4Quantity = 1`
+- `remaining` recalculated by checking-floor formula
 
 ## `receivedData` (array)
 

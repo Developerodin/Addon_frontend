@@ -18,7 +18,6 @@ import {
   toTransferredPayloadRows,
   type TransferredStyleRowDraft,
 } from "../../utils/transferredStyleRows";
-import { FinalCheckingInboundReceived } from "./FinalCheckingInboundReceived";
 import { FinalCheckingStyleTransferSection } from "./FinalCheckingStyleTransferSection";
 
 const M2_TRANSFER_DEST_OPTIONS: { value: FinalCheckingM2TransferToFloorKey; label: string }[] = [
@@ -55,7 +54,6 @@ export function VendorFinalCheckingProcessDrawer({
   onTransferM2,
   transferLoading,
 }: Props) {
-  const [m1Quantity, setM1Quantity] = useState(0);
   const [m2Quantity, setM2Quantity] = useState(0);
   const [m4Quantity, setM4Quantity] = useState(0);
   const [repairStatus, setRepairStatus] = useState<RepairStatus>("NOT_REQUIRED");
@@ -71,11 +69,12 @@ export function VendorFinalCheckingProcessDrawer({
   const finalLive = flow?.floorQuantities.finalChecking;
   const receivedQty = finalLive?.received ?? 0;
   const remainingQty = finalLive?.remaining ?? 0;
-  const transferCap = Math.max(0, Math.min(receivedQty, remainingQty));
+  const transferCap = Math.max(0, Number(m1Quantity) || 0);
   const totalTransferred = useMemo(
     () => rows.reduce((sum, r) => sum + Math.max(0, Number(r.transferred) || 0), 0),
     [rows]
   );
+  const m1Quantity = totalTransferred;
 
   const m1Avail = useMemo(() => (finalLive ? m1AvailableToTransfer(finalLive) : 0), [finalLive]);
   const m2Avail = useMemo(() => (finalLive ? m2AvailableToTransfer(finalLive) : 0), [finalLive]);
@@ -83,7 +82,6 @@ export function VendorFinalCheckingProcessDrawer({
   useEffect(() => {
     if (!open || !flow) return;
     const fc = flow.floorQuantities.finalChecking;
-    setM1Quantity(fc.m1Quantity ?? 0);
     setM2Quantity(fc.m2Quantity ?? 0);
     setM4Quantity(fc.m4Quantity ?? 0);
     setRepairStatus(fc.repairStatus ?? "NOT_REQUIRED");
@@ -177,9 +175,7 @@ export function VendorFinalCheckingProcessDrawer({
   const handleSave = async () => {
     if (!flow) return;
     if (totalTransferred > transferCap) {
-      toast.error(
-        `Style transfer total cannot exceed available (${transferCap.toLocaleString()}). Reduce line quantities.`
-      );
+      toast.error(`M1 style total cannot exceed M1 qty (${transferCap.toLocaleString()}). Reduce line quantities.`);
       return;
     }
     setSaving(true);
@@ -220,14 +216,11 @@ export function VendorFinalCheckingProcessDrawer({
 
   if (!open || !flow || !finalLive) return null;
 
-  const receivedData = finalLive.receivedData ?? [];
-  const hasInbound = receivedData.length > 0;
   const sec = {
-    qc: hasInbound ? "3" : "2",
-    repair: hasInbound ? "4" : "3",
-    transfer: hasInbound ? "5" : "4",
-    m1d: hasInbound ? "6" : "5",
-    m2: hasInbound ? "7" : "6",
+    qc: "2",
+    transfer: "3",
+    m2: "4",
+    repair: "5",
   };
 
   return (
@@ -251,10 +244,10 @@ export function VendorFinalCheckingProcessDrawer({
 
         <div className={CRM.drawerBodyScroll}>
           <p className={CRM.drawerHint}>
-            <strong>Final checking:</strong> M1–M4 + repair. Use <strong>transfer breakdown</strong> to record completed/outbound
-            by style (same shape as branding). PATCH uses <code className="text-[10px]">mode: replace</code> for{" "}
-            <code className="text-[10px]">transferredData</code> — server derives <code className="text-[10px]">completed</code> from
-            row sums when omitted.
+            <strong>Final checking:</strong> M1–M4 + repair. Use style rows as <strong>M1 completed breakdown</strong> (same
+            payload shape as branding). PATCH uses <code className="text-[10px]">mode: replace</code> for{" "}
+            <code className="text-[10px]">transferredData</code>; backend derives <code className="text-[10px]">completed</code>{" "}
+            from row sums when omitted.
           </p>
 
           <VendorFloorBatchSummary
@@ -262,7 +255,7 @@ export function VendorFinalCheckingProcessDrawer({
             footerInfo={
               <>
                 Received: <strong>{receivedQty.toLocaleString()}</strong> · Remaining:{" "}
-                <strong>{remainingQty.toLocaleString()}</strong> · Max transferable:{" "}
+                <strong>{remainingQty.toLocaleString()}</strong> · M1 cap:{" "}
                 <strong className="text-purple-700">{transferCap.toLocaleString()}</strong> · Selected:{" "}
                 <strong className={totalTransferred > transferCap ? "text-red-600" : "text-emerald-700"}>
                   {totalTransferred.toLocaleString()}
@@ -278,27 +271,11 @@ export function VendorFinalCheckingProcessDrawer({
             </p>
           )}
 
-          <FinalCheckingInboundReceived receivedData={receivedData} styleOptions={styleOptions} sectionIndex="2" />
-
           <div className={CRM.drawerSection}>
             <div className={CRM.drawerSectionHead}>
               {sec.qc}. Quality counts (M1 / M2 / M4)
             </div>
-            <div className="p-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className={CRM.label}>M1 qty (pass)</label>
-                <input
-                  type="number"
-                  className={`${CRM.input} border-emerald-200 focus:border-emerald-500`}
-                  value={m1Quantity}
-                  onChange={(e) => setM1Quantity(Number(e.target.value))}
-                  disabled={saving || transferLoading}
-                />
-                <p className="text-[10px] text-gray-500 mt-1">
-                  M1 transferred: {(finalLive.m1Transferred ?? 0).toLocaleString()} · Available for dispatch:{" "}
-                  <strong className="text-emerald-700">{m1Avail.toLocaleString()}</strong>
-                </p>
-              </div>
+            <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={CRM.label}>M2 qty (fix)</label>
                 <input
@@ -320,32 +297,12 @@ export function VendorFinalCheckingProcessDrawer({
                 />
               </div>
             </div>
-          </div>
-
-          <div className={CRM.drawerSection}>
-            <div className={CRM.drawerSectionHead}>{sec.repair}. Repair details</div>
-            <div className="p-3 space-y-3">
-              <div>
-                <label className={CRM.label}>Repair status</label>
-                <select
-                  className={CRM.select}
-                  value={repairStatus}
-                  onChange={(e) => setRepairStatus(e.target.value as RepairStatus)}
-                  disabled={saving || transferLoading}
-                >
-                  <option value="NOT_REQUIRED">Not required</option>
-                  <option value="REQUIRED">Required</option>
-                  <option value="IN_PROGRESS">In progress</option>
-                  <option value="REPAIRED">Repaired</option>
-                </select>
-              </div>
-              <textarea
-                className={`${CRM.input} h-24 resize-none`}
-                placeholder="Notes about repair items..."
-                value={repairRemarks}
-                onChange={(e) => setRepairRemarks(e.target.value)}
-                disabled={saving || transferLoading}
-              />
+            <div className="px-3 pb-3">
+              <p className="text-[10px] text-gray-500">
+                M1 qty auto-derived from style rows: <strong>{m1Quantity.toLocaleString()}</strong> · M1 transferred:{" "}
+                {(finalLive.m1Transferred ?? 0).toLocaleString()} · Available for dispatch:{" "}
+                <strong className="text-emerald-700">{m1Avail.toLocaleString()}</strong>
+              </p>
             </div>
           </div>
 
@@ -362,15 +319,6 @@ export function VendorFinalCheckingProcessDrawer({
             onStyleSelect={onStyleSelect}
             onQtyChange={(index, value) => updateRow(index, { transferred: value })}
           />
-
-          <div className={CRM.drawerSection}>
-            <div className={CRM.drawerSectionHead}>{sec.m1d}. M1 to dispatch</div>
-            <div className="p-3">
-              <p className="text-[10px] text-gray-600 leading-relaxed">
-                M1 is dispatched when you click <strong>Confirm Batch</strong> from the list.
-              </p>
-            </div>
-          </div>
 
           <div className={CRM.drawerSection}>
             <div className={CRM.drawerSectionHead}>{sec.m2}. M2 reroute (rework floor)</div>
@@ -419,6 +367,33 @@ export function VendorFinalCheckingProcessDrawer({
               </div>
             </div>
           </div>
+
+          <div className={CRM.drawerSection}>
+            <div className={CRM.drawerSectionHead}>{sec.repair}. Repair details</div>
+            <div className="p-3 space-y-3">
+              <div>
+                <label className={CRM.label}>Repair status</label>
+                <select
+                  className={CRM.select}
+                  value={repairStatus}
+                  onChange={(e) => setRepairStatus(e.target.value as RepairStatus)}
+                  disabled={saving || transferLoading}
+                >
+                  <option value="NOT_REQUIRED">Not required</option>
+                  <option value="REQUIRED">Required</option>
+                  <option value="IN_PROGRESS">In progress</option>
+                  <option value="REPAIRED">Repaired</option>
+                </select>
+              </div>
+              <textarea
+                className={`${CRM.input} h-24 resize-none`}
+                placeholder="Notes about repair items..."
+                value={repairRemarks}
+                onChange={(e) => setRepairRemarks(e.target.value)}
+                disabled={saving || transferLoading}
+              />
+            </div>
+          </div>
         </div>
 
         <div className={CRM.drawerFooterBar}>
@@ -428,7 +403,7 @@ export function VendorFinalCheckingProcessDrawer({
           <button type="button" onClick={() => void handleSave()} className={CRM.btnPrimary} disabled={transferLoading || saving}>
             {saving ? "…" : (
               <>
-                <i className="ri-save-line text-xs" /> Save QC findings
+                <i className="ri-save-line text-xs" /> Save only
               </>
             )}
           </button>

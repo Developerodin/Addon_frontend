@@ -19,7 +19,7 @@ type Props = {
   onQtyChange: (index: number, value: number) => void;
 };
 
-/** Editable `transferredData` rows — same UX as branding floor. */
+/** Editable `transferredData` rows (Final QC: each row `transferred` means M1 completed for that style). */
 export function FinalCheckingStyleTransferSection({
   sectionIndex,
   rows,
@@ -36,11 +36,12 @@ export function FinalCheckingStyleTransferSection({
   return (
     <div className={CRM.drawerSection}>
       <div className={CRM.drawerSectionHead}>
-        {sectionIndex}. Transfer breakdown (style &amp; qty)
+        {sectionIndex}. M1 completed breakdown (style &amp; qty)
       </div>
       <div className="p-3 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-center mb-2">
         <p className="text-[10px] text-gray-600 leading-relaxed">
-          Each row maps to <code className="text-[10px]">transferredData</code> (same as branding). Use StyleCode id + brand.
+          Each row maps to <code className="text-[10px]">transferredData</code>. Here <code className="text-[10px]">transferred</code>{" "}
+          is M1 line qty for that style (used to derive floor <code className="text-[10px]">completed</code> when omitted).
         </p>
         <button type="button" className={CRM.btnSecondary} onClick={onAddRow} disabled={saving || transferLoading}>
           <i className="ri-add-line" /> Row
@@ -76,7 +77,7 @@ export function FinalCheckingStyleTransferSection({
               )}
             </div>
             <div>
-              <label className={CRM.label}>Qty</label>
+              <label className={CRM.label}>M1 qty</label>
               <input
                 type="number"
                 min={0}
