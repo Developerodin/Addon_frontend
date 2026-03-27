@@ -17,7 +17,6 @@ import {
   type VendorBoxFormRow,
 } from "./vendorReceiveProcessPrintExport";
 import { VendorReceiveProcessBoxTables } from "./VendorReceiveProcessBoxTables";
-import { CRM } from "../../vendor-list/crmUiClasses";
 
 function readVendorName(v: VendorPurchaseOrder["vendor"]): string {
   if (!v || typeof v === "string") return typeof v === "string" ? v : "";
@@ -238,10 +237,10 @@ export function VendorReceiveProcessView({ orderId }: Props) {
 
   if (loading) {
     return (
-      <div className={CRM.mainContent}>
-        <div className={CRM.loadingWrap}>
-          <div className={CRM.spinner} />
-          <p className={CRM.loadingLabel}>Loading</p>
+      <div className="main-content !p-[10px]">
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50" />
+          <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
         </div>
       </div>
     );
@@ -249,13 +248,22 @@ export function VendorReceiveProcessView({ orderId }: Props) {
 
   if (!apiPo) {
     return (
-      <div className={CRM.mainContent}>
-        <Seo title="Vendor PO Process" />
-        <div className={`${CRM.card} ${CRM.emptyWrap}`}>
-          <p className={`${CRM.emptySub} mb-4`}>PO not found.</p>
-          <Link href="/vendor-po/receive" className={CRM.btnPrimary}>
-            Back
-          </Link>
+      <div className="main-content !p-[10px]">
+        <Seo title="Vendor Purchase Order Process" />
+        <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+              <i className="ri-inbox-line text-xl text-gray-200" />
+            </div>
+            <h3 className="text-xs font-bold text-gray-400 mb-1">PO NOT FOUND</h3>
+            <Link
+              href="/vendor-po/receive"
+              className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+            >
+              <i className="ri-arrow-left-line text-xs" />
+              Back
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -267,22 +275,28 @@ export function VendorReceiveProcessView({ orderId }: Props) {
   const vendorName = readVendorName(apiPo.vendor);
 
   return (
-    <div className={CRM.mainContent}>
+    <div className="main-content !p-[10px]">
       <QZTrayLoader />
       <QZTrayUntrustedWarning />
       <QZTrayRequestBlocked />
-      <Seo title={`Process — ${apiPo.vpoNumber}`} />
+      <Seo title={`Process Order - ${apiPo.vpoNumber}`} />
 
-      <div className={CRM.card}>
-        <div className={CRM.cardBody}>
-          <div className={CRM.titleRow}>
-            <div className={`${CRM.titleWithAccent} min-w-0`}>
-              <Link href="/vendor-po/receive" className={`${CRM.linkAccent} inline-flex p-1 rounded hover:bg-gray-100`} title="Back">
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2 min-w-0">
+              <Link
+                href="/vendor-po/receive"
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+                title="Back to received orders"
+              >
                 <i className="ri-arrow-left-line text-sm" />
               </Link>
-              <div className={CRM.titleAccent} />
-              <h1 className={`${CRM.pageTitle} truncate`}>Process receipt</h1>
-              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0">{apiPo.vpoNumber}</span>
+              <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
+              <h1 className="text-sm font-bold text-gray-800 truncate">Process Order</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm shrink-0">
+                {apiPo.vpoNumber}
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="bg-gray-50 px-2 py-1 rounded border border-gray-200">
@@ -293,10 +307,12 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                   type="button"
                   onClick={() => handleExportExcel()}
                   disabled={isExporting}
-                  className={CRM.btnSuccess}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors shadow-sm ${
+                    !isExporting ? "bg-green-600 hover:bg-green-700 text-white" : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
                 >
                   {isExporting ? <i className="ri-loader-4-line animate-spin text-xs" /> : <i className="ri-file-excel-2-line text-xs" />}
-                  Export Excel
+                  {isExporting ? "Exporting..." : "Export to Excel"}
                 </button>
               )}
               {boxes.length > 0 && (
@@ -304,32 +320,48 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                   type="button"
                   onClick={() => void handlePrintAll()}
                   disabled={!qz.connected || !qz.printer || isPrinting}
-                  className={CRM.btnPrimary}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-[11px] font-bold rounded transition-colors shadow-sm ${
+                    qz.connected && qz.printer && !isPrinting ? "bg-purple-600 hover:bg-purple-700" : "bg-gray-400 cursor-not-allowed"
+                  }`}
                   title={!qz.connected ? "Start QZ Tray" : !qz.printer ? "Select printer" : "Print all labels"}
                 >
                   {isPrinting ? <i className="ri-loader-4-line animate-spin text-xs" /> : <i className="ri-printer-line text-xs" />}
-                  Print all barcodes
+                  {isPrinting ? "Printing Barcodes..." : "Print All Barcodes"}
                 </button>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
             <div>
-              <p className="text-[10px] uppercase text-gray-500">Vendor</p>
-              <p className="font-bold text-[#323251]">{vendorName || "—"}</p>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">PO Number</p>
+              <p className="text-xs font-bold text-gray-900">{apiPo.vpoNumber}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase text-gray-500">Status</p>
-              <p className="font-bold text-[#323251]">{apiPo.currentStatus}</p>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Vendor</p>
+              <p className="text-xs font-bold text-gray-900">{vendorName || "—"}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase text-gray-500">Total</p>
-              <p className="font-bold text-[#323251]">₹{Number(apiPo.total || 0).toLocaleString()}</p>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Status</p>
+              <p className="text-xs font-bold text-gray-900">{apiPo.currentStatus}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase text-gray-500">Boxes</p>
-              <p className="font-bold text-[#323251]">{boxes.length}</p>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Amount</p>
+              <p className="text-xs font-bold text-gray-900">₹{Number(apiPo.total || 0).toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Items</p>
+              <p className="text-xs font-bold text-gray-900">{poItems.length}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Total Quantity</p>
+              <p className="text-xs font-bold text-gray-900">
+                {poItems.reduce((sum, it) => sum + Number(it.quantity || 0), 0).toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-gray-500 mb-0.5">Boxes</p>
+              <p className="text-xs font-bold text-gray-900">{boxes.length}</p>
             </div>
           </div>
 
@@ -338,25 +370,31 @@ export function VendorReceiveProcessView({ orderId }: Props) {
               <button
                 type="button"
                 onClick={() => setItemsOpen(!itemsOpen)}
-                className={`${CRM.btnSecondary} w-full justify-between`}
+                className="w-full px-3 py-2.5 flex items-center justify-between hover:bg-gray-100 transition-colors"
               >
                 <span className="text-xs font-bold text-gray-800">Order lines</span>
-                <i className={`ri-arrow-${itemsOpen ? "up" : "down"}-s-line`} />
+                <i className={`ri-arrow-${itemsOpen ? "up" : "down"}-s-line text-gray-600 text-sm transition-transform`} />
               </button>
               {itemsOpen && (
                 <div className="px-3 pb-3 overflow-x-auto">
-                  <table className={CRM.table}>
+                  <table className="w-full border-collapse border border-gray-200">
                     <thead>
-                      <tr className={CRM.theadTr}>
-                        <th className={CRM.th}>Product</th>
-                        <th className={CRM.thRight}>Qty</th>
+                      <tr className="bg-gray-50/30">
+                        <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                          Product
+                        </th>
+                        <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                          Qty
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {poItems.map((it, i) => (
-                        <tr key={i} className={CRM.tbodyTr}>
-                          <td className={CRM.td}>{it.productName || "—"}</td>
-                          <td className={`${CRM.td} text-right`}>{Number(it.quantity || 0)}</td>
+                        <tr key={i} className="hover:bg-gray-50/50">
+                          <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{it.productName || "—"}</td>
+                          <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200">
+                            {Number(it.quantity || 0)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -367,23 +405,23 @@ export function VendorReceiveProcessView({ orderId }: Props) {
           )}
 
           {hasLots && (
-            <div className={`${CRM.tableWrap} mb-4 rounded-md border border-gray-200`}>
-              <table className={CRM.table}>
+            <div className="mb-4 rounded-md border border-gray-200 overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-200">
                 <thead>
-                  <tr className={CRM.theadTr}>
-                    <th className={CRM.th}>Lot</th>
-                    <th className={CRM.th}>Product</th>
-                    <th className={CRM.thRight}>Received qty</th>
-                    <th className={CRM.thRight}>Boxes (expected)</th>
+                  <tr className="bg-gray-50/30">
+                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot</th>
+                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Product</th>
+                    <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received qty</th>
+                    <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Boxes (expected)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lotRows.map((l) => {
                     const lines = getVendorLotReceivedLines(apiPo, l);
                     return (
-                    <tr key={l.lotNumber} className={CRM.tbodyTr}>
-                      <td className={CRM.td}>{l.lotNumber}</td>
-                      <td className={CRM.td}>
+                    <tr key={l.lotNumber} className="hover:bg-gray-50/50">
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{l.lotNumber}</td>
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">
                         {lines.length === 0 ? (
                           "—"
                         ) : (
@@ -394,7 +432,7 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                           </div>
                         )}
                       </td>
-                      <td className={`${CRM.td} text-right tabular-nums`}>
+                      <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200 tabular-nums">
                         {lines.length === 0 ? (
                           "—"
                         ) : (
@@ -405,7 +443,7 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                           </div>
                         )}
                       </td>
-                      <td className={`${CRM.td} text-right`}>{l.numberOfBoxes}</td>
+                      <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200">{l.numberOfBoxes}</td>
                     </tr>
                     );
                   })}
@@ -417,11 +455,11 @@ export function VendorReceiveProcessView({ orderId }: Props) {
           {boxes.length === 0 && hasLots && (
             <button
               type="button"
-              className={`${CRM.btnPrimary} mb-4`}
+              className="mb-4 flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
               disabled={creatingBoxes}
               onClick={() => void ensureBoxes()}
             >
-              {creatingBoxes ? "Creating…" : "Create boxes from lots"}
+              {creatingBoxes ? "Creating..." : "Create boxes from lots"}
             </button>
           )}
         </div>

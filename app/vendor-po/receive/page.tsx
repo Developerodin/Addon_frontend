@@ -205,10 +205,10 @@ const VendorPOReceivePage = () => {
   if (!canAccess) {
     return (
       <div className="main-content">
-        <Seo title="Purchase Order Received" />
+        <Seo title="Vendor Purchase Order Received" />
         <div className="box">
           <div className="box-body text-center py-12">
-            <p className="text-gray-500 mb-4">You don&apos;t have permission to access Purchase Order Received.</p>
+            <p className="text-gray-500 mb-4">You don&apos;t have permission to access Vendor Purchase Order Received.</p>
             <Link href="/vendor-po/purchase-management" className="ti-btn ti-btn-primary ti-btn-sm">
               Back to Purchase Management
             </Link>
@@ -220,9 +220,9 @@ const VendorPOReceivePage = () => {
 
   return (
     <>
-      <Seo title="Purchase Order Received" />
+      <Seo title="Vendor Purchase Order Received" />
       <VendorPOPurchaseListLayout
-        listTitle="Purchase Order Received"
+        listTitle="Vendor Purchase Order Received"
         count={loading ? 0 : filteredOrders.length}
         searchPlaceholder="Search PO or vendor…"
         searchValue={searchTerm}

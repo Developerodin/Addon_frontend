@@ -167,9 +167,9 @@ const VendorPORaisePage = () => {
 
   return (
     <>
-      <Seo title="Purchase Order" />
+      <Seo title="Vendor Purchase Order" />
       <VendorPOPurchaseListLayout
-        listTitle="Purchase Order"
+        listTitle="Vendor Purchase Order"
         count={loading ? 0 : filteredOrders.length}
         searchPlaceholder="Search PO, vendor, article…"
         searchValue={searchTerm}
