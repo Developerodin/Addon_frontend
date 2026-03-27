@@ -10,7 +10,6 @@ import {
   validateVendorProcessNum,
 } from "./vendorReceiveProcessHelpers";
 import type { VendorBoxFormRow } from "./vendorReceiveProcessPrintExport";
-import { CRM } from "../../vendor-list/crmUiClasses";
 
 type Props = {
   apiPo: VendorPurchaseOrder;
@@ -48,16 +47,17 @@ export function VendorReceiveProcessBoxTables({
   isFetchingWeight,
 }: Props) {
   const boxesByLot = groupVendorBoxesByLot(boxes, boxData);
+  const inputBase = "w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300";
 
   return (
-    <div className={`${CRM.cardBody} border-t border-gray-100`}>
+    <div className="p-[10px] border-t border-gray-100">
       <h3 className="text-xs font-bold text-gray-800 mb-2">Boxes ({boxes.length})</h3>
       <div className="mb-3">
-        <label className={CRM.label}>Scan barcode</label>
+        <label className="text-xs font-medium text-gray-600 mb-1 block">Scan Barcode</label>
         <input
           ref={barcodeRef}
           type="text"
-          className={CRM.input}
+          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
           placeholder="Scan or type barcode, Enter to activate row"
           value={barcodeScanValue}
           onChange={(e) => setBarcodeScanValue(e.target.value)}
@@ -76,17 +76,17 @@ export function VendorReceiveProcessBoxTables({
       {boxesByLot.sortedLots.map((lot) => (
         <div key={lot} className="mb-4 overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
           <div className="bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-800 border-b border-gray-100">Lot {lot}</div>
-          <div className={CRM.tableWrap}>
-            <table className={CRM.table}>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse border border-gray-200">
               <thead>
-                <tr className={CRM.theadTr}>
-                  <th className={CRM.th}>Box ID</th>
-                  <th className={CRM.th}>Barcode</th>
-                  <th className={CRM.th}>Product</th>
-                  <th className={CRM.thRight}>Gross</th>
-                  <th className={CRM.thRight}>Net kg</th>
-                  <th className={CRM.thRight}>Units</th>
-                  <th className={`${CRM.th} text-center w-[72px]`} />
+                <tr className="bg-gray-50/30">
+                  <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
+                  <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
+                  <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Product</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Gross</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Net kg</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Units</th>
+                  <th className="px-1.5 py-2 text-center text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-[72px]" />
                 </tr>
               </thead>
               <tbody>
@@ -103,13 +103,13 @@ export function VendorReceiveProcessBoxTables({
                   };
                   const opts = getVendorPoItemOptionsForLot(apiPo, d.lotNumber || lot);
                   return (
-                    <tr key={bid} className={`${CRM.tbodyTr} ${isActive ? "!bg-sky-50 ring-1 ring-inset ring-purple-200" : ""}`}>
-                      <td className={`${CRM.td} font-mono`}>{box.boxId || bid.slice(-8)}</td>
-                      <td className={`${CRM.td} font-mono text-[10px]`}>{box.barcode || "—"}</td>
-                      <td className={CRM.td}>
+                    <tr key={bid} className={`hover:bg-gray-50/50 ${isActive ? "!bg-sky-50 ring-1 ring-inset ring-purple-200" : ""}`}>
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 font-mono">{box.boxId || bid.slice(-8)}</td>
+                      <td className="px-1.5 py-2 text-[10px] text-gray-700 border border-gray-200 font-mono">{box.barcode || "—"}</td>
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">
                         {opts.length > 1 ? (
                           <select
-                            className={CRM.select}
+                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
                             value={d.productName}
                             onChange={(e) => {
                               const sel = opts.find((o) => o.productName === e.target.value);
@@ -130,10 +130,10 @@ export function VendorReceiveProcessBoxTables({
                           <span>{d.productName || box.productName || "—"}</span>
                         )}
                       </td>
-                      <td className={`${CRM.td} text-right`}>
+                      <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
                         {isActive ? (
                           <input
-                            className={CRM.inputTableNum}
+                            className={`${inputBase} text-right`}
                             value={rawInput[`g-${bid}`] ?? d.grossWeight}
                             onChange={(e) => {
                               const v = validateVendorProcessNum(e.target.value);
@@ -152,11 +152,11 @@ export function VendorReceiveProcessBoxTables({
                           d.grossWeight || "—"
                         )}
                       </td>
-                      <td className={`${CRM.td} text-right`}>
+                      <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
                         {isActive ? (
                           <input
                             data-vb-w={bid}
-                            className={CRM.inputTableNum}
+                            className={`${inputBase} text-right`}
                             value={rawInput[`w-${bid}`] ?? d.boxWeight}
                             onChange={(e) => {
                               const v = validateVendorProcessNum(e.target.value);
@@ -175,10 +175,10 @@ export function VendorReceiveProcessBoxTables({
                           d.boxWeight || "—"
                         )}
                       </td>
-                      <td className={`${CRM.td} text-right`}>
+                      <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
                         {isActive ? (
                           <input
-                            className={CRM.inputTableNumSm}
+                            className={`${inputBase} text-right`}
                             value={rawInput[`u-${bid}`] ?? d.numberOfUnits}
                             onChange={(e) => {
                               const v = validateVendorProcessNum(e.target.value);
@@ -197,18 +197,18 @@ export function VendorReceiveProcessBoxTables({
                           d.numberOfUnits || "—"
                         )}
                       </td>
-                      <td className={`${CRM.td} text-center`}>
+                      <td className="px-1.5 py-2 text-center border border-gray-200">
                         {isActive ? (
                           <button
                             type="button"
-                            className={CRM.btnPrimarySm}
+                            className="inline-flex items-center justify-center h-6 px-2 text-[10px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-50"
                             disabled={updatingId === bid}
                             onClick={() => void saveBox(box)}
                           >
                             {updatingId === bid ? "…" : "Save"}
                           </button>
                         ) : (
-                          <button type="button" className={CRM.linkRowAction} onClick={() => setActiveBoxId(bid)}>
+                          <button type="button" className="text-purple-600 hover:text-purple-700 text-[10px] font-bold" onClick={() => setActiveBoxId(bid)}>
                             Edit
                           </button>
                         )}
@@ -227,18 +227,18 @@ export function VendorReceiveProcessBoxTables({
           <div className="bg-amber-100 px-3 py-2 text-[11px] font-bold border-b border-amber-200 text-amber-900">
             Unassigned to lot ({boxesByLot.unassigned.length})
           </div>
-          <div className={CRM.tableWrap}>
-            <table className={CRM.table}>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse border border-gray-200">
               <thead>
-                <tr className={CRM.theadTr}>
-                  <th className={CRM.th}>Box ID</th>
-                  <th className={CRM.th}>Barcode</th>
-                  <th className={CRM.th}>Lot *</th>
-                  <th className={CRM.th}>Product</th>
-                  <th className={CRM.thRight}>Gross</th>
-                  <th className={CRM.thRight}>Net kg</th>
-                  <th className={CRM.thRight}>Units</th>
-                  <th className={`${CRM.th} text-center w-[72px]`} />
+                <tr className="bg-gray-50/30">
+                  <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
+                  <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
+                  <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot *</th>
+                  <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Product</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Gross</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Net kg</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Units</th>
+                  <th className="px-1.5 py-2 text-center text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-[72px]" />
                 </tr>
               </thead>
               <tbody>
@@ -254,12 +254,12 @@ export function VendorReceiveProcessBoxTables({
                     numberOfUnits: "",
                   };
                   return (
-                    <tr key={bid} className={`${CRM.tbodyTr} ${isActive ? "!bg-amber-50 ring-1 ring-inset ring-amber-300" : ""}`}>
-                      <td className={`${CRM.td} font-mono`}>{box.boxId || bid.slice(-8)}</td>
-                      <td className={`${CRM.td} font-mono text-[10px]`}>{box.barcode || "—"}</td>
-                      <td className={CRM.td}>
+                    <tr key={bid} className={`hover:bg-gray-50/50 ${isActive ? "!bg-amber-50 ring-1 ring-inset ring-amber-300" : ""}`}>
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 font-mono">{box.boxId || bid.slice(-8)}</td>
+                      <td className="px-1.5 py-2 text-[10px] text-gray-700 border border-gray-200 font-mono">{box.barcode || "—"}</td>
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">
                         <input
-                          className={CRM.inputTable}
+                          className={inputBase}
                           placeholder="Lot #"
                           value={d.lotNumber}
                           onChange={(e) =>
@@ -270,9 +270,9 @@ export function VendorReceiveProcessBoxTables({
                           }
                         />
                       </td>
-                      <td className={CRM.td}>
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">
                         <input
-                          className={CRM.inputTable}
+                          className={inputBase}
                           placeholder="Product name"
                           value={d.productName}
                           onChange={(e) =>
@@ -283,10 +283,10 @@ export function VendorReceiveProcessBoxTables({
                           }
                         />
                       </td>
-                      <td className={`${CRM.td} text-right`}>
+                      <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
                         {isActive ? (
                           <input
-                            className={CRM.inputTableNum}
+                            className={`${inputBase} text-right`}
                             value={rawInput[`g-${bid}`] ?? d.grossWeight}
                             onChange={(e) => {
                               const v = validateVendorProcessNum(e.target.value);
@@ -305,11 +305,11 @@ export function VendorReceiveProcessBoxTables({
                           d.grossWeight || "—"
                         )}
                       </td>
-                      <td className={`${CRM.td} text-right`}>
+                      <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
                         {isActive ? (
                           <input
                             data-vb-w={bid}
-                            className={CRM.inputTableNum}
+                            className={`${inputBase} text-right`}
                             value={rawInput[`w-${bid}`] ?? d.boxWeight}
                             onChange={(e) => {
                               const v = validateVendorProcessNum(e.target.value);
@@ -328,10 +328,10 @@ export function VendorReceiveProcessBoxTables({
                           d.boxWeight || "—"
                         )}
                       </td>
-                      <td className={`${CRM.td} text-right`}>
+                      <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
                         {isActive ? (
                           <input
-                            className={CRM.inputTableNumSm}
+                            className={`${inputBase} text-right`}
                             value={rawInput[`u-${bid}`] ?? d.numberOfUnits}
                             onChange={(e) => {
                               const v = validateVendorProcessNum(e.target.value);
@@ -350,18 +350,18 @@ export function VendorReceiveProcessBoxTables({
                           d.numberOfUnits || "—"
                         )}
                       </td>
-                      <td className={`${CRM.td} text-center`}>
+                      <td className="px-1.5 py-2 text-center border border-gray-200">
                         {isActive ? (
                           <button
                             type="button"
-                            className={CRM.btnPrimarySm}
+                            className="inline-flex items-center justify-center h-6 px-2 text-[10px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-50"
                             disabled={updatingId === bid}
                             onClick={() => void saveBox(box)}
                           >
                             {updatingId === bid ? "…" : "Save"}
                           </button>
                         ) : (
-                          <button type="button" className={CRM.linkRowAction} onClick={() => setActiveBoxId(bid)}>
+                          <button type="button" className="text-purple-600 hover:text-purple-700 text-[10px] font-bold" onClick={() => setActiveBoxId(bid)}>
                             Edit
                           </button>
                         )}

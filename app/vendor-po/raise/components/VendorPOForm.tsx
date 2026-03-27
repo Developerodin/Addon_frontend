@@ -270,14 +270,12 @@ export default function VendorPOForm({
         vendorId={vendorId}
         creditDays={creditDays}
         estimatedOrderDeliveryDate={estimatedOrderDeliveryDate}
-        remarks={remarks}
         vendors={vendors}
         errors={errors}
         onVendorChange={onVendorChange}
         setVendorId={setVendorId}
         setCreditDays={setCreditDays}
         setEstimatedOrderDeliveryDate={setEstimatedOrderDeliveryDate}
-        setRemarks={setRemarks}
         clearError={clearError}
       />
 
@@ -301,6 +299,18 @@ export default function VendorPOForm({
       />
 
       <VendorPOOrderTotalsSection totals={totals} />
+
+      <div className="border-t pt-4">
+        <label className="text-xs font-medium text-gray-600 mb-1 block">Notes</label>
+        <textarea
+          value={remarks}
+          onChange={(e) => setRemarks(e.target.value)}
+          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+          rows={2}
+          disabled={locked}
+          placeholder="Additional notes about the purchase order..."
+        />
+      </div>
 
       <VendorPOArticlePickerPortal
         articleOpen={articleOpen}

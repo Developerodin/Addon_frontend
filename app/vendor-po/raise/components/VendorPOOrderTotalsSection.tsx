@@ -1,6 +1,5 @@
 "use client";
 import React from "react";
-import { VPO_FORM } from "./vendorPoFormLayoutClasses";
 
 type Totals = { subTotal: number; gst: number; total: number };
 
@@ -14,8 +13,7 @@ export default function VendorPOOrderTotalsSection({ totals }: Props) {
     `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
-    <div className={VPO_FORM.section}>
-      <h4 className={VPO_FORM.sectionTitle}>Order totals</h4>
+    <div className="border-t pt-4">
       <div className="max-w-lg ml-auto">
         <table className="min-w-full border border-gray-200 bg-white">
           <thead>

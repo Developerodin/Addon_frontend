@@ -254,6 +254,51 @@ const extractTransactions = (data: any): any[] => {
   return transactions;
 };
 
+/** Order id + production order number from cone API (string or populated order). */
+const orderIdsFromConeDetails = (cd: any): { orderId: string; orderNumber: string } | null => {
+  const normalizeId = (id: any): string =>
+    String(
+      typeof id === "object" && id !== null ? id._id || id.id || "" : id ?? ""
+    ).trim();
+  const rawOrder = cd?.orderId ?? cd?.order;
+  const orderId = normalizeId(rawOrder);
+  // Backend may expose PO as poNumber, orderno, orderNumber, or on populated order
+  let orderNumber = (cd?.orderno ?? cd?.orderNumber ?? cd?.poNumber ?? "").toString().trim();
+  if (!orderNumber && typeof rawOrder === "object" && rawOrder) {
+    orderNumber = String(
+      (rawOrder as { orderNumber?: string; poNumber?: string }).orderNumber ??
+        (rawOrder as { poNumber?: string }).poNumber ??
+        ""
+    ).trim();
+  }
+  if (!orderId) return null;
+  if (!orderNumber) return null;
+  return { orderId, orderNumber };
+};
+
+/** Minimal article row for fetchOrderWithCones when only cone data exists (quick return). */
+const articleStubFromConeDetails = (cd: any): Article[] => {
+  const normalizeId = (id: any): string =>
+    String(
+      typeof id === "object" && id !== null ? id._id || id.id || "" : id ?? ""
+    ).trim();
+  const artId = normalizeId(cd?.articleId ?? cd?.article);
+  if (!artId) return [];
+  const n = cd?.articleNumber ?? cd?.article?.articleNumber;
+  const articleNumber = typeof n === "string" ? n.trim() : "";
+  return [
+    {
+      id: artId,
+      _id: artId,
+      articleNumber: articleNumber || "—",
+      plannedQuantity: 0,
+      linkingType: "Auto Linking",
+      priority: "Medium",
+      status: "Pending",
+    },
+  ];
+};
+
 const statusBadgeColor = (status: ReturnStatus | OrderStatus) => {
   switch (status) {
     case "Awaiting":
@@ -317,8 +362,14 @@ const YarnReturnPage = () => {
   const [showScanReturnPanel, setShowScanReturnPanel] = useState(false);
   /** Scan drawer dashed summary: collapsed by default; expand for yarn / floor / cones. */
   const [scanPanelSummaryOpen, setScanPanelSummaryOpen] = useState(false);
+  /** Yarn/floor summary accordion in Quick return drawer only (separate from main Scan & Return). */
+  const [quickReturnSummaryOpen, setQuickReturnSummaryOpen] = useState(false);
   const [yarnNamesDrawerRow, setYarnNamesDrawerRow] = useState<ArticleRow | null>(null);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
+  /** Return by scanning cone only: order/article resolved from cone API (not from machine list). */
+  const [showQuickReturnDrawer, setShowQuickReturnDrawer] = useState(false);
+  const [quickReturnOrder, setQuickReturnOrder] = useState<ProductionOrder | null>(null);
+  const [loadingQuickReturnOrder, setLoadingQuickReturnOrder] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
   const [scannedBarcodes, setScannedBarcodes] = useState<string[]>([]);
@@ -342,6 +393,7 @@ const YarnReturnPage = () => {
 
   const pendingToastShown = useRef(false);
   const scanBarcodeInputRef = useRef<HTMLInputElement>(null);
+  const quickReturnBarcodeInputRef = useRef<HTMLInputElement>(null);
   const returnModalPrimaryInputRef = useRef<HTMLInputElement>(null);
   const [fetchingWeight, setFetchingWeight] = useState(false);
   const [markingAllReturned, setMarkingAllReturned] = useState(false);
@@ -795,15 +847,18 @@ const YarnReturnPage = () => {
 
   /** Keep focus on the scan barcode field when the panel is active (portal + modal transitions need explicit focus). */
   useEffect(() => {
-    if (!showScanReturnPanel || !selectedOrderId) return;
+    if (!showScanReturnPanel && !showQuickReturnDrawer) return;
+    if (showScanReturnPanel && !selectedOrderId) return;
     if (showConeTypeModal || showReturnModal) return;
-    if (barcodeLoading || storingCone) return;
+    if (barcodeLoading || storingCone || loadingQuickReturnOrder) return;
+    const ref = showQuickReturnDrawer ? quickReturnBarcodeInputRef : scanBarcodeInputRef;
     const t = window.setTimeout(() => {
-      scanBarcodeInputRef.current?.focus({ preventScroll: true });
+      ref.current?.focus({ preventScroll: true });
     }, 0);
     return () => window.clearTimeout(t);
   }, [
     showScanReturnPanel,
+    showQuickReturnDrawer,
     selectedOrderId,
     showConeTypeModal,
     showReturnModal,
@@ -812,6 +867,7 @@ const YarnReturnPage = () => {
     scannedBarcodes.length,
     barcodeLoading,
     storingCone,
+    loadingQuickReturnOrder,
   ]);
 
   /** When the return modal opens, focus the first weight field so Enter can submit without clicking. */
@@ -875,10 +931,70 @@ const YarnReturnPage = () => {
     [articleRows, selectedArticleRowId]
   );
 
-  const scanPanelYarnSummaryLines = useMemo(
-    () => yarnSummaryLinesFromCones(selectedArticleRow?.cones ?? selectedOrder?.cones ?? []),
-    [selectedOrder, selectedArticleRow]
-  );
+  /** Order context for scan + return: machine flow uses selected order; quick return uses cone-resolved order. */
+  const effectiveReturnOrder = useMemo((): ProductionOrder | null => {
+    if (showQuickReturnDrawer) return quickReturnOrder;
+    return selectedOrder;
+  }, [showQuickReturnDrawer, quickReturnOrder, selectedOrder]);
+
+  /** Article row for scan panel summary in quick mode (derive from resolved order + cone article). */
+  const effectiveArticleRowForScan = useMemo((): ArticleRow | null => {
+    if (!showQuickReturnDrawer || !quickReturnOrder) return selectedArticleRow;
+    const order = quickReturnOrder;
+    const articles = order.articles?.length
+      ? order.articles
+      : [{ id: order.id, articleNumber: order.orderNumber, plannedQuantity: 0 } as Article];
+    const norm = (id: string | undefined) => String(id ?? "").trim();
+    const firstId = articles[0] ? norm(articles[0].id || (articles[0] as any)._id) : "";
+    let art = articles[0];
+    for (const a of articles) {
+      const aid = norm(a.id || (a as any)._id);
+      if (aid && order.cones.some((c) => norm(c.articleId) === aid)) {
+        art = a;
+        break;
+      }
+    }
+    const artId = norm(art?.id ?? (art as any)?._id) || firstId;
+    let conesForArticle = order.cones.filter((c) => {
+      if (c.articleId && norm(c.articleId) === artId) return true;
+      if (c.articleNumber && art?.articleNumber && String(c.articleNumber).trim() === String(art.articleNumber).trim()) return true;
+      if (!c.articleId && !c.articleNumber) return norm(artId) === firstId;
+      return false;
+    });
+    if (conesForArticle.length === 0 && order.cones.length > 0 && articles.length === 1) {
+      conesForArticle = order.cones;
+    }
+    const yarnNames = Array.from(new Set(conesForArticle.map((c) => c.yarnName).filter(Boolean))).join(", ");
+    return {
+      rowId: `${artId}-${order.id}`,
+      articleId: artId,
+      articleNumber: art?.articleNumber ?? "—",
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      productionOrder: order.productionOrder || order.orderNumber,
+      floor: order.floor,
+      knittingSupervisor: order.knittingSupervisor,
+      knittingCompletedAt: order.knittingCompletedAt,
+      status: order.status,
+      cones: conesForArticle,
+      plannedQuantity: art?.plannedQuantity ?? 0,
+      yarnNames,
+    };
+  }, [showQuickReturnDrawer, quickReturnOrder, selectedArticleRow]);
+
+  const scanPanelYarnSummaryLines = useMemo(() => {
+    const cones =
+      showQuickReturnDrawer
+        ? effectiveArticleRowForScan?.cones ?? quickReturnOrder?.cones ?? []
+        : selectedArticleRow?.cones ?? selectedOrder?.cones ?? [];
+    return yarnSummaryLinesFromCones(cones);
+  }, [
+    showQuickReturnDrawer,
+    effectiveArticleRowForScan,
+    quickReturnOrder,
+    selectedOrder,
+    selectedArticleRow,
+  ]);
 
   const yarnNamesDrawerLines = useMemo(
     () => (yarnNamesDrawerRow ? yarnSummaryLinesFromCones(yarnNamesDrawerRow.cones) : []),
@@ -1030,11 +1146,32 @@ const YarnReturnPage = () => {
       );
   }, [returnTransactions, historyDateRange.from, historyDateRange.to, historySearchTerm]);
 
+  /** Find machine assignment row that contains this production order (for yarn-return status when not on selected machine). */
+  const findMachineAssignmentForOrderId = useCallback(
+    (orderId: string): MachineOrderAssignmentTopItems | null => {
+      for (const a of machineAssignments) {
+        const items = a.productionOrderItems ?? [];
+        for (const it of items) {
+          const po = it.productionOrder;
+          const oid =
+            typeof po === "string" ? po : po?.id ?? (po as { _id?: string })?._id ?? "";
+          if (String(oid) === String(orderId)) return a;
+        }
+      }
+      return null;
+    },
+    [machineAssignments]
+  );
+
   /** Get assignment item ids and article numbers for an order (for yarn-return-status API). Must be before any early return (hooks order). */
   const getAssignmentItemsForOrder = useCallback(
-    (orderId: string): { itemId: string; articleNumber: string; articleId: string }[] => {
-      const assignment = selectedMachineAssignment;
-      if (!assignment?.id || !assignment.productionOrderItems?.length) return [];
+    (
+      orderId: string,
+      assignmentOverride?: MachineOrderAssignmentTopItems | null
+    ): { itemId: string; articleNumber: string; articleId: string }[] => {
+      const assignment = assignmentOverride ?? selectedMachineAssignment;
+      const assignmentKey = assignment?.id ?? (assignment as { _id?: string } | null)?._id;
+      if (!assignment || !assignmentKey || !assignment.productionOrderItems?.length) return [];
       return assignment.productionOrderItems
         .filter((item) => {
           const po = item.productionOrder;
@@ -1060,8 +1197,12 @@ const YarnReturnPage = () => {
 
   /** Get assignment item for a specific (order, article) pair. Returns single item or null. */
   const getAssignmentItemForArticle = useCallback(
-    (orderId: string, articleId: string): { itemId: string; articleNumber: string } | null => {
-      const items = getAssignmentItemsForOrder(orderId);
+    (
+      orderId: string,
+      articleId: string,
+      assignmentOverride?: MachineOrderAssignmentTopItems | null
+    ): { itemId: string; articleNumber: string } | null => {
+      const items = getAssignmentItemsForOrder(orderId, assignmentOverride);
       const item = items.find((i) => normId(i.articleId) === normId(articleId));
       return item ? { itemId: item.itemId, articleNumber: item.articleNumber } : null;
     },
@@ -1136,6 +1277,8 @@ const YarnReturnPage = () => {
   const handleReturnConesClick = (orderId: string, articleRowId?: string) => {
     setSelectedOrderId(orderId);
     if (articleRowId) setSelectedArticleRowId(articleRowId);
+    setShowQuickReturnDrawer(false);
+    setQuickReturnOrder(null);
     setShowScanReturnPanel(true);
     setScanPanelSummaryOpen(false);
     setBarcodeInput("");
@@ -1155,6 +1298,42 @@ const YarnReturnPage = () => {
       totalTearWeight: "0",
       totalNetWeight: "",
     });
+  };
+
+  const resetQuickReturnScanState = () => {
+    setQuickReturnSummaryOpen(false);
+    setScanPanelSummaryOpen(false);
+    setBarcodeInput("");
+    setScanError(null);
+    setScannedBarcodes([]);
+    setScannedConeData(new Map());
+    setRackBarcodes(new Map());
+    setEmptyCones(new Set());
+    setShowConeTypeModal(false);
+    setPendingConeBarcode(null);
+    setPendingConeData(null);
+    setScanningMode("cone");
+    setCurrentConeBarcode(null);
+    setActiveConeId(null);
+    setTransactionForm({
+      totalWeight: "",
+      numberOfCones: "1",
+      totalTearWeight: "0",
+      totalNetWeight: "",
+    });
+  };
+
+  const handleOpenQuickReturnDrawer = () => {
+    setShowScanReturnPanel(false);
+    setShowQuickReturnDrawer(true);
+    setQuickReturnOrder(null);
+    resetQuickReturnScanState();
+  };
+
+  const handleCloseQuickReturnDrawer = () => {
+    setShowQuickReturnDrawer(false);
+    setQuickReturnOrder(null);
+    resetQuickReturnScanState();
   };
 
   const handleStoreConeInRack = async (coneBarcode: string, rackBarcode: string) => {
@@ -1449,7 +1628,7 @@ const YarnReturnPage = () => {
 
   const handleBarcodeSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedOrder) {
+    if (!showQuickReturnDrawer && !selectedOrder) {
       toast.error("Select a production order to continue.");
       return;
     }
@@ -1492,17 +1671,8 @@ const YarnReturnPage = () => {
       }
 
       const coneDetails = await response.json();
-      
-      console.log("🔍 Cone Details from API:", {
-        barcode: value,
-        coneDetails,
-        selectedOrderNumber: selectedOrder.orderNumber,
-        orderConesCount: selectedOrder.cones.length,
-        orderConesBarcodes: selectedOrder.cones.map((c) => c.barcode),
-      });
 
       // ORDER + ARTICLE VALIDATION (from cone / transaction side):
-      // If cone is issued for a different order/article, block it even if yarnName is same.
       const normalizeId = (id: any): string =>
         String(
           typeof id === "object" && id !== null
@@ -1510,10 +1680,97 @@ const YarnReturnPage = () => {
             : id ?? ""
         ).trim();
 
+      // Check if cone has been issued - only issued cones can be returned
+      const issueStatus = (coneDetails.issueStatus ?? coneDetails.issue_status ?? "").toString().toLowerCase();
+      if (issueStatus !== "issued") {
+        setScanError("This cone has not been issued and cannot be returned. Only issued cones can be returned.");
+        return;
+      }
+
+      // Check if cone is already returned (from API response)
+      if (coneDetails.returnStatus === "returned") {
+        setScanError("This cone has already been returned and cannot be returned again.");
+        return;
+      }
+
+      /** Resolve production order from transactions when using quick return (no machine/article pick). */
+      let orderCtx: ProductionOrder | null = showQuickReturnDrawer ? quickReturnOrder : selectedOrder;
+
+      if (showQuickReturnDrawer && !orderCtx) {
+        const ids = orderIdsFromConeDetails(coneDetails);
+        if (!ids) {
+          setScanError(
+            "This cone is missing order id / order number. Cannot create a return without them."
+          );
+          return;
+        }
+        setLoadingQuickReturnOrder(true);
+        try {
+          const stubArticles = articleStubFromConeDetails(coneDetails);
+          const fallbackArticle: Article =
+            stubArticles[0] ?? {
+              id: normalizeId(coneDetails.articleId) || ids.orderId,
+              articleNumber: (coneDetails.articleNumber as string) || "—",
+              plannedQuantity: 0,
+              linkingType: "Auto Linking",
+              priority: "Medium",
+              status: "Pending",
+            };
+          const loaded = await fetchOrderWithCones(token, ids.orderNumber, ids.orderId, {
+            floor: (coneDetails as { floor?: string }).floor ?? "N/A",
+            articles: stubArticles.length ? stubArticles : [fallbackArticle],
+          });
+          orderCtx = loaded;
+          setQuickReturnOrder(loaded);
+          try {
+            const res = await fetch(
+              `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${ids.orderId}`,
+              { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              const txs = extractTransactions(data).filter(
+                (tx: any) => tx.transactionType === "yarn_returned"
+              ) as ReturnTransaction[];
+              setReturnTransactions((prev) => {
+                const rest = prev.filter(
+                  (tx) =>
+                    txOrderId(tx) !== ids.orderId &&
+                    (txOrderno(tx) ?? tx.orderno) !== ids.orderNumber
+                );
+                return [...rest, ...txs];
+              });
+            }
+          } catch {
+            /* ignore */
+          }
+        } finally {
+          setLoadingQuickReturnOrder(false);
+        }
+        if (!orderCtx) {
+          setScanError("Could not load order data for this cone. Try again or use the main return flow.");
+          return;
+        }
+      }
+
+      if (!orderCtx) {
+        toast.error("Select a production order to continue.");
+        return;
+      }
+
+      console.log("🔍 Cone Details from API:", {
+        barcode: value,
+        coneDetails,
+        selectedOrderNumber: orderCtx.orderNumber,
+        orderConesCount: orderCtx.cones.length,
+        orderConesBarcodes: orderCtx.cones.map((c) => c.barcode),
+        quickReturn: showQuickReturnDrawer,
+      });
+
       // 1) Order check
       if (coneDetails.orderId) {
         const coneOrderId = normalizeId(coneDetails.orderId);
-        const currentOrderId = normalizeId(selectedOrder.id);
+        const currentOrderId = normalizeId(orderCtx.id);
 
         console.log("🔎 Order validation:", {
           coneOrderId,
@@ -1532,57 +1789,47 @@ const YarnReturnPage = () => {
         }
       }
 
-      // 2) Article check:
-      // We only block when the cone's articleId does NOT exist in this order's
-      // transactions/articles at all. If it does belong to this order (same
-      // articleId as any article in the order), we allow it even if a
-      // different article is currently selected in the UI.
+      // 2) Article check
       if (coneDetails.articleId) {
         const coneArticleId = normalizeId(coneDetails.articleId);
         if (coneArticleId) {
           const matchesAnyArticleInOrder =
-            Array.isArray(selectedOrder.articles) &&
-            selectedOrder.articles.some(
-              // Prefer backend _id for matching; fall back to id only if _id is missing
+            Array.isArray(orderCtx.articles) &&
+            orderCtx.articles.length > 0 &&
+            orderCtx.articles.some(
               (a) => normalizeId((a as any)._id ?? a.id) === coneArticleId
             );
+          const matchesConeRow = orderCtx.cones.some(
+            (c) => normalizeId(c.articleId) === coneArticleId
+          );
 
           console.log("🔎 Article validation:", {
             coneArticleId,
-            orderArticles: selectedOrder.articles?.map((a) => ({
+            orderArticles: orderCtx.articles?.map((a) => ({
               backendId: (a as any)._id,
               frontendId: a.id,
               articleNumber: a.articleNumber,
               matches: normalizeId((a as any)._id ?? a.id) === coneArticleId,
             })),
             matchesAnyArticleInOrder,
+            matchesConeRow,
+            quickReturn: showQuickReturnDrawer,
           });
 
-          if (!matchesAnyArticleInOrder) {
+          if (!matchesAnyArticleInOrder && !matchesConeRow) {
             setScanError(
-              "This cone belongs to a different article than the one selected."
+              showQuickReturnDrawer
+                ? "This cone does not match the articles/yarn issued for this production order."
+                : "This cone belongs to a different article than the one selected."
             );
             return;
           }
         }
       }
 
-      // Check if cone has been issued - only issued cones can be returned
-      const issueStatus = (coneDetails.issueStatus ?? coneDetails.issue_status ?? "").toString().toLowerCase();
-      if (issueStatus !== "issued") {
-        setScanError("This cone has not been issued and cannot be returned. Only issued cones can be returned.");
-        return;
-      }
-      
-      // Check if cone is already returned (from API response)
-      if (coneDetails.returnStatus === "returned") {
-        setScanError("This cone has already been returned and cannot be returned again.");
-        return;
-      }
-
       // Check if cone was already returned for this order/article (from return transactions)
       const orderReturnTxs = returnTransactions.filter(
-        (tx) => (txOrderno(tx) ?? tx.orderno) === selectedOrder.orderNumber || txOrderId(tx) === selectedOrder.id
+        (tx) => (txOrderno(tx) ?? tx.orderno) === orderCtx.orderNumber || txOrderId(tx) === orderCtx.id
       );
       const returnedConeIds = new Set(
         orderReturnTxs.flatMap((tx) => (tx as any).conesIdsArray ?? [])
@@ -1596,21 +1843,21 @@ const YarnReturnPage = () => {
 
       // Find the cone in the selected order (try multiple matching strategies)
       // Only search in pending cones (not returned ones) - this prevents showing returned cones
-      const pendingCones = selectedOrder.cones.filter(
+      const pendingCones = orderCtx.cones.filter(
         (item) => item.status !== "Returned"
       );
-      
-      // If no pending cones, this order has no cones to return
-      if (pendingCones.length === 0) {
+
+      // If no pending cones, this order has no cones to return (quick return: still allow API-built cone)
+      if (pendingCones.length === 0 && !showQuickReturnDrawer) {
         setScanError("This order has no pending cones to return.");
         return;
       }
-      
+
       console.log("🔎 Attempting to find cone in order by barcode:", value);
       console.log("📊 Order cones:", {
-        total: selectedOrder.cones.length,
+        total: orderCtx.cones.length,
         pending: pendingCones.length,
-        returned: selectedOrder.cones.length - pendingCones.length,
+        returned: orderCtx.cones.length - pendingCones.length,
       });
       
       let cone = pendingCones.find(
@@ -1630,7 +1877,7 @@ const YarnReturnPage = () => {
           cone = pendingCones.find(
             (item) => item.id === coneDetails._id || item.id === coneDetails.id
           );
-          
+
           if (cone) {
             console.log("✅ Cone found in order by _id:", {
               coneId: cone.id,
@@ -1725,7 +1972,8 @@ const YarnReturnPage = () => {
   };
 
   const handleReturnSubmit = async () => {
-    if (!selectedOrder || scannedBarcodes.length === 0) {
+    const orderForSubmit = effectiveReturnOrder;
+    if (!orderForSubmit || scannedBarcodes.length === 0) {
       toast.error("Missing required information.");
       return;
     }
@@ -1816,8 +2064,8 @@ const YarnReturnPage = () => {
           yarnId = resolveYarnCatalogId({ yarnCatalogId: cone.yarnCatalogId });
         }
 
-        if ((!yarnId || yarnId === "N/A") && selectedOrder) {
-          const orderCone = selectedOrder.cones.find(
+        if ((!yarnId || yarnId === "N/A") && orderForSubmit) {
+          const orderCone = orderForSubmit.cones.find(
             (c) => c.barcode.toLowerCase() === barcode.toLowerCase() || c.id === cone.id
           );
           if (orderCone && orderCone.yarnCatalogId && orderCone.yarnCatalogId !== "N/A") {
@@ -1851,11 +2099,11 @@ const YarnReturnPage = () => {
           }
         }
 
-        if ((!yarnId || yarnId === "N/A") && selectedOrder && cone.yarnName) {
-          console.log("🔍 Querying issued transactions for order:", selectedOrder.orderNumber);
+        if ((!yarnId || yarnId === "N/A") && orderForSubmit && cone.yarnName) {
+          console.log("🔍 Querying issued transactions for order:", orderForSubmit.orderNumber);
           try {
             const txListResponse = await fetch(
-              `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${selectedOrder.orderNumber}`,
+              `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${orderForSubmit.orderNumber}`,
               {
                 headers: {
                   "Content-Type": "application/json",
@@ -1946,8 +2194,8 @@ const YarnReturnPage = () => {
           totalTearWeight: tearWeightPerCone,
           totalNetWeight: weightPerCone,
           numberOfCones: 1,
-          orderno: selectedOrder.orderNumber,
-          orderId: selectedOrder.id,
+          orderno: orderForSubmit.orderNumber,
+          orderId: orderForSubmit.id,
           conesIdsArray: [String(cone.id).replace(/-\d+$/, "") || cone.id],
         };
 
@@ -2049,42 +2297,38 @@ const YarnReturnPage = () => {
       }
 
       // Update local state for all returned cones
-      const updatedOrders = orders.map((order) => {
-        if (order.id !== selectedOrder.id) {
-          return order;
+      const updatedCones = orderForSubmit.cones.map((cone) => {
+        const returnedResult = results.find(
+          (r) => r.cone.id === cone.id || r.cone.barcode === cone.barcode
+        );
+        if (returnedResult) {
+          return {
+            ...cone,
+            returnedWeight: returnedResult.weightPerCone,
+            balanceWeight: Math.max(cone.issuedWeight - returnedResult.weightPerCone, 0),
+            status: "Returned" as ConeStatus,
+            lastReturnedAt: new Date().toISOString(),
+          };
         }
-
-        const updatedCones = order.cones.map((cone) => {
-          // Check if this cone was returned
-          const returnedResult = results.find((r) => r.cone.id === cone.id || r.cone.barcode === cone.barcode);
-          if (returnedResult) {
-            return {
-              ...cone,
-              returnedWeight: returnedResult.weightPerCone,
-              balanceWeight: Math.max(cone.issuedWeight - returnedResult.weightPerCone, 0),
-              status: "Returned" as ConeStatus,
-              lastReturnedAt: new Date().toISOString(),
-            };
-          }
-          return cone;
-        });
-
-        const returnedCount = updatedCones.filter(
-          (cone) => cone.status === "Returned"
-        ).length;
-        let status: OrderStatus = getOrderStatusFromCones(updatedCones);
-
-        return {
-          ...order,
-          cones: updatedCones,
-          status,
-          lastUpdated: new Date().toISOString(),
-        };
+        return cone;
       });
+      const updatedOrder: ProductionOrder = {
+        ...orderForSubmit,
+        cones: updatedCones,
+        status: getOrderStatusFromCones(updatedCones),
+        lastUpdated: new Date().toISOString(),
+      };
 
-      setOrders(updatedOrders);
-      const updatedOrder =
-        updatedOrders.find((order) => order.id === selectedOrder.id) ?? null;
+      setOrders((prev) => {
+        const idx = prev.findIndex((o) => o.id === orderForSubmit.id);
+        if (idx === -1) return prev;
+        const copy = [...prev];
+        copy[idx] = updatedOrder;
+        return copy;
+      });
+      if (showQuickReturnDrawer) {
+        setQuickReturnOrder(updatedOrder);
+      }
 
       if (updatedOrder) {
         upsertHistoryRecord(updatedOrder);
@@ -2115,9 +2359,13 @@ const YarnReturnPage = () => {
         }
 
         // After return API 200: update assignment item yarn-return status per ARTICLE (not whole order)
-        // "Completed" when all cones for that article returned, else "In Progress"
-        if (selectedMachineAssignmentId) {
-          const allItems = getAssignmentItemsForOrder(updatedOrder.id);
+        const assignmentForReturn =
+          findMachineAssignmentForOrderId(updatedOrder.id) ?? selectedMachineAssignment;
+        const assignmentIdForReturn =
+          assignmentForReturn?.id ?? (assignmentForReturn as { _id?: string } | null)?._id;
+
+        if (assignmentIdForReturn) {
+          const allItems = getAssignmentItemsForOrder(updatedOrder.id, assignmentForReturn);
           const articleIdsToUpdate = Array.from(
             new Set(
               [
@@ -2130,12 +2378,14 @@ const YarnReturnPage = () => {
           const itemsToUpdate =
             articleIdsToUpdate.length > 0
               ? articleIdsToUpdate
-                  .map((aid) => getAssignmentItemForArticle(updatedOrder.id, aid))
+                  .map((aid) =>
+                    getAssignmentItemForArticle(updatedOrder.id, aid, assignmentForReturn)
+                  )
                   .filter((x): x is NonNullable<typeof x> => x != null)
               : allItems
                   .map((i) => ({ itemId: i.itemId, articleNumber: i.articleNumber }))
                   .filter((x) => !!x.itemId);
-          const pendingBefore = selectedOrder.cones.filter((c) => c.status !== "Returned").length;
+          const pendingBefore = orderForSubmit.cones.filter((c) => c.status !== "Returned").length;
           const justReturnedLastBatch = results.length >= pendingBefore;
           if (itemsToUpdate.length > 0) {
             try {
@@ -2147,7 +2397,7 @@ const YarnReturnPage = () => {
                   updatedOrder.status === "Returned";
                 const yarnReturnStatus = allReturned ? "Completed" : "In Progress";
                 await updateAssignmentItemYarnReturnStatus(
-                  selectedMachineAssignmentId,
+                  assignmentIdForReturn,
                   item.itemId,
                   yarnReturnStatus
                 );
@@ -2159,7 +2409,9 @@ const YarnReturnPage = () => {
                   ? "Assignment item return status updated."
                   : "Assignment item marked in progress."
               );
-              if (selectedMachineAssignment) loadOrdersForMachine(selectedMachineAssignment);
+              if (!showQuickReturnDrawer && selectedMachineAssignment) {
+                loadOrdersForMachine(selectedMachineAssignment);
+              }
             } catch (err) {
               console.error("Assignment yarn-return status update failed:", err);
               toast.error("Cones returned, but failed to update assignment yarn-return status.");
@@ -2168,14 +2420,14 @@ const YarnReturnPage = () => {
             console.warn("Assignment yarn-return status not updated: no items for order", updatedOrder.orderNumber);
           }
         } else {
-          console.warn("Assignment yarn-return status not updated: no selected machine assignment");
+          console.warn("Assignment yarn-return status not updated: no machine assignment for this order");
         }
 
         // Refetch transactions to ensure we have the latest data
         try {
           const token = getAccessToken();
           const transactionsResponse = await fetch(
-            `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${selectedOrder.orderNumber}`,
+            `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${orderForSubmit.orderNumber}`,
             {
               headers: {
                 "Content-Type": "application/json",
@@ -2193,7 +2445,7 @@ const YarnReturnPage = () => {
             let returnedTransactions: any[] = [];
             try {
               const allTransactionsResponse = await fetch(
-                `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${selectedOrder.id}`,
+                `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${orderForSubmit.id}`,
                 {
                   headers: {
                     "Content-Type": "application/json",
@@ -2263,7 +2515,7 @@ const YarnReturnPage = () => {
             const updatedCones = Array.from(conesMap.values());
             setOrders((prev) =>
               prev.map((order) => {
-                if (order.id !== selectedOrder.id) {
+                if (order.id !== orderForSubmit.id) {
                   return order;
                 }
                 return {
@@ -2274,6 +2526,18 @@ const YarnReturnPage = () => {
                 };
               })
             );
+            if (showQuickReturnDrawer) {
+              setQuickReturnOrder((qo) =>
+                qo && qo.id === orderForSubmit.id
+                  ? {
+                      ...qo,
+                      cones: updatedCones,
+                      status: getOrderStatusFromCones(updatedCones),
+                      lastUpdated: new Date().toISOString(),
+                    }
+                  : qo
+              );
+            }
 
             // Refresh return transactions for this order (merge API response with just-created txs in case of race)
             const fromApi = (returnedTransactions as any[]).map((tx) => ({
@@ -2285,8 +2549,11 @@ const YarnReturnPage = () => {
               ...fromApi,
             ];
             setReturnTransactions((prev) => {
-              const orderno = selectedOrder.orderNumber;
-              const filtered = prev.filter((tx) => (txOrderno(tx) ?? tx.orderno) !== orderno && txOrderId(tx) !== selectedOrder.id);
+              const orderno = orderForSubmit.orderNumber;
+              const filtered = prev.filter(
+                (tx) =>
+                  (txOrderno(tx) ?? tx.orderno) !== orderno && txOrderId(tx) !== orderForSubmit.id
+              );
               return [...filtered, ...merged];
             });
           }
@@ -2298,7 +2565,11 @@ const YarnReturnPage = () => {
         // Also refresh all return transactions to ensure we have the latest data
         try {
           const token = getAccessToken();
-          const allOrderIds = Array.from(new Set(orders.map(o => o.id).filter(Boolean)));
+          const allOrderIds = Array.from(
+            new Set(
+              [...orders.map((o) => o.id), orderForSubmit.id].filter(Boolean) as string[]
+            )
+          );
           const allReturnTransactions: ReturnTransaction[] = [];
           
           await Promise.all(
@@ -2334,7 +2605,7 @@ const YarnReturnPage = () => {
         }
 
         // Reload orders and return transactions from API so pending counts (Orders Awaiting, Cones Pending, etc.) are correct
-        if (selectedMachineAssignment) {
+        if (!showQuickReturnDrawer && selectedMachineAssignment) {
           await loadOrdersForMachine(selectedMachineAssignment);
         }
       }
@@ -2360,14 +2631,25 @@ const YarnReturnPage = () => {
                 {pendingOrders.length}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowHistoryDrawer(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors"
-            >
-              <i className="ri-history-line text-sm"></i>
-              History
-            </button>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <button
+                type="button"
+                onClick={handleOpenQuickReturnDrawer}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors"
+                title="Return cones when the order is not on the list — order comes from the scanned cone"
+              >
+                <i className="ri-scan-2-line text-sm"></i>
+                Quick return
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowHistoryDrawer(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors"
+              >
+                <i className="ri-history-line text-sm"></i>
+                History
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2632,12 +2914,11 @@ const YarnReturnPage = () => {
           </div>
         </div>
 
-      {/* Scan & Return: portal to body so fixed + flex scroll are not broken by layout/transform; no global .box/.box-body */}
+      {/* Main: Scan & Return — separate portal from Quick return */}
       {showScanReturnPanel &&
         typeof document !== "undefined" &&
         createPortal(
           <>
-            {/* Backdrop */}
             <div
               className="fixed inset-0 z-[10040] bg-black/50 transition-opacity"
               onClick={() => {
@@ -2656,114 +2937,397 @@ const YarnReturnPage = () => {
                 setCurrentConeBarcode(null);
               }}
             />
-            {/* Side panel: viewport height, scroll only inside body */}
             <div
               className="fixed top-0 right-0 z-[10050] flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl"
               role="dialog"
               aria-modal="true"
-              aria-labelledby="yarn-return-scan-panel-title"
+              aria-labelledby="yarn-return-main-scan-title"
             >
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 py-3">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 id="yarn-return-scan-panel-title" className="text-lg font-bold text-gray-800">
-                      Scan &amp; Return
-                    </h3>
-                    {(selectedOrder || selectedArticleRowId) && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {selectedArticleRow?.articleNumber ?? selectedOrder?.productionOrder ?? "—"}
-                        {selectedOrder?.orderNumber && ` · PO: ${selectedOrder.orderNumber}`}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowScanReturnPanel(false);
-                      setScanPanelSummaryOpen(false);
-                      setBarcodeInput("");
-                      setScanError(null);
-                      setScannedBarcodes([]);
-                      setScannedConeData(new Map());
-                      setRackBarcodes(new Map());
-                      setEmptyCones(new Set());
-                      setShowConeTypeModal(false);
-                      setPendingConeBarcode(null);
-                      setPendingConeData(null);
-                      setScanningMode("cone");
-                      setCurrentConeBarcode(null);
-                      setActiveConeId(null);
-                    }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                    aria-label="Close panel"
-                  >
-                    <i className="ri-close-line text-xl"></i>
-                  </button>
-                </div>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pb-6 pt-2 text-[0.813rem] text-defaulttextcolor [scrollbar-gutter:stable]">
-                {!selectedOrder ? (
-                  <div className="text-center py-12 text-sm text-gray-500">
-                    <i className="ri-focus-2-line text-4xl text-gray-300 mb-2"></i>
-                    <p>Select an article to start returning cones.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="border border-dashed border-primary/40 rounded-md bg-primary/5 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => setScanPanelSummaryOpen((o) => !o)}
-                        className="w-full flex items-center justify-between gap-3 p-3 text-left hover:bg-primary/[0.07] transition-colors"
-                        aria-expanded={scanPanelSummaryOpen}
-                        aria-label={scanPanelSummaryOpen ? "Hide yarn and floor details" : "Show yarn and floor details"}
-                      >
-                        <span className="text-sm font-semibold text-gray-900 truncate min-w-0">
-                          {selectedArticleRow?.articleNumber ?? selectedOrder.productionOrder}
-                        </span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span
-                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusBadgeColor(
-                              selectedOrder.status
-                            )}`}
-                          >
-                            {selectedOrder.status}
-                          </span>
-                          <i
-                            className={`ri-arrow-down-s-line text-lg text-gray-500 transition-transform ${scanPanelSummaryOpen ? "rotate-180" : ""}`}
-                            aria-hidden={true}
-                          />
-                        </div>
-                      </button>
-                      {scanPanelSummaryOpen && (
-                        <div className="px-3 pb-3 pt-0 border-t border-dashed border-primary/25 space-y-2">
-                          {scanPanelYarnSummaryLines.length > 0 && (
-                            <div
-                              className="max-h-[min(40vh,11rem)] overflow-y-auto overflow-x-hidden overscroll-y-contain rounded border border-gray-200/80 bg-white/60 px-2 py-1.5 [scrollbar-gutter:stable]"
-                              aria-label="Yarn list"
-                            >
-                              <div className="text-xs text-gray-500 space-y-0.5">
-                                {scanPanelYarnSummaryLines.map((line, i) => (
-                                  <div key={`${line}-${i}`} className="break-words">
-                                    {line}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          <p className="text-xs text-gray-500">
-                            Floor: {selectedOrder.floor}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Cones:{" "}
-                            {(selectedArticleRow ? selectedArticleRow.cones : selectedOrder.cones).filter((c) => c.status !== "Returned").length}{" "}
-                            pending
-                          </p>
-                        </div>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 id="yarn-return-main-scan-title" className="text-lg font-bold text-gray-800">
+                        Scan &amp; Return
+                      </h3>
+                      {(selectedOrder || selectedArticleRowId) && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {selectedArticleRow?.articleNumber ?? selectedOrder?.productionOrder ?? "—"}
+                          {selectedOrder?.orderNumber && ` · PO: ${selectedOrder.orderNumber}`}
+                        </p>
                       )}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowScanReturnPanel(false);
+                        setScanPanelSummaryOpen(false);
+                        setBarcodeInput("");
+                        setScanError(null);
+                        setScannedBarcodes([]);
+                        setScannedConeData(new Map());
+                        setRackBarcodes(new Map());
+                        setEmptyCones(new Set());
+                        setShowConeTypeModal(false);
+                        setPendingConeBarcode(null);
+                        setPendingConeData(null);
+                        setScanningMode("cone");
+                        setCurrentConeBarcode(null);
+                        setActiveConeId(null);
+                      }}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      aria-label="Close Scan and Return"
+                    >
+                      <i className="ri-close-line text-xl"></i>
+                    </button>
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pb-6 pt-2 text-[0.813rem] text-defaulttextcolor [scrollbar-gutter:stable]">
+                  {!selectedOrder ? (
+                    <div className="text-center py-12 text-sm text-gray-500">
+                      <i className="ri-focus-2-line text-4xl text-gray-300 mb-2"></i>
+                      <p>Select an article to start returning cones.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {selectedOrder && (
+                        <div className="border border-dashed border-primary/40 rounded-md bg-primary/5 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setScanPanelSummaryOpen((o) => !o)}
+                            className="w-full flex items-center justify-between gap-3 p-3 text-left hover:bg-primary/[0.07] transition-colors"
+                            aria-expanded={scanPanelSummaryOpen}
+                            aria-label={scanPanelSummaryOpen ? "Hide yarn and floor details" : "Show yarn and floor details"}
+                          >
+                            <span className="text-sm font-semibold text-gray-900 truncate min-w-0">
+                              {selectedArticleRow?.articleNumber ?? selectedOrder.productionOrder}
+                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span
+                                className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusBadgeColor(
+                                  selectedOrder.status
+                                )}`}
+                              >
+                                {selectedOrder.status}
+                              </span>
+                              <i
+                                className={`ri-arrow-down-s-line text-lg text-gray-500 transition-transform ${scanPanelSummaryOpen ? "rotate-180" : ""}`}
+                                aria-hidden={true}
+                              />
+                            </div>
+                          </button>
+                          {scanPanelSummaryOpen && (
+                            <div className="px-3 pb-3 pt-0 border-t border-dashed border-primary/25 space-y-2">
+                              {scanPanelYarnSummaryLines.length > 0 && (
+                                <div
+                                  className="max-h-[min(40vh,11rem)] overflow-y-auto overflow-x-hidden overscroll-y-contain rounded border border-gray-200/80 bg-white/60 px-2 py-1.5 [scrollbar-gutter:stable]"
+                                  aria-label="Yarn list"
+                                >
+                                  <div className="text-xs text-gray-500 space-y-0.5">
+                                    {scanPanelYarnSummaryLines.map((line, i) => (
+                                      <div key={`main-${line}-${i}`} className="break-words">
+                                        {line}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              <p className="text-xs text-gray-500">Floor: {selectedOrder.floor}</p>
+                              <p className="text-xs text-gray-500">
+                                Cones:{" "}
+                                {(selectedArticleRow ? selectedArticleRow.cones : selectedOrder.cones).filter(
+                                  (c) => c.status !== "Returned"
+                                ).length}{" "}
+                                pending
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="form-label text-sm font-semibold text-gray-700">
+                            Number of Cones to Return
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            className="form-control"
+                            placeholder="Enter number of cones"
+                            value={transactionForm.numberOfCones}
+                            onChange={(e) => {
+                              const numCones = e.target.value;
+                              setTransactionForm((prev) => ({
+                                ...prev,
+                                numberOfCones: numCones,
+                              }));
+                              if (scannedBarcodes.length > 0) {
+                                setScannedBarcodes([]);
+                                setScannedConeData(new Map());
+                                setRackBarcodes(new Map());
+                                setEmptyCones(new Set());
+                              }
+                            }}
+                            disabled={scannedBarcodes.length > 0}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            {scannedBarcodes.length > 0
+                              ? "Cannot change number of cones after scanning has started. Clear scanned barcodes first."
+                              : "Enter how many cones you want to return in this transaction."}
+                          </p>
+                        </div>
+
+                        {parseInt(transactionForm.numberOfCones) > 0 && (
+                          <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-semibold text-blue-900">Scanning Progress</span>
+                              <span className="text-sm text-blue-700">
+                                {scannedBarcodes.length} / {transactionForm.numberOfCones}
+                              </span>
+                            </div>
+                            <div className="w-full bg-blue-200 rounded-full h-2">
+                              <div
+                                className="bg-blue-600 h-2 rounded-full transition-all"
+                                style={{
+                                  width: `${(scannedBarcodes.length / parseInt(transactionForm.numberOfCones || "1")) * 100}%`,
+                                }}
+                              />
+                            </div>
+                            {scannedBarcodes.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                <p className="text-xs font-medium text-blue-900">Scanned Cones & Racks:</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {scannedBarcodes.map((barcode, index) => {
+                                    const rackBarcode = rackBarcodes.get(barcode);
+                                    const isConeEmpty = emptyCones.has(barcode);
+                                    return (
+                                      <span
+                                        key={index}
+                                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                          isConeEmpty ? "bg-gray-100 text-gray-800" : "bg-blue-100 text-blue-800"
+                                        }`}
+                                      >
+                                        Cone: {barcode}
+                                        {isConeEmpty ? (
+                                          <span className="ml-1 text-gray-600">(Empty)</span>
+                                        ) : rackBarcode ? (
+                                          <span className="ml-1 text-green-700">→ Rack: {rackBarcode}</span>
+                                        ) : (
+                                          <span className="ml-1 text-orange-600">(Needs Rack)</span>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const newBarcodes = scannedBarcodes.filter((_, i) => i !== index);
+                                            const newConeData = new Map(scannedConeData);
+                                            const newRackBarcodes = new Map(rackBarcodes);
+                                            const newEmptyCones = new Set(emptyCones);
+                                            newConeData.delete(barcode);
+                                            newRackBarcodes.delete(barcode);
+                                            newEmptyCones.delete(barcode);
+                                            setScannedBarcodes(newBarcodes);
+                                            setScannedConeData(newConeData);
+                                            setRackBarcodes(newRackBarcodes);
+                                            setEmptyCones(newEmptyCones);
+                                            if (currentConeBarcode === barcode) {
+                                              setCurrentConeBarcode(null);
+                                              setScanningMode("cone");
+                                            }
+                                          }}
+                                          className="ml-1 text-blue-600 hover:text-blue-800"
+                                        >
+                                          <i className="ri-close-line text-xs"></i>
+                                        </button>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <form onSubmit={handleBarcodeSubmit} className="space-y-2">
+                          <label className="form-label text-sm font-semibold text-gray-700">
+                            {scanningMode === "cone" ? "Scan Cone Barcode" : "Scan Rack Barcode (Short-Term Storage)"}
+                          </label>
+                          {scanningMode === "rack" && currentConeBarcode && (
+                            <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                              <i className="ri-information-line me-1"></i>
+                              Scanning rack for cone: <strong>{currentConeBarcode}</strong>
+                            </div>
+                          )}
+                          <div className="relative">
+                            <input
+                              ref={scanBarcodeInputRef}
+                              type="text"
+                              className={`form-control ps-10 ${scanError ? "border-red-500 focus:border-red-500" : ""}`}
+                              placeholder={scanningMode === "cone" ? "Scan or enter cone barcode" : "Scan or enter rack barcode"}
+                              value={barcodeInput}
+                              onChange={(event) => {
+                                setBarcodeInput(event.target.value);
+                                if (scanError) setScanError(null);
+                              }}
+                              disabled={
+                                barcodeLoading ||
+                                storingCone ||
+                                (scanningMode === "cone" &&
+                                  scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1"))
+                              }
+                            />
+                            <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                          </div>
+                          {scanError && scanningMode === "cone" && (
+                            <div className="flex items-center gap-2 text-red-600 text-sm font-medium">
+                              <i className="ri-error-warning-line text-base"></i>
+                              {scanError}
+                            </div>
+                          )}
+                          <button
+                            type="submit"
+                            className="ti-btn ti-btn-primary w-full whitespace-normal break-words leading-tight px-4 py-2 text-sm"
+                            disabled={
+                              barcodeLoading ||
+                              storingCone ||
+                              (scanningMode === "cone" &&
+                                (scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1") ||
+                                  !transactionForm.numberOfCones ||
+                                  parseInt(transactionForm.numberOfCones) < 1))
+                            }
+                          >
+                            {barcodeLoading ? (
+                              <>
+                                <span className="animate-spin inline-block mr-2">⟳</span>
+                                Loading...
+                              </>
+                            ) : storingCone ? (
+                              <>
+                                <span className="animate-spin inline-block mr-2">⟳</span>
+                                Storing Cone...
+                              </>
+                            ) : scanningMode === "rack" ? (
+                              "Scan Rack Barcode"
+                            ) : scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1") ? (
+                              "All Barcodes Scanned"
+                            ) : (
+                              "Scan Cone Barcode"
+                            )}
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+
+      {/* Quick return — separate portal (cone-driven order); not mixed with main Scan & Return */}
+      {showQuickReturnDrawer &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[10042] bg-black/50 transition-opacity"
+              onClick={handleCloseQuickReturnDrawer}
+            />
+            <div
+              className="fixed top-0 right-0 z-[10052] flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col overflow-hidden border-l border-purple-100 bg-white shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="yarn-return-quick-drawer-title"
+            >
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex-shrink-0 border-b border-purple-100 bg-purple-50/50 px-4 py-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 id="yarn-return-quick-drawer-title" className="text-lg font-bold text-gray-800">
+                        Quick return
+                      </h3>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {quickReturnOrder
+                          ? `PO: ${quickReturnOrder.orderNumber} · ${quickReturnOrder.floor ?? "—"}`
+                          : "Scan a cone first — order and article come from the cone."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCloseQuickReturnDrawer}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      aria-label="Close Quick return"
+                    >
+                      <i className="ri-close-line text-xl"></i>
+                    </button>
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pb-6 pt-2 text-[0.813rem] text-defaulttextcolor [scrollbar-gutter:stable]">
+                  <div className="space-y-4">
+                    {!quickReturnOrder && (
+                      <div className="rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900">
+                        Set how many cones to return, then scan a cone — the production order and article are loaded from the cone (no article pick needed).
+                      </div>
+                    )}
+                    {quickReturnOrder && (
+                      <div className="border border-dashed border-purple-300/60 rounded-md bg-purple-50/30 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setQuickReturnSummaryOpen((o) => !o)}
+                          className="w-full flex items-center justify-between gap-3 p-3 text-left hover:bg-purple-50/80 transition-colors"
+                          aria-expanded={quickReturnSummaryOpen}
+                          aria-label={quickReturnSummaryOpen ? "Hide yarn and floor details" : "Show yarn and floor details"}
+                        >
+                          <span className="text-sm font-semibold text-gray-900 truncate min-w-0">
+                            {effectiveArticleRowForScan?.articleNumber ?? quickReturnOrder.productionOrder}
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusBadgeColor(
+                                quickReturnOrder.status
+                              )}`}
+                            >
+                              {quickReturnOrder.status}
+                            </span>
+                            <i
+                              className={`ri-arrow-down-s-line text-lg text-gray-500 transition-transform ${quickReturnSummaryOpen ? "rotate-180" : ""}`}
+                              aria-hidden={true}
+                            />
+                          </div>
+                        </button>
+                        {quickReturnSummaryOpen && (
+                          <div className="px-3 pb-3 pt-0 border-t border-dashed border-purple-200/80 space-y-2">
+                            {scanPanelYarnSummaryLines.length > 0 && (
+                              <div
+                                className="max-h-[min(40vh,11rem)] overflow-y-auto overflow-x-hidden overscroll-y-contain rounded border border-gray-200/80 bg-white/60 px-2 py-1.5 [scrollbar-gutter:stable]"
+                                aria-label="Yarn list"
+                              >
+                                <div className="text-xs text-gray-500 space-y-0.5">
+                                  {scanPanelYarnSummaryLines.map((line, i) => (
+                                    <div key={`quick-${line}-${i}`} className="break-words">
+                                      {line}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <p className="text-xs text-gray-500">Floor: {quickReturnOrder.floor}</p>
+                            <p className="text-xs text-gray-500">
+                              Cones:{" "}
+                              {(effectiveArticleRowForScan
+                                ? effectiveArticleRowForScan.cones
+                                : quickReturnOrder.cones
+                              ).filter((c) => c.status !== "Returned").length}{" "}
+                              pending
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div className="space-y-4">
-                      {/* Number of Cones Input */}
                       <div>
                         <label className="form-label text-sm font-semibold text-gray-700">
                           Number of Cones to Return
@@ -2781,7 +3345,6 @@ const YarnReturnPage = () => {
                               ...prev,
                               numberOfCones: numCones,
                             }));
-                            // Reset scanned barcodes if number changes
                             if (scannedBarcodes.length > 0) {
                               setScannedBarcodes([]);
                               setScannedConeData(new Map());
@@ -2792,19 +3355,16 @@ const YarnReturnPage = () => {
                           disabled={scannedBarcodes.length > 0}
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          {scannedBarcodes.length > 0 
+                          {scannedBarcodes.length > 0
                             ? "Cannot change number of cones after scanning has started. Clear scanned barcodes first."
                             : "Enter how many cones you want to return in this transaction."}
                         </p>
                       </div>
 
-                      {/* Scanning Progress */}
                       {parseInt(transactionForm.numberOfCones) > 0 && (
                         <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-blue-900">
-                              Scanning Progress
-                            </span>
+                            <span className="text-sm font-semibold text-blue-900">Scanning Progress</span>
                             <span className="text-sm text-blue-700">
                               {scannedBarcodes.length} / {transactionForm.numberOfCones}
                             </span>
@@ -2815,7 +3375,7 @@ const YarnReturnPage = () => {
                               style={{
                                 width: `${(scannedBarcodes.length / parseInt(transactionForm.numberOfCones || "1")) * 100}%`,
                               }}
-                            ></div>
+                            />
                           </div>
                           {scannedBarcodes.length > 0 && (
                             <div className="mt-2 space-y-1">
@@ -2828,9 +3388,7 @@ const YarnReturnPage = () => {
                                     <span
                                       key={index}
                                       className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                        isConeEmpty 
-                                          ? "bg-gray-100 text-gray-800" 
-                                          : "bg-blue-100 text-blue-800"
+                                        isConeEmpty ? "bg-gray-100 text-gray-800" : "bg-blue-100 text-blue-800"
                                       }`}
                                     >
                                       Cone: {barcode}
@@ -2873,7 +3431,6 @@ const YarnReturnPage = () => {
                         </div>
                       )}
 
-                      {/* Barcode Scanning Form */}
                       <form onSubmit={handleBarcodeSubmit} className="space-y-2">
                         <label className="form-label text-sm font-semibold text-gray-700">
                           {scanningMode === "cone" ? "Scan Cone Barcode" : "Scan Rack Barcode (Short-Term Storage)"}
@@ -2886,7 +3443,7 @@ const YarnReturnPage = () => {
                         )}
                         <div className="relative">
                           <input
-                            ref={scanBarcodeInputRef}
+                            ref={quickReturnBarcodeInputRef}
                             type="text"
                             className={`form-control ps-10 ${scanError ? "border-red-500 focus:border-red-500" : ""}`}
                             placeholder={scanningMode === "cone" ? "Scan or enter cone barcode" : "Scan or enter rack barcode"}
@@ -2895,7 +3452,13 @@ const YarnReturnPage = () => {
                               setBarcodeInput(event.target.value);
                               if (scanError) setScanError(null);
                             }}
-                            disabled={barcodeLoading || storingCone || (scanningMode === "cone" && scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1"))}
+                            disabled={
+                              loadingQuickReturnOrder ||
+                              barcodeLoading ||
+                              storingCone ||
+                              (scanningMode === "cone" &&
+                                scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1"))
+                            }
                           />
                           <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                         </div>
@@ -2908,9 +3471,22 @@ const YarnReturnPage = () => {
                         <button
                           type="submit"
                           className="ti-btn ti-btn-primary w-full whitespace-normal break-words leading-tight px-4 py-2 text-sm"
-                          disabled={barcodeLoading || storingCone || (scanningMode === "cone" && (scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1") || !transactionForm.numberOfCones || parseInt(transactionForm.numberOfCones) < 1))}
+                          disabled={
+                            loadingQuickReturnOrder ||
+                            barcodeLoading ||
+                            storingCone ||
+                            (scanningMode === "cone" &&
+                              (scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1") ||
+                                !transactionForm.numberOfCones ||
+                                parseInt(transactionForm.numberOfCones) < 1))
+                          }
                         >
-                          {barcodeLoading ? (
+                          {loadingQuickReturnOrder ? (
+                            <>
+                              <span className="animate-spin inline-block mr-2">⟳</span>
+                              Loading order…
+                            </>
+                          ) : barcodeLoading ? (
                             <>
                               <span className="animate-spin inline-block mr-2">⟳</span>
                               Loading...
@@ -2931,13 +3507,11 @@ const YarnReturnPage = () => {
                       </form>
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
               </div>
             </div>
-          </>
-        ,
-        document.body
+          </>,
+          document.body
         )}
 
       {/* Return Modal — z above scan panel so focus and stacking match */}
@@ -2972,7 +3546,7 @@ const YarnReturnPage = () => {
                 if (!submittingReturn) void handleReturnSubmit();
               }}
             >
-              {scannedBarcodes.length > 0 && selectedOrder && (
+              {scannedBarcodes.length > 0 && effectiveReturnOrder && (
                 <>
                   <div className="mb-6 p-4 bg-gray-50 rounded-md">
                     <h4 className="text-sm font-semibold text-gray-900 mb-3">
@@ -3139,10 +3713,10 @@ const YarnReturnPage = () => {
                       </p>
                     </div>
 
-                    {selectedOrder && (
+                    {effectiveReturnOrder && (
                       <div className="p-3 bg-blue-50 rounded-md">
                         <p className="text-xs text-gray-600">
-                          <span className="font-semibold">Order:</span> {selectedOrder.orderNumber}
+                          <span className="font-semibold">Order:</span> {effectiveReturnOrder.orderNumber}
                         </p>
                         <p className="text-xs text-gray-600 mt-1">
                           <span className="font-semibold">Number of Cones:</span> {scannedBarcodes.length}

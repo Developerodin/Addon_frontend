@@ -12,9 +12,6 @@ import { mapVendorDocToVendor } from "../../vendor-list/vendorMappers";
 import vendorPurchaseOrderService from "@/shared/services/vendorPurchaseOrderService";
 import { listProducts, getProductById } from "@/shared/services/productService";
 
-/**
- * Create vendor PO — shell matches yarn `purchase-management/purchase/add` (main-content, white card, compact header).
- */
 const VendorPOCreatePage = () => {
   const router = useRouter();
   const { hasSubPermission, isLoading: permLoading } = useNavigation();
@@ -195,13 +192,13 @@ const VendorPOCreatePage = () => {
 
   return (
     <div className="main-content !p-[10px]">
-      <Seo title="Create Vendor PO" />
+      <Seo title="Add Purchase Order" />
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px]">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-2">
               <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
-              <h1 className="text-sm font-bold text-gray-800">New Vendor Purchase Order</h1>
+              <h1 className="text-sm font-bold text-gray-800">Vendor Purchase Order</h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Link
@@ -215,16 +212,13 @@ const VendorPOCreatePage = () => {
           </div>
         </div>
         <div className="px-[10px] pb-[10px]">
-          <p className="text-[11px] text-[#7987A1] -mt-4 mb-4">
-            Select vendor → catalog shows only products linked to that vendor → enter qty, rate, GST% → totals auto-calculate (same flow as Yarn Purchase Order).
-          </p>
           <VendorPOForm
             initialData={null}
             vendors={vendors}
             articles={articles}
             onVendorChange={handleVendorChange}
             onSubmit={handleCreate}
-            submitButtonText="Submit PO"
+            submitButtonText="Submit to Supplier"
             onCancel={() => router.push("/vendor-po/raise")}
             isSubmitting={isSubmitting}
           />
