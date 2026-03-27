@@ -412,20 +412,14 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                     const { poCount, articleCount } = getItemCounts(row);
                     const needleCount = needleOptionsCount(row);
                     const isPlaceholder = row.id.startsWith("placeholder-");
+                    const machineIdForLogs = getMachineIdFromRow(row);
                     return (
                       <tr
                         key={row.id}
-                        className={`hover:bg-gray-50 transition-colors ${!isPlaceholder ? "cursor-pointer" : ""}`}
-                        onClick={async () => {
-                          if (isPlaceholder) return;
-                          setPoDetailsAssignment(row);
-                          try {
-                            const full = await getMachineOrderAssignment(row.id);
-                            setPoDetailsAssignment(full);
-                            setRows((prev) => prev.map((r) => (r.id === row.id ? full : r)));
-                          } catch {
-                            // keep list assignment if refetch fails
-                          }
+                        className={`hover:bg-gray-50 transition-colors ${machineIdForLogs ? "cursor-pointer" : ""}`}
+                        onClick={() => {
+                          if (!machineIdForLogs) return;
+                          setAuditLogsTarget({ machineId: machineIdForLogs, label: machineLabel(row) });
                         }}
                       >
                         <td className="px-2 py-1.5 text-center border-r border-gray-300 font-medium text-gray-900">
@@ -452,19 +446,6 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                         </td>
                         <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-1">
-                            {(() => {
-                              const mid = getMachineIdFromRow(row);
-                              return mid ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setAuditLogsTarget({ machineId: mid, label: machineLabel(row) })}
-                                  className="flex items-center justify-center rounded bg-amber-50 text-amber-800 hover:bg-amber-100 w-7 h-7 border border-amber-200/80"
-                                  title="Machine audit logs"
-                                >
-                                  <i className="ri-file-list-3-line text-sm" />
-                                </button>
-                              ) : null;
-                            })()}
                             {!isPlaceholder && (
                               <>
                                 <button
