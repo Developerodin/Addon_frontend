@@ -97,13 +97,52 @@ export interface MachineOrderAssignmentTopItems {
 
 export interface MachineOrderAssignmentLog {
   id?: string;
-  assignmentId: string;
+  assignmentId?: string;
   userId?: string;
   userName?: string;
+  orderNumber?: string;
+  articleNumber?: string;
   action: string;
+  remarks?: string;
   changes?: Record<string, unknown>[];
   timestamp: string;
   createdAt?: string;
+}
+
+/** Query params for GET .../machines/:machineId/audit-logs */
+export type MachineAuditLogChangeType =
+  | 'all'
+  | 'order_status'
+  | 'yarn_issue'
+  | 'yarn_return'
+  | 'removal';
+
+export interface MachineAuditLogsQueryParams {
+  dateFrom?: string;
+  dateTo?: string;
+  action?: string;
+  changeType?: MachineAuditLogChangeType;
+  orderStatus?: OrderStatusType;
+  yarnIssueStatus?: string;
+  yarnReturnStatus?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+}
+
+export interface MachineAuditLogsResponse {
+  machine: Record<string, unknown> | null;
+  assignment: MachineOrderAssignment | null;
+  assignmentId: string | null;
+  logs: {
+    results: MachineOrderAssignmentLog[];
+    page: number;
+    limit: number;
+    totalPages: number;
+    totalResults: number;
+  };
+  filtersApplied: Record<string, unknown>;
+  message?: string;
 }
 
 export interface ListAssignmentsParams {
@@ -572,4 +611,97 @@ export async function getUserAssignmentLogs(
   }
   const data = await res.json();
   return { results: data.results ?? data.data?.results ?? [] };
+}
+
+function normalizeAuditLog(raw: any): MachineOrderAssignmentLog {
+  const id = raw.id ?? raw._id;
+  const parseObjectIdTime = (val: unknown): string | undefined => {
+    if (typeof val !== 'string' || val.length < 8) return undefined;
+    const hex = val.slice(0, 8);
+    if (!/^[a-fA-F0-9]{8}$/.test(hex)) return undefined;
+    const ms = Number.parseInt(hex, 16) * 1000;
+    if (!Number.isFinite(ms)) return undefined;
+    return new Date(ms).toISOString();
+  };
+  const u = raw.userId;
+  let userIdStr: string | undefined;
+  let userNameStr: string | undefined;
+  if (typeof u === 'object' && u && u !== null) {
+    userIdStr = String(u.id ?? u._id ?? '');
+    userNameStr = (u.name ?? u.fullName ?? u.email ?? u.userName ?? '') as string | undefined;
+  } else if (u != null && u !== '') {
+    userIdStr = String(u);
+  }
+  return {
+    id,
+    assignmentId: raw.assignmentId,
+    userId: userIdStr,
+    userName: userNameStr ?? raw.userName,
+    orderNumber:
+      raw.orderNumber ?? raw.productionOrder?.orderNumber ?? raw.productionOrderItems?.[0]?.productionOrder?.orderNumber,
+    articleNumber: raw.articleNumber ?? raw.article?.articleNumber ?? raw.productionOrderItems?.[0]?.article?.articleNumber,
+    action: raw.action ?? '',
+    remarks: raw.remarks,
+    changes: raw.changes,
+    timestamp: raw.timestamp ?? raw.createdAt ?? raw.updatedAt ?? parseObjectIdTime(id) ?? '',
+    createdAt: raw.createdAt ?? raw.updatedAt ?? parseObjectIdTime(id),
+  };
+}
+
+/** Machine-scoped audit logs (assignment + machine context). GET .../machines/:machineId/audit-logs */
+export async function getMachineAuditLogsByMachineId(
+  machineId: string,
+  params: MachineAuditLogsQueryParams = {}
+): Promise<MachineAuditLogsResponse> {
+  const {
+    dateFrom,
+    dateTo,
+    action,
+    changeType,
+    orderStatus,
+    yarnIssueStatus,
+    yarnReturnStatus,
+    page = 1,
+    limit = 10,
+    sortBy = 'createdAt:desc',
+  } = params;
+  const q = new URLSearchParams();
+  if (dateFrom) q.set('dateFrom', dateFrom);
+  if (dateTo) q.set('dateTo', dateTo);
+  if (action) q.set('action', action);
+  if (changeType && changeType !== 'all') q.set('changeType', changeType);
+  if (orderStatus) q.set('orderStatus', orderStatus);
+  if (yarnIssueStatus) q.set('yarnIssueStatus', yarnIssueStatus);
+  if (yarnReturnStatus) q.set('yarnReturnStatus', yarnReturnStatus);
+  q.set('page', String(page));
+  q.set('limit', String(Math.min(100, Math.max(1, limit))));
+  if (sortBy) q.set('sortBy', sortBy);
+
+  const url = `${BASE}/machines/${encodeURIComponent(machineId)}/audit-logs?${q.toString()}`;
+  const res = await fetch(url, { method: 'GET', headers: getAuthHeaders() });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message || 'Failed to fetch machine audit logs');
+  }
+  const data = await res.json();
+  const payload = data.data ?? data;
+  const logsBlock = payload.logs ?? {};
+  const rawResults = logsBlock.results ?? [];
+  const assignmentRaw = payload.assignment;
+  return {
+    machine: payload.machine ?? null,
+    assignment: assignmentRaw
+      ? normalizeAssignment(assignmentRaw)
+      : null,
+    assignmentId: payload.assignmentId ?? null,
+    logs: {
+      results: Array.isArray(rawResults) ? rawResults.map(normalizeAuditLog) : [],
+      page: logsBlock.page ?? page,
+      limit: logsBlock.limit ?? limit,
+      totalPages: logsBlock.totalPages ?? 1,
+      totalResults: logsBlock.totalResults ?? rawResults.length,
+    },
+    filtersApplied: payload.filtersApplied ?? {},
+    message: typeof payload.message === 'string' ? payload.message : undefined,
+  };
 }

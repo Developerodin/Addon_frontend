@@ -16,6 +16,7 @@ import {
   type OrderStatusType,
 } from "@/shared/services/machineOrderAssignmentService";
 import { machinesService } from "@/shared/services/machinesService";
+import MachineAuditLogsDrawer from "./MachineAuditLogsDrawer";
 
 function machineLabel(a: MachineOrderAssignment): string {
   const m = a.machine;
@@ -34,6 +35,17 @@ function needleOptionsCount(a: MachineOrderAssignment): number {
   if (Array.isArray(config)) return config.filter((c: unknown) => (c as { needleSize?: unknown })?.needleSize).length;
   if ((m as { needleSize?: unknown }).needleSize) return 1;
   return 0;
+}
+
+/** Mongo machine id for audit-log API (works for real rows and placeholders). */
+function getMachineIdFromRow(row: MachineOrderAssignment): string | null {
+  const m = row.machine;
+  if (typeof m === "object" && m) {
+    const id = (m as { id?: string; _id?: string }).id ?? (m as { _id?: string })._id;
+    return id ? String(id) : null;
+  }
+  if (typeof m === "string" && m.trim()) return m.trim();
+  return null;
 }
 
 function getItemCounts(a: MachineOrderAssignment): { poCount: number; articleCount: number } {
@@ -75,6 +87,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
   const [yarnMenuOpenItemId, setYarnMenuOpenItemId] = useState<string | null>(null);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState<{ itemId: string; top: number; left: number } | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+  const [auditLogsTarget, setAuditLogsTarget] = useState<{ machineId: string; label: string } | null>(null);
 
   const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
     OrderStatus.PENDING,
@@ -438,35 +451,50 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                           </span>
                         </td>
                         <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
-                          {!isPlaceholder && (
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => onOpenEditModal?.(row)}
-                                className="flex items-center justify-center rounded bg-purple-100 text-purple-600 hover:bg-purple-200 w-7 h-7"
-                                title="Edit"
-                              >
-                                <i className="ri-pencil-line text-sm" />
-                              </button>
-                              {canShowSettings && (
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  setPoDetailsAssignment(row);
-                                  try {
-                                    const full = await getMachineOrderAssignment(row.id);
-                                    setPoDetailsAssignment(full);
-                                    setRows((prev) => prev.map((r) => (r.id === row.id ? full : r)));
-                                  } catch {}
-                                }}
-                                className="flex items-center justify-center rounded bg-gray-100 text-gray-600 hover:bg-gray-200 w-7 h-7"
-                                title="PO details"
-                              >
-                                <i className="ri-settings-3-line text-sm" />
-                              </button>
-                              )}
-                            </div>
-                          )}
+                          <div className="flex items-center justify-center gap-1">
+                            {(() => {
+                              const mid = getMachineIdFromRow(row);
+                              return mid ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setAuditLogsTarget({ machineId: mid, label: machineLabel(row) })}
+                                  className="flex items-center justify-center rounded bg-amber-50 text-amber-800 hover:bg-amber-100 w-7 h-7 border border-amber-200/80"
+                                  title="Machine audit logs"
+                                >
+                                  <i className="ri-file-list-3-line text-sm" />
+                                </button>
+                              ) : null;
+                            })()}
+                            {!isPlaceholder && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenEditModal?.(row)}
+                                  className="flex items-center justify-center rounded bg-purple-100 text-purple-600 hover:bg-purple-200 w-7 h-7"
+                                  title="Edit"
+                                >
+                                  <i className="ri-pencil-line text-sm" />
+                                </button>
+                                {canShowSettings && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      setPoDetailsAssignment(row);
+                                      try {
+                                        const full = await getMachineOrderAssignment(row.id);
+                                        setPoDetailsAssignment(full);
+                                        setRows((prev) => prev.map((r) => (r.id === row.id ? full : r)));
+                                      } catch {}
+                                    }}
+                                    className="flex items-center justify-center rounded bg-gray-100 text-gray-600 hover:bg-gray-200 w-7 h-7"
+                                    title="PO details"
+                                  >
+                                    <i className="ri-settings-3-line text-sm" />
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -741,6 +769,14 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
           </div>
         </>
       )}
+
+      <MachineAuditLogsDrawer
+        key={auditLogsTarget?.machineId ?? "closed"}
+        open={auditLogsTarget !== null}
+        onClose={() => setAuditLogsTarget(null)}
+        machineId={auditLogsTarget?.machineId ?? null}
+        machineLabel={auditLogsTarget?.label}
+      />
     </>
   );
 }
