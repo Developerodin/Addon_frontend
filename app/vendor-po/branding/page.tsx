@@ -5,7 +5,10 @@ import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { CRM } from "../vendor-list/crmUiClasses";
-import vendorProductionFlowService, { type VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
+import vendorProductionFlowService, {
+  mergeProductionFlowPreservePopulatedRefs,
+  type VendorProductionFlow,
+} from "@/shared/services/vendorProductionFlowService";
 import { formatTransferredRowLabel } from "../utils/transferredStyleRows";
 import { VendorBrandingProcessDrawer } from "./components/VendorBrandingProcessDrawer";
 
@@ -58,8 +61,10 @@ const BrandingPage = () => {
   };
 
   const handleBrandingSaved = useCallback((updated: VendorProductionFlow) => {
-    setFlows((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
-    setSelectedFlow(updated);
+    setFlows((prev) =>
+      prev.map((f) => (f.id === updated.id ? mergeProductionFlowPreservePopulatedRefs(f, updated) : f))
+    );
+    setSelectedFlow((prev) => (prev && prev.id === updated.id ? mergeProductionFlowPreservePopulatedRefs(prev, updated) : prev));
   }, []);
 
   if (loading) {

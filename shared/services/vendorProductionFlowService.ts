@@ -143,6 +143,33 @@ export interface ConfirmFinalQualityPayload {
   remarks?: string;
 }
 
+/**
+ * Floor PATCH responses often return `vendor` / `vendorPurchaseOrder` / `product` as IDs only.
+ * Merge with the previous in-memory flow so list UIs keep populated names until the next full list fetch.
+ */
+export function mergeProductionFlowPreservePopulatedRefs(
+  prev: VendorProductionFlow,
+  next: VendorProductionFlow
+): VendorProductionFlow {
+  return {
+    ...next,
+    vendor:
+      typeof next.vendor === "string" && typeof prev.vendor === "object" && prev.vendor !== null
+        ? prev.vendor
+        : next.vendor,
+    vendorPurchaseOrder:
+      typeof next.vendorPurchaseOrder === "string" &&
+      typeof prev.vendorPurchaseOrder === "object" &&
+      prev.vendorPurchaseOrder !== null
+        ? prev.vendorPurchaseOrder
+        : next.vendorPurchaseOrder,
+    product:
+      typeof next.product === "string" && typeof prev.product === "object" && prev.product !== null
+        ? prev.product
+        : next.product,
+  };
+}
+
 function getAccessToken(): string | null {
   if (typeof document === "undefined") return null;
   try {
