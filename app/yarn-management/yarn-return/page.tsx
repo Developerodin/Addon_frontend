@@ -2405,8 +2405,12 @@ const YarnReturnPage = () => {
         copy[idx] = updatedOrder;
         return copy;
       });
+      // Quick return: clear resolved order after success so the next scan re-resolves
+      // from the cone (otherwise the previous orderId stays in state and a different
+      // order's cone incorrectly fails validation).
       if (showQuickReturnDrawer) {
-        setQuickReturnOrder(updatedOrder);
+        setQuickReturnOrder(null);
+        setQuickReturnSummaryOpen(false);
       }
 
       if (updatedOrder) {
@@ -2607,18 +2611,8 @@ const YarnReturnPage = () => {
                 };
               })
             );
-            if (showQuickReturnDrawer) {
-              setQuickReturnOrder((qo) =>
-                qo && qo.id === orderForSubmit.id
-                  ? {
-                      ...qo,
-                      cones: updatedCones,
-                      status: getOrderStatusFromCones(updatedCones),
-                      lastUpdated: new Date().toISOString(),
-                    }
-                  : qo
-              );
-            }
+            // Do not set quickReturnOrder here: after a successful quick return we keep it
+            // null so the next cone scan starts fresh (see setQuickReturnOrder above).
 
             // Refresh return transactions for this order (merge API response with just-created txs in case of race)
             const fromApi = (returnedTransactions as any[]).map((tx) => ({
