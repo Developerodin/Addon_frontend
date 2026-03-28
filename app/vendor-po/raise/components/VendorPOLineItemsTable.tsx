@@ -2,6 +2,12 @@
 import React, { RefObject } from "react";
 import { VendorPOLineItem } from "../types";
 
+/** Shown next to article name; only vendor code is stored — missing → label. */
+function articleVendorCodeLabel(articleCode: string | undefined): string {
+  const t = articleCode?.trim();
+  return t || "no vendor code";
+}
+
 type Props = {
   lineItems: VendorPOLineItem[];
   locked: boolean;
@@ -79,6 +85,15 @@ export default function VendorPOLineItemsTable({
                 <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider">
                   Article <span className="text-red-500">*</span>
                 </th>
+                <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[7rem]">
+                  Type
+                </th>
+                <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[7rem]">
+                  Color
+                </th>
+                <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[7rem]">
+                  Pattern
+                </th>
                 <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-32">
                   Ordered Qty <span className="text-red-500">*</span>
                 </th>
@@ -86,7 +101,7 @@ export default function VendorPOLineItemsTable({
                   Rate <span className="text-red-500">*</span>
                 </th>
                 <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-32">
-                  GST %
+                  GST % <span className="text-red-500">*</span>
                 </th>
                 <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-32">
                   Sub Total
@@ -118,7 +133,10 @@ export default function VendorPOLineItemsTable({
                       <div className="relative">
                         {locked ? (
                           <span className="text-sm">
-                            {row.articleName} {row.articleCode ? <span className="text-gray-500"> ({row.articleCode})</span> : null}
+                            {row.articleName}{" "}
+                            <span className={row.articleCode?.trim() ? "text-gray-500" : "text-amber-600 italic"}>
+                              ({articleVendorCodeLabel(row.articleCode)})
+                            </span>
                           </span>
                         ) : (
                           <>
@@ -126,12 +144,14 @@ export default function VendorPOLineItemsTable({
                               ref={articleOpen === row.id ? articleInputRef : undefined}
                               type="text"
                               className={`w-full px-1.5 py-1 text-xs border rounded focus:outline-none focus:ring-0 focus:border-purple-300 ${
-                                errors[`article_${row.id}`] ? "border-red-400" : "border-gray-200"
+                                errors[`article_${row.id}`] || errors[`dup_article_${row.id}`]
+                                  ? "border-red-400"
+                                  : "border-gray-200"
                               }`}
                               placeholder="Search article..."
                               value={
                                 row.articleId
-                                  ? `${row.articleName}${row.articleCode ? ` (${row.articleCode})` : ""}`
+                                  ? `${row.articleName} (${articleVendorCodeLabel(row.articleCode)})`
                                   : articleSearch[row.id] ?? ""
                               }
                               onFocus={() => setArticleOpen(row.id)}
@@ -147,9 +167,57 @@ export default function VendorPOLineItemsTable({
                             {errors[`article_${row.id}`] && (
                               <p className="text-red-600 text-xs mt-1">{errors[`article_${row.id}`]}</p>
                             )}
+                            {errors[`dup_article_${row.id}`] && (
+                              <p className="text-red-600 text-xs mt-1">{errors[`dup_article_${row.id}`]}</p>
+                            )}
                           </>
                         )}
                       </div>
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1.5 align-top">
+                      {locked ? (
+                        <span className="text-xs text-gray-700">{row.type || "–"}</span>
+                      ) : (
+                        <input
+                          type="text"
+                          readOnly
+                          tabIndex={-1}
+                          className="w-full px-1.5 py-1 text-xs border border-gray-100 rounded bg-gray-50 text-gray-700 cursor-default"
+                          value={row.type ?? ""}
+                          placeholder="—"
+                          disabled={lineItemsDisabled}
+                        />
+                      )}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1.5 align-top">
+                      {locked ? (
+                        <span className="text-xs text-gray-700">{row.color || "–"}</span>
+                      ) : (
+                        <input
+                          type="text"
+                          readOnly
+                          tabIndex={-1}
+                          className="w-full px-1.5 py-1 text-xs border border-gray-100 rounded bg-gray-50 text-gray-700 cursor-default"
+                          value={row.color ?? ""}
+                          placeholder="—"
+                          disabled={lineItemsDisabled}
+                        />
+                      )}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1.5 align-top">
+                      {locked ? (
+                        <span className="text-xs text-gray-700">{row.pattern || "–"}</span>
+                      ) : (
+                        <input
+                          type="text"
+                          readOnly
+                          tabIndex={-1}
+                          className="w-full px-1.5 py-1 text-xs border border-gray-100 rounded bg-gray-50 text-gray-700 cursor-default"
+                          value={row.pattern ?? ""}
+                          placeholder="—"
+                          disabled={lineItemsDisabled}
+                        />
+                      )}
                     </td>
                     <td className="border border-gray-300 px-2 py-1.5 align-top">
                       {locked ? (
@@ -202,17 +270,24 @@ export default function VendorPOLineItemsTable({
                       {locked ? (
                         <span className="text-sm">{Number(row.gstRate || 0).toFixed(2)}</span>
                       ) : (
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300 text-right"
-                          value={row.gstRate || ""}
-                          onChange={(e) =>
-                            setLineItemGstRate(row.id, e.target.value === "" ? 0 : Number(e.target.value))
-                          }
-                          disabled={lineItemsDisabled}
-                        />
+                        <>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className={`w-full px-1.5 py-1 text-xs border rounded focus:outline-none focus:ring-0 focus:border-purple-300 text-right ${
+                              errors[`gst_${row.id}`] ? "border-red-400" : "border-gray-200"
+                            }`}
+                            value={row.gstRate || ""}
+                            onChange={(e) =>
+                              setLineItemGstRate(row.id, e.target.value === "" ? 0 : Number(e.target.value))
+                            }
+                            disabled={lineItemsDisabled}
+                          />
+                          {errors[`gst_${row.id}`] && (
+                            <p className="text-red-600 text-xs mt-1 text-right">{errors[`gst_${row.id}`]}</p>
+                          )}
+                        </>
                       )}
                     </td>
                     <td className="border border-gray-300 px-2 py-1.5 align-top">

@@ -139,7 +139,7 @@ const VendorPOReceivePage = () => {
     }
     const lots = raw.receivedLotDetails;
     if (!lots?.length) {
-      toast.error("Record goods received (with lot details) before processing.");
+      toast.error("Record goods received (with invoice details) before processing.");
       return;
     }
     setProcessingId(order.id);
@@ -147,7 +147,7 @@ const VendorPOReceivePage = () => {
       const full = await vendorPurchaseOrderService.getById(order.id);
       const lotDetails = lotDetailsForBulkBoxes(full.vpoNumber, full.receivedLotDetails);
       if (lotDetails.length === 0) {
-        toast.error("No valid lots (lot number + number of boxes).");
+        toast.error("No valid invoices (invoice number + number of boxes).");
         return;
       }
       const existing = await vendorBoxService.list({
@@ -433,7 +433,7 @@ const VendorPOReceivePage = () => {
                             }}
                             disabled={goodsDisabled}
                             className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={goodsDisabled ? "Nothing pending to receive" : "Record goods received (lot + qty)"}
+                            title={goodsDisabled ? "Nothing pending to receive" : "Record goods received (invoice + qty)"}
                           >
                             <i className="ri-checkbox-circle-line text-xs" />
                             Goods received
@@ -445,7 +445,7 @@ const VendorPOReceivePage = () => {
                             className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-gray-700 text-[10px] font-bold rounded border border-gray-200 hover:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed"
                             title={
                               processDisabled
-                                ? "Complete goods receipt with lot/boxes first"
+                                ? "Complete goods receipt with invoice/boxes first"
                                 : "Create boxes (if needed) and open process"
                             }
                           >

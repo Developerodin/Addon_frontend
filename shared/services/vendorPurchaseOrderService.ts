@@ -17,12 +17,17 @@ export interface VendorPurchaseOrderItem {
   id?: string;
   productId: string | { id?: string; _id?: string; name?: string; factoryCode?: string; vendorCode?: string };
   productName?: string;
+  /** Denormalized vendor article code when API stores it on the line; else use populated `productId.vendorCode`. */
+  vendorCode?: string;
   quantity: number;
   /** Cumulative received qty for this line when returned by API. */
   receivedQuantity?: number;
   rate: number;
   gstRate?: number;
   estimatedDeliveryDate?: string;
+  type?: string;
+  color?: string;
+  pattern?: string;
 }
 
 /** Matches vendor lot embeds (see vendorPurchaseOrder model / yarn-style receipt). */
@@ -33,13 +38,13 @@ export interface VendorReceivedLotPoItem {
 
 export type VendorLotStatus = "lot_pending" | "lot_qc_pending" | "lot_rejected" | "lot_accepted";
 
-/** Embedded lot on VPO. PATCH payloads must not include yarn-only fields (`numberOfCones`, `totalWeight`) — backend rejects them. */
+/** Embedded lot on VPO. PATCH payloads must not include yarn-only fields (`numberOfCones`) — backend rejects them. */
 export interface VendorReceivedLotDetail {
   lotNumber: string;
   /** Yarn PO only; omit on vendor PATCH. */
   numberOfCones?: number;
-  /** Yarn PO only; omit on vendor PATCH. */
-  totalWeight?: number;
+  /** Total units (e.g. pcs) for this lot; aligns with `receivedLotSchema`. */
+  totalUnits?: number;
   numberOfBoxes: number;
   poItems: VendorReceivedLotPoItem[];
   status?: VendorLotStatus;
@@ -64,7 +69,8 @@ export interface VendorPackListEntry {
   dispatchDate?: string;
   estimatedDeliveryDate?: string;
   numberOfBoxes?: number;
-  totalWeight?: number;
+  /** Total units for this shipment row; aligns with `packListSchema`. */
+  totalUnits?: number;
   notes?: string;
   /** PO line item ids (_id) included in this shipment. */
   poItems?: string[];
@@ -123,6 +129,9 @@ export interface CreateVendorPoPayload {
     rate: number;
     gstRate?: number;
     estimatedDeliveryDate?: string;
+    type?: string;
+    color?: string;
+    pattern?: string;
   }>;
   subTotal: number;
   gst: number;
@@ -147,6 +156,9 @@ export interface UpdateVendorPoPayload {
     rate: number;
     gstRate?: number;
     estimatedDeliveryDate?: string;
+    type?: string;
+    color?: string;
+    pattern?: string;
   }>;
   subTotal?: number;
   gst?: number;
@@ -249,7 +261,7 @@ export async function createVendorPurchaseOrder(payload: CreateVendorPoPayload):
   });
 }
 
-/** PATCH schema allows only vendor lot fields — strips yarn-only keys (`numberOfCones`, `totalWeight`, etc.). */
+/** PATCH schema allows only vendor lot fields — strips yarn-only keys (`numberOfCones`, etc.). */
 function sanitizeReceivedLotDetailsForPatch(lots: VendorReceivedLotDetail[]): VendorReceivedLotDetail[] {
   return lots.map((lot) => ({
     lotNumber: lot.lotNumber,
@@ -258,6 +270,7 @@ function sanitizeReceivedLotDetailsForPatch(lots: VendorReceivedLotDetail[]): Ve
       poItem: p.poItem,
       receivedQuantity: p.receivedQuantity,
     })),
+    ...(lot.totalUnits != null && !Number.isNaN(Number(lot.totalUnits)) ? { totalUnits: Number(lot.totalUnits) } : {}),
     ...(lot.status != null ? { status: lot.status } : {}),
   }));
 }

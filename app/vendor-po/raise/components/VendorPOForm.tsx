@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { toast } from "react-hot-toast";
 import { VendorPOFormData, VendorPOLineItem, VendorPOArticle } from "../types";
 import { newVendorPOLineItem } from "./vendorPoFormLineDefaults";
 import VendorPOFormHeaderSection from "./VendorPOFormHeaderSection";
@@ -110,10 +111,19 @@ export default function VendorPOForm({
       e.estimatedOrderDeliveryDate = "Estimated order delivery date is required";
     }
     if (!lineItems.length) e.lineItems = "At least one line item is required";
+    const articleIdCounts = new Map<string, number>();
+    lineItems.forEach((row) => {
+      if (!row.articleId) return;
+      articleIdCounts.set(row.articleId, (articleIdCounts.get(row.articleId) || 0) + 1);
+    });
     lineItems.forEach((row) => {
       if (!row.articleId) e[`article_${row.id}`] = "Article is required";
+      if (row.articleId && (articleIdCounts.get(row.articleId) || 0) > 1) {
+        e[`dup_article_${row.id}`] = "This article is already on another line";
+      }
       if (row.orderedQty <= 0) e[`qty_${row.id}`] = "Qty must be greater than 0";
       if ((row.rate ?? 0) <= 0) e[`rate_${row.id}`] = "Rate must be greater than 0";
+      if ((row.gstRate ?? 0) <= 0) e[`gst_${row.id}`] = "GST % is required";
     });
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -125,11 +135,27 @@ export default function VendorPOForm({
     estimatedOrderDeliveryDate: estimatedOrderDeliveryDate || undefined,
     remarks,
     lineItems: lineItems.map(
-      ({ id, articleId, articleCode, articleName, orderedQty, rate, gstRate, estimatedDeliveryDate, lineRemarks }) => ({
+      ({
         id,
         articleId,
         articleCode,
         articleName,
+        type,
+        color,
+        pattern,
+        orderedQty,
+        rate,
+        gstRate,
+        estimatedDeliveryDate,
+        lineRemarks,
+      }) => ({
+        id,
+        articleId,
+        articleCode,
+        articleName,
+        type: type?.trim() || undefined,
+        color: color?.trim() || undefined,
+        pattern: pattern?.trim() || undefined,
         orderedQty,
         rate: Number(rate || 0),
         gstRate: Number(gstRate || 0),
@@ -164,21 +190,31 @@ export default function VendorPOForm({
     setErrors((prev) => {
       const next = { ...prev };
       delete next[`article_${id}`];
+      delete next[`dup_article_${id}`];
       delete next[`qty_${id}`];
+      delete next[`gst_${id}`];
       return next;
     });
   };
 
   const setLineItemArticle = (rowId: string, article: VendorPOArticle) => {
     if (lineItemsDisabled) return;
+    if (lineItems.some((r) => r.id !== rowId && r.articleId === article.id)) {
+      toast.error("This article is already added on another line.");
+      setArticleOpen(null);
+      return;
+    }
     setLineItems((prev) =>
       prev.map((r) =>
         r.id === rowId
           ? {
               ...r,
               articleId: article.id,
-              articleCode: (article.internalCode?.trim() || article.code?.trim() || ""),
+              articleCode: article.vendorCode?.trim() || "",
               articleName: article.name,
+              type: article.type ?? "",
+              color: article.color ?? "",
+              pattern: article.pattern ?? "",
             }
           : r
       )
@@ -188,6 +224,7 @@ export default function VendorPOForm({
     setErrors((prev) => {
       const next = { ...prev };
       delete next[`article_${rowId}`];
+      delete next[`dup_article_${rowId}`];
       return next;
     });
   };
@@ -224,6 +261,11 @@ export default function VendorPOForm({
     setLineItems((prev) =>
       prev.map((r) => (r.id === rowId ? { ...r, gstRate: isNaN(n) ? 0 : n } : r))
     );
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[`gst_${rowId}`];
+      return next;
+    });
   };
 
   const setLineItemRemarks = (rowId: string, value: string) => {
@@ -237,12 +279,8 @@ export default function VendorPOForm({
     const q = (articleSearch[rowId] ?? "").trim().toLowerCase();
     if (!q) return articles;
     return articles.filter((a) => {
-      const ic = (a.internalCode ?? "").toLowerCase();
-      return (
-        a.code.toLowerCase().includes(q) ||
-        ic.includes(q) ||
-        a.name.toLowerCase().includes(q)
-      );
+      const vc = (a.vendorCode ?? "").toLowerCase();
+      return vc.includes(q) || a.name.toLowerCase().includes(q);
     });
   };
 

@@ -89,6 +89,11 @@ interface ProductionOrder {
   hasIssuedTransactions?: boolean; // Track if order has issued transactions
 }
 
+/** Knitting production order number for yarn APIs and transaction `orderno` (not yarn purchase PO). */
+function productionOrderNoForApi(order: ProductionOrder): string {
+  return String(order.productionOrder ?? order.orderNumber ?? "").trim();
+}
+
 /** Article row for article-wise display. Links to parent order for cones. */
 interface ArticleRow {
   rowId: string;
@@ -116,6 +121,9 @@ interface ReturnRecord {
   pendingCones: number;
   lastUpdated: string;
 }
+
+/** History drawer: rows per page (client-side slice of filtered return transactions). */
+const HISTORY_PAGE_SIZE = 100;
 
 interface ReturnTransaction {
   _id: string;
@@ -254,27 +262,69 @@ const extractTransactions = (data: any): any[] => {
   return transactions;
 };
 
-/** Order id + production order number from cone API (string or populated order). */
-const orderIdsFromConeDetails = (cd: any): { orderId: string; orderNumber: string } | null => {
+/** Production order Mongo id from cone (`orderId` or populated `order`). Cones often only store this + `articleId`. */
+function productionOrderIdFromCone(cd: any): string | null {
   const normalizeId = (id: any): string =>
     String(
       typeof id === "object" && id !== null ? id._id || id.id || "" : id ?? ""
     ).trim();
   const rawOrder = cd?.orderId ?? cd?.order;
   const orderId = normalizeId(rawOrder);
-  // Backend may expose PO as poNumber, orderno, orderNumber, or on populated order
-  let orderNumber = (cd?.orderno ?? cd?.orderNumber ?? cd?.poNumber ?? "").toString().trim();
-  if (!orderNumber && typeof rawOrder === "object" && rawOrder) {
-    orderNumber = String(
-      (rawOrder as { orderNumber?: string; poNumber?: string }).orderNumber ??
-        (rawOrder as { poNumber?: string }).poNumber ??
-        ""
-    ).trim();
-  }
+  return orderId || null;
+}
+
+/** Optional knitting order number if present on cone or populated order (never yarn purchase `poNumber`). */
+function productionOrderNumberFromConeFields(cd: any): string | null {
+  const rawOrder = cd?.orderId ?? cd?.order;
+  const pop = typeof rawOrder === "object" && rawOrder ? (rawOrder as Record<string, unknown>) : null;
+  const s = (
+    cd?.productionOrder ??
+    cd?.productionOrderNumber ??
+    pop?.productionOrder ??
+    pop?.productionOrderNumber ??
+    pop?.orderNumber ??
+    cd?.orderno ??
+    cd?.orderNumber ??
+    ""
+  )
+    .toString()
+    .trim();
+  return s || null;
+}
+
+/**
+ * Resolve `orderId` + knitting `orderNumber` for quick return.
+ * When the cone only has ids, load `orderNumber` from GET /production/orders/:orderId.
+ */
+async function resolveQuickReturnOrderRefs(
+  cd: any,
+  token: string | null
+): Promise<{ orderId: string; orderNumber: string } | null> {
+  const orderId = productionOrderIdFromCone(cd);
   if (!orderId) return null;
+
+  let orderNumber = productionOrderNumberFromConeFields(cd);
+  if (!orderNumber) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/production/orders/${orderId}`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const body = data?.data ?? data;
+        orderNumber = String(body?.orderNumber ?? "").trim();
+      }
+    } catch (e) {
+      console.warn("resolveQuickReturnOrderRefs: production order fetch failed", e);
+    }
+  }
+
   if (!orderNumber) return null;
   return { orderId, orderNumber };
-};
+}
 
 /** Minimal article row for fetchOrderWithCones when only cone data exists (quick return). */
 const articleStubFromConeDetails = (cd: any): Article[] => {
@@ -351,6 +401,7 @@ const YarnReturnPage = () => {
     from: string;
     to: string;
   }>({ from: "", to: "" });
+  const [historyPage, setHistoryPage] = useState(1);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [machineAssignments, setMachineAssignments] = useState<MachineOrderAssignmentTopItems[]>([]);
   const [machineAssignmentsLoading, setMachineAssignmentsLoading] = useState(true);
@@ -472,7 +523,7 @@ const YarnReturnPage = () => {
       try {
         const [issuedRes, allRes] = await Promise.all([
           fetch(
-            `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${orderNumber}`,
+            `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${encodeURIComponent(orderNumber)}`,
             { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
           ),
           fetch(
@@ -813,7 +864,9 @@ const YarnReturnPage = () => {
 
       // Get return transactions for this order (same order number)
       const orderReturnTransactions = returnTransactions.filter(
-        (tx) => (txOrderno(tx) ?? tx.orderno) === order.orderNumber || txOrderId(tx) === order.id
+        (tx) =>
+          (txOrderno(tx) ?? tx.orderno) === productionOrderNoForApi(order) ||
+          txOrderId(tx) === order.id
       );
 
       if (orderReturnTransactions.length === 0) {
@@ -1023,7 +1076,9 @@ const YarnReturnPage = () => {
       pendingOrders.reduce((sum, order) => {
         // Get return transactions for this order
         const orderReturnTransactions = returnTransactions.filter(
-          (tx) => (txOrderno(tx) ?? tx.orderno) === order.orderNumber || txOrderId(tx) === order.id
+          (tx) =>
+            (txOrderno(tx) ?? tx.orderno) === productionOrderNoForApi(order) ||
+            txOrderId(tx) === order.id
         );
         
         // Count total cones returned from return transactions (from history)
@@ -1072,7 +1127,9 @@ const YarnReturnPage = () => {
 
       // Get return transactions for this order
       const orderReturnTransactions = returnTransactions.filter(
-        (tx) => (txOrderno(tx) ?? tx.orderno) === order.orderNumber || txOrderId(tx) === order.id
+        (tx) =>
+          (txOrderno(tx) ?? tx.orderno) === productionOrderNoForApi(order) ||
+          txOrderId(tx) === order.id
       );
 
       if (orderReturnTransactions.length === 0) {
@@ -1145,6 +1202,24 @@ const YarnReturnPage = () => {
           new Date(a.transactionDate || a.createdAt).getTime()
       );
   }, [returnTransactions, historyDateRange.from, historyDateRange.to, historySearchTerm]);
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historySearchTerm, historyDateRange.from, historyDateRange.to]);
+
+  const historyFilteredTotal = filteredReturnTransactions.length;
+  const historyTotalPages =
+    historyFilteredTotal === 0 ? 0 : Math.ceil(historyFilteredTotal / HISTORY_PAGE_SIZE);
+
+  useEffect(() => {
+    if (historyTotalPages === 0) return;
+    setHistoryPage((p) => (p > historyTotalPages ? historyTotalPages : p));
+  }, [historyTotalPages]);
+
+  const paginatedHistoryTransactions = useMemo(() => {
+    const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
+    return filteredReturnTransactions.slice(start, start + HISTORY_PAGE_SIZE);
+  }, [filteredReturnTransactions, historyPage]);
 
   /** Find machine assignment row that contains this production order (for yarn-return status when not on selected machine). */
   const findMachineAssignmentForOrderId = useCallback(
@@ -1697,10 +1772,10 @@ const YarnReturnPage = () => {
       let orderCtx: ProductionOrder | null = showQuickReturnDrawer ? quickReturnOrder : selectedOrder;
 
       if (showQuickReturnDrawer && !orderCtx) {
-        const ids = orderIdsFromConeDetails(coneDetails);
+        const ids = await resolveQuickReturnOrderRefs(coneDetails, token);
         if (!ids) {
           setScanError(
-            "This cone is missing order id / order number. Cannot create a return without them."
+            "Could not resolve production order from this cone. Need a valid orderId, or the production order could not be loaded."
           );
           return;
         }
@@ -1761,7 +1836,7 @@ const YarnReturnPage = () => {
       console.log("🔍 Cone Details from API:", {
         barcode: value,
         coneDetails,
-        selectedOrderNumber: orderCtx.orderNumber,
+        selectedOrderNumber: productionOrderNoForApi(orderCtx),
         orderConesCount: orderCtx.cones.length,
         orderConesBarcodes: orderCtx.cones.map((c) => c.barcode),
         quickReturn: showQuickReturnDrawer,
@@ -1829,7 +1904,9 @@ const YarnReturnPage = () => {
 
       // Check if cone was already returned for this order/article (from return transactions)
       const orderReturnTxs = returnTransactions.filter(
-        (tx) => (txOrderno(tx) ?? tx.orderno) === orderCtx.orderNumber || txOrderId(tx) === orderCtx.id
+        (tx) =>
+          (txOrderno(tx) ?? tx.orderno) === productionOrderNoForApi(orderCtx) ||
+          txOrderId(tx) === orderCtx.id
       );
       const returnedConeIds = new Set(
         orderReturnTxs.flatMap((tx) => (tx as any).conesIdsArray ?? [])
@@ -2100,10 +2177,12 @@ const YarnReturnPage = () => {
         }
 
         if ((!yarnId || yarnId === "N/A") && orderForSubmit && cone.yarnName) {
-          console.log("🔍 Querying issued transactions for order:", orderForSubmit.orderNumber);
+          console.log("🔍 Querying issued transactions for order:", productionOrderNoForApi(orderForSubmit));
           try {
             const txListResponse = await fetch(
-              `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${orderForSubmit.orderNumber}`,
+              `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${encodeURIComponent(
+                productionOrderNoForApi(orderForSubmit)
+              )}`,
               {
                 headers: {
                   "Content-Type": "application/json",
@@ -2194,7 +2273,7 @@ const YarnReturnPage = () => {
           totalTearWeight: tearWeightPerCone,
           totalNetWeight: weightPerCone,
           numberOfCones: 1,
-          orderno: orderForSubmit.orderNumber,
+          orderno: productionOrderNoForApi(orderForSubmit),
           orderId: orderForSubmit.id,
           conesIdsArray: [String(cone.id).replace(/-\d+$/, "") || cone.id],
         };
@@ -2326,8 +2405,12 @@ const YarnReturnPage = () => {
         copy[idx] = updatedOrder;
         return copy;
       });
+      // Quick return: clear resolved order after success so the next scan re-resolves
+      // from the cone (otherwise the previous orderId stays in state and a different
+      // order's cone incorrectly fails validation).
       if (showQuickReturnDrawer) {
-        setQuickReturnOrder(updatedOrder);
+        setQuickReturnOrder(null);
+        setQuickReturnSummaryOpen(false);
       }
 
       if (updatedOrder) {
@@ -2417,7 +2500,7 @@ const YarnReturnPage = () => {
               toast.error("Cones returned, but failed to update assignment yarn-return status.");
             }
           } else {
-            console.warn("Assignment yarn-return status not updated: no items for order", updatedOrder.orderNumber);
+            console.warn("Assignment yarn-return status not updated: no items for order", productionOrderNoForApi(updatedOrder));
           }
         } else {
           console.warn("Assignment yarn-return status not updated: no machine assignment for this order");
@@ -2427,7 +2510,9 @@ const YarnReturnPage = () => {
         try {
           const token = getAccessToken();
           const transactionsResponse = await fetch(
-            `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${orderForSubmit.orderNumber}`,
+            `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${encodeURIComponent(
+              productionOrderNoForApi(orderForSubmit)
+            )}`,
             {
               headers: {
                 "Content-Type": "application/json",
@@ -2526,18 +2611,8 @@ const YarnReturnPage = () => {
                 };
               })
             );
-            if (showQuickReturnDrawer) {
-              setQuickReturnOrder((qo) =>
-                qo && qo.id === orderForSubmit.id
-                  ? {
-                      ...qo,
-                      cones: updatedCones,
-                      status: getOrderStatusFromCones(updatedCones),
-                      lastUpdated: new Date().toISOString(),
-                    }
-                  : qo
-              );
-            }
+            // Do not set quickReturnOrder here: after a successful quick return we keep it
+            // null so the next cone scan starts fresh (see setQuickReturnOrder above).
 
             // Refresh return transactions for this order (merge API response with just-created txs in case of race)
             const fromApi = (returnedTransactions as any[]).map((tx) => ({
@@ -2549,7 +2624,7 @@ const YarnReturnPage = () => {
               ...fromApi,
             ];
             setReturnTransactions((prev) => {
-              const orderno = orderForSubmit.orderNumber;
+              const orderno = productionOrderNoForApi(orderForSubmit);
               const filtered = prev.filter(
                 (tx) =>
                   (txOrderno(tx) ?? tx.orderno) !== orderno && txOrderId(tx) !== orderForSubmit.id
@@ -2803,7 +2878,7 @@ const YarnReturnPage = () => {
                             >
                               <div className="text-[12px] font-bold text-gray-900 truncate">{row.articleNumber}</div>
                               <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={row.yarnNames || undefined}>{row.yarnNames || "—"}</div>
-                              <div className="text-[10px] text-gray-500 mt-0.5 truncate">PO: {row.orderNumber}</div>
+                              <div className="text-[10px] text-gray-500 mt-0.5 truncate">Prod: {row.productionOrder}</div>
                               <div className="text-[10px] text-gray-600 mt-1 font-medium">{actualPendingCones} pending</div>
                             </button>
                           );
@@ -2827,7 +2902,7 @@ const YarnReturnPage = () => {
                               {selectedArticleRow?.articleNumber ?? selectedOrder?.orderNumber ?? "—"}
                             </h2>
                             <p className="text-[11px] text-gray-500">
-                              PO: {selectedOrder?.orderNumber ?? "—"} · {selectedOrder?.floor ?? "—"}
+                              Prod. order: {selectedOrder ? productionOrderNoForApi(selectedOrder) : "—"} · {selectedOrder?.floor ?? "—"}
                             </p>
                           </>
                         )}
@@ -2953,7 +3028,9 @@ const YarnReturnPage = () => {
                       {(selectedOrder || selectedArticleRowId) && (
                         <p className="text-xs text-gray-500 mt-1">
                           {selectedArticleRow?.articleNumber ?? selectedOrder?.productionOrder ?? "—"}
-                          {selectedOrder?.orderNumber && ` · PO: ${selectedOrder.orderNumber}`}
+                          {selectedOrder &&
+                            productionOrderNoForApi(selectedOrder) &&
+                            ` · Prod. order: ${productionOrderNoForApi(selectedOrder)}`}
                         </p>
                       )}
                     </div>
@@ -3250,7 +3327,7 @@ const YarnReturnPage = () => {
                       </h3>
                       <p className="text-xs text-gray-600 mt-1">
                         {quickReturnOrder
-                          ? `PO: ${quickReturnOrder.orderNumber} · ${quickReturnOrder.floor ?? "—"}`
+                          ? `Prod. order: ${productionOrderNoForApi(quickReturnOrder)} · ${quickReturnOrder.floor ?? "—"}`
                           : "Scan a cone first — order and article come from the cone."}
                       </p>
                     </div>
@@ -3716,7 +3793,8 @@ const YarnReturnPage = () => {
                     {effectiveReturnOrder && (
                       <div className="p-3 bg-blue-50 rounded-md">
                         <p className="text-xs text-gray-600">
-                          <span className="font-semibold">Order:</span> {effectiveReturnOrder.orderNumber}
+                          <span className="font-semibold">Production order:</span>{" "}
+                          {productionOrderNoForApi(effectiveReturnOrder)}
                         </p>
                         <p className="text-xs text-gray-600 mt-1">
                           <span className="font-semibold">Number of Cones:</span> {scannedBarcodes.length}
@@ -3888,34 +3966,75 @@ const YarnReturnPage = () => {
                     <p className="text-[11px] text-gray-500">Adjust filters or process cone returns to see records here.</p>
                   </div>
                 ) : (
-                  <table className="w-full border-collapse border border-gray-200">
-                    <thead>
-                      <tr className="bg-gray-50/30">
-                        <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
-                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transaction Date</th>
-                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
-                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Net (kg)</th>
-                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Total (kg)</th>
-                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tear (kg)</th>
-                        <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cones</th>
-                        <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Created At</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredReturnTransactions.map((transaction) => (
-                        <tr key={transaction._id} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{txOrderno(transaction) ?? transaction.orderno ?? transaction.orderId ?? "-"}</td>
-                          <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.transactionDate).toLocaleDateString()}</td>
-                          <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.yarnName}</td>
-                          <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionNetWeight?.toFixed(2) || "0.00"}</td>
-                          <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTotalWeight?.toFixed(2) || "0.00"}</td>
-                          <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTearWeight?.toFixed(2) || "0.00"}</td>
-                          <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionConeCount || 1}</td>
-                          <td className="px-1.5 py-2 text-right pr-[10px] text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.createdAt).toLocaleString()}</td>
+                  <>
+                    <p className="text-[11px] text-gray-500 mb-2">
+                      {historyFilteredTotal} record{historyFilteredTotal !== 1 ? "s" : ""} · {HISTORY_PAGE_SIZE} per page
+                      {historyTotalPages > 0 && (
+                        <>
+                          {" "}
+                          · Page {historyPage} of {historyTotalPages}
+                        </>
+                      )}
+                    </p>
+                    <table className="w-full border-collapse border border-gray-200">
+                      <thead>
+                        <tr className="bg-gray-50/30">
+                          <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transaction Date</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Net (kg)</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Total (kg)</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tear (kg)</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cones</th>
+                          <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Created At</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {paginatedHistoryTransactions.map((transaction) => (
+                          <tr key={transaction._id} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{txOrderno(transaction) ?? transaction.orderno ?? transaction.orderId ?? "-"}</td>
+                            <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.transactionDate).toLocaleDateString()}</td>
+                            <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.yarnName}</td>
+                            <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionNetWeight?.toFixed(2) || "0.00"}</td>
+                            <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTotalWeight?.toFixed(2) || "0.00"}</td>
+                            <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTearWeight?.toFixed(2) || "0.00"}</td>
+                            <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionConeCount || 1}</td>
+                            <td className="px-1.5 py-2 text-right pr-[10px] text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.createdAt).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {historyTotalPages > 1 && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-gray-100">
+                        <p className="text-[11px] text-gray-500">
+                          Showing{" "}
+                          {(historyPage - 1) * HISTORY_PAGE_SIZE + 1}
+                          –
+                          {Math.min(historyPage * HISTORY_PAGE_SIZE, historyFilteredTotal)} of {historyFilteredTotal}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                            disabled={historyPage <= 1}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <i className="ri-arrow-left-s-line" />
+                            Previous
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
+                            disabled={historyPage >= historyTotalPages}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Next
+                            <i className="ri-arrow-right-s-line" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -3945,7 +4064,7 @@ const YarnReturnPage = () => {
                     Yarn names
                   </h3>
                   <p className="mt-0.5 truncate text-xs text-gray-500">
-                    {yarnNamesDrawerRow.articleNumber} · PO {yarnNamesDrawerRow.orderNumber}
+                    {yarnNamesDrawerRow.articleNumber} · {yarnNamesDrawerRow.productionOrder}
                   </p>
                 </div>
                 <button

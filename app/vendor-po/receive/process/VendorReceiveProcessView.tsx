@@ -6,7 +6,6 @@ import Link from "next/link";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
-import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
 import vendorPurchaseOrderService, { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
 import vendorBoxService, { VendorBox } from "@/shared/services/vendorBoxService";
 import { lotDetailsForBulkBoxes } from "../../utils/vendorPoFlow";
@@ -38,7 +37,6 @@ export function VendorReceiveProcessView({ orderId }: Props) {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isFetchingWeight, setIsFetchingWeight] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [qz, setQz] = useState({ connected: false, printer: null as { name: string } | null });
   const barcodeRef = useRef<HTMLInputElement>(null);
@@ -69,8 +67,6 @@ export function VendorReceiveProcessView({ orderId }: Props) {
             productName: ex?.productName || b.productName || def?.productName || "",
             articleCode: ex?.articleCode || def?.code || "",
             lotNumber: ex?.lotNumber || lot,
-            grossWeight: ex?.grossWeight || (b.grossWeight != null ? String(b.grossWeight) : ""),
-            boxWeight: ex?.boxWeight || (b.boxWeight != null ? String(b.boxWeight) : ""),
             numberOfUnits: ex?.numberOfUnits || (b.numberOfUnits != null ? String(b.numberOfUnits) : ""),
           };
         }
@@ -94,42 +90,13 @@ export function VendorReceiveProcessView({ orderId }: Props) {
     }
   }, [loading, boxes.length, activeBoxId]);
 
-  const fetchLatestWeight = useCallback(async (): Promise<number | null> => {
-    try {
-      setIsFetchingWeight(true);
-      return await fetchWeightLatest("boxes");
-    } catch {
-      return null;
-    } finally {
-      setIsFetchingWeight(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!activeBoxId || !apiPo) return;
-    void (async () => {
-      const w = await fetchLatestWeight();
-      if (w != null && w > 0) {
-        setBoxData((prev) => ({
-          ...prev,
-          [activeBoxId]: { ...prev[activeBoxId], grossWeight: String(w) },
-        }));
-        setTimeout(() => {
-          const el = document.querySelector(`input[data-vb-w="${activeBoxId}"]`) as HTMLInputElement | null;
-          el?.focus();
-          el?.select();
-        }, 200);
-      }
-    })();
-  }, [activeBoxId, apiPo, fetchLatestWeight]);
-
   const ensureBoxes = async () => {
     if (!apiPo) return;
     setCreatingBoxes(true);
     try {
       const lotDetails = lotDetailsForBulkBoxes(apiPo.vpoNumber, apiPo.receivedLotDetails);
       if (lotDetails.length === 0) {
-        toast.error("No lot details with box counts on this PO.");
+        toast.error("No invoice details with box counts on this PO.");
         return;
       }
       await vendorBoxService.bulkCreate({ vpoNumber: apiPo.vpoNumber, lotDetails });
@@ -173,19 +140,13 @@ export function VendorReceiveProcessView({ orderId }: Props) {
     const bid = getVendorBoxId(box);
     const d = boxData[bid];
     if (!d || !apiPo) return;
-    const gw = parseFloat(d.grossWeight);
-    const bw = parseFloat(d.boxWeight);
     const nu = parseFloat(d.numberOfUnits);
     if (!d.lotNumber?.trim()) {
-      toast.error("Lot number required");
+      toast.error("Invoice number required");
       return;
     }
     if (!d.productName?.trim()) {
       toast.error("Product name required");
-      return;
-    }
-    if (Number.isNaN(bw) || bw <= 0) {
-      toast.error("Net weight must be > 0");
       return;
     }
     if (Number.isNaN(nu) || nu <= 0) {
@@ -197,8 +158,6 @@ export function VendorReceiveProcessView({ orderId }: Props) {
       await vendorBoxService.update(bid, {
         lotNumber: d.lotNumber.trim(),
         productName: d.productName.trim(),
-        grossWeight: Number.isNaN(gw) ? undefined : gw,
-        boxWeight: bw,
         numberOfUnits: nu,
       });
       toast.success("Box saved");
@@ -409,7 +368,7 @@ export function VendorReceiveProcessView({ orderId }: Props) {
               <table className="w-full border-collapse border border-gray-200">
                 <thead>
                   <tr className="bg-gray-50/30">
-                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot</th>
+                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Invoice</th>
                     <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Product</th>
                     <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received qty</th>
                     <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Boxes (expected)</th>
@@ -459,7 +418,7 @@ export function VendorReceiveProcessView({ orderId }: Props) {
               disabled={creatingBoxes}
               onClick={() => void ensureBoxes()}
             >
-              {creatingBoxes ? "Creating..." : "Create boxes from lots"}
+              {creatingBoxes ? "Creating..." : "Create boxes from invoices"}
             </button>
           )}
         </div>
@@ -480,7 +439,6 @@ export function VendorReceiveProcessView({ orderId }: Props) {
             barcodeScanValue={barcodeScanValue}
             setBarcodeScanValue={setBarcodeScanValue}
             onBarcodeKey={handleBarcodeKey}
-            isFetchingWeight={isFetchingWeight}
           />
         )}
       </div>

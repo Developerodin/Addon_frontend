@@ -35,7 +35,7 @@ function packlistToArray(pd: VendorPurchaseOrder["packListDetails"]) {
 }
 
 /**
- * Yarn PO Received parity: right slide-over, order + packlist summary, multiple lot cards with per-line qty.
+ * Yarn PO Received parity: right slide-over, order + packlist summary, multiple receipt cards (UI: invoice) with per-line qty.
  */
 export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSaved }: VendorGoodsReceivedModalProps) {
   const [detailPo, setDetailPo] = useState<VendorPurchaseOrder | null>(null);
@@ -263,14 +263,14 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                 )}
 
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-semibold text-gray-800">Received lot details</h4>
+                  <h4 className="text-xs font-semibold text-gray-800">Received invoice details</h4>
                   <button
                     type="button"
                     onClick={addLot}
                     className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 shadow-sm"
                   >
                     <i className="ri-add-line text-xs" />
-                    Add lot
+                    Add invoice
                   </button>
                 </div>
                 <p className="text-[10px] text-gray-500 mb-3">
@@ -284,7 +284,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                       className="border border-gray-200 rounded-lg p-3 space-y-3 bg-white shadow-sm"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-gray-800">Lot {lotIndex + 1}</span>
+                        <span className="text-xs font-bold text-gray-800">Invoice {lotIndex + 1}</span>
                         {lots.length > 1 && (
                           <button
                             type="button"
@@ -297,7 +297,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[10px] font-medium text-gray-600">Lot number *</label>
+                          <label className="text-[10px] font-medium text-gray-600">Invoice number *</label>
                           <input
                             className={lotInputCls}
                             value={lot.lotNumber}
@@ -308,7 +308,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                 return n;
                               })
                             }
-                            placeholder="e.g. LOT-001"
+                            placeholder="e.g. INV-001"
                           />
                         </div>
                         <div>
@@ -336,7 +336,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                             <tr>
                               <th className="px-2 py-2 text-left font-bold text-gray-600">Article</th>
                               <th className="px-2 py-2 text-right">Max</th>
-                              <th className="px-2 py-2 text-right w-[88px]">This lot</th>
+                              <th className="px-2 py-2 text-right w-[88px]">This invoice</th>
                             </tr>
                           </thead>
                           <tbody>

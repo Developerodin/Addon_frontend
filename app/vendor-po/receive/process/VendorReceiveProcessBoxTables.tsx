@@ -26,7 +26,6 @@ type Props = {
   barcodeScanValue: string;
   setBarcodeScanValue: (v: string) => void;
   onBarcodeKey: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-  isFetchingWeight: boolean;
 };
 
 export function VendorReceiveProcessBoxTables({
@@ -44,7 +43,6 @@ export function VendorReceiveProcessBoxTables({
   barcodeScanValue,
   setBarcodeScanValue,
   onBarcodeKey,
-  isFetchingWeight,
 }: Props) {
   const boxesByLot = groupVendorBoxesByLot(boxes, boxData);
   const inputBase = "w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300";
@@ -66,16 +64,14 @@ export function VendorReceiveProcessBoxTables({
       </div>
       {activeBoxId && (
         <p className="text-[10px] text-purple-700 mb-2 flex items-center gap-2">
-          <i className="ri-scales-3-line" />
-          {isFetchingWeight
-            ? "Reading scale…"
-            : "Gross weight can auto-fill from scale; enter net weight & units, then Save."}
+          <i className="ri-edit-line" />
+          Enter units, then Save.
         </p>
       )}
 
       {boxesByLot.sortedLots.map((lot) => (
         <div key={lot} className="mb-4 overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
-          <div className="bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-800 border-b border-gray-100">Lot {lot}</div>
+          <div className="bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-800 border-b border-gray-100">Invoice {lot}</div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse border border-gray-200">
               <thead>
@@ -83,8 +79,6 @@ export function VendorReceiveProcessBoxTables({
                   <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
                   <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
                   <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Product</th>
-                  <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Gross</th>
-                  <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Net kg</th>
                   <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Units</th>
                   <th className="px-1.5 py-2 text-center text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-[72px]" />
                 </tr>
@@ -97,8 +91,6 @@ export function VendorReceiveProcessBoxTables({
                     productName: "",
                     articleCode: "",
                     lotNumber: "",
-                    grossWeight: "",
-                    boxWeight: "",
                     numberOfUnits: "",
                   };
                   const opts = getVendorPoItemOptionsForLot(apiPo, d.lotNumber || lot);
@@ -133,51 +125,7 @@ export function VendorReceiveProcessBoxTables({
                       <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
                         {isActive ? (
                           <input
-                            className={`${inputBase} text-right`}
-                            value={rawInput[`g-${bid}`] ?? d.grossWeight}
-                            onChange={(e) => {
-                              const v = validateVendorProcessNum(e.target.value);
-                              setRawInput((r) => ({ ...r, [`g-${bid}`]: v }));
-                              setBoxData((p) => ({ ...p, [bid]: { ...d, grossWeight: v } }));
-                            }}
-                            onBlur={() =>
-                              setRawInput((r) => {
-                                const x = { ...r };
-                                delete x[`g-${bid}`];
-                                return x;
-                              })
-                            }
-                          />
-                        ) : (
-                          d.grossWeight || "—"
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
-                        {isActive ? (
-                          <input
                             data-vb-w={bid}
-                            className={`${inputBase} text-right`}
-                            value={rawInput[`w-${bid}`] ?? d.boxWeight}
-                            onChange={(e) => {
-                              const v = validateVendorProcessNum(e.target.value);
-                              setRawInput((r) => ({ ...r, [`w-${bid}`]: v }));
-                              setBoxData((p) => ({ ...p, [bid]: { ...d, boxWeight: v } }));
-                            }}
-                            onBlur={() =>
-                              setRawInput((r) => {
-                                const x = { ...r };
-                                delete x[`w-${bid}`];
-                                return x;
-                              })
-                            }
-                          />
-                        ) : (
-                          d.boxWeight || "—"
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
-                        {isActive ? (
-                          <input
                             className={`${inputBase} text-right`}
                             value={rawInput[`u-${bid}`] ?? d.numberOfUnits}
                             onChange={(e) => {
@@ -225,7 +173,7 @@ export function VendorReceiveProcessBoxTables({
       {boxesByLot.unassigned.length > 0 && (
         <div className="mb-4 overflow-hidden rounded-lg border border-amber-200 bg-amber-50/30 shadow-sm">
           <div className="bg-amber-100 px-3 py-2 text-[11px] font-bold border-b border-amber-200 text-amber-900">
-            Unassigned to lot ({boxesByLot.unassigned.length})
+            Unassigned to invoice ({boxesByLot.unassigned.length})
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse border border-gray-200">
@@ -233,10 +181,8 @@ export function VendorReceiveProcessBoxTables({
                 <tr className="bg-gray-50/30">
                   <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
                   <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
-                  <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot *</th>
+                  <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Invoice *</th>
                   <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Product</th>
-                  <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Gross</th>
-                  <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Net kg</th>
                   <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Units</th>
                   <th className="px-1.5 py-2 text-center text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-[72px]" />
                 </tr>
@@ -249,8 +195,6 @@ export function VendorReceiveProcessBoxTables({
                     productName: box.productName || "",
                     articleCode: "",
                     lotNumber: box.lotNumber || "",
-                    grossWeight: "",
-                    boxWeight: "",
                     numberOfUnits: "",
                   };
                   return (
@@ -260,7 +204,7 @@ export function VendorReceiveProcessBoxTables({
                       <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">
                         <input
                           className={inputBase}
-                          placeholder="Lot #"
+                          placeholder="Invoice #"
                           value={d.lotNumber}
                           onChange={(e) =>
                             setBoxData((p) => ({
@@ -286,51 +230,7 @@ export function VendorReceiveProcessBoxTables({
                       <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
                         {isActive ? (
                           <input
-                            className={`${inputBase} text-right`}
-                            value={rawInput[`g-${bid}`] ?? d.grossWeight}
-                            onChange={(e) => {
-                              const v = validateVendorProcessNum(e.target.value);
-                              setRawInput((r) => ({ ...r, [`g-${bid}`]: v }));
-                              setBoxData((p) => ({ ...p, [bid]: { ...d, grossWeight: v } }));
-                            }}
-                            onBlur={() =>
-                              setRawInput((r) => {
-                                const x = { ...r };
-                                delete x[`g-${bid}`];
-                                return x;
-                              })
-                            }
-                          />
-                        ) : (
-                          d.grossWeight || "—"
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
-                        {isActive ? (
-                          <input
                             data-vb-w={bid}
-                            className={`${inputBase} text-right`}
-                            value={rawInput[`w-${bid}`] ?? d.boxWeight}
-                            onChange={(e) => {
-                              const v = validateVendorProcessNum(e.target.value);
-                              setRawInput((r) => ({ ...r, [`w-${bid}`]: v }));
-                              setBoxData((p) => ({ ...p, [bid]: { ...d, boxWeight: v } }));
-                            }}
-                            onBlur={() =>
-                              setRawInput((r) => {
-                                const x = { ...r };
-                                delete x[`w-${bid}`];
-                                return x;
-                              })
-                            }
-                          />
-                        ) : (
-                          d.boxWeight || "—"
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
-                        {isActive ? (
-                          <input
                             className={`${inputBase} text-right`}
                             value={rawInput[`u-${bid}`] ?? d.numberOfUnits}
                             onChange={(e) => {

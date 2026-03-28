@@ -2,7 +2,12 @@
 
 import React from "react";
 import type { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
-import { readVendorName } from "./vendorPacklistHelpers";
+import { readVendorName, vendorCodeFromPoLineItem } from "./vendorPacklistHelpers";
+
+function dashOr(value: string | undefined): string {
+  const t = value?.trim();
+  return t || "—";
+}
 
 function formatOrderDateLabel(raw: string | undefined): string {
   if (!raw?.trim()) return "—";
@@ -59,15 +64,40 @@ export function VendorPacklistOrderSummary({
                 </tr>
               </thead>
               <tbody>
-                {po.poItems.map((item) => {
+                {po.poItems.map((item, idx) => {
                   const pid = item.productId;
                   const name =
                     item.productName || (typeof pid === "object" ? pid?.name || "" : "") || "—";
+                  const vendorCodeLabel = vendorCodeFromPoLineItem(item) || "—";
                   return (
-                    <tr key={item._id || name}>
-                      <td className="px-2 py-1 border border-gray-200">{name}</td>
-                      <td className="px-2 py-1 text-right border border-gray-200">{item.quantity}</td>
-                      <td className="px-2 py-1 text-right border border-gray-200">{item.rate}</td>
+                    <tr key={String(item._id ?? item.id ?? `line-${idx}`)}>
+                      <td className="px-2 py-1.5 border border-gray-200 align-top">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
+                          <div className="min-w-0 flex-1 font-medium text-gray-900">{name}</div>
+                          <div className="min-w-0 flex-1 text-[10px] leading-snug text-gray-600 sm:text-right">
+                            <div className="sm:text-right">
+                              <span className="text-gray-500">Vendor code:</span> {vendorCodeLabel}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 sm:justify-end">
+                              <span>
+                                <span className="text-gray-500">Type:</span> {dashOr(item.type)}
+                              </span>
+                              <span>
+                                <span className="text-gray-500">Color:</span> {dashOr(item.color)}
+                              </span>
+                              <span>
+                                <span className="text-gray-500">Pattern:</span> {dashOr(item.pattern)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-2 py-1.5 text-right border border-gray-200 align-top tabular-nums">
+                        {item.quantity}
+                      </td>
+                      <td className="px-2 py-1.5 text-right border border-gray-200 align-top tabular-nums">
+                        {item.rate}
+                      </td>
                     </tr>
                   );
                 })}
