@@ -147,8 +147,8 @@ export function VendorPacklistModal({
         toast.error(`Number of boxes must be greater than 0 for entry ${i + 1}`);
         return;
       }
-      if (!r.totalWeight || r.totalWeight <= 0) {
-        toast.error(`Total weight must be greater than 0 for entry ${i + 1}`);
+      if (!r.totalUnits || r.totalUnits <= 0) {
+        toast.error(`Total units must be greater than 0 for entry ${i + 1}`);
         return;
       }
       if (!r.poItems?.length) {
@@ -166,7 +166,7 @@ export function VendorPacklistModal({
       dispatchDate: r.dispatchDate,
       estimatedDeliveryDate: r.estimatedDeliveryDate,
       numberOfBoxes: Number(r.numberOfBoxes),
-      totalWeight: Number(r.totalWeight),
+      totalUnits: Number(r.totalUnits),
       notes: r.notes || "",
       poItems: r.poItems || [],
       files: r.files || [],
@@ -216,7 +216,7 @@ export function VendorPacklistModal({
           <div className="flex-1 overflow-y-auto px-4 py-3">
             <VendorPacklistOrderSummary po={po} orderDateFallback={orderDateFallback} />
             <p className="text-xs text-gray-600 mb-3">
-              One row per shipment. Each row needs packing ref, courier, dates, weights, and which PO lines ship together.
+              One row per shipment. Each row needs packing ref, courier, dates, total units, and which PO lines ship together.
             </p>
             <div className="space-y-4">
               {rows.map((entry, entryIndex) => (

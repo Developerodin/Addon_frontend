@@ -19,6 +19,10 @@ export interface VendorPOLineItem {
   articleId: string;
   articleCode: string;
   articleName: string;
+  /** From product attributes (Product / Type); auto-filled when article is selected */
+  type?: string;
+  color?: string;
+  pattern?: string;
   orderedQty: number;
   rate?: number;
   gstRate?: number;
@@ -31,11 +35,15 @@ export interface VendorPOLineItem {
 /** Article option for dropdown/search */
 export interface VendorPOArticle {
   id: string;
-  /** Factory code — used for search / fallback when internal code is empty */
+  /** Same as vendor code when present; empty when product has no vendor code (no factory fallback). */
   code: string;
   name: string;
-  /** Internal product code — shown next to name in catalog picker and line item */
   internalCode?: string;
+  vendorCode?: string;
+  /** From attributes; applied to line item on select */
+  type?: string;
+  color?: string;
+  pattern?: string;
 }
 
 export interface VendorPO {

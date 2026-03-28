@@ -41,7 +41,7 @@ export default function VendorPOArticlePickerPortal({
         <div className="px-3 py-2 text-sm text-gray-500">No articles found</div>
       ) : (
         filteredArticles.map((a) => {
-          const codeUi = a.internalCode?.trim();
+          const codeUi = a.vendorCode?.trim() ? a.vendorCode.trim() : "no vendor code";
           return (
             <button
               key={a.id}
@@ -50,7 +50,9 @@ export default function VendorPOArticlePickerPortal({
               onClick={() => onSelect(a)}
             >
               {a.name}
-              {codeUi ? <span className="text-xs text-gray-500 ml-2">{codeUi}</span> : null}
+              <span className={`text-xs ml-2 ${a.vendorCode?.trim() ? "text-gray-500" : "text-amber-600 italic"}`}>
+                {codeUi}
+              </span>
             </button>
           );
         })

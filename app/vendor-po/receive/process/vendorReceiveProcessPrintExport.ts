@@ -9,8 +9,6 @@ export type VendorBoxFormRow = {
   productName: string;
   articleCode: string;
   lotNumber: string;
-  grossWeight: string;
-  boxWeight: string;
   numberOfUnits: string;
 };
 
@@ -54,13 +52,12 @@ export async function printAllVendorBoxLabels(
     .map((b) => {
       const id = getVendorBoxId(b);
       const d = boxData[id];
-      const w = d?.boxWeight ? parseFloat(d.boxWeight) : b.boxWeight;
       return {
         barcode: String(b.barcode),
         boxId: b.boxId || id,
         yarnName: d?.productName || b.productName || "",
         shadeCode: d?.articleCode || "",
-        weight: w != null && !Number.isNaN(Number(w)) ? Number(w) : undefined,
+        weight: undefined,
         lotNumber: d?.lotNumber || b.lotNumber || "",
         supplierName: vendorShort,
         poNumber: apiPo.vpoNumber || "",
@@ -83,11 +80,9 @@ export function exportVendorBoxesExcel(apiPo: VendorPurchaseOrder, boxes: Vendor
       VPO: apiPo.vpoNumber,
       "Box ID": b.boxId || "",
       Barcode: b.barcode || "",
-      Lot: d?.lotNumber || b.lotNumber || "",
+      Invoice: d?.lotNumber || b.lotNumber || "",
       Product: d?.productName || b.productName || "",
       Code: d?.articleCode || "",
-      "Gross (kg)": d?.grossWeight || "",
-      "Net (kg)": d?.boxWeight ?? b.boxWeight ?? "",
       Units: d?.numberOfUnits ?? b.numberOfUnits ?? "",
     };
   });

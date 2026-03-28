@@ -75,17 +75,17 @@ export function validateVendorLotDrafts(
 ): string | null {
   for (let i = 0; i < drafts.length; i++) {
     const d = drafts[i];
-    if (!d.lotNumber.trim()) return `Lot ${i + 1}: lot number is required`;
-    if (!d.numberOfBoxes || d.numberOfBoxes < 1) return `Lot ${i + 1}: number of boxes must be at least 1`;
+    if (!d.lotNumber.trim()) return `Invoice ${i + 1}: invoice number is required`;
+    if (!d.numberOfBoxes || d.numberOfBoxes < 1) return `Invoice ${i + 1}: number of boxes must be at least 1`;
     const batch = Object.keys(d.lineQty).reduce((s, k) => s + Math.max(0, Number(d.lineQty[k] ?? 0)), 0);
-    if (batch <= 0) return `Lot ${i + 1}: enter received quantity for at least one line`;
+    if (batch <= 0) return `Invoice ${i + 1}: enter received quantity for at least one line`;
   }
   for (const lineId of Object.keys(orderedByLine)) {
     let sum = 0;
     for (const d of drafts) sum += Math.max(0, Number(d.lineQty[lineId] ?? 0));
     if (sum > orderedByLine[lineId] + 1e-6) {
       const name = poItems.find((it) => getPoLineItemId(it) === lineId)?.productName || "line";
-      return `Total received for ${name} across all lots (${sum}) exceeds ordered (${orderedByLine[lineId]})`;
+      return `Total received for ${name} across all invoices (${sum}) exceeds ordered (${orderedByLine[lineId]})`;
     }
   }
   return null;
@@ -98,10 +98,12 @@ export function draftsToReceivedLotDetails(drafts: VendorLotDraft[]): VendorRece
       const n = Math.max(0, Number(q));
       if (n > 0) poItems.push({ poItem, receivedQuantity: n });
     }
-    /** Vendor PO Joi schema allows only lot fields needed for catalog receipt (no yarn `numberOfCones` / `totalWeight`). */
+    /** Vendor PO Joi schema: catalog lots use `totalUnits` (yarn-only fields like extra weight are omitted). */
+    const totalUnits = poItems.reduce((s, p) => s + Number(p.receivedQuantity || 0), 0);
     return {
       lotNumber: d.lotNumber.trim(),
       numberOfBoxes: d.numberOfBoxes,
+      totalUnits,
       poItems,
       status: "lot_pending",
     };

@@ -84,8 +84,11 @@ export function mapVendorPurchaseOrderToUi(po: VendorPurchaseOrder): VendorPO {
     return {
       id: item._id || `${po.id}-${String(articleId)}`,
       articleId,
-      articleCode: typeof pid === "object" ? pid?.factoryCode || pid?.vendorCode || "" : "",
+      articleCode: typeof pid === "object" ? pid?.vendorCode || "" : "",
       articleName: item.productName || (typeof pid === "object" ? pid?.name || "" : ""),
+      type: item.type ?? "",
+      color: item.color ?? "",
+      pattern: item.pattern ?? "",
       orderedQty: Number(item.quantity || 0),
       rate: Number(item.rate ?? 0),
       gstRate: Number(item.gstRate ?? 0),

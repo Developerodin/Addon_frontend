@@ -3,7 +3,7 @@
 import React from "react";
 import { formatFileSize, getFileIcon } from "@/shared/services/fileUploadService";
 import type { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
-import { getPoLineItemId, type PacklistRow } from "./vendorPacklistHelpers";
+import { getPoLineItemId, vendorCodeFromPoLineItem, type PacklistRow } from "./vendorPacklistHelpers";
 
 export interface VendorPacklistShipmentRowProps {
   entryIndex: number;
@@ -154,16 +154,16 @@ export function VendorPacklistShipmentRow({
           </div>
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">
-              Total weight (kg) <span className="text-red-500">*</span>
+              Total units <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
               min={0}
               step="0.01"
-              value={entry.totalWeight || ""}
+              value={entry.totalUnits || ""}
               onChange={(e) =>
                 onFieldChange({
-                  totalWeight: e.target.value === "" ? 0 : parseFloat(e.target.value),
+                  totalUnits: e.target.value === "" ? 0 : parseFloat(e.target.value),
                 })
               }
               className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-0 focus:border-purple-400"
@@ -187,12 +187,16 @@ export function VendorPacklistShipmentRow({
                   const pid = item.productId;
                   const name =
                     item.productName || (typeof pid === "object" ? pid?.name || "" : "") || "Line";
+                  const typeLabel = item.type?.trim() || "—";
+                  const colorLabel = item.color?.trim() || "—";
+                  const patternLabel = item.pattern?.trim() || "—";
+                  const vendorCodeLabel = vendorCodeFromPoLineItem(item) || "—";
                   const selected = (entry.poItems || []).some((id) => String(id) === String(lineId));
                   const inputId = `vpo-pack-line-${entryIndex}-${itemIdx}-${lineId.replace(/[^a-zA-Z0-9]/g, "-")}`;
                   return (
                     <div
                       key={lineId}
-                      className={`flex items-center gap-2.5 p-2 rounded border border-transparent ${
+                      className={`flex items-start gap-2.5 p-2 rounded border border-transparent ${
                         selected ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50 border-gray-100"
                       }`}
                     >
@@ -204,18 +208,31 @@ export function VendorPacklistShipmentRow({
                           e.stopPropagation();
                           onPoItemToggle(lineId, e.target.checked);
                         }}
-                        className="h-3.5 w-3.5 shrink-0 text-blue-600 focus:ring-2 focus:ring-purple-400 border-gray-300 rounded cursor-pointer"
+                        className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-600 focus:ring-2 focus:ring-purple-400 border-gray-300 rounded cursor-pointer"
                       />
                       <label
                         htmlFor={inputId}
-                        className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-4"
+                        className="flex min-w-0 flex-1 cursor-pointer flex-col gap-2 sm:flex-row sm:items-start sm:gap-3"
                       >
                         <span className="min-w-0 flex-1 text-xs font-medium leading-snug text-gray-900">
                           {name}
                         </span>
-                        <span className="shrink-0 text-right text-[10px] font-medium tabular-nums leading-none text-gray-600">
-                          Qty: {item.quantity}
-                        </span>
+                        <div className="min-w-0 flex-1 text-[10px] leading-snug text-gray-600 sm:text-right">
+                          <div className="sm:text-right">
+                            <span className="text-gray-500">Vendor code:</span> {vendorCodeLabel}
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 sm:justify-end">
+                            <span>
+                              <span className="text-gray-500">Type:</span> {typeLabel}
+                            </span>
+                            <span>
+                              <span className="text-gray-500">Color:</span> {colorLabel}
+                            </span>
+                            <span>
+                              <span className="text-gray-500">Pattern:</span> {patternLabel}
+                            </span>
+                          </div>
+                        </div>
                       </label>
                     </div>
                   );

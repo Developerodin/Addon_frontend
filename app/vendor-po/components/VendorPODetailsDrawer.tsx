@@ -11,7 +11,7 @@ import vendorPurchaseOrderService, {
 } from "@/shared/services/vendorPurchaseOrderService";
 import { vendorPoApiStatusToUi, vendorPoUiStatusClass } from "../utils/vendorPoFlow";
 import type { VendorPO } from "../raise/types";
-import { getPoLineItemId, productNameForPoLineId } from "./vendorPacklistHelpers";
+import { getPoLineItemId, packlistRowTotalUnits, productNameForPoLineId, receivedLotTotalUnits } from "./vendorPacklistHelpers";
 
 function readVendorName(vendor: VendorPurchaseOrder["vendor"]): string {
   if (!vendor) return "—";
@@ -375,10 +375,10 @@ export function VendorPODetailsDrawer({
                                   <div className="text-gray-900">{pl.numberOfBoxes}</div>
                                 </div>
                               )}
-                              {pl.totalWeight != null && (
+                              {packlistRowTotalUnits(pl) > 0 && (
                                 <div>
-                                  <span className="text-[10px] text-gray-600">Weight (kg)</span>
-                                  <div className="text-gray-900">{pl.totalWeight}</div>
+                                  <span className="text-[10px] text-gray-600">Total units</span>
+                                  <div className="text-gray-900">{packlistRowTotalUnits(pl)}</div>
                                 </div>
                               )}
                             </div>
@@ -406,9 +406,9 @@ export function VendorPODetailsDrawer({
                   {receivedLots.length > 0 && (
                     <div className="mb-4">
                       <label className="text-xs font-medium text-gray-700 mb-2 block">
-                        Received lot details
+                        Received invoice details
                         <span className="text-[10px] text-gray-500 ms-2">
-                          ({receivedLots.length} {receivedLots.length === 1 ? "lot" : "lots"})
+                          ({receivedLots.length} {receivedLots.length === 1 ? "invoice" : "invoices"})
                         </span>
                       </label>
                       <div className="space-y-3">
@@ -416,10 +416,10 @@ export function VendorPODetailsDrawer({
                           const statusLbl = lotStatusLabel(lot.status);
                           return (
                             <div key={`${lot.lotNumber || "lot"}-${idx}`} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                              <h4 className="text-xs font-semibold text-gray-800 mb-2">Lot entry {idx + 1}</h4>
+                              <h4 className="text-xs font-semibold text-gray-800 mb-2">Invoice entry {idx + 1}</h4>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                                 <div>
-                                  <span className="text-[10px] text-gray-600">Lot number</span>
+                                  <span className="text-[10px] text-gray-600">Invoice number</span>
                                   <div className="text-gray-900 font-medium">{lot.lotNumber?.trim() || "—"}</div>
                                 </div>
                                 <div>
@@ -438,10 +438,10 @@ export function VendorPODetailsDrawer({
                                     <div className="text-gray-900">{lot.numberOfCones}</div>
                                   </div>
                                 )}
-                                {lot.totalWeight != null && Number(lot.totalWeight) > 0 && (
+                                {receivedLotTotalUnits(lot) > 0 && (
                                   <div>
-                                    <span className="text-[10px] text-gray-600">Weight</span>
-                                    <div className="text-gray-900">{lot.totalWeight}</div>
+                                    <span className="text-[10px] text-gray-600">Total units</span>
+                                    <div className="text-gray-900">{receivedLotTotalUnits(lot)}</div>
                                   </div>
                                 )}
                               </div>

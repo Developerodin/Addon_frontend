@@ -12,6 +12,7 @@ import { mapVendorDocToVendor } from "../../../vendor-list/vendorMappers";
 import vendorPurchaseOrderService from "@/shared/services/vendorPurchaseOrderService";
 import { mapVendorPurchaseOrderToUi } from "../../../utils/vendorPoFlow";
 import { listProducts, getProductById } from "@/shared/services/productService";
+import { productRecordToVendorPOArticle } from "../../components/vendorPoArticleMapping";
 
 function poToFormData(po: VendorPO): VendorPOFormData {
   return {
@@ -30,6 +31,9 @@ function poToFormData(po: VendorPO): VendorPOFormData {
             articleId: "",
             articleCode: "",
             articleName: "",
+            type: "",
+            color: "",
+            pattern: "",
             orderedQty: 0,
             rate: 0,
             gstRate: 0,
@@ -86,12 +90,9 @@ const VendorPOEditPage = () => {
       try {
         const products = await listProducts({ page: 1, limit: 500 });
         if (!cancelled) {
-          const mapped = (products.results || []).map((p) => ({
-              id: p.id,
-              code: p.factoryCode || "",
-              name: p.name,
-              internalCode: p.internalCode?.trim() || undefined,
-            }));
+          const mapped = (products.results || [])
+            .map((p) => productRecordToVendorPOArticle(p as unknown as Record<string, unknown>, p.id))
+            .filter((a): a is NonNullable<typeof a> => a != null);
           setAllCatalogArticles(mapped);
           setArticles(mapped);
         }
@@ -118,25 +119,12 @@ const VendorPOEditPage = () => {
           vendorProducts.map(async (product) => {
             if (typeof product === "string") {
               const full = await getProductById(product);
-              const internalRaw = full?.internalCode as string | undefined;
-              return {
-                id: product,
-                code: (full?.factoryCode as string | undefined) || "",
-                name: (full?.name as string | undefined) || "",
-                internalCode: internalRaw?.trim() || undefined,
-              };
+              return productRecordToVendorPOArticle(full as Record<string, unknown> | null | undefined, product);
             }
-            const productObj = product as Record<string, unknown>;
-            const ic = productObj.internalCode;
-            return {
-              id: String(productObj.id || productObj._id || ""),
-              code: String(productObj.factoryCode || ""),
-              name: String(productObj.name || ""),
-              internalCode: (typeof ic === "string" ? ic : String(ic || "")).trim() || undefined,
-            };
+            return productRecordToVendorPOArticle(product as Record<string, unknown>);
           })
         );
-        setArticles(mapped.filter((p) => p.id && p.name));
+        setArticles(mapped.filter((p): p is NonNullable<typeof p> => p != null && !!p.id && !!p.name));
       } catch {
         setArticles([]);
       }
@@ -159,25 +147,12 @@ const VendorPOEditPage = () => {
         vendorProducts.map(async (product) => {
           if (typeof product === "string") {
             const full = await getProductById(product);
-            const internalRaw = full?.internalCode as string | undefined;
-            return {
-              id: product,
-              code: (full?.factoryCode as string | undefined) || "",
-              name: (full?.name as string | undefined) || "",
-              internalCode: internalRaw?.trim() || undefined,
-            };
+            return productRecordToVendorPOArticle(full as Record<string, unknown> | null | undefined, product);
           }
-          const productObj = product as Record<string, unknown>;
-          const ic = productObj.internalCode;
-          return {
-            id: String(productObj.id || productObj._id || ""),
-            code: String(productObj.factoryCode || ""),
-            name: String(productObj.name || ""),
-            internalCode: (typeof ic === "string" ? ic : String(ic || "")).trim() || undefined,
-          };
+          return productRecordToVendorPOArticle(product as Record<string, unknown>);
         })
       );
-      setArticles(mapped.filter((p) => p.id && p.name));
+      setArticles(mapped.filter((p): p is NonNullable<typeof p> => p != null && !!p.id && !!p.name));
     } catch {
       setArticles([]);
     }
@@ -216,6 +191,9 @@ const VendorPOEditPage = () => {
             rate: Number(item.rate || 0),
             gstRate: Number(item.gstRate || 0),
             estimatedDeliveryDate: item.estimatedDeliveryDate || undefined,
+            type: item.type?.trim() || undefined,
+            color: item.color?.trim() || undefined,
+            pattern: item.pattern?.trim() || undefined,
           })),
           subTotal,
           gst,
