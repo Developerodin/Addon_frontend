@@ -3,9 +3,10 @@
 import React, { useState } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { InwardItem } from "../types";
+import { whmsInwardBasePath } from "../inwardPaths";
 
 // Mock detail for receiving entry
 const MOCK_ITEMS: InwardItem[] = [
@@ -16,6 +17,8 @@ const MOCK_ITEMS: InwardItem[] = [
 export default function InwardDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const pathname = usePathname();
+  const inwardBase = whmsInwardBasePath(pathname);
   const id = params.id as string;
   const isNew = id === "new";
 
@@ -37,7 +40,7 @@ export default function InwardDetailPage() {
       // TODO: API call to save inward receiving
       await new Promise((r) => setTimeout(r, 500));
       toast.success(isNew ? "Inward created" : "Inward updated");
-      router.push("/warehouse-management/orders/inward");
+      router.push(inwardBase);
     } catch {
       toast.error("Failed to save");
     } finally {
@@ -54,7 +57,7 @@ export default function InwardDetailPage() {
         <div className="box-header flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link
-              href="/warehouse-management/orders/inward"
+              href={inwardBase}
               className="ti-btn ti-btn-secondary"
             >
               <i className="ri-arrow-left-line me-1"></i>

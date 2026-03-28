@@ -2,7 +2,7 @@ import { productionService } from "@/shared/services/productionService";
 import type { ArticleProcess } from "@/shared/services/productionService";
 import { PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 
-export type FloorType = 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Final Checking' | 'Branding' | 'Warehouse';
+export type FloorType = 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Final Checking' | 'Branding' | 'Warehouse' | 'Dispatch';
 export type LinkingType = 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
 
 /** Normalize floor name for comparison (lowercase, no spaces) */
@@ -187,7 +187,8 @@ export const getFloorDisplayName = (floor: FloorType): string => {
     'Boarding': 'Boarding',
     'Final Checking': 'Final Checking',
     'Branding': 'Branding',
-    'Warehouse': 'Warehouse'
+    'Warehouse': 'Warehouse',
+    'Dispatch': 'Dispatch',
   };
   
   return displayNames[floor] || floor;
@@ -205,7 +206,8 @@ export const getFloorColor = (floor: FloorType): string => {
     'Boarding': 'bg-green-100 text-green-800',
     'Final Checking': 'bg-orange-100 text-orange-800',
     'Branding': 'bg-pink-100 text-pink-800',
-    'Warehouse': 'bg-gray-100 text-gray-800'
+    'Warehouse': 'bg-gray-100 text-gray-800',
+    'Dispatch': 'bg-teal-100 text-teal-800',
   };
   
   return colors[floor] || 'bg-gray-100 text-gray-800';

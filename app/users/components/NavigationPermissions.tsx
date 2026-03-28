@@ -49,6 +49,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Secondary Checking Floor', label: 'Secondary Checking Floor' },
     { key: 'Branding Floor', label: 'Branding Floor' },
     { key: 'Final Checking Floor', label: 'Final Checking Floor' },
+    { key: 'Dispatch Floor', label: 'Dispatch Floor' },
     { key: 'Machine Floor', label: 'Machine Floor' },
     { key: 'Warehouse Floor', label: 'Warehouse Floor' }
   ]
@@ -79,6 +80,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
 
   const warehouseSections = [
     { key: 'Orders', label: 'Orders' },
+    { key: 'Inward', label: 'Inward' },
     { key: 'Pick&Pack', label: 'Pick&Pack' },
     { key: 'Layout', label: 'Layout' },
     { key: 'Stock', label: 'Stock' },

@@ -258,7 +258,7 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
               <button
                 type="button"
                 className="text-xs text-primary hover:text-primary-dark"
-                onClick={() => handleSelectAll('Warehouse Management', ['Orders', 'Pick&Pack', 'Layout', 'Stock', 'Reports'])}
+                onClick={() => handleSelectAll('Warehouse Management', ['Orders', 'Inward', 'Pick&Pack', 'Layout', 'Stock', 'Reports'])}
               >
                 Toggle All
               </button>
@@ -266,6 +266,7 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
             <div className="space-y-2 ml-4">
               {[
                 { key: 'Orders', label: 'Orders' },
+                { key: 'Inward', label: 'Inward' },
                 { key: 'Pick&Pack', label: 'Pick&Pack' },
                 { key: 'Layout', label: 'Layout' },
                 { key: 'Stock', label: 'Stock' },

@@ -57,8 +57,29 @@ export interface Article {
     washing: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
     boarding: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
     finalChecking: { received: number; completed: number; remaining: number; transferred: number; m1Quantity?: number; m2Quantity?: number; m3Quantity?: number; m4Quantity?: number; m2Transferred?: number; m2Remaining?: number; repairReceived?: number; repairFromFloor?: string; transferredData?: TransferItem[]; receivedData?: Array<TransferItem & { receivedStatusFromPreviousFloor?: string; receivedInContainerId?: string; receivedTimestamp?: string }> };
+    /** Dispatch: no M1–M4; transfer is style/brand lines + container to next floor (e.g. Warehouse). */
+    dispatch: {
+      received: number;
+      completed?: number;
+      remaining?: number;
+      transferred?: number;
+      repairReceived?: number;
+      repairFromFloor?: string;
+      transferredData?: TransferItem[];
+      receivedData?: DispatchReceivedDataEntry[];
+    };
     branding: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string; transferredData?: TransferItem[]; receivedData?: Array<TransferItem & { receivedStatusFromPreviousFloor?: string; receivedInContainerId?: string; receivedTimestamp?: string }> };
-    warehouse: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
+    /** Warehouse: receive from Dispatch (or prior floor) with line-level receivedData; optional outbound transferredData. */
+    warehouse: {
+      received: number;
+      completed?: number;
+      remaining?: number;
+      transferred?: number;
+      repairReceived?: number;
+      repairFromFloor?: string;
+      transferredData?: TransferItem[];
+      receivedData?: DispatchReceivedDataEntry[];
+    };
   };
 }
 
@@ -140,6 +161,16 @@ export interface UpdateOrderRequest {
 /** Transfer item breakdown by styleCode/brand (Branding, Final Checking) */
 export interface TransferItem {
   transferred: number;
+  styleCode?: string;
+  brand?: string;
+}
+
+/** Dispatch floor: lines received from previous floor (container scan), optional qty/style/brand per row. */
+export interface DispatchReceivedDataEntry {
+  receivedStatusFromPreviousFloor?: string;
+  receivedInContainerId?: string | null;
+  receivedTimestamp?: string | null;
+  transferred?: number;
   styleCode?: string;
   brand?: string;
 }
@@ -291,9 +322,9 @@ class ProductionService {
   // Utility function to get floor order based on linking type
   getFloorOrderByLinkingType(linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking'): string[] {
     if (linkingType === 'Auto Linking') {
-      return ['Knitting', 'Checking', 'Washing', 'Boarding', 'Final Checking', 'Branding', 'Warehouse'];
+      return ['Knitting', 'Checking', 'Washing', 'Boarding', 'Final Checking', 'Branding', 'Warehouse', 'Dispatch'];
     } else {
-      return ['Knitting', 'Linking', 'Checking', 'Washing', 'Boarding', 'Final Checking', 'Branding', 'Warehouse'];
+      return ['Knitting', 'Linking', 'Checking', 'Washing', 'Boarding', 'Final Checking', 'Branding', 'Warehouse', 'Dispatch'];
     }
   }
 

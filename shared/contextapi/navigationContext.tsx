@@ -39,6 +39,7 @@ interface NavigationPermissions {
     'Secondary Checking Floor': boolean;
     'Branding Floor': boolean;
     'Final Checking Floor': boolean;
+    'Dispatch Floor': boolean;
     'Machine Floor': boolean;
     'Warehouse Floor': boolean;
   };
@@ -67,6 +68,7 @@ interface NavigationPermissions {
   };
   'Warehouse Management': {
     'Orders': boolean;
+    'Inward': boolean;
     'Pick&Pack': boolean;
     'Layout': boolean;
     'Stock': boolean;
@@ -132,6 +134,7 @@ const defaultPermissions: NavigationPermissions = {
     'Secondary Checking Floor': false,
     'Branding Floor': false,
     'Final Checking Floor': false,
+    'Dispatch Floor': false,
     'Machine Floor': false,
     'Warehouse Floor': false,
   },
@@ -160,6 +163,7 @@ const defaultPermissions: NavigationPermissions = {
   },
   'Warehouse Management': {
     'Orders': false,
+    'Inward': false,
     'Pick&Pack': false,
     'Layout': false,
     'Stock': false,

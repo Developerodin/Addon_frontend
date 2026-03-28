@@ -43,6 +43,7 @@ const PickPackIcon = <i className="ri ri-handbag-line side-menu__icon" style={{ 
 const LayoutIcon = <i className="ri ri-layout-grid-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const StockIcon = <i className="ri ri-stack-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const ReportsIcon = <i className="ri ri-file-chart-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const InwardIcon = <i className="ri ri-inbox-unarchive-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const VendorPOIcon = <i className="ri ri-truck-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const VendorListIcon = <i className="ri ri-list-unordered side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const RaiseIcon = <i className="ri ri-upload-2-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
@@ -381,6 +382,14 @@ const BaseMenuItems: any = [
         selected: false,
         title: "Final Checking Floor",
       },
+      {
+        icon: FloorIcon,
+        path: "/production/floor-supervisor/dispatch",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Dispatch Floor",
+      },
       // Warehouse Floor – commented out from navbar
       // {
       //   icon: FloorIcon,
@@ -600,6 +609,14 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Orders",
+      },
+      {
+        icon: InwardIcon,
+        path: "/warehouse-management/inward",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Inward",
       },
       {
         icon: PickPackIcon,

@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { InwardRecord, InwardStatus } from "./types";
+import { whmsInwardBasePath } from "./inwardPaths";
 import { whmsInward, WhmsInwardRecord } from "@/shared/services/whmsService";
 import { toast } from "react-hot-toast";
 
@@ -50,6 +51,8 @@ const statusBadge: Record<InwardStatus, string> = {
 
 export default function InwardListPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const inwardBase = whmsInwardBasePath(pathname);
   const [inward, setInward] = useState<InwardRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +77,7 @@ export default function InwardListPage() {
   }, [fetchInward]);
 
   const handleRowClick = (id: string) => {
-    router.push(`/warehouse-management/orders/inward/${id}`);
+    router.push(`${inwardBase}/${id}`);
   };
 
   const stats = {
@@ -145,7 +148,7 @@ export default function InwardListPage() {
             </p>
           </div>
           <Link
-            href="/warehouse-management/orders/inward/new"
+            href={`${inwardBase}/new`}
             className="ti-btn ti-btn-primary-full"
           >
             <i className="ri-add-line me-2"></i>

@@ -16,6 +16,13 @@ const WarehouseManagementPage = () => {
       permission: "Orders"
     },
     {
+      title: "Inward",
+      description: "GRN and goods receipt / inward processing",
+      icon: "ri-inbox-unarchive-line",
+      path: "/warehouse-management/inward",
+      permission: "Inward"
+    },
+    {
       title: "Pick&Pack",
       description: "Handle picking and packing operations",
       icon: "ri-handbag-line",
@@ -56,7 +63,7 @@ const WarehouseManagementPage = () => {
             <div className="box-header">
               <h1 className="box-title text-2xl font-semibold">Warehouse Management</h1>
               <p className="text-gray-600 mt-2">
-                Comprehensive warehouse management system for orders, picking, packing, layout, stock, and reporting.
+                Comprehensive warehouse management system for orders, inward, picking, packing, layout, stock, and reporting.
               </p>
             </div>
           </div>

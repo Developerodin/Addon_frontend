@@ -167,6 +167,8 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose, embedIn
       'Branding': 'bg-pink-100 text-pink-800',
       'Final Checking': 'bg-indigo-100 text-indigo-800',
       'finalChecking': 'bg-indigo-100 text-indigo-800',
+      'Dispatch': 'bg-teal-100 text-teal-800',
+      'dispatch': 'bg-teal-100 text-teal-800',
       'Warehouse': 'bg-green-100 text-green-800'
     };
     return floorClasses[floor as keyof typeof floorClasses] || 'bg-gray-100 text-gray-800';
@@ -415,7 +417,7 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose, embedIn
                                   </div>
                                   
                                   {/* Quality Categories for Checking floors */}
-                                  {(floor === 'checking' || floor === 'finalChecking') && (
+                                  {(floor === 'checking' || floor === 'finalChecking' || floor === 'dispatch') && (
                                     <div className="mt-3 pt-3 border-t border-gray-300">
                                       <div className="text-xs font-medium text-gray-600 mb-2">Quality Categories:</div>
                                       <div className="grid grid-cols-4 gap-2 text-xs">

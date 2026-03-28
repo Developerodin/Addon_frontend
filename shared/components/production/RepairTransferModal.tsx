@@ -33,7 +33,8 @@ const AVAILABLE_FLOORS = [
   { value: 'SecondaryChecking', label: 'Secondary Checking' },
   { value: 'Branding', label: 'Branding' },
   { value: 'FinalChecking', label: 'Final Checking' },
-  { value: 'Warehouse', label: 'Warehouse' }
+  { value: 'Warehouse', label: 'Warehouse' },
+  { value: 'Dispatch', label: 'Dispatch' },
 ];
 
 const RepairTransferModal: React.FC<RepairTransferModalProps> = ({
@@ -72,6 +73,7 @@ const RepairTransferModal: React.FC<RepairTransferModalProps> = ({
       const currentFloorFormatted = floor === 'Checking' ? 'Checking' :
                                     floor === 'SecondaryChecking' ? 'SecondaryChecking' :
                                     floor === 'FinalChecking' ? 'FinalChecking' :
+                                    floor === 'Dispatch' ? 'Dispatch' :
                                     floor;
       return f.value !== currentFloorFormatted;
     });
@@ -126,7 +128,8 @@ const RepairTransferModal: React.FC<RepairTransferModalProps> = ({
             'Washing': 'Washing',
             'Boarding': 'Boarding',
             'Branding': 'Branding',
-            'Warehouse': 'Warehouse'
+            'Warehouse': 'Warehouse',
+            'Dispatch': 'Dispatch',
           };
           return floorMap[floorName] || floorName;
         };
@@ -177,7 +180,8 @@ const RepairTransferModal: React.FC<RepairTransferModalProps> = ({
       'Washing': 'Washing',
       'Boarding': 'Boarding',
       'Branding': 'Branding',
-      'Warehouse': 'Warehouse'
+      'Warehouse': 'Warehouse',
+      'Dispatch': 'Dispatch',
     };
     return floorMap[floorName] || floorName;
   };

@@ -38,6 +38,7 @@ export interface NavigationPermissions {
     'Secondary Checking Floor': boolean;
     'Branding Floor': boolean;
     'Final Checking Floor': boolean;
+    'Dispatch Floor': boolean;
     'Machine Floor': boolean;
     'Warehouse Floor': boolean;
   };
@@ -64,6 +65,7 @@ export interface NavigationPermissions {
   };
   'Warehouse Management': {
     Orders: boolean;
+    Inward: boolean;
     'Pick&Pack': boolean;
     Layout: boolean;
     Stock: boolean;
