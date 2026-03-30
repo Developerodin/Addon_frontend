@@ -23,6 +23,13 @@ const WarehouseManagementPage = () => {
       permission: "Inward"
     },
     {
+      title: "Clients",
+      description: "Warehouse clients and account relationships",
+      icon: "ri-contacts-line",
+      path: "/warehouse-management/clients",
+      permission: "Clients"
+    },
+    {
       title: "Pick&Pack",
       description: "Handle picking and packing operations",
       icon: "ri-handbag-line",

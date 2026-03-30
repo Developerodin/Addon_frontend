@@ -177,6 +177,156 @@ export const whmsInward = {
     request<WhmsInwardRecord>(`/inward/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 };
 
+// --- 2b. Inward receive (production → WHMS line rows, Bearer + getOrders) ---
+export const InwardReceiveStatus = {
+  PENDING: 'pending',
+  ACCEPTED: 'accepted',
+  REJECTED: 'rejected',
+  ON_HOLD: 'onhold',
+} as const;
+
+export type InwardReceiveStatus = (typeof InwardReceiveStatus)[keyof typeof InwardReceiveStatus];
+
+export interface WhmsInwardReceivePopulatedArticle {
+  id?: string;
+  _id?: string;
+  articleNumber?: string;
+  status?: string;
+  plannedQuantity?: number;
+}
+
+export interface WhmsInwardReceivePopulatedOrder {
+  id?: string;
+  _id?: string;
+  orderNumber?: string;
+  status?: string;
+  currentFloor?: string;
+  priority?: string;
+}
+
+/** One row from GET /whms/inward-receive */
+export interface WhmsInwardReceiveRow {
+  id: string;
+  articleId: WhmsInwardReceivePopulatedArticle | string;
+  orderId: WhmsInwardReceivePopulatedOrder | string;
+  articleNumber: string;
+  QuantityFromFactory: number;
+  receivedQuantity: number;
+  styleCode: string;
+  brand: string;
+  status: InwardReceiveStatus | string;
+  orderData?: Record<string, unknown>;
+  receivedAt: string;
+  receivedInContainerId?: string | null;
+  warehouseReceivedLineId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WhmsInwardReceivePatchBody = {
+  receivedQuantity?: number;
+  status?: InwardReceiveStatus;
+};
+
+export const whmsInwardReceive = {
+  list: (params?: Record<string, string | number | undefined>) =>
+    request<WhmsPaginated<WhmsInwardReceiveRow>>(`/inward-receive${qs(params || {})}`),
+  get: (id: string) => request<WhmsInwardReceiveRow>(`/inward-receive/${id}`),
+  patch: (id: string, body: WhmsInwardReceivePatchBody) =>
+    request<WhmsInwardReceiveRow>(`/inward-receive/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+};
+
+// --- 2c. Warehouse inventory (GET list/detail/logs; POST/PATCH/DELETE manageOrders) ---
+export interface WhmsWarehouseInventoryProduct {
+  id: string;
+  name?: string;
+  factoryCode?: string;
+}
+
+export interface WhmsWarehouseInventoryStyleMaster {
+  id: string;
+  styleCode?: string;
+  eanCode?: string;
+  mrp?: number;
+  brand?: string;
+  pack?: string;
+  status?: string;
+}
+
+export interface WhmsWarehouseInventoryQuantities {
+  total: number;
+  blocked: number;
+  available: number;
+}
+
+/** List row may omit logsSummary; detail includes it. */
+export interface WhmsWarehouseInventoryDTO {
+  id: string;
+  product?: WhmsWarehouseInventoryProduct;
+  styleCodeMaster?: WhmsWarehouseInventoryStyleMaster;
+  styleCode?: string;
+  itemData?: Record<string, unknown>;
+  styleCodeData?: Record<string, unknown>;
+  quantities?: WhmsWarehouseInventoryQuantities;
+  logsSummary?: { total: number };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WhmsWarehouseInventoryLog {
+  id: string;
+  warehouseInventoryId: string;
+  styleCodeId?: string;
+  styleCode?: string;
+  action?: string;
+  message?: string;
+  quantityDelta?: number;
+  blockedDelta?: number;
+  totalQuantityAfter?: number;
+  blockedQuantityAfter?: number;
+  availableQuantityAfter?: number;
+  userId?: string | null;
+  meta?: Record<string, unknown>;
+  createdAt?: string;
+}
+
+export interface WhmsWarehouseInventoryCreateBody {
+  itemId: string;
+  styleCodeId: string;
+  styleCode: string;
+  itemData?: Record<string, unknown>;
+  styleCodeData?: Record<string, unknown>;
+  totalQuantity?: number;
+  blockedQuantity?: number;
+}
+
+export interface WhmsWarehouseInventoryPatchBody {
+  itemData?: Record<string, unknown>;
+  styleCodeData?: Record<string, unknown>;
+  totalQuantity?: number;
+  blockedQuantity?: number;
+  adjustReason?: string;
+}
+
+export const whmsWarehouseInventory = {
+  list: (params?: Record<string, string | number | undefined>) =>
+    request<WhmsPaginated<WhmsWarehouseInventoryDTO>>(`/warehouse-inventory${qs(params || {})}`),
+  get: (inventoryId: string) => request<WhmsWarehouseInventoryDTO>(`/warehouse-inventory/${inventoryId}`),
+  getByStyleCode: (styleCode: string) =>
+    request<WhmsWarehouseInventoryDTO>(`/warehouse-inventory/by-style-code${qs({ styleCode })}`),
+  logs: (inventoryId: string, params?: Record<string, string | number | undefined>) =>
+    request<WhmsPaginated<WhmsWarehouseInventoryLog>>(`/warehouse-inventory/${inventoryId}/logs${qs(params || {})}`),
+  create: (body: WhmsWarehouseInventoryCreateBody) =>
+    request<WhmsWarehouseInventoryDTO>('/warehouse-inventory', { method: 'POST', body: JSON.stringify(body) }),
+  update: (inventoryId: string, body: WhmsWarehouseInventoryPatchBody) =>
+    request<WhmsWarehouseInventoryDTO>(`/warehouse-inventory/${inventoryId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  delete: (inventoryId: string) =>
+    request<void>(`/warehouse-inventory/${inventoryId}`, { method: 'DELETE' }),
+};
+
 // --- 3. Approvals ---
 export interface WhmsVarianceApproval {
   id: string;
@@ -384,6 +534,8 @@ export const whmsPickPack = {
 export default {
   orders: whmsOrders,
   inward: whmsInward,
+  inwardReceive: whmsInwardReceive,
+  warehouseInventory: whmsWarehouseInventory,
   approvals: whmsApprovals,
   consolidation: whmsConsolidation,
   gapReport: whmsGapReport,

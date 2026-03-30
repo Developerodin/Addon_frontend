@@ -81,6 +81,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
   const warehouseSections = [
     { key: 'Orders', label: 'Orders' },
     { key: 'Inward', label: 'Inward' },
+    { key: 'Clients', label: 'Clients' },
     { key: 'Pick&Pack', label: 'Pick&Pack' },
     { key: 'Layout', label: 'Layout' },
     { key: 'Stock', label: 'Stock' },

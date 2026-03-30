@@ -69,6 +69,7 @@ interface NavigationPermissions {
   'Warehouse Management': {
     'Orders': boolean;
     'Inward': boolean;
+    'Clients': boolean;
     'Pick&Pack': boolean;
     'Layout': boolean;
     'Stock': boolean;
@@ -164,6 +165,7 @@ const defaultPermissions: NavigationPermissions = {
   'Warehouse Management': {
     'Orders': false,
     'Inward': false,
+    'Clients': false,
     'Pick&Pack': false,
     'Layout': false,
     'Stock': false,

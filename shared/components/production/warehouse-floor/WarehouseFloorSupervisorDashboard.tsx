@@ -30,12 +30,18 @@ export interface WarehouseFloorSupervisorDashboardProps {
   pageHeading?: string;
   /** Help popover title */
   helpTitle?: string;
+  /**
+   * When false, omits outer `main-content` + `Seo` so a parent page can wrap multiple tabs.
+   * @default true
+   */
+  showPageChrome?: boolean;
 }
 
 export default function WarehouseFloorSupervisorDashboard({
   seoTitle = "Warehouse Floor Supervisor Dashboard",
   pageHeading = "Warehouse Floor Supervisor Dashboard",
   helpTitle = "Warehouse Floor Supervisor Dashboard",
+  showPageChrome = true,
 }: WarehouseFloorSupervisorDashboardProps = {}) {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -543,10 +549,8 @@ export default function WarehouseFloorSupervisorDashboard({
     return priorityClasses[priority as keyof typeof priorityClasses] || 'bg-gray-100 text-gray-800';
   };
 
-  return (
-    <div className="main-content !p-[10px]">
-      <Seo title={seoTitle} />
-
+  const dashboardChrome = (
+    <>
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px]">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
@@ -1645,7 +1649,16 @@ export default function WarehouseFloorSupervisorDashboard({
           </div>
         </>
       )}
+    </>
+  );
+
+  return showPageChrome ? (
+    <div className="main-content !p-[10px]">
+      <Seo title={seoTitle} />
+      {dashboardChrome}
     </div>
+  ) : (
+    dashboardChrome
   );
 }
 

@@ -66,6 +66,7 @@ export interface NavigationPermissions {
   'Warehouse Management': {
     Orders: boolean;
     Inward: boolean;
+    Clients: boolean;
     'Pick&Pack': boolean;
     Layout: boolean;
     Stock: boolean;

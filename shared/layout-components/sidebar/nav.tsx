@@ -44,6 +44,7 @@ const LayoutIcon = <i className="ri ri-layout-grid-line side-menu__icon" style={
 const StockIcon = <i className="ri ri-stack-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const ReportsIcon = <i className="ri ri-file-chart-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const InwardIcon = <i className="ri ri-inbox-unarchive-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const ClientsIcon = <i className="ri ri-contacts-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const VendorPOIcon = <i className="ri ri-truck-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const VendorListIcon = <i className="ri ri-list-unordered side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const RaiseIcon = <i className="ri ri-upload-2-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
@@ -617,6 +618,14 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Inward",
+      },
+      {
+        icon: ClientsIcon,
+        path: "/warehouse-management/clients",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Clients",
       },
       {
         icon: PickPackIcon,
