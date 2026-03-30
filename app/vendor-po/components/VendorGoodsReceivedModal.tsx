@@ -98,8 +98,25 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
     });
   };
 
+  const setLineBoxes = (lotIndex: number, lineId: string, value: number) => {
+    setLots((prev) => {
+      const v = Math.max(0, Number(value) || 0);
+      const next = [...prev];
+      const lot = next[lotIndex];
+      if (!lot) return prev;
+      next[lotIndex] = {
+        ...lot,
+        lineBoxes: { ...lot.lineBoxes, [lineId]: v },
+      };
+      return next;
+    });
+  };
+
   const addLot = () => {
-    setLots((prev) => [...prev, { lotNumber: "", numberOfBoxes: 1, lineQty: emptyLineQtyMap(poItems) }]);
+    setLots((prev) => [
+      ...prev,
+      { lotNumber: "", numberOfBoxes: 1, lineQty: emptyLineQtyMap(poItems), lineBoxes: emptyLineQtyMap(poItems) },
+    ]);
   };
 
   const removeLot = (index: number) => {
@@ -336,7 +353,8 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                             <tr>
                               <th className="px-2 py-2 text-left font-bold text-gray-600">Article</th>
                               <th className="px-2 py-2 text-right">Max</th>
-                              <th className="px-2 py-2 text-right w-[88px]">This invoice</th>
+                              <th className="px-2 py-2 text-right w-[88px]">Qty</th>
+                              <th className="px-2 py-2 text-right w-[88px]">Boxes</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -345,6 +363,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                               if (!id) return null;
                               const max = maxQtyForLineInLot(id, lotIndex, lots, orderedMap);
                               const v = lot.lineQty[id] ?? 0;
+                              const boxV = lot.lineBoxes[id] ?? 0;
                               return (
                                 <tr key={`${lotIndex}-${id}`} className="border-t border-gray-100">
                                   <td className="px-2 py-2 text-gray-900">{it.productName || "—"}</td>
@@ -359,6 +378,18 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                       onChange={(e) => {
                                         const raw = e.target.value;
                                         setLineQty(lotIndex, id, raw === "" ? 0 : Number(raw));
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      className={lotQtyInputCls}
+                                      value={boxV === 0 ? "" : boxV}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        setLineBoxes(lotIndex, id, raw === "" ? 0 : Number(raw));
                                       }}
                                     />
                                   </td>

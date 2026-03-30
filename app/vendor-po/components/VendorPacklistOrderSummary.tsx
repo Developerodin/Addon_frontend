@@ -59,6 +59,10 @@ export function VendorPacklistOrderSummary({
               <thead className="bg-gray-50/30">
                 <tr>
                   <th className="px-2 py-1 text-left border border-gray-200">Product</th>
+                  <th className="px-2 py-1 text-left border border-gray-200">Vendor code</th>
+                  <th className="px-2 py-1 text-left border border-gray-200">Type</th>
+                  <th className="px-2 py-1 text-left border border-gray-200">Color</th>
+                  <th className="px-2 py-1 text-left border border-gray-200">Pattern</th>
                   <th className="px-2 py-1 text-right border border-gray-200">Qty</th>
                   <th className="px-2 py-1 text-right border border-gray-200">Rate</th>
                 </tr>
@@ -71,26 +75,20 @@ export function VendorPacklistOrderSummary({
                   const vendorCodeLabel = vendorCodeFromPoLineItem(item) || "—";
                   return (
                     <tr key={String(item._id ?? item.id ?? `line-${idx}`)}>
-                      <td className="px-2 py-1.5 border border-gray-200 align-top">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
-                          <div className="min-w-0 flex-1 font-medium text-gray-900">{name}</div>
-                          <div className="min-w-0 flex-1 text-[10px] leading-snug text-gray-600 sm:text-right">
-                            <div className="sm:text-right">
-                              <span className="text-gray-500">Vendor code:</span> {vendorCodeLabel}
-                            </div>
-                            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 sm:justify-end">
-                              <span>
-                                <span className="text-gray-500">Type:</span> {dashOr(item.type)}
-                              </span>
-                              <span>
-                                <span className="text-gray-500">Color:</span> {dashOr(item.color)}
-                              </span>
-                              <span>
-                                <span className="text-gray-500">Pattern:</span> {dashOr(item.pattern)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
+                      <td className="px-2 py-1.5 border border-gray-200 align-top font-medium text-gray-900">
+                        {name}
+                      </td>
+                      <td className="px-2 py-1.5 border border-gray-200 align-top text-gray-700">
+                        {vendorCodeLabel}
+                      </td>
+                      <td className="px-2 py-1.5 border border-gray-200 align-top text-gray-700">
+                        {dashOr(item.type)}
+                      </td>
+                      <td className="px-2 py-1.5 border border-gray-200 align-top text-gray-700">
+                        {dashOr(item.color)}
+                      </td>
+                      <td className="px-2 py-1.5 border border-gray-200 align-top text-gray-700">
+                        {dashOr(item.pattern)}
                       </td>
                       <td className="px-2 py-1.5 text-right border border-gray-200 align-top tabular-nums">
                         {item.quantity}

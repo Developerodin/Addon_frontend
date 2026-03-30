@@ -17,7 +17,7 @@ type Props = {
   articleSearch: Record<string, string>;
   articleOpen: string | null;
   articleInputRef: RefObject<HTMLInputElement | null>;
-  setArticleSearch: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  onArticleInputChange: (rowId: string, value: string) => void;
   setArticleOpen: (id: string | null) => void;
   setLineItemQty: (rowId: string, value: number) => void;
   setLineItemRate: (rowId: string, value: number) => void;
@@ -39,7 +39,7 @@ export default function VendorPOLineItemsTable({
   articleSearch,
   articleOpen,
   articleInputRef,
-  setArticleSearch,
+  onArticleInputChange,
   setArticleOpen,
   setLineItemQty,
   setLineItemRate,
@@ -82,7 +82,7 @@ export default function VendorPOLineItemsTable({
           <table className="min-w-full border-collapse border border-gray-300 bg-white">
             <thead className="bg-gray-50/30">
               <tr>
-                <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider">
+                <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[13rem]">
                   Article <span className="text-red-500">*</span>
                 </th>
                 <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[7rem]">
@@ -94,26 +94,36 @@ export default function VendorPOLineItemsTable({
                 <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[7rem]">
                   Pattern
                 </th>
-                <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-32">
-                  Ordered Qty <span className="text-red-500">*</span>
+                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
+                  <span className="block">Ordered</span>
+                  <span className="block">
+                    Qty <span className="text-red-500">*</span>
+                  </span>
                 </th>
-                <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-32">
+                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
                   Rate <span className="text-red-500">*</span>
                 </th>
-                <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-32">
-                  GST % <span className="text-red-500">*</span>
+                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
+                  <span className="block">GST</span>
+                  <span className="block">
+                    % <span className="text-red-500">*</span>
+                  </span>
                 </th>
-                <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-32">
-                  Sub Total
+                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
+                  <span className="block">Sub</span>
+                  <span className="block">Total</span>
                 </th>
-                <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-32">
-                  GST Amt
+                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
+                  <span className="block">GST</span>
+                  <span className="block">Amt</span>
                 </th>
-                <th className="border border-gray-300 px-2 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-32">
-                  Line Total
+                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
+                  <span className="block">Line</span>
+                  <span className="block">Total</span>
                 </th>
-                <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider">
-                  Line Remarks
+                <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[9rem] whitespace-normal leading-tight align-bottom">
+                  <span className="block">Line</span>
+                  <span className="block">Remarks</span>
                 </th>
                 {!locked && (
                   <th className="border border-gray-300 px-2 py-1.5 text-center text-[10px] font-bold text-gray-700 uppercase tracking-wider w-20">
@@ -132,11 +142,10 @@ export default function VendorPOLineItemsTable({
                     <td className="border border-gray-300 px-2 py-1.5 align-top overflow-visible">
                       <div className="relative">
                         {locked ? (
-                          <span className="text-sm">
-                            {row.articleName}{" "}
-                            <span className={row.articleCode?.trim() ? "text-gray-500" : "text-amber-600 italic"}>
-                              ({articleVendorCodeLabel(row.articleCode)})
-                            </span>
+                          <span
+                            className={`text-sm ${row.articleCode?.trim() ? "text-gray-800 font-medium" : "text-amber-600 italic"}`}
+                          >
+                            {articleVendorCodeLabel(row.articleCode)}
                           </span>
                         ) : (
                           <>
@@ -150,15 +159,10 @@ export default function VendorPOLineItemsTable({
                               }`}
                               placeholder="Search article..."
                               value={
-                                row.articleId
-                                  ? `${row.articleName} (${articleVendorCodeLabel(row.articleCode)})`
-                                  : articleSearch[row.id] ?? ""
+                                row.articleId ? articleVendorCodeLabel(row.articleCode) : articleSearch[row.id] ?? ""
                               }
                               onFocus={() => setArticleOpen(row.id)}
-                              onChange={(e) => {
-                                setArticleSearch((p) => ({ ...p, [row.id]: e.target.value }));
-                                if (!row.articleId) setArticleOpen(row.id);
-                              }}
+                              onChange={(e) => onArticleInputChange(row.id, e.target.value)}
                               onKeyDown={(e) => {
                                 if (e.key === "Escape") setArticleOpen(null);
                               }}
@@ -219,9 +223,9 @@ export default function VendorPOLineItemsTable({
                         />
                       )}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top">
+                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
                       {locked ? (
-                        <span className="text-sm">{row.orderedQty}</span>
+                        <span className="text-sm tabular-nums">{row.orderedQty}</span>
                       ) : (
                         <>
                           <input
@@ -242,9 +246,9 @@ export default function VendorPOLineItemsTable({
                         </>
                       )}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top">
+                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
                       {locked ? (
-                        <span className="text-sm">{Number(row.rate || 0).toFixed(2)}</span>
+                        <span className="text-sm tabular-nums">{Number(row.rate || 0).toFixed(2)}</span>
                       ) : (
                         <>
                           <input
@@ -266,9 +270,9 @@ export default function VendorPOLineItemsTable({
                         </>
                       )}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top">
+                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
                       {locked ? (
-                        <span className="text-sm">{Number(row.gstRate || 0).toFixed(2)}</span>
+                        <span className="text-sm tabular-nums">{Number(row.gstRate || 0).toFixed(2)}</span>
                       ) : (
                         <>
                           <input
@@ -290,14 +294,14 @@ export default function VendorPOLineItemsTable({
                         </>
                       )}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top">
-                      <span className="text-xs block text-right">{rowSubTotal.toFixed(2)}</span>
+                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
+                      <span className="text-xs tabular-nums">{rowSubTotal.toFixed(2)}</span>
                     </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top">
-                      <span className="text-xs block text-right">{rowGstAmount.toFixed(2)}</span>
+                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
+                      <span className="text-xs tabular-nums">{rowGstAmount.toFixed(2)}</span>
                     </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top">
-                      <span className="text-xs font-semibold block text-right">{rowTotal.toFixed(2)}</span>
+                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
+                      <span className="text-xs font-semibold tabular-nums">{rowTotal.toFixed(2)}</span>
                     </td>
                     <td className="border border-gray-300 px-2 py-1.5 align-top">
                       {locked ? (

@@ -197,6 +197,37 @@ export default function VendorPOForm({
     });
   };
 
+  /** When user types after a selection, clear the line article so `value` follows search text (avoids a "stuck" input). */
+  const onArticleInputChange = useCallback(
+    (rowId: string, value: string) => {
+      if (lineItemsDisabled) return;
+      setLineItems((prev) =>
+        prev.map((r) =>
+          r.id === rowId && r.articleId
+            ? {
+                ...r,
+                articleId: "",
+                articleCode: "",
+                articleName: "",
+                type: "",
+                color: "",
+                pattern: "",
+              }
+            : r
+        )
+      );
+      setArticleSearch((prev) => ({ ...prev, [rowId]: value }));
+      setArticleOpen(rowId);
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[`article_${rowId}`];
+        delete next[`dup_article_${rowId}`];
+        return next;
+      });
+    },
+    [lineItemsDisabled]
+  );
+
   const setLineItemArticle = (rowId: string, article: VendorPOArticle) => {
     if (lineItemsDisabled) return;
     if (lineItems.some((r) => r.id !== rowId && r.articleId === article.id)) {
@@ -326,7 +357,7 @@ export default function VendorPOForm({
         articleSearch={articleSearch}
         articleOpen={articleOpen}
         articleInputRef={articleInputRef}
-        setArticleSearch={setArticleSearch}
+        onArticleInputChange={onArticleInputChange}
         setArticleOpen={setArticleOpen}
         setLineItemQty={setLineItemQty}
         setLineItemRate={setLineItemRate}

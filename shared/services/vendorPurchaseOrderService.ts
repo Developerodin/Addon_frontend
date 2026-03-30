@@ -34,6 +34,7 @@ export interface VendorPurchaseOrderItem {
 export interface VendorReceivedLotPoItem {
   poItem: string;
   receivedQuantity: number;
+  receivedBoxes?: number;
 }
 
 export type VendorLotStatus = "lot_pending" | "lot_qc_pending" | "lot_rejected" | "lot_accepted";
@@ -269,6 +270,7 @@ function sanitizeReceivedLotDetailsForPatch(lots: VendorReceivedLotDetail[]): Ve
     poItems: (lot.poItems || []).map((p) => ({
       poItem: p.poItem,
       receivedQuantity: p.receivedQuantity,
+      receivedBoxes: Math.max(0, Number(p.receivedBoxes || 0)),
     })),
     ...(lot.totalUnits != null && !Number.isNaN(Number(lot.totalUnits)) ? { totalUnits: Number(lot.totalUnits) } : {}),
     ...(lot.status != null ? { status: lot.status } : {}),

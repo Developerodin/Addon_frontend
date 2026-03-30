@@ -1,6 +1,6 @@
 "use client";
 
-import React, { RefObject } from "react";
+import React, { RefObject, useEffect } from "react";
 import type { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
 import type { VendorBox } from "@/shared/services/vendorBoxService";
 import {
@@ -46,6 +46,19 @@ export function VendorReceiveProcessBoxTables({
 }: Props) {
   const boxesByLot = groupVendorBoxesByLot(boxes, boxData);
   const inputBase = "w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300";
+
+  useEffect(() => {
+    if (!activeBoxId) return;
+    const focusUnitsInput = () => {
+      const selector = `input[data-vb-w="${activeBoxId}"]`;
+      const input = document.querySelector<HTMLInputElement>(selector);
+      if (!input) return;
+      input.focus();
+      input.select();
+    };
+    const raf = window.requestAnimationFrame(focusUnitsInput);
+    return () => window.cancelAnimationFrame(raf);
+  }, [activeBoxId]);
 
   return (
     <div className="p-[10px] border-t border-gray-100">
@@ -99,28 +112,7 @@ export function VendorReceiveProcessBoxTables({
                       <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 font-mono">{box.boxId || bid.slice(-8)}</td>
                       <td className="px-1.5 py-2 text-[10px] text-gray-700 border border-gray-200 font-mono">{box.barcode || "—"}</td>
                       <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">
-                        {opts.length > 1 ? (
-                          <select
-                            className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
-                            value={d.productName}
-                            onChange={(e) => {
-                              const sel = opts.find((o) => o.productName === e.target.value);
-                              setBoxData((p) => ({
-                                ...p,
-                                [bid]: { ...d, productName: e.target.value, articleCode: sel?.code || "" },
-                              }));
-                            }}
-                          >
-                            <option value="">Select</option>
-                            {opts.map((o) => (
-                              <option key={o.productName + o.code} value={o.productName}>
-                                {o.productName}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span>{d.productName || box.productName || "—"}</span>
-                        )}
+                        <span>{d.productName || box.productName || opts[0]?.productName || "—"}</span>
                       </td>
                       <td className="px-1.5 py-2 text-right text-[11px] text-gray-700 border border-gray-200">
                         {isActive ? (
@@ -140,6 +132,11 @@ export function VendorReceiveProcessBoxTables({
                                 return x;
                               })
                             }
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              e.preventDefault();
+                              void saveBox(box);
+                            }}
                           />
                         ) : (
                           d.numberOfUnits || "—"
@@ -245,6 +242,11 @@ export function VendorReceiveProcessBoxTables({
                                 return x;
                               })
                             }
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              e.preventDefault();
+                              void saveBox(box);
+                            }}
                           />
                         ) : (
                           d.numberOfUnits || "—"
