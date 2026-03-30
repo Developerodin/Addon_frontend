@@ -12,6 +12,8 @@ export type VendorLotDraft = {
   numberOfBoxes: number;
   /** PO line id → qty received in this lot */
   lineQty: Record<string, number>;
+  /** PO line id → boxes received in this lot */
+  lineBoxes: Record<string, number>;
 };
 
 export function emptyLineQtyMap(poItems: VendorPurchaseOrderItem[]): Record<string, number> {
@@ -30,17 +32,20 @@ export function buildVendorLotDrafts(po: VendorPurchaseOrder): VendorLotDraft[] 
   if (existing?.length) {
     return existing.map((lot) => {
       const lineQty = emptyLineQtyMap(items);
+      const lineBoxes = emptyLineQtyMap(items);
       for (const p of lot.poItems || []) {
         if (p.poItem) lineQty[p.poItem] = Number(p.receivedQuantity || 0);
+        if (p.poItem) lineBoxes[p.poItem] = Math.max(0, Number(p.receivedBoxes || 0));
       }
       return {
         lotNumber: lot.lotNumber || "",
         numberOfBoxes: Math.max(1, Number(lot.numberOfBoxes || 1)),
         lineQty,
+        lineBoxes,
       };
     });
   }
-  return [{ lotNumber: "", numberOfBoxes: 1, lineQty: emptyLineQtyMap(items) }];
+  return [{ lotNumber: "", numberOfBoxes: 1, lineQty: emptyLineQtyMap(items), lineBoxes: emptyLineQtyMap(items) }];
 }
 
 export function orderedQtyByLine(poItems: VendorPurchaseOrderItem[]): Record<string, number> {
@@ -96,7 +101,8 @@ export function draftsToReceivedLotDetails(drafts: VendorLotDraft[]): VendorRece
     const poItems: VendorReceivedLotPoItem[] = [];
     for (const [poItem, q] of Object.entries(d.lineQty)) {
       const n = Math.max(0, Number(q));
-      if (n > 0) poItems.push({ poItem, receivedQuantity: n });
+      const receivedBoxes = Math.max(0, Number(d.lineBoxes[poItem] ?? 0));
+      if (n > 0) poItems.push({ poItem, receivedQuantity: n, receivedBoxes });
     }
     /** Vendor PO Joi schema: catalog lots use `totalUnits` (yarn-only fields like extra weight are omitted). */
     const totalUnits = poItems.reduce((s, p) => s + Number(p.receivedQuantity || 0), 0);

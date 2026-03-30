@@ -18,22 +18,22 @@ export default function VendorPOOrderTotalsSection({ totals }: Props) {
         <table className="min-w-full border border-gray-200 bg-white">
           <thead>
             <tr>
-              <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-center uppercase tracking-wider">
+              <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-right uppercase tracking-wider">
                 Sub Total
               </th>
-              <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-center uppercase tracking-wider">
+              <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-right uppercase tracking-wider">
                 GST
               </th>
-              <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-center uppercase tracking-wider">
+              <th className="border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-50/30 text-right uppercase tracking-wider">
                 Total
               </th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="border border-gray-200 px-2 py-1.5 text-xs text-gray-900 text-right">{fmt(totals.subTotal)}</td>
-              <td className="border border-gray-200 px-2 py-1.5 text-xs text-gray-900 text-right">{fmt(totals.gst)}</td>
-              <td className="border border-gray-200 px-2 py-1.5 text-xs font-bold text-gray-900 text-right">{fmt(totals.total)}</td>
+              <td className="border border-gray-200 px-2 py-1.5 text-xs text-gray-900 text-right tabular-nums">{fmt(totals.subTotal)}</td>
+              <td className="border border-gray-200 px-2 py-1.5 text-xs text-gray-900 text-right tabular-nums">{fmt(totals.gst)}</td>
+              <td className="border border-gray-200 px-2 py-1.5 text-xs font-bold text-gray-900 text-right tabular-nums">{fmt(totals.total)}</td>
             </tr>
           </tbody>
         </table>

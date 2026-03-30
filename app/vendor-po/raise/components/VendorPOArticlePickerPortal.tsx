@@ -46,13 +46,15 @@ export default function VendorPOArticlePickerPortal({
             <button
               key={a.id}
               type="button"
-              className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+              className="block w-full text-left px-3 py-2 hover:bg-gray-100"
               onClick={() => onSelect(a)}
             >
-              {a.name}
-              <span className={`text-xs ml-2 ${a.vendorCode?.trim() ? "text-gray-500" : "text-amber-600 italic"}`}>
+              <span
+                className={`block text-sm font-medium ${a.vendorCode?.trim() ? "text-gray-800" : "text-amber-600 italic"}`}
+              >
                 {codeUi}
               </span>
+              <span className="block text-xs text-gray-600 mt-0.5 leading-snug">{a.name}</span>
             </button>
           );
         })
