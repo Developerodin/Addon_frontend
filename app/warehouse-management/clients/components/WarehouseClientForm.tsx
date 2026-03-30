@@ -9,7 +9,6 @@ import type {
   WarehouseClientType,
 } from '@/shared/services/whmsWarehouseClientService';
 
-type SubmitBody = CreateWarehouseClientBody | UpdateWarehouseClientBody;
 import WarehouseClientStoreProfileFields from './WarehouseClientStoreProfileFields';
 import {
   WAREHOUSE_CLIENT_TYPES,
@@ -24,6 +23,8 @@ const labelClass = 'block text-[11px] font-bold text-[#495057] mb-1';
 const selectClass = `${inputClass} appearance-none cursor-pointer pr-8`;
 
 type Mode = 'create' | 'edit';
+
+type SubmitBody = CreateWarehouseClientBody | UpdateWarehouseClientBody;
 
 type Props = {
   mode: Mode;
@@ -95,6 +96,8 @@ export default function WarehouseClientForm({
     }
   };
 
+  const isStore = type === 'Store';
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-12 gap-3">
@@ -132,41 +135,50 @@ export default function WarehouseClientForm({
             <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
           </div>
         </div>
-        {TEXT_FIELDS.map(({ key, label, wide }) => (
-          <div key={key} className={wide ? 'col-span-12' : 'col-span-12 sm:col-span-6'}>
-            <label className={labelClass}>{label}</label>
-            <input
-              type="text"
-              className={inputClass}
-              inputMode={key === 'slNo' ? 'numeric' : undefined}
-              value={(root[key] as string) ?? ''}
-              onChange={(e) => setField(key, e.target.value)}
-            />
-          </div>
-        ))}
-        <div className="col-span-12">
-          <label className={labelClass}>Address</label>
-          <textarea
-            className={`${inputClass} min-h-[72px]`}
-            rows={3}
-            value={(root.address as string) ?? ''}
-            onChange={(e) => setField('address', e.target.value)}
-          />
-        </div>
-        <div className="col-span-12">
-          <label className={labelClass}>Remarks</label>
-          <textarea
-            className={`${inputClass} min-h-[56px]`}
-            rows={2}
-            value={(root.remarks as string) ?? ''}
-            onChange={(e) => setField('remarks', e.target.value)}
-          />
-        </div>
-      </div>
 
-      {type === 'Store' && (
-        <WarehouseClientStoreProfileFields value={storeProfile} onChange={setStoreProfile} />
-      )}
+        {isStore ? (
+          <div className="col-span-12">
+            <p className="text-[11px] text-gray-500 mb-2">
+              Store clients use only the fields below (bill code, SAP, brand, etc.). No distributor / contact / GST
+              fields are sent for this type.
+            </p>
+            <WarehouseClientStoreProfileFields value={storeProfile} onChange={setStoreProfile} />
+          </div>
+        ) : (
+          <>
+            {TEXT_FIELDS.map(({ key, label, wide }) => (
+              <div key={key} className={wide ? 'col-span-12' : 'col-span-12 sm:col-span-6'}>
+                <label className={labelClass}>{label}</label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  inputMode={key === 'slNo' ? 'numeric' : undefined}
+                  value={(root[key] as string) ?? ''}
+                  onChange={(e) => setField(key, e.target.value)}
+                />
+              </div>
+            ))}
+            <div className="col-span-12">
+              <label className={labelClass}>Address</label>
+              <textarea
+                className={`${inputClass} min-h-[72px]`}
+                rows={3}
+                value={(root.address as string) ?? ''}
+                onChange={(e) => setField('address', e.target.value)}
+              />
+            </div>
+            <div className="col-span-12">
+              <label className={labelClass}>Remarks</label>
+              <textarea
+                className={`${inputClass} min-h-[56px]`}
+                rows={2}
+                value={(root.remarks as string) ?? ''}
+                onChange={(e) => setField('remarks', e.target.value)}
+              />
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
         <button

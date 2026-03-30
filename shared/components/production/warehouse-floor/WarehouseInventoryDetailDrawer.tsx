@@ -17,7 +17,6 @@ export interface WarehouseInventoryDetailDrawerProps {
   onClose: () => void;
   /** After PATCH — parent refreshes list + detail */
   onPatched: (dto: WhmsWarehouseInventoryDTO) => void;
-  onDeleted: (id: string) => void;
 }
 
 export default function WarehouseInventoryDetailDrawer({
@@ -26,7 +25,6 @@ export default function WarehouseInventoryDetailDrawer({
   loading,
   onClose,
   onPatched,
-  onDeleted,
 }: WarehouseInventoryDetailDrawerProps) {
   const [tab, setTab] = useState<DrawerTab>("details");
   const [logs, setLogs] = useState<WhmsWarehouseInventoryLog[]>([]);
@@ -41,7 +39,6 @@ export default function WarehouseInventoryDetailDrawer({
   const [adjustReason, setAdjustReason] = useState("");
   const [editingQty, setEditingQty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!row) return;
@@ -111,22 +108,6 @@ export default function WarehouseInventoryDetailDrawer({
       toast.error(e instanceof Error ? e.message : "Update failed");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (!inventoryId) return;
-    if (!window.confirm("Delete this inventory row and all its logs?")) return;
-    setDeleting(true);
-    try {
-      await whmsWarehouseInventory.delete(inventoryId);
-      toast.success("Deleted");
-      onDeleted(inventoryId);
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Delete failed");
-    } finally {
-      setDeleting(false);
     }
   };
 
@@ -297,15 +278,6 @@ export default function WarehouseInventoryDetailDrawer({
                   </div>
                 )}
               </div>
-
-              <button
-                type="button"
-                onClick={() => void confirmDelete()}
-                disabled={deleting}
-                className="w-full py-2 rounded border border-red-200 text-red-700 text-[11px] font-bold hover:bg-red-50 disabled:opacity-50"
-              >
-                {deleting ? "Deleting…" : "Delete row (manageOrders)"}
-              </button>
             </div>
           )}
 

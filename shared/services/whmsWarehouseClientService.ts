@@ -115,6 +115,11 @@ export interface PaginatedWarehouseClients {
 export const whmsWarehouseClients = {
   list: (params?: Record<string, string | number | undefined>) =>
     request<PaginatedWarehouseClients>(`/warehouse-clients${qs(params || {})}`),
+  /** GET /whms/warehouse-clients/by-type/:type — e.g. by-type/Store?search=&city=&page=&limit= */
+  listByType: (type: WarehouseClientType, params?: Record<string, string | number | undefined>) =>
+    request<PaginatedWarehouseClients>(
+      `/warehouse-clients/by-type/${encodeURIComponent(type)}${qs(params || {})}`,
+    ),
   get: (clientId: string) => request<WarehouseClient>(`/warehouse-clients/${clientId}`),
   create: (body: CreateWarehouseClientBody) =>
     request<WarehouseClient>('/warehouse-clients', { method: 'POST', body: JSON.stringify(body) }),

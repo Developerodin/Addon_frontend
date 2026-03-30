@@ -1,14 +1,25 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast, Toaster } from "react-hot-toast";
 import {
   whmsWarehouseClients,
   type WarehouseClient,
+  type WarehouseClientType,
 } from "@/shared/services/whmsWarehouseClientService";
+import WarehouseClientsTable from "./components/WarehouseClientsTable";
+import WarehouseClientDetailDrawer from "./components/WarehouseClientDetailDrawer";
+
+const TYPE_TABS: { id: WarehouseClientType; label: string }[] = [
+  { id: "Store", label: "Store" },
+  { id: "Trade", label: "Trade" },
+  { id: "Departmental", label: "Departmental" },
+  { id: "Ecom", label: "Ecom" },
+];
 
 function getPagination(currentPage: number, totalPages: number) {
   const pages: (number | string)[] = [];
@@ -31,11 +42,13 @@ function getPagination(currentPage: number, totalPages: number) {
 }
 
 export default function WarehouseManagementClientsPage() {
+  const router = useRouter();
   const { hasSubPermission } = useNavigation();
+  const [detailClientId, setDetailClientId] = useState<string | null>(null);
   const [rows, setRows] = useState<WarehouseClient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<string>("");
+  const [activeTypeTab, setActiveTypeTab] = useState<WarehouseClientType>("Store");
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterCity, setFilterCity] = useState("");
   const [filterState, setFilterState] = useState("");
@@ -49,6 +62,24 @@ export default function WarehouseManagementClientsPage() {
   const hasPermission = hasSubPermission("/warehouse-management", "Clients");
 
   useEffect(() => {
+    const v = new URLSearchParams(window.location.search).get("view");
+    if (v) setDetailClientId(v);
+  }, []);
+
+  const openClientDetail = useCallback(
+    (id: string) => {
+      setDetailClientId(id);
+      router.replace(`/warehouse-management/clients?view=${encodeURIComponent(id)}`, { scroll: false });
+    },
+    [router],
+  );
+
+  const closeClientDetail = useCallback(() => {
+    setDetailClientId(null);
+    router.replace("/warehouse-management/clients", { scroll: false });
+  }, [router]);
+
+  useEffect(() => {
     if (!hasPermission) return;
     const t = setTimeout(() => {
       void fetchClients();
@@ -58,7 +89,7 @@ export default function WarehouseManagementClientsPage() {
     currentPage,
     itemsPerPage,
     searchTerm,
-    filterType,
+    activeTypeTab,
     filterStatus,
     filterCity,
     filterState,
@@ -68,16 +99,16 @@ export default function WarehouseManagementClientsPage() {
   const fetchClients = async () => {
     setIsLoading(true);
     try {
-      const res = await whmsWarehouseClients.list({
+      const common = {
         page: currentPage,
         limit: itemsPerPage,
         search: searchTerm.trim() || undefined,
-        type: filterType || undefined,
         status: filterStatus || undefined,
         city: filterCity.trim() || undefined,
         state: filterState.trim() || undefined,
         sortBy: "createdAt:desc",
-      });
+      };
+      const res = await whmsWarehouseClients.listByType(activeTypeTab, common);
       setRows(res.results || []);
       setTotalPages(res.totalPages || 1);
       setTotalResults(res.totalResults || 0);
@@ -96,6 +127,7 @@ export default function WarehouseManagementClientsPage() {
     setDeleteId(id);
     try {
       await whmsWarehouseClients.delete(id);
+      if (detailClientId === id) closeClientDetail();
       toast.success("Client deleted");
       await fetchClients();
     } catch (e) {
@@ -160,23 +192,6 @@ export default function WarehouseManagementClientsPage() {
               </div>
               <div className="relative group">
                 <select
-                  value={filterType}
-                  onChange={(e) => {
-                    setFilterType(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer min-w-[100px]"
-                >
-                  <option value="">All types</option>
-                  <option value="Store">Store</option>
-                  <option value="Trade">Trade</option>
-                  <option value="Departmental">Departmental</option>
-                  <option value="Ecom">Ecom</option>
-                </select>
-                <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
-              </div>
-              <div className="relative group">
-                <select
                   value={filterStatus}
                   onChange={(e) => {
                     setFilterStatus(e.target.value);
@@ -233,6 +248,27 @@ export default function WarehouseManagementClientsPage() {
               </Link>
             </div>
           </div>
+
+          {/* Client type tabs (same pattern as knitting floor: border-b + purple active) */}
+          <div className="flex flex-wrap border-b border-gray-300 mt-4 -mb-px">
+            {TYPE_TABS.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                  activeTypeTab === id
+                    ? "border-purple-600 text-purple-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+                onClick={() => {
+                  setActiveTypeTab(id);
+                  setCurrentPage(1);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="overflow-x-auto min-h-[300px]">
@@ -255,108 +291,14 @@ export default function WarehouseManagementClientsPage() {
               </Link>
             </div>
           ) : (
-            <table className="w-full border-collapse border border-gray-200">
-              <thead>
-                <tr className="bg-gray-50/30">
-                  <th className="pl-[10px] pr-1 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Retailer
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Parent key
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Type
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    City
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    State
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Contact
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Mobile
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Status
-                  </th>
-                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50/50 transition-colors group">
-                    <td className="pl-[10px] pr-1 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">
-                      {c.retailerName?.trim() || "—"}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
-                      {c.parentKeyCode?.trim() || "—"}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
-                      {c.type}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
-                      {c.city?.trim() || "—"}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
-                      {c.state?.trim() || "—"}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
-                      {c.contactPerson?.trim() || "—"}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">
-                      {c.mobilePhone?.trim() || "—"}
-                    </td>
-                    <td className="px-1.5 py-2.5 border border-gray-200">
-                      <span
-                        className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${
-                          c.status === "active"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {c.status || "—"}
-                      </span>
-                    </td>
-                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
-                      <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                        <Link
-                          href={`/warehouse-management/clients/view/${c.id}`}
-                          className="w-7 h-7 flex items-center justify-center bg-sky-50 text-sky-500 border border-sky-100 rounded hover:bg-sky-100 transition-colors"
-                          title="View"
-                        >
-                          <i className="ri-eye-line text-xs" />
-                        </Link>
-                        <Link
-                          href={`/warehouse-management/clients/edit/${c.id}`}
-                          className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors"
-                          title="Edit"
-                        >
-                          <i className="ri-pencil-line text-xs" />
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(c.id)}
-                          className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors"
-                          title="Delete"
-                          disabled={isDeleting && deleteId === c.id}
-                        >
-                          {isDeleting && deleteId === c.id ? (
-                            <i className="ri-loader-4-line text-xs animate-spin" />
-                          ) : (
-                            <i className="ri-delete-bin-line text-xs" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <WarehouseClientsTable
+              activeTypeTab={activeTypeTab}
+              rows={rows}
+              isDeleting={isDeleting}
+              deleteId={deleteId}
+              onDelete={handleDelete}
+              onView={openClientDetail}
+            />
           )}
         </div>
 
@@ -413,6 +355,12 @@ export default function WarehouseManagementClientsPage() {
           </div>
         )}
       </div>
+
+      <WarehouseClientDetailDrawer
+        clientId={detailClientId}
+        open={detailClientId !== null}
+        onClose={closeClientDetail}
+      />
     </div>
   );
 }

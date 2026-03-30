@@ -100,7 +100,7 @@ export default function EditWarehouseClientPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
-              href={`/warehouse-management/clients/view/${clientId}`}
+              href={`/warehouse-management/clients?view=${encodeURIComponent(clientId)}`}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-600 border border-sky-100 text-[11px] font-bold rounded hover:bg-sky-100 shadow-sm"
             >
               <i className="ri-eye-line text-xs" /> View

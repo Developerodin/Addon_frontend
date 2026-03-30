@@ -69,7 +69,8 @@ export default function AddWarehouseClientPage() {
         </div>
         <div className="p-[10px] sm:p-4">
           <p className="text-[11px] text-gray-500 mb-4">
-            <span className="text-red-500">*</span> Type is required. Store clients can include store profile fields.
+            <span className="text-red-500">*</span> Type is required. For <strong className="font-bold text-gray-700">Store</strong>, only
+            store profile fields are shown and saved (no retailer / distributor / contact block).
           </p>
           <WarehouseClientForm
             mode="create"

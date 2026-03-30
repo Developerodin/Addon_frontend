@@ -79,12 +79,6 @@ export default function WhmsWarehouseInventoryTab() {
     setDetailRow((d) => (d?.id === dto.id ? dto : d));
   };
 
-  const removeRow = (id: string) => {
-    setRows((prev) => prev.filter((r) => r.id !== id));
-    setDetailRow((d) => (d?.id === id ? null : d));
-    setDetailId(null);
-  };
-
   return (
     <>
       <WarehouseInventoryCreateModal
@@ -281,7 +275,6 @@ export default function WhmsWarehouseInventoryTab() {
           mergeRow(dto);
           void load();
         }}
-        onDeleted={removeRow}
       />
     </>
   );

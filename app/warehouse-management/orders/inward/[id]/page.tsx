@@ -17,9 +17,9 @@ const MOCK_ITEMS: InwardItem[] = [
 export default function InwardDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
   const inwardBase = whmsInwardBasePath(pathname);
-  const id = params.id as string;
+  const id = (params?.id as string) || "";
   const isNew = id === "new";
 
   const [items, setItems] = useState<InwardItem[]>(isNew ? MOCK_ITEMS : [...MOCK_ITEMS]);

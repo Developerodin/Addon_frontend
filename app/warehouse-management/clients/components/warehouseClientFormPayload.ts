@@ -64,20 +64,39 @@ function attachSlNo(pruned: Record<string, unknown>, root: Record<string, unknow
   if (!Number.isNaN(n)) pruned.slNo = n;
 }
 
+/** Store clients: API only needs `type`, optional `status`, and `storeProfile` — no other root fields. */
+function buildStorePayload(
+  root: Record<string, unknown>,
+  storeProfile: WarehouseClientStoreProfile,
+  includeTypeInPatch: boolean,
+): Record<string, unknown> {
+  const pruned: Record<string, unknown> = {};
+  if (includeTypeInPatch) {
+    pruned.type = 'Store';
+  }
+  const st = root.status;
+  if (st === 'active' || st === 'inactive') {
+    pruned.status = st;
+  }
+  const sp = pruneStoreProfile(storeProfile);
+  if (Object.keys(sp).length > 0) {
+    pruned.storeProfile = sp;
+  }
+  return pruned;
+}
+
 export function buildCreatePayload(
   type: WarehouseClientType,
   root: Record<string, unknown>,
   storeProfile: WarehouseClientStoreProfile,
 ): CreateWarehouseClientBody {
+  if (type === 'Store') {
+    const pruned = buildStorePayload(root, storeProfile, true);
+    return pruned as CreateWarehouseClientBody;
+  }
   const pruned = pruneRoot(root, ROOT_KEYS as string[]);
   attachSlNo(pruned, root);
   pruned.type = type;
-  if (type === 'Store') {
-    const sp = pruneStoreProfile(storeProfile);
-    if (Object.keys(sp).length > 0) {
-      (pruned as CreateWarehouseClientBody).storeProfile = sp;
-    }
-  }
   return pruned as CreateWarehouseClientBody;
 }
 
@@ -86,15 +105,13 @@ export function buildUpdatePayload(
   root: Record<string, unknown>,
   storeProfile: WarehouseClientStoreProfile,
 ): UpdateWarehouseClientBody {
+  if (type === 'Store') {
+    const pruned = buildStorePayload(root, storeProfile, true);
+    return pruned as UpdateWarehouseClientBody;
+  }
   const pruned = pruneRoot(root, ROOT_KEYS.filter((k) => k !== 'type') as string[]);
   attachSlNo(pruned, root);
   pruned.type = type;
-  if (type === 'Store') {
-    const sp = pruneStoreProfile(storeProfile);
-    if (Object.keys(sp).length > 0) {
-      (pruned as UpdateWarehouseClientBody).storeProfile = sp;
-    }
-  }
   return pruned as UpdateWarehouseClientBody;
 }
 
