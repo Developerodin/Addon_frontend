@@ -558,9 +558,13 @@ const PurchasePage = () => {
 
       // Replace tax section
       htmlTemplate = htmlTemplate.replace(/<tr>\s*<td>IGST 5%<\/td>[\s\S]*?<td>3,678\.01<\/td>\s*<\/tr>/g, taxRowHtml);
+      // Grand total in tax table should always be dynamic (Sub Total + GST),
+      // and replacement must not depend on exact static style/value in template.
+      const computedGrandTotal = (subTotal || 0) + (totalGst || 0);
+      const displayGrandTotal = computedGrandTotal > 0 ? computedGrandTotal : (totalAmount || 0);
       htmlTemplate = htmlTemplate.replace(
-        /<tr>\s*<td colspan="3" class="tax-total" style="text-align: right;">TOTAL<\/td>\s*<td class="tax-total">77,238\.00<\/td>\s*<\/tr>/g,
-        `<tr><td colspan="3" class="tax-total" style="text-align: right;">TOTAL</td><td class="tax-total">${totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`
+        /<tr>\s*<td[^>]*colspan="3"[^>]*>\s*TOTAL\s*<\/td>\s*<td[^>]*>[\s\S]*?<\/td>\s*<\/tr>/i,
+        `<tr><td colspan="3" class="tax-total" style="text-align: right; padding-right: 10px;">TOTAL</td><td class="tax-total" style="text-align: left; padding-left: 6px;">${displayGrandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr>`
       );
 
       // Replace remarks

@@ -285,16 +285,24 @@ export default function WarehouseOrderForm({
                 <div key={k} className="col-span-12 sm:col-span-4">
                   <label className={labelClass}>{label}</label>
                   <input
-                    className={inputClass}
+                    className={`${inputClass} ${k === "styleCode" ? "cursor-pointer" : ""}`}
                     value={(r as Record<string, string | number>)[k] ?? ""}
-                    onChange={(e) =>
-                      setS((p) => ({
-                        ...p,
-                        single: p.single.map((row, i) =>
-                          i === idx ? { ...row, [k]: e.target.value } : row,
-                        ),
-                      }))
+                    onClick={
+                      k === "styleCode" ? () => setStyleCodeModalIdx(idx) : undefined
                     }
+                    onChange={
+                      k === "styleCode"
+                        ? undefined
+                        : (e) =>
+                            setS((p) => ({
+                              ...p,
+                              single: p.single.map((row, i) =>
+                                i === idx ? { ...row, [k]: e.target.value } : row,
+                              ),
+                            }))
+                    }
+                    readOnly={k === "styleCode"}
+                    placeholder={k === "styleCode" ? "Click to browse style codes..." : undefined}
                   />
                 </div>
               ))}
