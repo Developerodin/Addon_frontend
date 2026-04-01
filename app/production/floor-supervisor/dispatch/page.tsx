@@ -5,6 +5,7 @@ import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, FloorOrderFilters, Article, type ArticleProcess } from "@/shared/services/productionService";
+import { getProductsByFactoryCodes } from "@/shared/services/productService";
 
 type ArticleWithProcesses = Article & { processes?: ArticleProcess[] };
 import { API_BASE_URL } from "@/shared/data/utilities/api";
@@ -751,11 +752,101 @@ const DispatchFloorSupervisorPage = () => {
   };
 
   const handlePrintList = async () => {
+    const escapeHtml = (value: string) =>
+      value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+
+    type PrintRow = {
+      articleNo: string;
+      sapArticleNo: string;
+      articleName: string;
+      qtyInPairs: number;
+    };
+
+    const buildRowsForArticle = (
+      article: Article,
+      articleNameByFactoryCode: Record<string, string>
+    ): PrintRow[] => {
+      const dispatch = article.floorQuantities?.dispatch;
+      const transferredData = Array.isArray(dispatch?.transferredData) ? dispatch.transferredData : [];
+      const factoryCode = String(article.articleNumber ?? "").trim();
+      const articleName = articleNameByFactoryCode[factoryCode] ?? "—";
+
+      const rows: PrintRow[] = [];
+      transferredData.forEach((row) => {
+        const styleCode = String(row.styleCode ?? "").trim();
+        const qty = Number(row.transferred ?? 0);
+        if (qty <= 0) return;
+
+        rows.push({
+          articleNo: factoryCode || "—",
+          sapArticleNo: styleCode || "—",
+          articleName,
+          qtyInPairs: qty,
+        });
+      });
+
+      return rows;
+    };
+
     try {
-      const response = await fetch('/templates/stock-transfer-note.html');
+      const response = await fetch(`/templates/stock-transfer-note.html?v=${Date.now()}`, { cache: "no-store" });
       let htmlTemplate = await response.text();
 
-      const printWindow = window.open('', '_blank');
+      const factoryCodes = Array.from(
+        new Set(
+          orders
+            .flatMap((order) => order.articles.map((article) => String(article.articleNumber ?? "").trim()))
+            .filter(Boolean)
+        )
+      );
+      const productRows = await getProductsByFactoryCodes(factoryCodes).catch(() => []);
+      const articleNameByFactoryCode = productRows.reduce<Record<string, string>>((acc, row) => {
+        const fc = String(row.factoryCode ?? "").trim();
+        const name = String(row.name ?? "").trim();
+        if (fc) acc[fc] = name || "—";
+        return acc;
+      }, {});
+
+      const tableRows = orders.flatMap((order) =>
+        order.articles.flatMap((article) => buildRowsForArticle(article, articleNameByFactoryCode))
+      );
+      const totalQty = tableRows.reduce((sum, row) => sum + row.qtyInPairs, 0);
+      const rowsHtml = tableRows.length
+        ? tableRows
+            .map(
+              (row) => `
+      <tr>
+        <td>${escapeHtml(row.articleNo)}</td>
+        <td>${escapeHtml(row.sapArticleNo)}</td>
+        <td class="text-left">${escapeHtml(row.articleName)}</td>
+        <td>${row.qtyInPairs}</td>
+        <td></td>
+      </tr>`
+            )
+            .join("")
+        : `
+      <tr>
+        <td colspan="5">No rows available for print.</td>
+      </tr>`;
+
+      const printDate = new Date().toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+
+      htmlTemplate = htmlTemplate
+        .replace("{{STN_DATE}}", printDate)
+        .replace("{{TOTAL_ROWS}}", String(tableRows.length))
+        .replace("{{ARTICLE_ROWS}}", rowsHtml)
+        .replace("{{TOTAL_QTY}}", String(totalQty));
+
+      const printWindow = window.open("", "_blank");
       if (printWindow) {
         printWindow.document.write(htmlTemplate);
         printWindow.document.close();
@@ -765,11 +856,11 @@ const DispatchFloorSupervisorPage = () => {
           }, 250);
         };
       } else {
-        toast.error('Please allow popups to print list');
+        toast.error("Please allow popups to print list");
       }
     } catch (error) {
-      console.error('Error printing list:', error);
-      toast.error('Failed to load print template');
+      console.error("Error printing list:", error);
+      toast.error("Failed to load print template");
     }
   };
 
