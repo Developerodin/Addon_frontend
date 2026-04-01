@@ -1902,7 +1902,9 @@ const YarnReturnPage = () => {
         }
       }
 
-      // Check if cone was already returned for this order/article (from return transactions)
+      // Check if cone was already returned for this order/article (from return transactions).
+      // Important: treat cone API status as source of truth. Some historical tx payloads can
+      // contain ids that don't represent a true "already returned" state for this cone.
       const orderReturnTxs = returnTransactions.filter(
         (tx) =>
           (txOrderno(tx) ?? tx.orderno) === productionOrderNoForApi(orderCtx) ||
@@ -1911,9 +1913,22 @@ const YarnReturnPage = () => {
       const returnedConeIds = new Set(
         orderReturnTxs.flatMap((tx) => (tx as any).conesIdsArray ?? [])
       );
+      const returnedConeBarcodes = new Set(
+        orderReturnTxs
+          .map((tx) => ((tx as any).coneBarcode ?? "").toString().trim())
+          .filter(Boolean)
+      );
       const coneIdToCheck = String(coneDetails._id ?? coneDetails.id ?? value);
       const coneIdRaw = coneIdToCheck.replace(/-\d+$/, "");
-      if (returnedConeIds.has(coneIdToCheck) || returnedConeIds.has(coneIdRaw)) {
+      const coneBarcodeToCheck = String(coneDetails.barcode ?? value).trim();
+      const appearsReturnedInHistory =
+        returnedConeIds.has(coneIdToCheck) ||
+        returnedConeIds.has(coneIdRaw) ||
+        returnedConeBarcodes.has(coneBarcodeToCheck);
+      const coneApiReturnStatus = String(coneDetails.returnStatus ?? "").toLowerCase();
+
+      // Only block from history when cone API does not explicitly say "not_returned".
+      if (appearsReturnedInHistory && coneApiReturnStatus !== "not_returned") {
         setScanError("This cone has already been returned for this order and cannot be returned again.");
         return;
       }
