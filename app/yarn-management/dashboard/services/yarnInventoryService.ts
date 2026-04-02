@@ -85,14 +85,44 @@ export interface UpdateRequisitionStatusRequest {
   poSent: boolean;
 }
 
+function normalizePossibleId(value: unknown): string | undefined {
+  if (!value) return undefined;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const nested =
+      obj._id ??
+      obj.id ??
+      obj.$oid ??
+      obj.value ??
+      obj.yarnId;
+    return normalizePossibleId(nested);
+  }
+  return undefined;
+}
+
 /** Resolve yarn id whether API returns embedded `yarn`, a string id, or top-level `yarnId`. */
 export function requisitionYarnId(req: YarnRequisitionResponse): string | undefined {
-  const y = req.yarn;
-  if (typeof y === 'string' && y) return y;
-  if (y && typeof y === 'object' && '_id' in y && typeof (y as YarnCatalogInfo)._id === 'string') {
-    return (y as YarnCatalogInfo)._id;
-  }
-  return req.yarnId;
+  const byYarn = normalizePossibleId(req.yarn);
+  if (byYarn) return byYarn;
+  return normalizePossibleId(req.yarnId);
+}
+
+/** Resolve inventory yarn id whether API returns top-level yarnId or embedded yarn object. */
+export function inventoryYarnId(inv: YarnInventoryResponse): string | undefined {
+  const byYarnId = normalizePossibleId(inv.yarnId);
+  if (byYarnId) return byYarnId;
+  return normalizePossibleId(inv.yarn);
+}
+
+/** Compares two yarn ids safely after normalizing API id shapes. */
+export function sameYarnId(a?: string, b?: string): boolean {
+  const left = normalizePossibleId(a);
+  const right = normalizePossibleId(b);
+  return !!left && !!right && left === right;
 }
 
 /** Yarn report row from GET /yarn-management/yarn-report */

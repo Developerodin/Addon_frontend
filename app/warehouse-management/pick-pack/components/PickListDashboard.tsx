@@ -1,212 +1,229 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PickItem } from "../types";
+import type { PickListFilters, PickListPagination } from "../pickPackApi";
 import PickTable from "./PickTable";
-import PickDrawer from "./PickDrawer";
-import QRScanPanel from "./QRScanPanel";
 
 interface PickListDashboardProps {
   items: PickItem[];
-  onSetPickedQty: (itemId: string, pickedQty: number) => void;
-  onConfirmPick: (itemId: string, pickedQty: number) => void;
-  onMarkPartial: (itemId: string, pickedQty: number) => void;
-  onSkip: (itemId: string) => void;
+  onSavePickupQty: (itemId: string, pickupQty: number) => void;
   onAlert?: (message: string) => void;
+  onFilterChange?: (filters: PickListFilters) => void;
+  onPageChange?: (page: number) => void;
+  onRefresh?: () => void;
+  pagination?: PickListPagination | null;
+  isLoading?: boolean;
 }
+
+const DEBOUNCE_MS = 400;
 
 const PickListDashboard: React.FC<PickListDashboardProps> = ({
   items,
-  onSetPickedQty,
-  onConfirmPick,
-  onMarkPartial,
-  onSkip,
+  onSavePickupQty,
   onAlert,
+  onFilterChange,
+  onPageChange,
+  onRefresh,
+  pagination,
+  isLoading,
 }) => {
-  const [view, setView] = useState<"list" | "qr">("list");
-  const [filterOrder, setFilterOrder] = useState("");
-  const [filterBatch, setFilterBatch] = useState("");
-  const [filterZone, setFilterZone] = useState("");
-  const [selectedItem, setSelectedItem] = useState<PickItem | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const batches = useMemo(() => Array.from(new Set(items.map(i => i.batchId).filter(Boolean))) as string[], [items]);
-  const zones = useMemo(() => Array.from(new Set(items.map(i => i.rackLocation.zone).filter(Boolean))), [items]);
+  const emitFilter = useCallback(
+    (overrides: Partial<PickListFilters>) => {
+      if (!onFilterChange) return;
+      const next: PickListFilters = {
+        q: overrides.q ?? (searchQ.trim() || undefined),
+        status: overrides.status ?? (filterStatus || undefined),
+      };
+      onFilterChange(next);
+    },
+    [onFilterChange, searchQ, filterStatus],
+  );
 
-  const filtered = useMemo(() => {
-    const o = filterOrder.trim().toUpperCase();
-    return items
-      .slice()
-      .sort((a, b) => a.pathIndex - b.pathIndex)
-      .filter((i) => {
-        if (filterBatch && i.batchId !== filterBatch) return false;
-        if (filterZone && i.rackLocation.zone !== filterZone) return false;
-        if (o) {
-          const hasOrder = i.linkedOrderIds.some(id => id.toUpperCase().includes(o));
-          if (!hasOrder) return false;
-        }
-        return true;
-      });
-  }, [items, filterOrder, filterBatch, filterZone]);
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchQ(value);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        emitFilter({ q: value.trim() || undefined });
+      }, DEBOUNCE_MS);
+    },
+    [emitFilter],
+  );
+
+  const handleStatusFilterChange = useCallback(
+    (value: string) => {
+      setFilterStatus(value);
+      emitFilter({ status: value || undefined });
+    },
+    [emitFilter],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   const stats = useMemo(() => {
-    const total = items.length;
-    const pending = items.filter(i => i.status === "pending").length;
-    const picked = items.filter(i => i.status === "picked").length;
-    const verified = items.filter(i => i.status === "verified").length;
-    return { total, pending, picked, verified };
-  }, [items]);
+    const total = pagination?.totalResults ?? items.length;
+    const pending = items.filter((i) => i.status === "pending").length;
+    const partial = items.filter((i) => i.status === "partial").length;
+    const picked = items.filter((i) => i.status === "picked").length;
+    return { total, pending, partial, picked };
+  }, [items, pagination]);
 
-  const openPick = (item: PickItem) => {
-    setSelectedItem(item);
-    setDrawerOpen(true);
-  };
-
-  const confirmBySku = (sku: string, qty: number) => {
-    const match = items.find(i => i.sku.toUpperCase() === sku.toUpperCase());
-    if (!match) {
-      onAlert?.(`No pick item found for SKU ${sku}`);
-      return;
-    }
-    onConfirmPick(match.id, qty);
-  };
+  const totalPages = pagination?.totalPages ?? 1;
+  const currentPage = pagination?.page ?? 1;
 
   return (
-    <div className="space-y-4">
-      {/* Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-blue-50 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Items</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
-            </div>
-            <i className="ri-file-list-line text-3xl text-blue-400"></i>
+    <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+      <div className="p-[10px]">
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
+            <h1 className="text-sm font-bold text-gray-800">Pick List</h1>
+            <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+              {stats.total}
+            </span>
           </div>
-        </div>
-        <div className="bg-yellow-50 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Pending</p>
-              <p className="text-2xl font-bold text-yellow-700">{stats.pending}</p>
-            </div>
-            <i className="ri-time-line text-3xl text-yellow-500"></i>
-          </div>
-        </div>
-        <div className="bg-blue-50 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Picked</p>
-              <p className="text-2xl font-bold text-blue-700">{stats.picked}</p>
-            </div>
-            <i className="ri-checkbox-circle-line text-3xl text-blue-500"></i>
-          </div>
-        </div>
-        <div className="bg-green-50 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Verified</p>
-              <p className="text-2xl font-bold text-green-700">{stats.verified}</p>
-            </div>
-            <i className="ri-checkbox-circle-fill text-3xl text-green-500"></i>
-          </div>
-        </div>
-      </div>
 
-      {/* Controls */}
-      <div className="box">
-        <div className="box-body">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setView("list")}
-                className={`ti-btn ${view === "list" ? "ti-btn-primary" : "ti-btn-light"} px-4 py-2.5`}
-              >
-                <i className="ri-list-check-2 me-1"></i>
-                List View
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("qr")}
-                className={`ti-btn ${view === "qr" ? "ti-btn-success" : "ti-btn-light"} px-4 py-2.5`}
-              >
-                <i className="ri-qr-scan-line me-1"></i>
-                QR Scan Mode
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
               <input
-                className="ti-form-input !h-10 !text-[12px] min-w-[220px]"
-                placeholder="Filter by Order ID..."
-                value={filterOrder}
-                onChange={(e) => setFilterOrder(e.target.value)}
+                type="text"
+                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-52 min-w-[140px] placeholder:text-gray-400 transition-all font-medium"
+                placeholder="Search order / SKU..."
+                value={searchQ}
+                onChange={(e) => handleSearchChange(e.target.value)}
               />
-              <select
-                className="ti-form-input !h-10 !text-[12px] min-w-[180px]"
-                value={filterBatch}
-                onChange={(e) => setFilterBatch(e.target.value)}
-              >
-                <option value="">All Batches</option>
-                {batches.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="ti-form-input !h-10 !text-[12px] min-w-[140px]"
-                value={filterZone}
-                onChange={(e) => setFilterZone(e.target.value)}
-              >
-                <option value="">All Zones</option>
-                {zones.map((z) => (
-                  <option key={z} value={z}>
-                    Zone {z}
-                  </option>
-                ))}
-              </select>
+              <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
             </div>
+            <div className="relative">
+              <select
+                value={filterStatus}
+                onChange={(e) => handleStatusFilterChange(e.target.value)}
+                className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
+              >
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="partial">Partial</option>
+                <option value="picked">Picked</option>
+                <option value="verified">Verified</option>
+                <option value="skipped">Skipped</option>
+              </select>
+              <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
+            </div>
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={isLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-60"
+              >
+                <i className={`ri-refresh-line text-xs ${isLoading ? "animate-spin" : ""}`} />
+                Refresh
+              </button>
+            )}
           </div>
+        </div>
+
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
+          <div className="bg-sky-50 border border-sky-100 rounded p-2 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wide">Total</span>
+            <span className="text-sm font-bold text-sky-950">{stats.total}</span>
+          </div>
+          <div className="bg-amber-50 border border-amber-100 rounded p-2 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">Pending</span>
+            <span className="text-sm font-bold text-amber-950">{stats.pending}</span>
+          </div>
+          <div className="bg-orange-50 border border-orange-100 rounded p-2 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-orange-800 uppercase tracking-wide">Partial</span>
+            <span className="text-sm font-bold text-orange-950">{stats.partial}</span>
+          </div>
+          <div className="bg-emerald-50 border border-emerald-100 rounded p-2 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Picked</span>
+            <span className="text-sm font-bold text-emerald-950">{stats.picked}</span>
+          </div>
+        </div>
+
+        {/* Status tabs */}
+        <div className="flex flex-wrap border-b border-gray-200 mt-4 -mb-px">
+          {[
+            { id: "", label: "All" },
+            { id: "pending", label: "Pending" },
+            { id: "partial", label: "Partial" },
+            { id: "picked", label: "Picked" },
+            { id: "verified", label: "Verified" },
+            { id: "skipped", label: "Skipped" },
+          ].map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                filterStatus === id
+                  ? "border-purple-600 text-purple-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+              onClick={() => handleStatusFilterChange(id)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {view === "qr" ? (
-        <QRScanPanel
-          items={filtered}
-          onConfirmPickBySku={confirmBySku}
-          onMismatch={(msg) => onAlert?.(msg)}
-        />
-      ) : (
-        <div className="box">
-          <div className="box-header">
-            <h3 className="box-title">Pick List (Optimized Path)</h3>
+      {/* Table */}
+      <div className="overflow-x-auto min-h-[300px]">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <i className="ri-loader-4-line animate-spin text-lg text-purple-500 mb-2"></i>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Loading Data</span>
           </div>
-          <div className="box-body">
-            <PickTable
-              items={filtered}
-              onOpenPick={openPick}
-              onInlineQtyChange={onSetPickedQty}
-            />
+        ) : (
+          <PickTable items={items} onSave={onSavePickupQty} />
+        )}
+      </div>
+
+      {/* Pagination */}
+      {!isLoading && totalPages > 0 && (
+        <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
+          <div className="text-[11px] font-medium text-[#495057] tracking-tight">
+            Page <span>{currentPage}</span> of <span>{totalPages}</span>
+            {pagination && (
+              <span className="ml-2 opacity-50">
+                ({pagination.totalResults} entries)
+              </span>
+            )}
+          </div>
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => onPageChange?.(currentPage - 1)}
+              disabled={currentPage <= 1}
+              className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              onClick={() => onPageChange?.(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+              className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
           </div>
         </div>
       )}
-
-      <PickDrawer
-        isOpen={drawerOpen}
-        item={selectedItem ? items.find(i => i.id === selectedItem.id) || selectedItem : null}
-        onClose={() => setDrawerOpen(false)}
-        onConfirm={onConfirmPick}
-        onMarkPartial={onMarkPartial}
-        onSkip={onSkip}
-        onScanMismatch={(msg) => onAlert?.(msg)}
-      />
     </div>
   );
 };
 
 export default PickListDashboard;
-
-
-

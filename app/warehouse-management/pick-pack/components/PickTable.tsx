@@ -1,37 +1,115 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import type { PickItem } from "../types";
-import StatusBadge from "./StatusBadge";
-import RackLocationChip from "./RackLocationChip";
-import OrderChipList from "./OrderChipList";
-import QtyInputCell from "./QtyInputCell";
 
-function statusTone(status: PickItem["status"]) {
-  switch (status) {
-    case "pending":
-      return "yellow" as const;
-    case "partial":
-      return "orange" as const;
-    case "picked":
-      return "blue" as const;
-    case "verified":
-      return "green" as const;
-    case "skipped":
-      return "red" as const;
-    default:
-      return "gray" as const;
-  }
+function statusBadge(status: PickItem["status"]) {
+  const map: Record<string, { bg: string; text: string; label: string }> = {
+    pending: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", label: "Pending" },
+    partial: { bg: "bg-orange-50 border-orange-200", text: "text-orange-700", label: "Partial" },
+    picked: { bg: "bg-sky-50 border-sky-200", text: "text-sky-700", label: "Picked" },
+    verified: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", label: "Verified" },
+    skipped: { bg: "bg-red-50 border-red-200", text: "text-red-700", label: "Skipped" },
+  };
+  const s = map[status] ?? map.pending;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wide ${s.bg} ${s.text}`}>
+      {s.label}
+    </span>
+  );
+}
+
+function PickRow({
+  item,
+  index,
+  onSave,
+}: {
+  item: PickItem;
+  index: number;
+  onSave: (itemId: string, pickupQty: number) => void;
+}) {
+  const [qty, setQty] = useState<number>(item.pickedQty);
+  const [saving, setSaving] = useState(false);
+
+  const dirty = qty !== item.pickedQty;
+  const disabled = item.status === "verified" || item.status === "skipped";
+
+  const handleSave = async () => {
+    if (disabled || !dirty) return;
+    setSaving(true);
+    try {
+      onSave(item.id, qty);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <tr className="hover:bg-gray-50/50 transition-colors group">
+      <td className="px-2 py-2 text-[11px] font-medium text-gray-500 border border-gray-200 text-center w-10">
+        {index + 1}
+      </td>
+      <td className="px-2 py-2 text-[11px] font-bold text-purple-700 border border-gray-200 whitespace-nowrap">
+        {item.orderNumber || "—"}
+      </td>
+      <td className="px-2 py-2 text-[12px] font-bold text-gray-900 border border-gray-200 whitespace-nowrap">
+        {item.sku}
+      </td>
+      <td className="px-2 py-2 text-[11px] font-medium text-gray-600 border border-gray-200 whitespace-nowrap">
+        {item.styleCode || item.sku}
+      </td>
+      <td className="px-2 py-2 text-[11px] font-medium text-gray-700 border border-gray-200 whitespace-nowrap">
+        {item.shade || "—"}
+      </td>
+      <td className="px-2 py-2 text-[12px] font-bold text-gray-900 border border-gray-200 text-center w-20">
+        {item.requiredQty}
+      </td>
+      <td className="px-2 py-2 border border-gray-200 w-28">
+        <input
+          type="number"
+          min={0}
+          max={item.requiredQty}
+          value={qty}
+          disabled={disabled}
+          onChange={(e) => setQty(Math.max(0, Number(e.target.value)))}
+          className={`w-full bg-white border rounded px-2 py-1 text-[12px] font-bold text-center outline-none transition-colors
+            ${disabled ? "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed" : ""}
+            ${dirty && !disabled ? "border-purple-400 ring-1 ring-purple-200 text-purple-700" : "border-gray-200 text-gray-800"}
+            focus:border-purple-400 focus:ring-1 focus:ring-purple-200`}
+        />
+      </td>
+      <td className="px-2 py-2 border border-gray-200 text-center w-24">
+        {statusBadge(item.status)}
+      </td>
+      <td className="px-2 py-2 border border-gray-200 text-center w-24">
+        <button
+          type="button"
+          disabled={disabled || !dirty || saving}
+          onClick={handleSave}
+          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wide transition-colors shadow-sm
+            ${disabled || !dirty
+              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+              : "bg-purple-600 text-white hover:bg-purple-700 cursor-pointer"
+            }`}
+        >
+          {saving ? (
+            <i className="ri-loader-4-line animate-spin text-xs"></i>
+          ) : (
+            <i className="ri-save-line text-xs"></i>
+          )}
+          Save
+        </button>
+      </td>
+    </tr>
+  );
 }
 
 export default function PickTable({
   items,
-  onOpenPick,
-  onInlineQtyChange,
+  onSave,
 }: {
   items: PickItem[];
-  onOpenPick: (item: PickItem) => void;
-  onInlineQtyChange: (itemId: string, pickedQty: number) => void;
+  onSave: (itemId: string, pickupQty: number) => void;
 }) {
   if (items.length === 0) {
     return (
@@ -39,126 +117,52 @@ export default function PickTable({
         <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
           <i className="ri-inbox-line text-xl text-gray-200"></i>
         </div>
-        <h3 className="text-xs font-bold text-gray-400 mb-1">NO PICK ITEMS</h3>
+        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">No Pick Items</h3>
+        <p className="text-[11px] text-gray-400">No entries match your current filters.</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto min-h-[260px]">
-      <table className="w-full border-collapse border border-gray-200">
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse border border-gray-200 min-w-[820px]">
         <thead>
           <tr className="bg-gray-50/30">
-            <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-16">
-              Path #
+            <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-10">
+              #
             </th>
-            <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-28">
-              SKU
+            <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              Order No
             </th>
-            <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-              Item
+            <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              SKU Code
             </th>
-            <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-40">
-              Rack Location
+            <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              Style Code
             </th>
-            <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-40">
-              Qty (Req / Picked)
+            <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              Shade
             </th>
-            <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-44">
-              Linked Orders
+            <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-20">
+              Qty
             </th>
-            <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-28">
+            <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-28">
+              Pickup Qty
+            </th>
+            <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-24">
               Status
             </th>
-            <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-28">
+            <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-24">
               Action
             </th>
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => {
-            const pct = item.requiredQty > 0 ? Math.round((item.pickedQty / item.requiredQty) * 100) : 0;
-            const warn = item.pickedQty > 0 && item.pickedQty < item.requiredQty && item.status === "picked";
-            const canEdit = item.status !== "verified" && item.status !== "skipped";
-
-            return (
-              <tr
-                key={item.id}
-                className="hover:bg-gray-50/50 transition-colors group"
-              >
-                <td className="px-1.5 py-2.5 border border-gray-200">
-                  <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-[12px] font-bold">
-                    {item.pathIndex}
-                  </div>
-                </td>
-                <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">
-                  {item.sku}
-                </td>
-                <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-700 border border-gray-200">
-                  <div className="font-semibold text-gray-800">{item.name}</div>
-                  {item.batchId ? (
-                    <div className="text-[10px] text-gray-500">Batch: {item.batchId}</div>
-                  ) : null}
-                </td>
-                <td className="px-1.5 py-2.5 border border-gray-200">
-                  <RackLocationChip location={item.rackLocation} />
-                </td>
-                <td className="px-1.5 py-2.5 border border-gray-200">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[11px] font-bold text-gray-700">
-                        {item.requiredQty} {item.unit}
-                      </div>
-                      <div className="text-[10px] font-semibold text-gray-500">{pct}%</div>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded">
-                      <div
-                        className="h-2 bg-purple-600 rounded"
-                        style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[10px] text-gray-500">
-                        Picked:
-                      </div>
-                      <QtyInputCell
-                        value={item.pickedQty}
-                        min={0}
-                        max={item.requiredQty}
-                        onChange={(next) => onInlineQtyChange(item.id, next)}
-                        disabled={!canEdit}
-                        warn={warn}
-                        className="scale-[0.92] origin-right"
-                      />
-                    </div>
-                  </div>
-                </td>
-                <td className="px-1.5 py-2.5 border border-gray-200">
-                  <OrderChipList orderIds={item.linkedOrderIds} max={3} />
-                </td>
-                <td className="px-1.5 py-2.5 border border-gray-200">
-                  <StatusBadge
-                    label={item.status}
-                    tone={statusTone(item.status)}
-                    size="sm"
-                  />
-                </td>
-                <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
-                  <button
-                    type="button"
-                    onClick={() => onOpenPick(item)}
-                    className="ti-btn ti-btn-primary inline-flex items-center justify-center px-3 py-2 min-w-[92px]"
-                  >
-                    <i className="ri-hand-coin-line me-1"></i>
-                    PICK
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
+          {items.map((item, idx) => (
+            <PickRow key={item.id} item={item} index={idx} onSave={onSave} />
+          ))}
         </tbody>
       </table>
     </div>
   );
 }
-

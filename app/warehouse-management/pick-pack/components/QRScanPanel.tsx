@@ -78,10 +78,12 @@ export default function QRScanPanel({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  <div>
-                    <div className="text-[11px] font-bold text-gray-500 uppercase">Rack</div>
-                    <RackLocationChip location={matched.rackLocation} emphasize />
-                  </div>
+                  {matched.rackLocation && (
+                    <div>
+                      <div className="text-[11px] font-bold text-gray-500 uppercase">Rack</div>
+                      <RackLocationChip location={matched.rackLocation} emphasize />
+                    </div>
+                  )}
                   <div className="flex-1" />
                   <div className="text-right">
                     <div className="text-[11px] font-bold text-gray-500 uppercase">Required</div>

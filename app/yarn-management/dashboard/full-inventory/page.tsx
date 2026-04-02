@@ -7,7 +7,9 @@ import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { YarnInventory } from "../types";
 import {
   yarnInventoryService,
+  inventoryYarnId,
   requisitionYarnId,
+  sameYarnId,
 } from "../services/yarnInventoryService";
 
 type SortField = keyof YarnInventory;
@@ -61,7 +63,7 @@ const FullInventoryPage = () => {
 
             // Find blocked quantity from requisitions
             const relatedRequisitions = requisitions.filter(
-              (req) => requisitionYarnId(req) === item.yarnId
+              (req) => sameYarnId(requisitionYarnId(req), inventoryYarnId(item))
             );
             const blockedQty = relatedRequisitions.reduce(
               (sum, req) => sum + req.blockedQty,
@@ -78,9 +80,11 @@ const FullInventoryPage = () => {
             }
 
             return {
-              id: item._id || item.yarnId,
+              id: item._id || inventoryYarnId(item) || item.yarnName,
               yarnName: item.yarnName,
               weight: totalWeight,
+              longTermWeight: item.longTermStorage.totalWeight,
+              shortTermWeight: item.shortTermStorage.totalWeight,
               conesLongTerm: item.longTermStorage.numberOfCones,
               conesShortTerm: item.shortTermStorage.numberOfCones,
               blockedQty: blockedQty,
@@ -91,7 +95,7 @@ const FullInventoryPage = () => {
               lastUpdated: new Date().toISOString().split('T')[0],
               status: status,
               supplier: '', // Not available from API
-              yarnId: item.yarnId,
+              yarnId: inventoryYarnId(item),
               inventoryStatus: item.inventoryStatus,
               overbooked: item.overbooked,
             };

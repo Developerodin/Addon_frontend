@@ -413,7 +413,84 @@ export const whmsGapReport = {
     request<unknown>('/gap-report/send-requirement', { method: 'POST', body: JSON.stringify(body) }),
 };
 
-// --- 6. Pick & Pack ---
+// --- 6. Pick List (dedicated /pick-list endpoints) ---
+export interface WhmsPickListEntryOrder {
+  id: string;
+  status?: string;
+  clientType?: string;
+  clientId?: string;
+  date?: string;
+  orderNumber?: string;
+  clientName?: string;
+  styleCodeSinglePair?: Array<{
+    styleCodeId?: string;
+    styleCode?: string;
+    pack?: string;
+    colour?: string;
+    type?: string;
+    pattern?: string;
+    quantity?: number;
+  }>;
+  styleCodeMultiPair?: unknown[];
+}
+
+export interface WhmsPickListEntry {
+  id: string;
+  _id?: string;
+  orderId?: string | WhmsPickListEntryOrder;
+  orderNumber?: string;
+  skuCode?: string;
+  styleCode?: string;
+  steCodeNew?: string;
+  name?: string;
+  description?: string;
+  pickupQuantity?: number;
+  requiredQuantity?: number;
+  quantity?: number;
+  size?: string;
+  shade?: string;
+  nih?: number;
+  asst?: string;
+  sapStock?: number;
+  status?: string;
+  rackLocation?: WhmsRackLocation;
+  zone?: string;
+  row?: string;
+  column?: string;
+  bin?: string;
+  unit?: string;
+  batchId?: string;
+  pathIndex?: number;
+  imageUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WhmsPickListEntryPatchBody {
+  pickupQuantity?: number;
+  steCodeNew?: string;
+  nih?: number;
+  asst?: string;
+  sapStock?: number;
+  status?: string;
+}
+
+export const whmsPickListApi = {
+  list: (params?: Record<string, string | number | undefined>) =>
+    request<WhmsPaginated<WhmsPickListEntry>>(`/pick-list${qs(params || {})}`),
+  getByOrder: (orderId: string) =>
+    request<WhmsPickListEntry[]>(`/pick-list/order/${encodeURIComponent(orderId)}`),
+  deleteByOrder: (orderId: string) =>
+    request<void>(`/pick-list/order/${encodeURIComponent(orderId)}`, { method: 'DELETE' }),
+  get: (pickListId: string) =>
+    request<WhmsPickListEntry>(`/pick-list/${pickListId}`),
+  update: (pickListId: string, body: WhmsPickListEntryPatchBody) =>
+    request<WhmsPickListEntry>(`/pick-list/${pickListId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  delete: (pickListId: string) =>
+    request<void>(`/pick-list/${pickListId}`, { method: 'DELETE' }),
+};
+
+// --- 7. Pick & Pack ---
 export interface WhmsRackLocation {
   zone: string;
   row: string;
@@ -540,4 +617,5 @@ export default {
   consolidation: whmsConsolidation,
   gapReport: whmsGapReport,
   pickPack: whmsPickPack,
+  pickList: whmsPickListApi,
 };

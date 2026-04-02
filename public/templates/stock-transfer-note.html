@@ -11,21 +11,18 @@
       margin: 20px;
       color: #000;
     }
-
     .invoice-box {
       border: 2px solid #000;
       width: 100%;
       box-sizing: border-box;
       padding: 5px;
     }
-
     .header-table,
     .product-table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 0px;
+      table-layout: fixed;
     }
-
     .header-table td,
     .product-table td,
     .product-table th {
@@ -33,13 +30,23 @@
       padding: 6px;
       text-align: center;
     }
-    
     .product-table th {
       font-weight: bold;
     }
-    
-    .text-left { text-align: left !important; }
-
+    .product-table th:nth-child(3),
+    .product-table td:nth-child(3) {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .product-table col.col-article { width: 12%; }
+    .product-table col.col-sap { width: 20%; }
+    .product-table col.col-name { width: 40%; }
+    .product-table col.col-qty { width: 12%; }
+    .product-table col.col-box { width: 16%; }
+    .text-left {
+      text-align: left !important;
+    }
     .bottom-wrap {
       width: 100%;
       display: flex;
@@ -56,7 +63,6 @@
 </head>
 <body>
   <div class="invoice-box">
-    <!-- Company Header Block -->
     <div style="text-align: center; border-bottom: 2px solid #000; padding: 8px 5px; margin-bottom: 0;">
       <div style="font-size: 18px; font-weight: bold; margin-bottom: 4px; color: #000; text-decoration: underline;">Addon Holding Pvt. Ltd.</div>
       <div style="font-size: 10px; line-height: 1.3; color: #000;">
@@ -65,196 +71,52 @@
         GSTIN NO : 27AAACA8827A1ZZ
       </div>
     </div>
-    
-    <!-- Title -->
+
     <div style="text-align: center; padding: 6px 0; border-bottom: 2px solid #000; font-size: 15px; font-weight: bold;">
       STOCK TRANSFER NOTE
     </div>
 
-    <!-- Combined Table -->
-    <table class="product-table" style="border-top: none;">
-      <!-- Row 1 -->
+    <table class="header-table" style="border-top: none;">
       <tr>
-        <td colspan="2" class="text-left" style="font-weight: bold; border-right: none; width: 18%;">From</td>
-        <td colspan="2" class="text-left" style="border-left: none; width: 40%;">Unit B7-GF</td>
-        <td colspan="2" class="text-left" style="font-weight: bold; width: 25%;">STN No.:</td>
-        <td colspan="2" class="text-left" style="width: 17%;">DLY/25-26/01331</td>
-      </tr>
-      <!-- Row 2 -->
-      <tr>
-        <td colspan="2" class="text-left" style="font-weight: bold; border-right: none;">To</td>
-        <td colspan="2" class="text-left" style="border-left: none;">Unit B8-2F</td>
-        <td colspan="2" class="text-left" style="font-weight: bold;">STN Date:</td>
-        <td colspan="2" class="text-left">7-Mar-2026</td>
-      </tr>
-      <!-- Row 3 & 4 header elements -->
-      <tr>
-        <td colspan="4" rowspan="2" style="border-bottom: none; border-right: 2px solid #000; border-top: none;"></td>
-        <td colspan="2" class="text-left" style="font-weight: bold;">Total Box:</td>
-        <td colspan="2" class="text-left">01 Boxes</td>
+        <td class="text-left" style="font-weight: bold; width: 12%;">From</td>
+        <td class="text-left" style="width: 48%;">Unit B7-GF</td>
+        <td class="text-left" style="font-weight: bold; width: 20%;">STN Date:</td>
+        <td class="text-left" style="width: 20%;">{{STN_DATE}}</td>
       </tr>
       <tr>
-        <td colspan="4" style="font-size: 13px; font-weight: bold; text-align: center; text-transform: uppercase;">CORE & COLLECTION MIX</td>
+        <td class="text-left" style="font-weight: bold;">To</td>
+        <td class="text-left">Unit B8-2F</td>
+        <td class="text-left" style="font-weight: bold;">Total Box:</td>
+        <td class="text-left">1</td>
       </tr>
+    </table>
 
-      <!-- Header Row -->
+    <table class="product-table" style="border-top: none;">
+      <colgroup>
+        <col class="col-article">
+        <col class="col-sap">
+        <col class="col-name">
+        <col class="col-qty">
+        <col class="col-box">
+      </colgroup>
       <tr>
-        <th style="width: 8%;">Article No.</th>
-        <th style="width: 10%;">-</th>
-        <th style="width: 15%;">SAP Article No.</th>
-        <th style="width: 25%;">Article Name</th>
-        <th style="width: 15%;">Machine / Needle No.</th>
-        <th style="width: 10%;">Colour</th>
-        <th style="width: 10%;">Qty in Pairs</th>
-        <th style="width: 7%;">Box No.</th>
+        <td colspan="5" style="font-size: 13px; font-weight: bold; text-align: center; text-transform: uppercase;">CORE & COLLECTION MIX</td>
       </tr>
       <tr>
-        <td>A582</td>
-        <td>VXAL0030</td>
-        <td>VHN15ALB00330</td>
-        <td>AL-VXAL0030-Plain-Black</td>
-        <td>200 Needle</td>
-        <td>Black</td>
-        <td>22</td>
-        <td></td>
+        <th>Article No</th>
+        <th>SAP Article No.</th>
+        <th>Article Name</th>
+        <th>Qty in Pairs</th>
+        <th>Box No.</th>
       </tr>
+      {{ARTICLE_ROWS}}
       <tr>
-        <td>A137</td>
-        <td>PXB1697</td>
-        <td>PEC15ALB00353</td>
-        <td>AL-PXB1697-Plain-Beige</td>
-        <td>168 Needle</td>
-        <td>Beige</td>
-        <td>8</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A092</td>
-        <td>PXC2019</td>
-        <td>PEC15QCB00364</td>
-        <td>QC-PXC2019-Plain-Brown</td>
-        <td>168 Needle</td>
-        <td>Brown</td>
-        <td>5</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A908</td>
-        <td>AXQC0037</td>
-        <td>ASC15QCB00337</td>
-        <td>AL-AXQC0037-Pique-Navy</td>
-        <td>168 Needle</td>
-        <td>Navy</td>
-        <td>14</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A846</td>
-        <td>AXCR26227</td>
-        <td>ASC1SFLB00317</td>
-        <td>FL-AXCR26227-Pilot-Black</td>
-        <td>168 Needle</td>
-        <td>Black</td>
-        <td>19</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A851</td>
-        <td>AXQC0035</td>
-        <td>ASC1SQCB00335</td>
-        <td>QC-AXQC0035-Pique-Denim</td>
-        <td>168 Needle</td>
-        <td>Denim</td>
-        <td>9</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A383</td>
-        <td>PXC1023</td>
-        <td>PEC1SFLB00325</td>
-        <td>FL-PXC1023-Argyle-white</td>
-        <td>168 Needle</td>
-        <td>White</td>
-        <td>16</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A070</td>
-        <td>PXC1025</td>
-        <td>PEC1SFLB00327</td>
-        <td>FL-PXC1025-Argyle D-Dk. Grey</td>
-        <td>168 Needle</td>
-        <td>Dk. Grey</td>
-        <td>5</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A906</td>
-        <td>AXQC0031</td>
-        <td>ASC1SQCB00331</td>
-        <td>AL-AXQC0031-Pique-Black</td>
-        <td>168 Needle</td>
-        <td>Black</td>
-        <td>1</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A098</td>
-        <td>PXC2010</td>
-        <td>PEC1SFLB00310</td>
-        <td>FL-PXC2010-Plain-Black</td>
-        <td>168 Needle</td>
-        <td>Black</td>
-        <td>10</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A902</td>
-        <td>AXCR26219</td>
-        <td>ASC1SFLB00309</td>
-        <td>FL-AXCR26219-Pique-Olive</td>
-        <td>168 Needle</td>
-        <td>Olive</td>
-        <td>2</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A572</td>
-        <td>VX116603</td>
-        <td>VHN1SQCB00324</td>
-        <td>QC-VX116603-Plain-Dark Grey</td>
-        <td>200 Needle</td>
-        <td>Dark Grey</td>
-        <td>1</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A581</td>
-        <td>VXAL0029</td>
-        <td>VHN1SALB00329</td>
-        <td>AL-VXAL0029-Plain-Navy</td>
-        <td>200 Needle</td>
-        <td>Navy</td>
-        <td>1</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>A1352</td>
-        <td>200N FL PLANE D</td>
-        <td>VHN1SFLB00304</td>
-        <td>FL-200N FL PLANE D-Plain-Olive</td>
-        <td>200 Needle</td>
-        <td>Olive</td>
-        <td>26</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td colspan="6" style="text-align: right; font-weight: bold;">Total Qty</td>
-        <td style="font-weight: bold;">329</td>
+        <td colspan="3" style="text-align: right; font-weight: bold;">Total Qty</td>
+        <td style="font-weight: bold;">{{TOTAL_QTY}}</td>
         <td></td>
       </tr>
     </table>
-    
+
     <div class="bottom-wrap">
       <div class="bottom-cell text-left" style="border-right: 2px solid #000;">
         <div style="margin-bottom: 20px;">Please receive the above mentioned goods order & conditions.</div>

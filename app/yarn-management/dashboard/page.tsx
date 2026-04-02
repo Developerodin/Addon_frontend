@@ -13,7 +13,9 @@ import {
 } from "./types";
 import {
   yarnInventoryService,
+  inventoryYarnId,
   requisitionYarnId,
+  sameYarnId,
 } from "./services/yarnInventoryService";
 
 const DashboardPage = () => {
@@ -73,7 +75,7 @@ const DashboardPage = () => {
             }
 
             return {
-              id: item._id || item.yarnId,
+              id: item._id || inventoryYarnId(item) || item.yarnName,
               yarnName: item.yarnName,
               weight: totalWeight, // Total weight (LTS + STS)
               longTermWeight: item.longTermStorage.totalWeight,
@@ -88,7 +90,7 @@ const DashboardPage = () => {
               lastUpdated: new Date().toISOString().split('T')[0],
               status: status,
               supplier: '', // Not available from API
-              yarnId: item.yarnId,
+              yarnId: inventoryYarnId(item),
               inventoryStatus: item.inventoryStatus,
               overbooked: item.overbooked,
             };
@@ -148,7 +150,7 @@ const DashboardPage = () => {
         // Update blocked quantities from requisitions
         transformedInventory.forEach((inv) => {
           const relatedRequisitions = requisitions.filter(
-            (req) => requisitionYarnId(req) === inv.yarnId
+            (req) => sameYarnId(requisitionYarnId(req), inv.yarnId)
           );
           if (relatedRequisitions.length > 0) {
             const totalBlocked = relatedRequisitions.reduce(

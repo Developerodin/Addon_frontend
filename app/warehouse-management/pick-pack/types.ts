@@ -20,16 +20,19 @@ export interface RackLocation {
 export interface PickItem {
   id: string;
   sku: string;
+  styleCode?: string;
   name: string;
+  shade?: string;
+  orderNumber?: string;
   imageUrl?: string;
-  pathIndex: number; // Path #
-  rackLocation: RackLocation;
+  pathIndex: number;
+  rackLocation?: RackLocation;
   requiredQty: number;
   pickedQty: number;
   unit: string;
   status: PickItemStatus;
-  linkedOrderIds: string[]; // Order IDs that require this SKU
-  batchId?: string; // For filter/display only
+  linkedOrderIds: string[];
+  batchId?: string;
 }
 
 export interface PickList {
