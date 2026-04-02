@@ -1,18 +1,22 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import PickListDashboard from "./components/PickListDashboard";
 import PackListDashboard from "./components/PackListDashboard";
 import type { PackBatch, PickItem, PackItem, PackOrder, PackOrderStatus, PickList, PackList } from "./types";
 import { pickPackApi } from "./pickPackApi";
+import type { PickListFilters, PickListPagination } from "./pickPackApi";
 
 const PickPackPage = () => {
   const [activeTab, setActiveTab] = useState<"pick" | "pack">("pick");
   const [loading, setLoading] = useState(true);
   const [pickList, setPickList] = useState<PickList | null>(null);
   const [packList, setPackList] = useState<PackList | null>(null);
+  const [pickPagination, setPickPagination] = useState<PickListPagination | null>(null);
+  const [pickFilters, setPickFilters] = useState<PickListFilters>({});
+  const [pickLoading, setPickLoading] = useState(false);
 
   const notify = (message: string, kind: "success" | "error" | "warning" | "info" = "info") => {
     try {
@@ -20,18 +24,36 @@ const PickPackPage = () => {
       else if (kind === "error") toast.error(message);
       else toast(message);
     } catch {
-      // Fallback if Toaster isn't mounted
       window.alert(message);
     }
   };
+
+  const loadPickList = useCallback(async (filters?: PickListFilters) => {
+    setPickLoading(true);
+    const result = await pickPackApi.fetchPickList(filters);
+    if (result) {
+      setPickList(result.pickList);
+      setPickPagination(result.pagination);
+    } else {
+      setPickList(null);
+      setPickPagination(null);
+    }
+    setPickLoading(false);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       setLoading(true);
-      const [pl, pkl] = await Promise.all([pickPackApi.fetchPickList(), pickPackApi.fetchPackList()]);
+      const [pickResult, pkl] = await Promise.all([
+        pickPackApi.fetchPickList(),
+        pickPackApi.fetchPackList(),
+      ]);
       if (!mounted) return;
-      setPickList(pl ?? null);
+      if (pickResult) {
+        setPickList(pickResult.pickList);
+        setPickPagination(pickResult.pagination);
+      }
       setPackList(pkl);
       setLoading(false);
     })();
@@ -150,7 +172,6 @@ const PickPackPage = () => {
         }
       });
 
-      // Update order statuses and batch status
       const normalizedOrders = nextOrders.map((o) => ({ ...o, status: computeOrderStatus(o.items) }));
       const updatedBatch: PackBatch = {
         ...b,
@@ -166,74 +187,63 @@ const PickPackPage = () => {
     });
   };
 
-  const setPickedQty = async (itemId: string, pickedQty: number) => {
-    setPickList((prev) => {
-      if (!prev) return prev;
-      const items = prev.items.map((it) => {
-        if (it.id !== itemId) return it;
-        const nextQty = clamp(pickedQty, 0, it.requiredQty);
-        return {
-          ...it,
-          pickedQty: nextQty,
-          status: computePickStatus(it.requiredQty, nextQty),
-        };
-      });
-      return { ...prev, items };
-    });
-  };
+  // ── Pick action: save pickup quantity (PATCH /v1/whms/pick-list/:id) ──
 
-  const confirmPick = async (itemId: string, pickedQty: number) => {
+  const savePickupQty = async (itemId: string, pickupQty: number) => {
     const item = pickItems.find((i) => i.id === itemId);
     if (!item) return;
+    const nextQty = clamp(pickupQty, 0, item.requiredQty);
 
-    const nextQty = clamp(pickedQty, 0, item.requiredQty);
-    await pickPackApi.confirmPick({ itemId, pickedQty: nextQty });
+    try {
+      await pickPackApi.updatePickEntry(itemId, { pickupQuantity: nextQty });
 
-    setPickList((prev) => {
-      if (!prev) return prev;
-      const items = prev.items.map((it) => {
-        if (it.id !== itemId) return it;
-        const status = computePickStatus(it.requiredQty, nextQty) as PickItem["status"];
-        return { ...it, pickedQty: nextQty, status };
+      setPickList((prev) => {
+        if (!prev) return prev;
+        const items = prev.items.map((it) => {
+          if (it.id !== itemId) return it;
+          return { ...it, pickedQty: nextQty, status: computePickStatus(it.requiredQty, nextQty) };
+        });
+        return { ...prev, items };
       });
-      return { ...prev, items };
-    });
 
-    if (nextQty < item.requiredQty) {
-      notify(`Partial pick: ${item.sku} (${nextQty}/${item.requiredQty})`, "warning");
-    } else {
-      notify(`Picked complete: ${item.sku} moved to Pack Queue`, "success");
-      movePickedItemToPackQueue({ ...item, pickedQty: nextQty, status: "picked" });
-      setActiveTab("pack");
+      if (nextQty >= item.requiredQty) {
+        notify(`Pickup saved: ${item.sku} (${nextQty}/${item.requiredQty})`, "success");
+        movePickedItemToPackQueue({ ...item, pickedQty: nextQty, status: "picked" });
+      } else if (nextQty > 0) {
+        notify(`Partial pickup saved: ${item.sku} (${nextQty}/${item.requiredQty})`, "warning");
+      } else {
+        notify(`Pickup quantity reset: ${item.sku}`, "info");
+      }
+    } catch {
+      notify("Failed to save pickup quantity", "error");
     }
   };
 
-  const markPartial = async (itemId: string, pickedQty: number) => {
-    const item = pickItems.find((i) => i.id === itemId);
-    if (!item) return;
-    const nextQty = clamp(pickedQty, 0, item.requiredQty);
-    await pickPackApi.confirmPick({ itemId, pickedQty: nextQty });
-    setPickList((prev) => {
-      if (!prev) return prev;
-      const items = prev.items.map((it) =>
-        it.id === itemId ? { ...it, pickedQty: nextQty, status: "partial" as PickItem["status"] } : it
-      );
-      return { ...prev, items };
-    });
-    notify(`Marked partial: ${item.sku} (${nextQty}/${item.requiredQty})`, "info");
-  };
+  // ── Pick filter / pagination handlers ──────────────────────────────────
 
-  const skipPick = async (itemId: string) => {
-    await pickPackApi.skipPick(itemId);
-    setPickList((prev) => {
-      if (!prev) return prev;
-      const items = prev.items.map((it) =>
-        it.id === itemId ? { ...it, status: "skipped" as PickItem["status"] } : it
-      );
-      return { ...prev, items };
-    });
-    notify("Item skipped", "info");
-  };
+  const handlePickFilterChange = useCallback(
+    async (filters: PickListFilters) => {
+      const merged = { ...filters, page: 1 };
+      setPickFilters(merged);
+      await loadPickList(merged);
+    },
+    [loadPickList],
+  );
+
+  const handlePickPageChange = useCallback(
+    async (page: number) => {
+      const merged = { ...pickFilters, page };
+      setPickFilters(merged);
+      await loadPickList(merged);
+    },
+    [pickFilters, loadPickList],
+  );
+
+  const handleRefreshPickList = useCallback(async () => {
+    await loadPickList(pickFilters);
+  }, [pickFilters, loadPickList]);
+
+  // ── Pack actions (unchanged) ───────────────────────────────────────────
 
   const setPackedQty = async (batchId: string, orderId: string, itemId: string, packedQty: number) => {
     setPackList((prev) => {
@@ -317,7 +327,6 @@ const PickPackPage = () => {
       request: args.request,
     });
 
-    // Attach item barcodes from API response when available
     const itemBarcodes = (res.generated ?? []).filter((g) => g.type === "item");
     if (itemBarcodes.length > 0) {
       setPackList((prev) => {
@@ -367,7 +376,7 @@ const PickPackPage = () => {
   return (
     <div className="main-content">
       <Seo title="Pick List & Pack List Automation" />
-      
+
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
           {/* Page Header */}
@@ -420,16 +429,18 @@ const PickPackPage = () => {
               ) : null}
 
               {/* Tab Content */}
-              {!loading && activeTab === "pick" && pickList ? (
+              {!loading && activeTab === "pick" && (
                 <PickListDashboard
                   items={pickItems}
-                  onSetPickedQty={setPickedQty}
-                  onConfirmPick={confirmPick}
-                  onMarkPartial={markPartial}
-                  onSkip={skipPick}
+                  onSavePickupQty={savePickupQty}
                   onAlert={(msg) => notify(msg, "error")}
+                  onFilterChange={handlePickFilterChange}
+                  onPageChange={handlePickPageChange}
+                  onRefresh={handleRefreshPickList}
+                  pagination={pickPagination}
+                  isLoading={pickLoading}
                 />
-              ) : null}
+              )}
 
               {!loading && activeTab === "pack" && packList ? (
                 <PackListDashboard
@@ -450,4 +461,3 @@ const PickPackPage = () => {
 };
 
 export default PickPackPage;
-

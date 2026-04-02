@@ -1,18 +1,18 @@
 "use client";
 
 /**
- * Pick & Pack API — uses existing WHMS Node.js endpoints.
- * Maps WHMS response shapes to UI types (PickList, PackList, etc.).
+ * Pick & Pack API — pick-list methods use dedicated /v1/whms/pick-list endpoints;
+ * pack-list methods continue using /v1/whms/pick-pack.
  */
 import {
+  whmsPickListApi,
+  WhmsPickListEntry,
+  WhmsPickListEntryPatchBody,
   whmsPickPack,
-  WhmsPickList,
-  WhmsPickItem,
   WhmsPackBatch,
   WhmsPackOrder,
   WhmsPackItem,
   WhmsPackCarton,
-  WhmsRackLocation,
 } from "@/shared/services/whmsService";
 import type {
   PickList,
@@ -22,59 +22,58 @@ import type {
   PackOrder,
   PackItem,
   PackCarton,
-  RackLocation,
   BarcodeGenerateRequest,
 } from "./types";
 
-function mapRackLocation(r: WhmsRackLocation): RackLocation {
-  return {
-    zone: r.zone ?? "",
-    row: r.row ?? "",
-    column: r.column ?? "",
-    bin: r.bin ?? "",
-  };
+// ─── Pick-list entry → PickItem mapping ────────────────────────────────────────
+
+function resolveOrderId(orderId: WhmsPickListEntry["orderId"]): string {
+  if (!orderId) return "";
+  if (typeof orderId === "string") return orderId;
+  return orderId.id ?? "";
 }
 
-function mapPickItem(i: WhmsPickItem): PickItem {
-  const status = (i.status === "picked" || i.status === "partial" || i.status === "skipped" || i.status === "pending"
-    ? i.status
+function resolveOrderNumber(entry: WhmsPickListEntry): string {
+  if (entry.orderNumber) return entry.orderNumber;
+  if (entry.orderId && typeof entry.orderId === "object") return entry.orderId.orderNumber ?? "";
+  return "";
+}
+
+function mapPickListEntry(entry: WhmsPickListEntry): PickItem {
+  const raw = entry.status ?? "";
+  const status = (["pending", "partial", "picked", "verified", "skipped"].includes(raw)
+    ? raw
     : "pending") as PickItem["status"];
+
+  const orderIdStr = resolveOrderId(entry.orderId);
+  const orderNum = resolveOrderNumber(entry);
+
   return {
-    id: i.id,
-    sku: i.sku,
-    name: i.name ?? i.sku,
-    imageUrl: i.imageUrl,
-    pathIndex: i.pathIndex ?? 0,
-    rackLocation: mapRackLocation(i.rackLocation ?? { zone: "", row: "", column: "", bin: "" }),
-    requiredQty: i.requiredQty ?? 0,
-    pickedQty: i.pickedQty ?? 0,
-    unit: i.unit ?? "pcs",
+    id: entry.id ?? entry._id ?? "",
+    sku: entry.skuCode ?? entry.styleCode ?? "",
+    styleCode: entry.styleCode ?? entry.skuCode ?? "",
+    name: entry.name ?? entry.skuCode ?? entry.styleCode ?? "",
+    shade: entry.shade ?? "",
+    orderNumber: orderNum || orderIdStr,
+    pathIndex: entry.pathIndex ?? 0,
+    requiredQty: entry.requiredQuantity ?? entry.quantity ?? 0,
+    pickedQty: entry.pickupQuantity ?? 0,
+    unit: entry.size ?? entry.unit ?? "pcs",
     status,
-    linkedOrderIds: i.linkedOrderIds ?? [],
-    batchId: i.batchId,
+    linkedOrderIds: orderIdStr ? [orderNum || orderIdStr] : [],
+    batchId: entry.batchId,
   };
 }
 
-function mapPickList(w: WhmsPickList): PickList {
-  const status = (w.status === "picking-done" || w.status === "picking-in-progress" || w.status === "generated"
-    ? w.status
-    : "generated") as PickList["status"];
-  return {
-    id: w.id,
-    pickBatchId: w.pickBatchId ?? w.id,
-    createdAt: w.createdAt ?? new Date().toISOString(),
-    status,
-    items: (w.items ?? []).map(mapPickItem),
-    assignedTo: w.assignedTo,
-    startedAt: w.startedAt,
-    completedAt: w.completedAt,
-  };
-}
+// ─── Pack mapping (unchanged — still uses /pick-pack endpoints) ─────────────
 
 function mapPackItem(i: WhmsPackItem): PackItem {
-  const status = (i.status === "packed" || i.status === "partial" || i.status === "pending" || i.status === "verified" || i.status === "damaged" || i.status === "missing"
-    ? i.status
-    : "pending") as PackItem["status"];
+  const status = (
+    i.status === "packed" || i.status === "partial" || i.status === "pending" ||
+    i.status === "verified" || i.status === "damaged" || i.status === "missing"
+      ? i.status
+      : "pending"
+  ) as PackItem["status"];
   return {
     id: i.id,
     sku: i.sku,
@@ -87,9 +86,11 @@ function mapPackItem(i: WhmsPackItem): PackItem {
 }
 
 function mapPackOrder(o: WhmsPackOrder): PackOrder {
-  const status = (o.status === "packed" || o.status === "packing" || o.status === "dispatch-ready" || o.status === "ready"
-    ? o.status
-    : "ready") as PackOrder["status"];
+  const status = (
+    o.status === "packed" || o.status === "packing" || o.status === "dispatch-ready" || o.status === "ready"
+      ? o.status
+      : "ready"
+  ) as PackOrder["status"];
   return {
     orderId: o.orderId,
     orderNumber: o.orderNumber ?? o.orderId,
@@ -101,17 +102,15 @@ function mapPackOrder(o: WhmsPackOrder): PackOrder {
 }
 
 function mapPackCarton(c: WhmsPackCarton): PackCarton {
-  return {
-    id: c.id,
-    cartonBarcode: c.cartonBarcode,
-    createdAt: c.createdAt ?? new Date().toISOString(),
-  };
+  return { id: c.id, cartonBarcode: c.cartonBarcode, createdAt: c.createdAt ?? new Date().toISOString() };
 }
 
 function mapPackBatch(b: WhmsPackBatch): PackBatch {
-  const status = (b.status === "packed" || b.status === "packing" || b.status === "dispatch-ready" || b.status === "ready"
-    ? b.status
-    : "ready") as PackBatch["status"];
+  const status = (
+    b.status === "packed" || b.status === "packing" || b.status === "dispatch-ready" || b.status === "ready"
+      ? b.status
+      : "ready"
+  ) as PackBatch["status"];
   return {
     id: b.id,
     orderIds: b.orderIds ?? [],
@@ -122,9 +121,7 @@ function mapPackBatch(b: WhmsPackBatch): PackBatch {
   };
 }
 
-function normalizePackListResponse(
-  data: { batches?: WhmsPackBatch[] } | WhmsPackBatch
-): PackList {
+function normalizePackListResponse(data: { batches?: WhmsPackBatch[] } | WhmsPackBatch): PackList {
   const batches: WhmsPackBatch[] = Array.isArray((data as { batches?: WhmsPackBatch[] }).batches)
     ? (data as { batches: WhmsPackBatch[] }).batches
     : [data as WhmsPackBatch];
@@ -136,15 +133,96 @@ function normalizePackListResponse(
   };
 }
 
+// ─── Exported types ─────────────────────────────────────────────────────────
+
+export interface PickListPagination {
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalResults: number;
+}
+
+export interface PickListFilters {
+  orderId?: string;
+  skuCode?: string;
+  styleCode?: string;
+  status?: string;
+  q?: string;
+  page?: number;
+  limit?: number;
+}
+
+// ─── API ─────────────────────────────────────────────────────────────────────
+
 export const pickPackApi = {
-  async fetchPickList(): Promise<PickList | null> {
+  // ── Pick List (uses /v1/whms/pick-list) ──────────────────────────────────
+
+  async fetchPickList(
+    filters?: PickListFilters,
+  ): Promise<{ pickList: PickList; pagination: PickListPagination } | null> {
     try {
-      const data = await whmsPickPack.pickList.get();
-      return data ? mapPickList(data) : null;
+      const params: Record<string, string | number | undefined> = {
+        page: filters?.page ?? 1,
+        limit: filters?.limit ?? 100,
+        orderId: filters?.orderId || undefined,
+        skuCode: filters?.skuCode || undefined,
+        styleCode: filters?.styleCode || undefined,
+        status: filters?.status || undefined,
+        q: filters?.q || undefined,
+      };
+      const data = await whmsPickListApi.list(params);
+      const items = (data.results ?? []).map(mapPickListEntry);
+      const pickList: PickList = {
+        id: "pick-list-live",
+        pickBatchId: "live",
+        createdAt: new Date().toISOString(),
+        status: items.some((i) => i.status === "picked") ? "picking-in-progress" : "generated",
+        items,
+      };
+      return {
+        pickList,
+        pagination: {
+          page: data.page ?? 1,
+          limit: data.limit ?? 100,
+          totalPages: data.totalPages ?? 1,
+          totalResults: data.totalResults ?? items.length,
+        },
+      };
     } catch {
       return null;
     }
   },
+
+  async fetchPickListByOrder(orderId: string): Promise<PickItem[]> {
+    try {
+      const entries = await whmsPickListApi.getByOrder(orderId);
+      return (Array.isArray(entries) ? entries : []).map(mapPickListEntry);
+    } catch {
+      return [];
+    }
+  },
+
+  async updatePickEntry(
+    pickListId: string,
+    body: WhmsPickListEntryPatchBody,
+  ): Promise<PickItem | null> {
+    try {
+      const entry = await whmsPickListApi.update(pickListId, body);
+      return entry ? mapPickListEntry(entry) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  async deletePickEntry(pickListId: string): Promise<void> {
+    await whmsPickListApi.delete(pickListId);
+  },
+
+  async deletePickOrderEntries(orderId: string): Promise<void> {
+    await whmsPickListApi.deleteByOrder(orderId);
+  },
+
+  // ── Pack List (uses /v1/whms/pick-pack — unchanged) ──────────────────────
 
   async fetchPackList(): Promise<PackList> {
     try {
@@ -155,29 +233,15 @@ export const pickPackApi = {
     }
   },
 
-  async confirmPick(args: { itemId: string; pickedQty: number }): Promise<void> {
-    await whmsPickPack.pickList.confirmPick({
-      itemId: args.itemId,
-      pickedQty: args.pickedQty,
-    });
-  },
-
-  async skipPick(itemId: string): Promise<void> {
-    await whmsPickPack.pickList.skip({ itemId });
-  },
-
   async setPackedQty(args: {
     batchId: string;
     orderId: string;
     itemId: string;
     packedQty: number;
   }): Promise<void> {
-    await whmsPickPack.packList.updatePackedQty(
-      args.batchId,
-      args.orderId,
-      args.itemId,
-      { packedQty: args.packedQty }
-    );
+    await whmsPickPack.packList.updatePackedQty(args.batchId, args.orderId, args.itemId, {
+      packedQty: args.packedQty,
+    });
   },
 
   async generateCarton(batchId: string): Promise<PackBatch | null> {
