@@ -73,8 +73,8 @@ export function VendorSecondaryCheckingProcessDrawer({
           <>
         <div className={CRM.drawerBodyScroll}>
           <p className={CRM.drawerHint}>
-            <strong>Saved counts</strong> are shown above the inputs. Enter <strong>only what you want to change</strong> below — leave a field blank to keep the saved value. Then{" "}
-            <strong>Save &amp; update</strong> and pick where to send M1.
+            <strong>Saved counts</strong> are shown above the inputs. Enter <strong>only what you want to change</strong> below — leave a field blank to keep the saved value, then{" "}
+            <strong>Save &amp; update</strong>.
           </p>
 
           <div className={CRM.drawerSection}>
@@ -128,11 +128,6 @@ export function VendorSecondaryCheckingProcessDrawer({
                   <span className="inline-flex items-center rounded border border-red-100 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-800">
                     M4: {(scSaved.m4Quantity ?? 0).toLocaleString()}
                   </span>
-                  {(scSaved.m1Transferred ?? 0) > 0 && (
-                    <span className="inline-flex items-center rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
-                      M1 transferred: {(scSaved.m1Transferred ?? 0).toLocaleString()}
-                    </span>
-                  )}
                 </div>
               </div>
             )}
